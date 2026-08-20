@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: medgraph
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: medgraph_db
+    ports:
+      - "5432:5432"
+    mem_limit: 1g
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    mem_limit: 256m
+
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/password
+      NEO4J_dbms_memory_heap_initial__size: 256m
+      NEO4J_dbms_memory_heap_max__size: 512m
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    mem_limit: 1g
+    volumes:
+      - neo4jdata:/data
+
+  milvus:
+    image: milvusdb/milvus:v2.3.0
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      MINIO_ADDRESS: localhost
+    ports:
+      - "19530:19530"
+    mem_limit: 1.5g
+    volumes:
+      - milvusdata:/var/lib/milvus
+
+volumes:
+  pgdata:
+  neo4jdata:
+  milvusdata:
