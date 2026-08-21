@@ -54,3 +54,4 @@ def create_module_logger(name):
 
 
 # Module loggers
+auth_logger = create_module_logger("auth")

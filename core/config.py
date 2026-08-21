@@ -6,7 +6,8 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://medgraph:password@localhost:5432/medgraph_db"
     FIREBASE_CREDENTIALS_PATH: str = "firebase-adminsdk.json"
-    
+
+    STORAGE_DIR: str = "./storage/documents"
     class Config:
         env_file = ".env"
 
