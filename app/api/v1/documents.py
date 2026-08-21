@@ -9,9 +9,12 @@ from models.events import Document
 from storage.save_doc import StorageService
 from schemas.events import DocumentResponse
 import os
+from logger import auth_logger as logger
+from workers.ingestion_tasks import process_document_pipeline
 
 
 router = APIRouter(api_version="1", prefix="/v1/documents", tags=["documents"])
+
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_document(
@@ -63,4 +66,7 @@ def upload_document(
     db.commit()
     db.refresh(new_document)
 
+    # Trigger the ingestion pipeline asynchronously
+    process_document_pipeline.delay(str(new_document.document_id))
+    
     return new_document
