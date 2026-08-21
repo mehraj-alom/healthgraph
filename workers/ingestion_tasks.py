@@ -3,6 +3,10 @@ from core.celery_app import celery_app
 from core.db import SessionLocal
 from models.events import Document
 from logger import logger
+from services.ocr.gateway import OCRGateway
+from services.ocr.extraction_schema import EXTRACTION_SCHEMA
+from services.ocr.extraction import Extraction
+from models.events import RawExtractionData
 
 @celery_app.task(name="ingestion_tasks.process_document", bind=True,max_retries=3, default_retry_delay=30)
 def process_document_pipeline(self, document_id_str: str):
@@ -31,7 +35,28 @@ def process_document_pipeline(self, document_id_str: str):
         db.commit()
 
         """TODO: Procesing pipeline to update"""
-         
+        logger.info(f"Starting OCR processing for Document {document_id_str}...")
+        ocr_gateway = OCRGateway()
+        ocr_gateway_result = ocr_gateway.classify_document(document.storage_url)
+        if not ocr_gateway_result["is_medical"] or not ocr_gateway_result["document_type"]=="JUNK" or ocr_gateway_result["document_type"]=="UNKNOWN":
+            logger.warning(f"Document {document_id_str} is not a valid medical document or type is unknown.")
+            document.status = "FAILED"
+            db.commit()
+
+        #unload the model to free up memory
+        ocr_gateway.unload_model()
+        extraction_result = Extraction.parse_and_extract(document.storage_url, schema=EXTRACTION_SCHEMA)
+        ocr_record = RawExtractionData(
+            document_id=document.document_id,
+            gateway_json=ocr_gateway_result,
+            raw_ade_json=extraction_result["structured_json"],
+            markdown_text=extraction_result["markdown"]
+        )
+        db.add(ocr_record)
+        db.commit()
+        db.refresh(ocr_record)
+        # TODO: Landingai ADE extraction
+        
         document.status = "COMPLETED"
         db.commit()
         logger.info(f"Successfully completed pipeline for Document {document_id_str}")

@@ -69,6 +69,7 @@ class Document(Base, TimestampMixin):
     file_hash: Mapped[str] = mapped_column(String, unique=True, index=True)
     storage_url: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String) # UPLOADED, PROCESSED, FAILED
+    
 
 class EvidenceLink(Base):
     __tablename__ = "evidence_links"
@@ -86,3 +87,5 @@ class RawExtractionData(Base):
     #gateway json 
     gateway_json: Mapped[dict] = mapped_column(JSONB, nullable=True) #ocr gateway output
     raw_ade_json: Mapped[dict] = mapped_column(JSONB, nullable=False)  # LandingAI ADE output
+    markdown_text: Mapped[str] = mapped_column(String, nullable=True)  # Extracted text in markdown format
+

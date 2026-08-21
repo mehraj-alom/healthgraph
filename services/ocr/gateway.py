@@ -4,7 +4,6 @@ import threading
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Optional
-
 from pdf2image import convert_from_path
 from PIL import Image
 from llama_cpp import Llama
