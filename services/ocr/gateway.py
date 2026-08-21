@@ -8,8 +8,8 @@ from typing import Optional
 from pdf2image import convert_from_path
 from PIL import Image
 from llama_cpp import Llama
-
 from core.config import settings
+from logger import logger
 
 
 MODEL_PATH = settings.MODEL_PATH
@@ -72,67 +72,67 @@ class OCRGateway:
         "UNKNOWN",
     }
 
-CLASSIFICATION_PROMPT = """
-You are a medical document classifier.
+    CLASSIFICATION_PROMPT = """
+    You are a medical document classifier.
 
-Analyze the FIRST PAGE of the provided document image.
+    Analyze the FIRST PAGE of the provided document image.
 
-Your task has THREE parts:
+    Your task has THREE parts:
 
-1. Decide whether the image is a genuine medical document.
-2. If it is medical, classify it into EXACTLY ONE category:
-   - LAB_REPORT
-   - PRESCRIPTION
-   - DISCHARGE
-   - IMAGING
+    1. Decide whether the image is a genuine medical document.
+    2. If it is medical, classify it into EXACTLY ONE category:
+    - LAB_REPORT
+    - PRESCRIPTION
+    - DISCHARGE
+    - IMAGING
 
-3. Find the visible text on the page that explicitly indicates the
-   document/report type.
+    3. Find the visible text on the page that explicitly indicates the
+    document/report type.
 
-Examples of type-indicating text:
-- "Laboratory Investigation Report"
-- "Lab Report"
-- "Prescription"
-- "Discharge Summary"
-- "Discharge Report"
-- "Radiology Report"
-- "MRI Report"
-- "CT Scan Report"
-- "Ultrasound Report"
-- "X-Ray Report"
+    Examples of type-indicating text:
+    - "Laboratory Investigation Report"
+    - "Lab Report"
+    - "Prescription"
+    - "Discharge Summary"
+    - "Discharge Report"
+    - "Radiology Report"
+    - "MRI Report"
+    - "CT Scan Report"
+    - "Ultrasound Report"
+    - "X-Ray Report"
 
-IMPORTANT:
-- Do NOT use the patient's name, doctor's name, hospital name, or date
-  as the type text.
-- The bounding box must tightly surround the text indicating the
-  document type.
-- Coordinates MUST be normalized to [0,1].
-- bbox format is [x1, y1, x2, y2].
-- x1/y1 is the top-left corner.
-- x2/y2 is the bottom-right corner.
-- If the document type text cannot be reliably located, return
-  type_text=null and bbox=null.
-- If the document is not medical, use document_type="JUNK".
-- Never invent a bounding box.
+    IMPORTANT:
+    - Do NOT use the patient's name, doctor's name, hospital name, or date
+    as the type text.
+    - The bounding box must tightly surround the text indicating the
+    document type.
+    - Coordinates MUST be normalized to [0,1].
+    - bbox format is [x1, y1, x2, y2].
+    - x1/y1 is the top-left corner.
+    - x2/y2 is the bottom-right corner.
+    - If the document type text cannot be reliably located, return
+    type_text=null and bbox=null.
+    - If the document is not medical, use document_type="JUNK".
+    - Never invent a bounding box.
 
-Return ONLY valid JSON matching this exact structure:
+    Return ONLY valid JSON matching this exact structure:
 
-{
-  "is_medical": true,
-  "document_type": "LAB_REPORT",
-  "type_text": "Laboratory Investigation Report",
-  "bbox": [0.10, 0.05, 0.70, 0.10]
-}
+    {
+    "is_medical": true,
+    "document_type": "LAB_REPORT",
+    "type_text": "Laboratory Investigation Report",
+    "bbox": [0.10, 0.05, 0.70, 0.10]
+    }
 
-For non-medical documents:
+    For non-medical documents:
 
-{
-  "is_medical": false,
-  "document_type": "JUNK",
-  "type_text": null,
-  "bbox": null
-}
-""".strip()
+    {
+    "is_medical": false,
+    "document_type": "JUNK",
+    "type_text": null,
+    "bbox": null
+    }
+    """.strip()
 
     @classmethod
     def _extract_first_page(cls, file_path: str) -> dict:
@@ -151,8 +151,9 @@ For non-medical documents:
         )
 
         if not images:
+            logger.error(f"No pages found in the document: {file_path}")
             raise ValueError("No pages found in the document.")
-
+        logger.info(f"Successfully extracted first page from: {file_path}")
         image = images[0].convert("RGB")
         width, height = image.size
 
@@ -193,13 +194,25 @@ For non-medical documents:
             # multimodal/mmproj configuration for your GGUF, configure
             # that in this constructor according to that build.
 
-            cls._llm = Llama(
-                model_path=MODEL_PATH,
-                n_ctx=2048,
-                n_gpu_layers=0,       # CPU only
-                verbose=False,
-            )
+            llm_kwargs = {
+                "model_path": MODEL_PATH,
+                "n_ctx": 2048,
+                "n_gpu_layers": 0,   # CPU only
+                "verbose": False,
+            }
 
+            if MMPROJ_PATH:
+                llm_kwargs["mmproj"] = MMPROJ_PATH
+
+            try:
+                cls._llm = Llama(**llm_kwargs)
+                logger.info(f"Successfully loaded vl model from: {MODEL_PATH}")
+            except TypeError:
+                # Some llama-cpp-python builds do not expose `mmproj`.
+                llm_kwargs.pop("mmproj", None)
+                cls._llm = Llama(**llm_kwargs)
+                logger.warning(f"Loaded vl model without mmproj from: {MODEL_PATH}")
+            
         return cls._llm
 
     @classmethod
@@ -211,7 +224,6 @@ For non-medical documents:
     ) -> DocumentClassification:
         """
         Parse and validate model JSON.
-
         The model is expected to return bbox normalized to [0,1].
         """
 
@@ -259,12 +271,14 @@ For non-medical documents:
         bbox = data.get("bbox")
 
         if bbox is not None:
+
             if (
                 not isinstance(bbox, list)
                 or len(bbox) != 4
             ):
                 bbox = None
             else:
+                logger.info(f"Model returned bbox: {bbox} for document_type: {document_type}")
                 try:
                     bbox = [float(v) for v in bbox]
                 except (TypeError, ValueError):
@@ -318,7 +332,7 @@ For non-medical documents:
             return None
 
         x1, y1, x2, y2 = bbox
-
+        logger.info(f"Converting normalized bbox {bbox} to pixels for image size ({image_width}, {image_height})")
         return [
             round(x1 * image_width),
             round(y1 * image_height),
@@ -357,7 +371,6 @@ For non-medical documents:
         base64_image = page["base64"]
         image_width = page["width"]
         image_height = page["height"]
-
         llm = cls._load_model()
 
         messages = [
@@ -397,6 +410,7 @@ For non-medical documents:
                 response["choices"][0]["message"]["content"]
             )
         except (KeyError, IndexError, TypeError) as exc:
+            logger.error(f"Error parsing model response: {response}")
             raise ValueError(
                 f"Unexpected model response: {response}"
             ) from exc
@@ -417,7 +431,6 @@ For non-medical documents:
                 image_height=image_height,
             )
         )
-
         return result_dict
 
     @classmethod
@@ -428,7 +441,7 @@ For non-medical documents:
         Useful if your machine is memory constrained and you want
         to release the model after a period of inactivity.
         """
-
+        logger.info("Unloading LFM2.5-VL model from memory.")
         with cls._model_lock:
             if cls._llm is not None:
                 del cls._llm
