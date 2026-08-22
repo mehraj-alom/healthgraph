@@ -1,9 +1,9 @@
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException ,Request
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-
+from logger import logger
 from core.db import get_db
 from core.security import get_current_user
 from models.identity import Patient
@@ -16,13 +16,15 @@ router = APIRouter(prefix="/v1/logs", tags=["daily_logs"])
 @router.post("/daily-checkin")
 def submit_daily_checkin(
     payload: DailyCheckInRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_uid: str = Depends(get_current_user)
 ):
     patient = db.scalar(select(Patient).where(Patient.firebase_uid == current_uid))
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found.")
-    
+
+    deidentifier = request.app.state.deidentifier # will initialized at app startup
     daily_group_id = uuid.uuid4() 
     timestamp = datetime.combine(payload.log_date, datetime.min.time(), tzinfo=timezone.utc)
 
@@ -44,6 +46,19 @@ def submit_daily_checkin(
     # Shred Symptoms
     for sym in payload.symptoms:
         sym_id = uuid.uuid4()
+
+        #### De identification layer ####
+        safe_notes = None
+        if sym.notes:
+            result = deidentifier.sanitize(sym.notes)
+            if result.validation_passed:
+                safe_notes = result.text
+            else:
+                # if validation fails, no store of safe note at all 
+                logger.warning(f"Sanitization failed for symptom notes: {result.errors}")
+                safe_notes = None
+
+
         db.add(ClinicalEvent(
             event_id=sym_id, patient_id=patient.patient_id, concept_id=sym.concept_id,
             event_type=EventType.SYMPTOM, source_type=SourceType.MANUAL_ENTRY,
@@ -52,7 +67,9 @@ def submit_daily_checkin(
         ))
         db.add(SymptomPayload(
             event_id=sym_id, severity=sym.severity, 
-            duration_minutes=sym.duration_minutes, notes=sym.notes
+            duration_minutes=sym.duration_minutes, 
+            notes=sym.notes,
+            safe_notes=safe_notes 
         ))
 
     # Shred Vitals

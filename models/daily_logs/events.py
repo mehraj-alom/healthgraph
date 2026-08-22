@@ -16,7 +16,7 @@ class SymptomPayload(Base):
     severity: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     duration_minutes: Mapped[int | None] = mapped_column(Integer)
     notes: Mapped[str | None] = mapped_column(Text)
-    
+    safe_notes: Mapped[str | None] = mapped_column(Text)  # Sanitized notes for outside call
     __table_args__ = (
         CheckConstraint("severity BETWEEN 1 AND 10", name="ck_symptom_severity"),
     )
