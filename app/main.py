@@ -9,7 +9,7 @@ from core.db import engine
 from models.base import Base
 
 # Router imports
-from api.v1 import documents, review ,provenance
+from api.v1 import documents, review ,provenance, timeline,daily_logs
 
 
 # Configure logging
@@ -44,6 +44,10 @@ def create_app() -> FastAPI:
     app.include_router(review.router, prefix="/api")
     # Provenance API for fetching visual evidence of events
     app.include_router(provenance.router, prefix="/api")
+    # Timeline API for fetching longitudinal health events
+    app.include_router(timeline.router, prefix="/api")
+    # Daily Logs API for submitting daily health logs
+    app.include_router(daily_logs.router, prefix="/api")
 
     @app.get("/health", tags=["System"])
     def health_check():

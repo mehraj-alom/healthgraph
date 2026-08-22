@@ -14,6 +14,16 @@ class EventType(str, enum.Enum):
     SYMPTOM = "SYMPTOM"
     DIAGNOSIS = "DIAGNOSIS"
     VITAL_SIGN = "VITAL_SIGN"
+    WELLBEING_LOG = "wellbeing_log" ## Mood, Energy, Stress
+    PROCEDURE = "procedure"
+    PRESCRIPTION = "prescription"
+    IMAGING_RESULT = "imaging_result"
+    IMMUNIZATION = "immunization"
+    PAIN_LOG = "pain_log"            # Specific body mapping  
+    SLEEP_LOG = "sleep_log"
+    ACTIVITY_LOG = "activity_log"    # Exercise, Steps
+    NUTRITION_LOG = "nutrition_log"  # Meals, Hydration
+    MENSTRUAL_LOG = "menstrual_log"
 
 class SourceType(str, enum.Enum):
     DOCUMENT = "DOCUMENT"
@@ -37,7 +47,7 @@ class ClinicalEvent(Base, TimestampMixin):
     verification_status: Mapped[VerificationStatus] = mapped_column(Enum(VerificationStatus))
     
     event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-
+    group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True, nullable=True)
 
 class LabResult(Base):
     __tablename__ = "lab_results"
@@ -87,3 +97,5 @@ class RawExtractionData(Base):
     raw_ade_json: Mapped[dict] = mapped_column(JSONB, nullable=False)  # LandingAI ADE output
     markdown_text: Mapped[str] = mapped_column(String, nullable=True)  # Extracted text in markdown format
     extraction: Mapped[dict] = mapped_column(JSONB, nullable=True)  # Structured extraction data    
+
+
