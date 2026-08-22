@@ -54,8 +54,10 @@ def process_document_pipeline(self, document_id_str: str):
         document.status = "EXTRACTED" 
         db.commit()
         db.refresh(ocr_record)
-        # TODO: Landingai ADE extraction
-        
+        # TODO: extraction mapping ogic 
+        extraction_mapper = ExtractionMapper(extraction_result["structured_json"])
+        mapped_extraction = extraction_mapper.map()
+
         document.status = "COMPLETED"
         db.commit()
         logger.info(f"Successfully completed pipeline for Document {document_id_str}")
