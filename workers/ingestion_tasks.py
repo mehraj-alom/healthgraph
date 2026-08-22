@@ -7,6 +7,7 @@ from services.ocr.gateway import OCRGateway
 from services.ocr.extraction_schema import EXTRACTION_SCHEMA
 from services.ocr.extraction import Extraction
 from models.events import RawExtractionData
+from services.ocr.extraction_mapper import ExtractionMapper
 
 @celery_app.task(name="ingestion_tasks.process_document", bind=True,max_retries=3, default_retry_delay=30)
 def process_document_pipeline(self, document_id_str: str):
@@ -50,13 +51,16 @@ def process_document_pipeline(self, document_id_str: str):
             document_id=document.document_id,
             gateway_json=ocr_gateway_result,
             raw_ade_json=extraction_result["structured_json"],
-            markdown_text=extraction_result["markdown"]
+            markdown_text=extraction_result["markdown"],
+            extraction=extraction_result["extraction"]
         )
         db.add(ocr_record)
         db.commit()
         db.refresh(ocr_record)
-        # TODO: Landingai ADE extraction
-        
+        # TODO: extraction mapping ogic 
+        extraction_mapper = ExtractionMapper(extraction_result["structured_json"])
+        mapped_extraction = extraction_mapper.map()
+
         document.status = "COMPLETED"
         db.commit()
         logger.info(f"Successfully completed pipeline for Document {document_id_str}")

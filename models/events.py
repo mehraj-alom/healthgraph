@@ -83,9 +83,7 @@ class RawExtractionData(Base):
     __tablename__ = "raw_extraction"
     extraction_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.document_id"), index=True)
-    #raw json playloads 
-    #gateway json 
     gateway_json: Mapped[dict] = mapped_column(JSONB, nullable=True) #ocr gateway output
     raw_ade_json: Mapped[dict] = mapped_column(JSONB, nullable=False)  # LandingAI ADE output
     markdown_text: Mapped[str] = mapped_column(String, nullable=True)  # Extracted text in markdown format
-
+    extraction: Mapped[dict] = mapped_column(JSONB, nullable=True)  # Structured extraction data    
