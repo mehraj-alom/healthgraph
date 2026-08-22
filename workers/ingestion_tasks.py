@@ -49,15 +49,16 @@ def process_document_pipeline(self, document_id_str: str):
             gateway_json=ocr_gateway_result,
             raw_ade_json=extraction_result["structured_json"],
             markdown_text=extraction_result["markdown"]
+            extraction=extraction_result["extraction"]
         )
         db.add(ocr_record)
         document.status = "EXTRACTED" 
         db.commit()
         db.refresh(ocr_record)
-        # TODO: extraction mapping ogic 
-        extraction_mapper = ExtractionMapper(extraction_result["structured_json"])
-        mapped_extraction = extraction_mapper.map()
-
+       
+        logger.info(f"Starting Timeline Mapping for Document {document_id_str}...")
+        events_created = ExtractionMapper.map_to_timeline(db, document.document_id)
+         # TODO: ********************
         document.status = "COMPLETED"
         db.commit()
         logger.info(f"Successfully completed pipeline for Document {document_id_str}")
