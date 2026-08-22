@@ -9,7 +9,7 @@ from core.db import engine
 from models.base import Base
 
 # Router imports
-from api.v1 import documents, review
+from api.v1 import documents, review ,provenance
 
 
 # Configure logging
@@ -42,6 +42,8 @@ def create_app() -> FastAPI:
     app.include_router(documents.router, prefix="/api")
     # The Review Queue & Alias Learning API
     app.include_router(review.router, prefix="/api")
+    # Provenance API for fetching visual evidence of events
+    app.include_router(provenance.router, prefix="/api")
 
     @app.get("/health", tags=["System"])
     def health_check():
@@ -54,3 +56,7 @@ app = create_app()
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+
+

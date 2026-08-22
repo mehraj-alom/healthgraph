@@ -96,3 +96,12 @@ class ResolveEventRequest(BaseModel):
     """
     concept_id: UUID
     raw_term: str  # The exact string from OCR to learn (e.g., "S. Creat")
+
+class ProvenanceResponse(BaseModel):
+    event_id: UUID
+    document_id: UUID
+    storage_url: str          # The frontend uses this to fetch/render the PDF or Image
+    extracted_text: str       # The text the AI claims was here
+    bounding_box: Optional[List[float]] = None  # Coordinates [x1, y1, x2, y2]
+    
+    model_config = ConfigDict(from_attributes=True)
