@@ -32,19 +32,20 @@ services:
     volumes:
       - neo4jdata:/data
 
-  milvus:
-    image: milvusdb/milvus:v2.3.0
-    command: ["milvus", "run", "standalone"]
-    environment:
-      ETCD_USE_EMBED: "true"
-      MINIO_ADDRESS: localhost
+  qdrant:
+    container_name: qdrant
+    image: qdrant/qdrant:latest
+    restart: always
     ports:
-      - "19530:19530"
-    mem_limit: 1.5g
+      - "6333:6333" # REST API and  web interface
+      - "6334:6334" # gprc interface
     volumes:
-      - milvusdata:/var/lib/milvus
+      - ./volume/qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GPRC_PORT = 6334
+
 
 volumes:
   pgdata:
   neo4jdata:
-  milvusdata:
+  qdrantdata:

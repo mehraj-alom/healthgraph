@@ -48,7 +48,7 @@ def process_document_pipeline(self, document_id_str: str):
             document_id=document.document_id,
             gateway_json=ocr_gateway_result,
             raw_ade_json=extraction_result["structured_json"],
-            markdown_text=extraction_result["markdown"]
+            markdown_text=extraction_result["markdown"],
             extraction=extraction_result["extraction"]
         )
         db.add(ocr_record)
