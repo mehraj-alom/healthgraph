@@ -97,5 +97,5 @@ class RawExtractionData(Base):
     raw_ade_json: Mapped[dict] = mapped_column(JSONB, nullable=False)  # LandingAI ADE output
     markdown_text: Mapped[str] = mapped_column(String, nullable=True)  # Extracted text in markdown format
     extraction: Mapped[dict] = mapped_column(JSONB, nullable=True)  # Structured extraction data    
-
+    deidentified_markdown: Mapped[str] = mapped_column(String, nullable=True)  # De-identified markdown text
 

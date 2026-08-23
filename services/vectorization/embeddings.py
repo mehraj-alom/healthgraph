@@ -10,7 +10,7 @@ class EmbeddingService:
         self.model = model
         self.endpoint = "https://api.openai.com/v1/embeddings"
 
-    async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """generates 1536-dimensional embeddings for a list of texts"""
 
         if not texts:
