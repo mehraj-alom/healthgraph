@@ -1,6 +1,38 @@
 version: '3.8'
 
 services:
+  api:
+    build: .
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+      - neo4j
+      - qdrant
+    volumes:
+      - .:/app
+
+  celery-worker:
+    build: .
+    command: celery -A core.celery_app worker --loglevel=info
+    depends_on:
+      - postgres
+      - redis
+      - neo4j
+    volumes:
+      - .:/app
+
+  celery-beat:
+    build: .
+    command: celery -A core.celery_app beat --loglevel=info
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+
+      
   postgres:
     image: postgres:15-alpine
     environment:
@@ -37,13 +69,12 @@ services:
     image: qdrant/qdrant:latest
     restart: always
     ports:
-      - "6333:6333" # REST API and  web interface
-      - "6334:6334" # gprc interface
+      - "6333:6333" 
+      - "6334:6334" 
     volumes:
       - ./volume/qdrant_storage:/qdrant/storage
     environment:
-      - QDRANT__SERVICE__GPRC_PORT = 6334
-
+      - QDRANT__SERVICE__GRPC_PORT=6334
 
 volumes:
   pgdata:

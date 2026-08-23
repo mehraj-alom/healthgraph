@@ -30,3 +30,6 @@ python-Levenshtein>=0.25.0 # Speeds up fuzzy matching
 
 # Vector Database & Embeddings
 qdrant-client>=1.8.0      # For interacting with Qdrant vector database
+
+# Neo4j Graph Database
+neo4j>=5.14.1

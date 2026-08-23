@@ -7,12 +7,13 @@ celery_app = Celery(
     "core",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["workers.ingestion_tasks"],
+    include=[
+        "workers.ingestion_tasks", 
+        "tasks.graph_sync"  
+    ],
 )
-###*****************************************************************###
+
 celery_app.conf.update(
-    #"""Celery configuration settings for the application.
-    #it is fully optimized for the dev macine and can be changed for production deployment."""
     worker_max_tasks_per_child=1,
     worker_prefetch_multiplier=1,
     task_acks_late=True,
@@ -20,4 +21,11 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True
 )
-###*****************************************************************###
+
+
+celery_app.conf.beat_schedule = {
+    "drain-graph-outbox-every-5-seconds": {
+        "task": "tasks.graph_sync.drain_graph_outbox",
+        "schedule": 5.0,
+    }
+}
