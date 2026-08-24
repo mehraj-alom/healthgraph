@@ -1,6 +1,4 @@
-
 from contextlib import asynccontextmanager
-import logging
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,9 +10,10 @@ from models.base import Base
 from dotenv import load_dotenv
 load_dotenv()
 # Router imports
-from api.v1 import documents, review ,provenance, timeline,daily_logs
+from api.v1 import documents, review ,provenance, timeline,daily_logs,chat,body_state
 from services.vectorization.qdrant_client import vector_db
 from services.deidentification.deidentifier import DeIdentificationService
+from core.config import Settings
 
 
 # Configure logging
@@ -53,7 +52,10 @@ def create_app() -> FastAPI:
     app.include_router(timeline.router, prefix="/api")
     # Daily Logs API for submitting daily health logs
     app.include_router(daily_logs.router, prefix="/api")
-
+    # Chat API for interacting with the health timeline
+    app.include_router(chat.router, prefix="/api")
+    # Body State API for fetching and updating body state information
+    app.include_router(body_state.router, prefix="/api")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -64,6 +66,7 @@ def create_app() -> FastAPI:
             raise RuntimeError("Secret key not found in environment variables.")
         app.state.deidentifier = DeIdentificationService(secret_key=secret_key)
         app.state.qdrant_client = vector_db.setup_collection()
+        app.state.firebase_initialize = Settings.firebase_initialize()
         yield
 
         

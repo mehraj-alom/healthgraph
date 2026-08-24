@@ -1,5 +1,4 @@
 from presidio_analyzer import AnalyzerEngine
-
 from .config import DeIdentificationConfig
 from models.deidentification import DeIdentificationEntity, DeIdentificationResult
 from .pseudonymizer import Pseudonymizer
