@@ -26,9 +26,12 @@ class EventType(str, enum.Enum):
     MENSTRUAL_LOG = "menstrual_log"
 
 class SourceType(str, enum.Enum):
-    DOCUMENT = "DOCUMENT"
-    MANUAL_ENTRY = "MANUAL_ENTRY"
-    SMARTPHONE_PPG = "SMARTPHONE_PPG"
+    PATIENT_REPORTED = "PATIENT_REPORTED"
+    AI_INFERRED = "AI_INFERRED"
+    DOCTOR_ENTERED = "DOCTOR_ENTERED"
+    IMAGING_REPORT = "IMAGING_REPORT"
+    LAB_REPORT = "LAB_REPORT"
+    DEVICE_WEARABLE = "DEVICE_WEARABLE"
 
 class VerificationStatus(str, enum.Enum):
     EXTRACTED = "EXTRACTED"

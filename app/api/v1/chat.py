@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from langchain_core.messages import HumanMessage
@@ -14,14 +14,20 @@ from logger import logger
 
 router = APIRouter(prefix="/api/v1/chat", tags=["Agent Chat"])
 
+def _get_agent(request: Request):
+    agent = request.app.state.medical_agent
+    if not agent:
+        raise HTTPException(status_code=500, detail="AI Agent is not initialized.")
+    return agent
+
 @router.post("", response_model=ChatResponse)
 async def process_chat(
     request: ChatRequest,
+    http_request: Request,
     patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
     db: Session = Depends(get_db)
 ):
-    if not medical_agent:
-        raise HTTPException(status_code=500, detail="AI Agent is not initialized.")
+    medical_agent = _get_agent(http_request)
 
     validated_structure = None
     if request.focused_structure_id:

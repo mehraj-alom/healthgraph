@@ -27,6 +27,8 @@ async def stream_logs(document_id: str = Query(None)):
 
     async def event_generator():
         nonlocal seen
+        # Send initial connection message
+        yield f"data: {json.dumps({'time': time.strftime('%H:%M:%S'), 'level': 'INFO', 'doc': '-', 'msg': 'Log stream connected'})}\n\n"
         try:
             while True:
                 logs = pipeline_logs.recent(n=200, document_id=document_id)

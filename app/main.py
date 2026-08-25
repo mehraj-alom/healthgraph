@@ -43,6 +43,11 @@ async def lifespan(app: FastAPI):
     app.state.qdrant_client = vector_db.setup_collection()
     initialize_firebase()
     await initialize_agent()
+    # Store agent in app.state for access without globals
+    from agents.agent_setup import medical_agent
+    logger.info(f"DEBUG: medical_agent after init = {medical_agent}")
+    app.state.medical_agent = medical_agent
+    logger.info(f"DEBUG: app.state.medical_agent set = {app.state.medical_agent}")
     yield
 
     logger.info("Shutting down the FastAPI application.")

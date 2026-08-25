@@ -58,6 +58,7 @@ class EventBuilder:
         source_text: str,
         bbox: dict = None,
         event_time: datetime = None,
+        is_lab_result: bool = True,
     ) -> tuple[ClinicalEvent, AnatomicalObservation | None]:
         """
         Build a ClinicalEvent and a corresponding AnatomicalObservation.
@@ -69,55 +70,74 @@ class EventBuilder:
         else:
             verification_status = VerificationStatus.UNVERIFIED
 
+        if is_lab_result:
+            event_type = EventType.LAB_RESULT
+            source_type = SourceType.LAB_REPORT
+            observation_type = ObservationType.LAB_ASSOCIATED_FINDING
+            finding_code = canon_res.code or raw_test_name
+            finding_display_name = canon_res.display_name or raw_test_name
+        else:
+            event_type = EventType.IMAGING_RESULT if "IMAGING" in str(raw_test_name).upper() or "RADIOL" in str(raw_test_name).upper() else EventType.DIAGNOSIS
+            source_type = SourceType.IMAGING_REPORT if "IMAGING" in str(raw_test_name).upper() or "RADIOL" in str(raw_test_name).upper() else SourceType.DOCTOR_ENTERED
+            observation_type = ObservationType.IMAGING_FINDING
+            finding_code = canon_res.code or raw_test_name
+            finding_display_name = canon_res.display_name or raw_test_name
+
         event = ClinicalEvent(
             event_id=uuid.uuid4(),
             patient_id=patient_id,
             concept_id=canon_res.concept_id,
-            event_type=EventType.LAB_RESULT,
-            source_type=SourceType.DOCUMENT,
+            event_type=event_type,
+            source_type=source_type,
             verification_status=verification_status,
             event_time=event_time if event_time else datetime.now(timezone.utc),
         )
         db.add(event)
         db.flush()
 
-        lab_payload = LabResult(
-            event_id=event.event_id,
-            value=str(value),
-            unit=unit,
-            reference_range=ref_range,
-        )
-        db.add(lab_payload)
+        if is_lab_result:
+            lab_payload = LabResult(
+                event_id=event.event_id,
+                value=str(value),
+                unit=unit,
+                reference_range=ref_range,
+            )
+            db.add(lab_payload)
 
         evidence = EvidenceLink(
             evidence_id=uuid.uuid4(),
             event_id=event.event_id,
             document_id=document_id,
-            source_text=source_text or f"{raw_test_name} :{value} {unit}",
+            extracted_text=source_text or f"{raw_test_name} :{value} {unit}",
             bounding_box=bbox,
         )
         db.add(evidence)
 
         observation = None
         structure_id = _resolve_structure_id(db, canon_res.code, canon_res.terminology)
-        abnormal_flag = getattr(lab_payload, "abnormal_flag", None)
-        visual_status, visual_severity_score = _lab_severity(abnormal_flag)
+
+        if is_lab_result:
+            abnormal_flag = getattr(lab_payload, "abnormal_flag", None)
+            visual_status, visual_severity_score = _lab_severity(abnormal_flag)
+        else:
+            visual_status = VisualStatus.NORMAL
+            visual_severity_score = 0.0
 
         observation = AnatomicalObservation(
             observation_id=uuid.uuid4(),
             patient_id=patient_id,
             structure_id=structure_id,
-            observation_type=ObservationType.LAB_ASSOCIATED_FINDING,
-            finding_code=canon_res.code or raw_test_name,
-            finding_display_name=canon_res.display_name or raw_test_name,
+            observation_type=observation_type,
+            finding_code=finding_code,
+            finding_display_name=finding_display_name,
             visual_status=visual_status,
             visual_severity_score=visual_severity_score,
             trend=FindingTrend.STABLE,
-            source_type=AnatomySourceType.LAB_REPORT,
+            source_type=AnatomySourceType.LAB_REPORT if is_lab_result else AnatomySourceType.IMAGING_REPORT,
             source_id=str(event.event_id),
             event_id=event.event_id,
             document_id=document_id,
-            clinical_summary=f"{raw_test_name}: {value} {unit} (ref: {ref_range})",
+            clinical_summary=source_text[:500] if source_text else f"{raw_test_name}: {value} {unit}",
             recorded_at=event.event_time,
             ingested_at=datetime.now(timezone.utc),
         )
@@ -126,6 +146,7 @@ class EventBuilder:
 
 
 event_builder = EventBuilder()
+
 
 class ExtractionMapper:
     @staticmethod
@@ -137,23 +158,23 @@ class ExtractionMapper:
         document = db.scalars(select(Document).where(Document.document_id == document_id)).first()
 
         if not raw_record or not raw_record.extraction or not document:
-                logger.warning(f"No valid extraction data found for document {document_id}.")
-                return 0, []
-        
+            logger.warning(f"No valid extraction data found for document {document_id}.")
+            return 0, []
+
         doc_json = raw_record.extraction.get("document", {})
         sections = doc_json.get("sections", [])
         events_created = 0
         observations_created = []
 
         for section in sections:
-             results = section.get("results", [])
+            results = section.get("results", [])
 
-             for result in results:
+            for result in results:
                 raw_test_name = result.get("test_name", "")
                 value = result.get("result", "")
                 if not raw_test_name or not value:
-                        logger.warning(f"Missing test name or value in result: {result}. Skipping.")
-                        continue
+                    logger.warning(f"Missing test name or value in result: {result}. Skipping.")
+                    continue
                 canon_res = Canonicalizer.resolve_concept(db, raw_term=raw_test_name)
 
                 unit = result.get("unit", "")
@@ -161,24 +182,63 @@ class ExtractionMapper:
                 source_text = result.get("source_text", "")
 
                 event, observation = event_builder.build_clinical_event(
-                       db=db,
-                       patient_id=document.patient_id,
-                       document_id=document.document_id,
-                       canon_res=canon_res,
-                       raw_test_name=raw_test_name,
-                       value=value,
-                       unit=unit,
-                       ref_range=ref_range,
-                       source_text=source_text,
-                       bbox=None,
+                    db=db,
+                    patient_id=document.patient_id,
+                    document_id=document.document_id,
+                    canon_res=canon_res,
+                    raw_test_name=raw_test_name,
+                    value=value,
+                    unit=unit,
+                    ref_range=ref_range,
+                    source_text=source_text,
+                    bbox=None,
                 )
                 events_created += 1
                 if observation:
                     observations_created.append(observation)
 
+            # Also process diagnostic findings from radiology/imaging sections
+            diagnosis = section.get("diagnosis")
+            if diagnosis:
+                canon_res = Canonicalizer.resolve_concept(db, raw_term=diagnosis)
+                event, observation = event_builder.build_clinical_event(
+                    db=db,
+                    patient_id=document.patient_id,
+                    document_id=document.document_id,
+                    canon_res=canon_res,
+                    raw_test_name=section.get("section_title", "Imaging Finding"),
+                    value=diagnosis,
+                    unit="",
+                    ref_range="",
+                    source_text=diagnosis,
+                    bbox=None,
+                    is_lab_result=False,
+                )
+                events_created += 1
+                if observation:
+                    observations_created.append(observation)
+            else:
+                # Fallback: use comments as finding if no diagnosis
+                comments = section.get("comments")
+                if comments and len(comments) > 20:  # Only meaningful comments
+                    canon_res = Canonicalizer.resolve_concept(db, raw_term=comments[:200])
+                    event, observation = event_builder.build_clinical_event(
+                        db=db,
+                        patient_id=document.patient_id,
+                        document_id=document.document_id,
+                        canon_res=canon_res,
+                        raw_test_name=section.get("section_title", "Clinical Finding"),
+                        value=comments[:500],
+                        unit="",
+                        ref_range="",
+                        source_text=comments[:500],
+                        bbox=None,
+                        is_lab_result=False,
+                    )
+                    events_created += 1
+                    if observation:
+                        observations_created.append(observation)
+
         db.commit()
         logger.info(f"Successfully mapped {events_created} events for document {document_id}.")
         return events_created, observations_created
-          
-                      
-

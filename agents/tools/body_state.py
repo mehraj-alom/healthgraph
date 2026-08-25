@@ -13,7 +13,7 @@ def _get_current_body_state(patient_id: uuid.UUID, db: Session) -> list[dict]:
     anatomy registry to fetch the authoritative human-readable display name.
     """
     stmt = (
-        select(PatientBodyStateSnapshot, AnatomicalStructure.display_name)
+        select(PatientBodyStateSnapshot, AnatomicalStructure.display_name, AnatomicalStructure.mesh_node_name)
         .join(
             AnatomicalStructure,
             AnatomicalStructure.structure_id == PatientBodyStateSnapshot.structure_id
@@ -27,6 +27,7 @@ def _get_current_body_state(patient_id: uuid.UUID, db: Session) -> list[dict]:
         {
             "structure_id": row.PatientBodyStateSnapshot.structure_id,
             "display_name": row.display_name,
+            "mesh_node_name": row.mesh_node_name,
             "visual_status": row.PatientBodyStateSnapshot.visual_status.value,
             "severity": row.PatientBodyStateSnapshot.visual_severity_score,
             "trend": row.PatientBodyStateSnapshot.trend.value,
