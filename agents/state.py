@@ -1,7 +1,11 @@
 import uuid
-from typing import Annotated, Sequence, TypedDict
+from typing import Annotated, Optional, Sequence, TypedDict
+
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
+
+from schemas.chat import AgentStructuredOutput
+
 
 class GraphState(TypedDict):
     """
@@ -11,3 +15,4 @@ class GraphState(TypedDict):
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     session_patient_id: uuid.UUID
+    final_output: Optional[AgentStructuredOutput]

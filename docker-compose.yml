@@ -3,7 +3,16 @@ version: '3.8'
 services:
   api:
     build: .
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://medgraph:password@postgres:5432/medgraph_db
+      - ASYNC_DATABASE_URL=postgresql+asyncpg://medgraph:password@postgres:5432/medgraph_db
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
     ports:
       - "8000:8000"
     depends_on:
@@ -17,6 +26,18 @@ services:
   celery-worker:
     build: .
     command: celery -A core.celery_app worker --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://medgraph:password@postgres:5432/medgraph_db
+      - ASYNC_DATABASE_URL=postgresql+asyncpg://medgraph:password@postgres:5432/medgraph_db
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - VISION_AGENT_API_KEY=${LANDINGAI_API_KEY}
+      - OPENAI_API_KEY=${AICREDITS_API_KEY}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-https://api.aicredits.in/v1}
     depends_on:
       - postgres
       - redis
@@ -27,6 +48,12 @@ services:
   celery-beat:
     build: .
     command: celery -A core.celery_app beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://medgraph:password@postgres:5432/medgraph_db
     depends_on:
       - redis
     volumes:
@@ -36,9 +63,9 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: medgraph
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: medgraph_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${POSTGRES_DB:-medgraph_db}
     ports:
       - "5432:5432"
     mem_limit: 1g
@@ -54,12 +81,12 @@ services:
   neo4j:
     image: neo4j:5
     environment:
-      NEO4J_AUTH: neo4j/password
-      NEO4J_dbms_memory_heap_initial__size: 256m
-      NEO4J_dbms_memory_heap_max__size: 512m
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}
+      NEO4J_dbms_memory_heap_initial__size: ${NEO4J_HEAP_INITIAL:-256m}
+      NEO4J_dbms_memory_heap_max__size: ${NEO4J_HEAP_MAX:-512m}
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "7475:7474"
+      - "7688:7687"
     mem_limit: 1g
     volumes:
       - neo4jdata:/data
@@ -74,9 +101,8 @@ services:
     volumes:
       - ./volume/qdrant_storage:/qdrant/storage
     environment:
-      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__GRPC_PORT=${QDRANT_GRPC_PORT:-6334}
 
 volumes:
   pgdata:
   neo4jdata:
-  qdrantdata:

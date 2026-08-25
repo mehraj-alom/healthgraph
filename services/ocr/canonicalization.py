@@ -10,9 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import text
+
 from models.ontology import MedicalAlias, MedicalConcept
-from services.term_normalization import MedicalTermNormalizer
-from services.matching_policy import MatchingPolicy
+from services.ocr.term_normalization import MatchingPolicy, MedicalTermNormalizer
 
 class MatchStatus(str, Enum):
     AUTO_MATCH = "auto_match"

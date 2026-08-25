@@ -1,8 +1,10 @@
-import os 
-from fastapi import UploadFile
-import haslib
+import hashlib
+import os
 from typing import BinaryIO
 from uuid import UUID
+
+from fastapi import UploadFile
+
 from core.config import Settings
 
 STORAGE_DIR = Settings().STORAGE_DIR

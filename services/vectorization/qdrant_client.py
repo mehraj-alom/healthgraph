@@ -1,3 +1,4 @@
+import os
 from logger import logger
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -6,9 +7,9 @@ from qdrant_client.http.models import Distance, VectorParams,PayloadSchemaType
 
 class QdrantManager:
     def __init__(self, host: str = "localhost", port: int = 6333):
-        self.host = host
-        self.port = port
-        self.collection_name = "healthLine"
+        self.host = os.getenv("QDRANT_HOST", host)
+        self.port = int(os.getenv("QDRANT_PORT", str(port)))
+        self.collection_name = os.getenv("QDRANT_COLLECTION_NAME", "healthLine")
         self.client = QdrantClient(host=self.host, port=self.port)
 
     def setup_collection(self):
@@ -36,4 +37,4 @@ class QdrantManager:
         return self.client
 
 
-vector_db = QdrantManager(host="localhost", port=6333)
+vector_db = QdrantManager()

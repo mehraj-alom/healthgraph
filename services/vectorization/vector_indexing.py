@@ -1,16 +1,22 @@
+import os
 import uuid
+from typing import Any, Dict, List
+
+from qdrant_client.http.models import PointStruct
+
 from logger import logger
-from typing import List, Dict, Any
-from qdrant_client.http.models  import PointStruct
-from vectorization.qdrant_client import vector_db
-from vectorization.embeddings import EmbeddingService
-from vectorization.chunker import MarkdownChunker
+from services.vectorization.chunker import MarkdownChunker
+from services.vectorization.embeddings import EmbeddingService
+from services.vectorization.qdrant_client import vector_db
 
 
 
 class VectorIndexingService:
     def __init__(self):
-        self.embedding_service = EmbeddingService()
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required for vector indexing.")
+        self.embedding_service = EmbeddingService(api_key=api_key)
         self.chunker = MarkdownChunker()
         self.client = vector_db.setup_collection()
         self.collection_name = vector_db.collection_name
@@ -40,14 +46,15 @@ class VectorIndexingService:
         points: List[PointStruct] = []
         for i, (chunk, vector) in enumerate(zip(chunks, embeddings)):
             point = PointStruct(
-                id= str(uuid.uuid4()),  # Generate a unique ID for each chunk
+                id=str(uuid.uuid4()),
                 vector=vector,
                 payload={
                     "patient_id": str(patient_id),
                     "document_id": str(document_id),
                     "chunk_index": i,
-                    "chunk_text": chunk
-                }
+                    "text": chunk,
+                    "chunk_text": chunk,
+                },
             )
             points.append(point)
 

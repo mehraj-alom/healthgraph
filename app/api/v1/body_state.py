@@ -2,9 +2,10 @@ import uuid
 from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from core.db  import get_db
-from api.dependencies import get_authenticated_patient_id
+
+from app.api.dependencies import get_authenticated_patient_id
 from agents.tools.body_state import _get_current_body_state
+from core.db import get_db
 from schemas.body_state import BodyStateItem
 
 router = APIRouter(prefix="/api/v1/body-state", tags=["3D Body State"])

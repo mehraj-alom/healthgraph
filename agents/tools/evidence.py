@@ -12,13 +12,13 @@ from qdrant_client.http import models
 
 from core.db import SessionLocal
 from core.neo4j_client import neo4j_driver
-from services.vectorization.qdrant_client import QdrantManager
+from services.vectorization.qdrant_client import vector_db
 from services.vectorization.embeddings import EmbeddingService 
 from models.anatomy import AnatomicalObservation
 
 
 
-def _get_document_evidence(
+async def _get_document_evidence(
     patient_id: uuid.UUID, 
     document_id: str, 
     query: str,
@@ -61,12 +61,13 @@ def _get_document_evidence(
         result = session.run(cypher, patient_id=str(patient_id), document_id=str(document_id))
         if not result.single():
             return [{"error": "DOCUMENT_NOT_PROJECTED: Document exists but lacks clinical graph provenance."}]
+    
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise ValueError("OPENAI_API_KEY is not set.")
     embedding_service = EmbeddingService(api_key=api_key)
     # Qdrant Semantic Search (Mandatory Tenant Isolation Filter)
-    query_vector = embedding_service.generate_embeddings(query)
+    query_vector = (await embedding_service.generate_embeddings([query]))[0]
     tenant_filter = models.Filter(
         must=[
             models.FieldCondition(
@@ -81,10 +82,10 @@ def _get_document_evidence(
     )
     
     results = client.search(
-        collection_name="clinical_documents",
+        collection_name="healthLine",
         query_vector=query_vector,
         query_filter=tenant_filter,
-        limit=5  # Top-K constraint
+        limit=5,
     )
     
     if not results:
@@ -93,15 +94,15 @@ def _get_document_evidence(
     return [
         {
             "chunk_id": str(hit.id),
-            "text": hit.payload.get("text", ""),
+            "text": hit.payload.get("text") or hit.payload.get("chunk_text", ""),
             "page_number": hit.payload.get("page_number", 1),
-            "similarity_score": round(hit.score, 4)
+            "similarity_score": round(hit.score, 4),
         }
         for hit in results
     ]
 
 @tool
-def get_document_evidence(document_id: str, query: str, config: RunnableConfig = None) -> List[Dict]:
+async def get_document_evidence(document_id: str, query: str, config: RunnableConfig = None) -> List[Dict]:
     """
     Retrieves semantic text evidence and exact quotes from a specific medical document.
     """
@@ -114,7 +115,6 @@ def get_document_evidence(document_id: str, query: str, config: RunnableConfig =
     
     db: Session = SessionLocal()
     try:
-        quadrent_client = QdrantManager()
-        return _get_document_evidence(patient_id, document_id, query, db, neo4j_driver, quadrent_client.client)
+        return await _get_document_evidence(patient_id, document_id, query, db, neo4j_driver, vector_db.client)
     finally:
         db.close()

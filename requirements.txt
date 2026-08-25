@@ -22,14 +22,27 @@ presidio-analyzer>=2.2.35
 presidio-anonymizer>=2.2.35
 spacy>=3.7.4              # Core NLP engine for Presidio
 
+# Language / Agent Runtime
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langgraph>=0.2.0
+langgraph-checkpoint-postgres>=2.0.0
+
 # Extraction & Matching Utilities
 httpx>=0.26.0             # Async HTTP client for LandingAI API
 thefuzz>=0.22.1           # For canonical alias fuzzy matching
 python-Levenshtein>=0.25.0 # Speeds up fuzzy matching
-
+python-dotenv>=1.0.1      # Load environment variables for local config
+pdf2image>=1.17.0         # Render PDF first pages for OCR/document classification
+llama-cpp-python>=0.3.0   # Optional OCR model backend for document classification
+landingai-ade>=1.17.0     # LandingAI ADE for document extraction
 
 # Vector Database & Embeddings
 qdrant-client>=1.8.0      # For interacting with Qdrant vector database
 
 # Neo4j Graph Database
 neo4j>=5.14.1
+asyncpg>=0.29.0           # Async PostgreSQL driver for LangGraph checkpointing
+
+
+openrouter

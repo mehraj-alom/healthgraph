@@ -14,6 +14,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file first to leverage Docker layer caching
@@ -35,5 +36,5 @@ EXPOSE 8000
 
 
 # (In your docker-compose.yml, this command will override this CMD for Celery workers)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 

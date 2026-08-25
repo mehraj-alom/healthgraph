@@ -20,7 +20,8 @@ STALE_LEASE_MINUTES = 5
 
 REQUIRED_OBSERVATION_KEYS = {
     "patient_id", "observation_id", "structure_id", 
-    "finding_code", "visual_severity_score", "recorded_at", "source_type"
+    "finding_code", "visual_severity_score", "recorded_at", "source_type",
+    "level_number"
 }
 
 class PermanentProjectionError(Exception):
@@ -85,7 +86,7 @@ def _process_outbox_events(db: Session, driver, batch_size: int = 50):
 
         db.commit()
 
-@shared_task(name="tasks.graph_sync.drain_graph_outbox")
+@shared_task(name="workers.graph_sync.drain_graph_outbox")
 def drain_graph_outbox():
     db = SessionLocal()
     try:
@@ -133,7 +134,13 @@ def _project_observation_tx(tx, payload: dict):
     if payload.get("document_id"):
         cypher += " MERGE (d:Document {id: $document_id}) MERGE (o)-[:SOURCE_DOCUMENT]->(d)"
     if payload.get("event_id"):
-        cypher += " MERGE (t:TimelineEvent {id: $event_id}) MERGE (o)-[:LOGGED_ON]->(t)"
+        cypher += """
+        MERGE (t:TimelineEvent {id: $event_id})
+        SET t.date = $recorded_at,
+            t.level_number = $level_number
+        MERGE (p)-[:HAS_TIMELINE_EVENT]->(t)
+        MERGE (o)-[:LOGGED_ON]->(t)
+        """
 
     result = tx.run(cypher, **parameters)
     result.consume() # Ensures the transaction fully executes

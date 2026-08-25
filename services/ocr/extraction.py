@@ -1,25 +1,62 @@
-from dotenv import load_dotenv
-load_dotenv()  # Load environment variables from .env file
+import os
 from pathlib import Path
-from landingai_ade import LandingAIADE
+
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables for local config
+
+try:
+    from landingai_ade import LandingAIADE
+except ModuleNotFoundError:  # pragma: no cover - optional OCR backend
+    LandingAIADE = None
+
+_client = None
 
 
-client = LandingAIADE()
+def _get_client():
+    global _client
+    if _client is not None:
+        return _client
+    if LandingAIADE is None:
+        return None
+    api_key = os.getenv("VISION_AGENT_API_KEY") or os.getenv("LANDINGAI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        _client = LandingAIADE(apikey=api_key)
+        return _client
+    except Exception:
+        return None
 
 
 class Extraction:
+    @staticmethod
+    def _require_client():
+        active_client = _get_client()
+        if active_client is None:
+            raise RuntimeError(
+                "The optional OCR dependency 'landingai_ade' is not installed or configured. "
+                "Install the LandingAI ADE package and set VISION_AGENT_API_KEY to enable document extraction."
+            )
+        return active_client
+
     @staticmethod
     def parse_(document_path: str, model: str = "dpt-3-pro-latest") -> dict:
         """
         Parses a document using the LandingAI ADE API.
         return marksdown and structured json output"""
 
-        
-        response = client.v2.parse(
+        active_client = Extraction._require_client()
+        response = active_client.v2.parse(
             document=Path(document_path),
             model=model,
         )
-        return {"markdown": response.markdown, "structured_json": response.structure}
+        structured = response.structure
+        if hasattr(structured, "model_dump"):
+            structured = structured.model_dump()
+        elif hasattr(structured, "dict"):
+            structured = structured.dict()
+        return {"markdown": response.markdown, "structured_json": structured}
 
 
     @staticmethod
@@ -27,11 +64,17 @@ class Extraction:
         """
         Extracts structured data from markdown using the LandingAI ADE API.
         return structured json output"""
-        extract_response = client.v2.extract(
+        active_client = Extraction._require_client()
+        extract_response = active_client.v2.extract(
             markdown=markdown,
-            schema=schema
+            schema=schema,
         )
-        return {"extraction": extract_response.extraction}
+        extraction = extract_response.extraction
+        if hasattr(extraction, "model_dump"):
+            extraction = extraction.model_dump()
+        elif hasattr(extraction, "dict"):
+            extraction = extraction.dict()
+        return {"extraction": extraction}
 
 
     @staticmethod

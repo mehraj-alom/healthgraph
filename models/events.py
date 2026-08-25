@@ -40,7 +40,7 @@ class ClinicalEvent(Base, TimestampMixin):
     
     event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("patients.patient_id"), index=True)
-    concept_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_concepts.concept_id"), nullable=True)
+    concept_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("medical_concepts.id"), nullable=True)
     
     event_type: Mapped[EventType] = mapped_column(Enum(EventType))
     source_type: Mapped[SourceType] = mapped_column(Enum(SourceType))

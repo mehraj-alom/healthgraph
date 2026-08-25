@@ -4,9 +4,15 @@ import threading
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Optional
+
 from pdf2image import convert_from_path
 from PIL import Image
-from llama_cpp import Llama
+
+try:
+    from llama_cpp import Llama
+except ModuleNotFoundError:  # pragma: no cover - optional runtime dependency
+    Llama = None
+
 from core.config import settings
 from logger import logger
 
@@ -58,7 +64,7 @@ class OCRGateway:
     displays the page at.
     """
 
-    _llm: Optional[Llama] = None
+    _llm: Optional["Llama"] = None
     _model_lock = threading.Lock()
     _inference_lock = threading.Lock()
 
@@ -136,24 +142,37 @@ class OCRGateway:
     @classmethod
     def _extract_first_page(cls, file_path: str) -> dict:
         """
-        Render the first page of a PDF and return:
+        Render the first page of a PDF or directly load an image file.
+        Returns:
           - base64 JPEG
           - image width
           - image height
         """
+        ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
+        image_extensions = {"jpg", "jpeg", "png", "bmp", "tiff", "tif", "webp"}
 
-        images = convert_from_path(
-            file_path,
-            first_page=1,
-            last_page=1,
-            dpi=150,
-        )
+        if ext in image_extensions:
+            image = Image.open(file_path).convert("RGB")
+            logger.info(f"Loaded image directly: {file_path}")
+        else:
+            images = convert_from_path(
+                file_path,
+                first_page=1,
+                last_page=1,
+                dpi=100,
+            )
+            if not images:
+                logger.error(f"No pages found in the document: {file_path}")
+                raise ValueError("No pages found in the document.")
+            logger.info(f"Successfully extracted first page from: {file_path}")
+            image = images[0].convert("RGB")
 
-        if not images:
-            logger.error(f"No pages found in the document: {file_path}")
-            raise ValueError("No pages found in the document.")
-        logger.info(f"Successfully extracted first page from: {file_path}")
-        image = images[0].convert("RGB")
+        max_dim = 256
+        w, h = image.size
+        if max(w, h) > max_dim:
+            ratio = max_dim / max(w, h)
+            image = image.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+
         width, height = image.size
 
         img_byte_arr = BytesIO()
@@ -172,10 +191,16 @@ class OCRGateway:
         }
 
     @classmethod
-    def _load_model(cls) -> Llama:
+    def _load_model(cls):
         """
         Lazy-load the model exactly once per Python process.
         """
+
+        if Llama is None:
+            raise RuntimeError(
+                "The optional dependency 'llama-cpp-python' is not installed. "
+                "Install it to enable OCR classification."
+            )
 
         if cls._llm is not None:
             return cls._llm
@@ -195,7 +220,7 @@ class OCRGateway:
 
             llm_kwargs = {
                 "model_path": MODEL_PATH,
-                "n_ctx": 2048,
+                "n_ctx": 32768,
                 "n_gpu_layers": 0,   # CPU only
                 "verbose": False,
             }
@@ -297,7 +322,11 @@ class OCRGateway:
                 bbox = None
 
         # Junk documents should not have a type box.
-        if not is_medical:
+        # If a valid medical type was identified, treat as medical
+        medical_types = {"LAB_REPORT", "PRESCRIPTION", "DISCHARGE", "IMAGING"}
+        if document_type in medical_types:
+            is_medical = True
+        elif not is_medical:
             document_type = "JUNK"
             type_text = None
             bbox = None

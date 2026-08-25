@@ -1,10 +1,38 @@
 from sqlalchemy import select
-from models.anatomy import AnatomicalStructure
+from models.anatomy import AnatomicalStructure, StructureCategory
+
+
+FULL_BODY_ID = "FULL_BODY"
+FULL_BODY_DISPLAY = "Full Body"
+FULL_BODY_MESH = "human_body_v1"
+FULL_BODY_MESH_NODE = "HumanBodyRoot"
+
+
+def seed_full_body(db_session):
+    """Ensure the canonical FULL_BODY root structure exists."""
+    existing = db_session.execute(
+        select(AnatomicalStructure).where(AnatomicalStructure.structure_id == FULL_BODY_ID)
+    ).scalar_one_or_none()
+
+    if not existing:
+        db_session.add(AnatomicalStructure(
+            structure_id=FULL_BODY_ID,
+            display_name=FULL_BODY_DISPLAY,
+            category=StructureCategory.ROOT,
+            parent_id=None,
+            mesh_asset_id=FULL_BODY_MESH,
+            mesh_node_name=FULL_BODY_MESH_NODE,
+            is_internal_organ=False,
+        ))
+        db_session.commit()
+
 
 def project_anatomy_hierarchy(db_session, neo4j_driver):
     """
     Reads the canonical hierarchy from PostgreSQL and builds the Neo4j Anatomy Graph.
     """
+    seed_full_body(db_session)
+
     structures = db_session.execute(select(AnatomicalStructure)).scalars().all()
     
     cypher = """

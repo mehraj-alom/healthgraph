@@ -9,8 +9,9 @@ from agents.agent_setup import medical_agent
 from models.chat import ConversationThread
 from models.anatomy import AnatomicalStructure, PatientBodyStateSnapshot
 from schemas.chat import ChatRequest, ChatResponse, HydratedUIAction, AgentStructuredOutput
-from api.dependencies import get_authenticated_patient_id
+from app.api.dependencies import get_authenticated_patient_id
 from logger import logger
+
 router = APIRouter(prefix="/api/v1/chat", tags=["Agent Chat"])
 
 @router.post("", response_model=ChatResponse)

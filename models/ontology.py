@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy import (
+    ARRAY,
     Boolean,
     Float,
     ForeignKey,
@@ -10,6 +11,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from models.base import Base, TimestampMixin
 
 class MedicalConcept(Base):
@@ -23,7 +25,7 @@ class MedicalConcept(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     
     # Optional embedding for semantic search (e.g., pgvector)
-    embedding: Mapped[list[float] | None] = mapped_column(nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(ARRAY(Float), nullable=True)
 
     aliases = relationship("MedicalAlias", back_populates="concept", cascade="all, delete-orphan")
 

@@ -2,7 +2,9 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
+
 from models.anatomy import AnatomicalObservation, PatientBodyStateSnapshot, AnatomicalStructure
+from models.outbox import GraphSyncOutbox, OutboxEventType
 
 # Fast Read Model for 3D Frontend
 def get_patient_body_state(db: Session, patient_id: uuid.UUID) -> dict:
@@ -29,8 +31,15 @@ def get_patient_body_state(db: Session, patient_id: uuid.UUID) -> dict:
     }
 
 # WRITE PATH: Authoritative Log + Snapshot Upsert
-def record_anatomical_observation(db: Session, observation: AnatomicalObservation):
-    """Saves the observation and defensively upserts the snapshot."""
+def record_anatomical_observation(db: Session, observation: AnatomicalObservation, *, auto_commit: bool = True):
+    """Saves the observation and defensively upserts the snapshot.
+    
+    Args:
+        db: SQLAlchemy session.
+        observation: The AnatomicalObservation to record.
+        auto_commit: If True (default), commits the transaction. Set to False
+                     when the caller manages its own transaction boundaries.
+    """
     
     db.add(observation)
     db.flush() 
@@ -84,4 +93,28 @@ def record_anatomical_observation(db: Session, observation: AnatomicalObservatio
     )
     
     db.execute(stmt)
-    db.commit()
+
+    payload = {
+        "patient_id": str(observation.patient_id),
+        "observation_id": str(observation.observation_id),
+        "structure_id": observation.structure_id,
+        "finding_code": observation.finding_code,
+        "visual_severity_score": float(observation.visual_severity_score),
+        "recorded_at": observation.recorded_at.isoformat(),
+        "source_type": observation.source_type.value,
+        "level_number": int(observation.recorded_at.strftime("%Y%m%d")),
+    }
+    if observation.document_id is not None:
+        payload["document_id"] = str(observation.document_id)
+    if observation.event_id is not None:
+        payload["event_id"] = str(observation.event_id)
+
+    db.add(
+        GraphSyncOutbox(
+            event_type=OutboxEventType.OBSERVATION_RECORDED,
+            payload=payload,
+        )
+    )
+    
+    if auto_commit:
+        db.commit()

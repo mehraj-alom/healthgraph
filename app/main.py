@@ -1,89 +1,106 @@
 from contextlib import asynccontextmanager
 import os
+
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from logger import logger
-import uvicorn
-# Database imports
-from core.db import engine
-from models.base import Base
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
-load_dotenv()
-# Router imports
-from api.v1 import documents, review ,provenance, timeline,daily_logs,chat,body_state
-from services.vectorization.qdrant_client import vector_db
+
+from app.api.auth import router as auth_router
+from app.api.v1 import (
+    body_state,
+    chat,
+    daily_logs,
+    documents,
+    logs,
+    provenance,
+    review,
+    timeline,
+)
+from agents.agent_setup import close_agent, initialize_agent
+from core.config import initialize_firebase
+from core.db import engine
+from core.neo4j_client import close_neo4j_driver
+from logger import logger
+from models.base import Base
 from services.deidentification.deidentifier import DeIdentificationService
-from core.config import Settings
+from services.vectorization.qdrant_client import vector_db
+
+load_dotenv()
 
 
-# Configure logging
-#TODO : Configure logging to write to a file and set the appropriate log level
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI application."""
+    logger.info("Starting up the FastAPI application.")
+    secret_key = os.getenv("secret_key")
+    if not secret_key:
+        logger.error("Secret key not found in environment variables.")
+        raise RuntimeError("Secret key not found in environment variables.")
+
+    app.state.deidentifier = DeIdentificationService(secret_key.encode() if isinstance(secret_key, str) else secret_key)
+    app.state.qdrant_client = vector_db.setup_collection()
+    initialize_firebase()
+    await initialize_agent()
+    yield
+
+    logger.info("Shutting down the FastAPI application.")
+    await close_agent()
+    close_neo4j_driver()
+
 
 def create_app() -> FastAPI:
     """Application factory for FastAPI."""
     logger.info("Initializing FastAPI application.")
-    # Optional: If you are using Alembic for migrations (recommended), 
-    # remove this line. If developing locally without Alembic, this 
-    # automatically creates your tables.
     Base.metadata.create_all(bind=engine)
-    
+
     app = FastAPI(
         title="MedGraph Core API",
         description="Longitudinal Health Timeline & Automated Extraction API",
         version="1.0.0",
+        lifespan=lifespan,
     )
 
-    # Configure CORS for frontend access
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Restrict to your frontend domain in production
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    #Document Upload & Ingestion Trigger
-    app.include_router(documents.router, prefix="/api")
-    # The Review Queue & Alias Learning API
-    app.include_router(review.router, prefix="/api")
-    # Provenance API for fetching visual evidence of events
-    app.include_router(provenance.router, prefix="/api")
-    # Timeline API for fetching longitudinal health events
-    app.include_router(timeline.router, prefix="/api")
-    # Daily Logs API for submitting daily health logs
-    app.include_router(daily_logs.router, prefix="/api")
-    # Chat API for interacting with the health timeline
-    app.include_router(chat.router, prefix="/api")
-    # Body State API for fetching and updating body state information
-    app.include_router(body_state.router, prefix="/api")
+    app.include_router(auth_router)
+    app.include_router(documents.router)
+    app.include_router(review.router)
+    app.include_router(provenance.router)
+    app.include_router(timeline.router)
+    app.include_router(daily_logs.router)
+    app.include_router(chat.router)
+    app.include_router(body_state.router)
+    app.include_router(logs.router)
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        """Lifespan context manager for FastAPI application."""
-        secret_key = os.getenv("secret_key")
-        if not secret_key:
-            logger.error("Secret key not found in environment variables.")
-            raise RuntimeError("Secret key not found in environment variables.")
-        app.state.deidentifier = DeIdentificationService(secret_key=secret_key)
-        app.state.qdrant_client = vector_db.setup_collection()
-        app.state.firebase_initialize = Settings.firebase_initialize()
-        yield
-
-        
     @app.get("/health", tags=["System"])
     def health_check():
         """Basic health check endpoint."""
         return {"status": "ok", "service": "MedGraph API"}
 
-    return app(lifespan=lifespan)
+    # Development console - serves index.html at root
+    @app.get("/", include_in_schema=False)
+    def dev_console():
+        index_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path, media_type="text/html")
+        return {"detail": "Dev console not found. Place index.html in the project root."}
 
-
+    return app
 
 
 app = create_app()
 
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
 
 
 

@@ -8,7 +8,7 @@ class EmbeddingService:
     def __init__(self, api_key: str, model: str = "text-embedding-3-small"):
         self.api_key = api_key
         self.model = model
-        self.endpoint = "https://api.openai.com/v1/embeddings"
+        self.endpoint = os.getenv("EMBEDDING_BASE_URL", "https://api.openai.com/v1") + "/embeddings"
 
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """generates 1536-dimensional embeddings for a list of texts"""
