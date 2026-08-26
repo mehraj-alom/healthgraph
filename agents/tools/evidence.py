@@ -32,7 +32,46 @@ async def _get_document_evidence(
     """
     if not query or not query.strip():
         return [{"error": "INVALID_QUERY: Search query cannot be empty."}]
+    
+    # If no specific document_id provided, search across all patient's documents
+    if not document_id or not document_id.strip():
+        # Search across all patient's documents
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY is not set.")
+        embedding_service = EmbeddingService(api_key=api_key)
+        query_vector = (await embedding_service.generate_embeddings([query]))[0]
+        tenant_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="patient_id",
+                    match=models.MatchValue(value=str(patient_id))
+                ),
+            ]
+        )
         
+        results = client.search(
+            collection_name="healthLine",
+            query_vector=query_vector,
+            query_filter=tenant_filter,
+            limit=5,
+        )
+        
+        if not results:
+            return [{"message": "No relevant evidence found across patient's documents for the given query."}]
+        
+        return [
+            {
+                "chunk_id": str(hit.id),
+                "text": hit.payload.get("text") or hit.payload.get("chunk_text", ""),
+                "document_id": hit.payload.get("document_id", ""),
+                "page_number": hit.payload.get("page_number", 1),
+                "similarity_score": round(hit.score, 4),
+            }
+            for hit in results
+        ]
+    
+    # Specific document_id provided - validate
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
@@ -63,9 +102,10 @@ async def _get_document_evidence(
             return [{"error": "DOCUMENT_NOT_PROJECTED: Document exists but lacks clinical graph provenance."}]
     
     api_key = os.getenv("OPENAI_API_KEY")
+    base_url = os.getenv("EMBEDDING_BASE_URL", "https://api.openai.com/v1")
     if not api_key:
         raise ValueError("OPENAI_API_KEY is not set.")
-    embedding_service = EmbeddingService(api_key=api_key)
+    embedding_service = EmbeddingService(api_key=api_key, base_url=base_url)
     # Qdrant Semantic Search (Mandatory Tenant Isolation Filter)
     query_vector = (await embedding_service.generate_embeddings([query]))[0]
     tenant_filter = models.Filter(
@@ -81,12 +121,13 @@ async def _get_document_evidence(
         ]
     )
     
-    results = client.search(
-        collection_name="healthLine",
-        query_vector=query_vector,
+    results = client.query_points(
+        collection_name=vector_db.collection_name,
+        query=query_vector,
         query_filter=tenant_filter,
         limit=5,
-    )
+        with_payload=True,
+    ).points
     
     if not results:
         return [{"message": "No relevant evidence found in this document for the given query."}]
@@ -102,9 +143,13 @@ async def _get_document_evidence(
     ]
 
 @tool
-async def get_document_evidence(document_id: str, query: str, config: RunnableConfig = None) -> List[Dict]:
+async def get_document_evidence(query: str, document_id: str = "", config: RunnableConfig = None) -> List[Dict]:
     """
-    Retrieves semantic text evidence and exact quotes from a specific medical document.
+    Retrieves semantic text evidence and exact quotes from a specific medical document or across all patient documents.
+    
+    Args:
+        query: Search query (required).
+        document_id: Optional UUID of a specific document. If omitted, searches across all patient's documents.
     """
     # Security Boundary: Extract tenant ID from execution context
     patient_id_str = config.get("configurable", {}).get("session_patient_id") if config else None
@@ -113,6 +158,9 @@ async def get_document_evidence(document_id: str, query: str, config: RunnableCo
         
     patient_id = uuid.UUID(str(patient_id_str))
     
+    if not query or not query.strip():
+        return [{"error": "INVALID_QUERY: Search query cannot be empty."}]
+        
     db: Session = SessionLocal()
     try:
         return await _get_document_evidence(patient_id, document_id, query, db, neo4j_driver, vector_db.client)

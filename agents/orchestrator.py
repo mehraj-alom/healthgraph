@@ -10,6 +10,7 @@ from agents.tools.evidence import get_document_evidence
 from agents.tools.patient_graph_context import get_patient_graph_context
 from agents.tools.observations import get_related_observations
 from agents.tools.timeline import get_patient_timeline
+from agents.tools.documents import get_patient_documents
 from schemas.chat import AgentStructuredOutput, LLMUIAction, UIActionType
 
 tools = [
@@ -19,7 +20,47 @@ tools = [
     get_patient_graph_context,
     get_related_observations,
     get_patient_timeline,
+    get_patient_documents,
 ]
+
+# Also update the system prompt to encourage better query extraction
+def call_agent(state: GraphState):
+    """Call LLM with tools to decide what to do."""
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0).bind_tools(tools)
+    
+    system_prompt = """You are a clinical AI assistant. You have access to tools to retrieve the patient's clinical data.
+    
+    When the user asks about their health data, lab reports, timeline, or anatomy:
+    1. Use the appropriate tools to fetch the relevant clinical data
+    2. Available tools:
+       - get_patient_timeline: Get chronological health events (queries Neo4j + PostgreSQL)
+       - get_current_body_state: Get 3D body state with observations (queries PostgreSQL)
+       - get_related_observations: Get observations for a specific anatomy (queries PostgreSQL)
+       - get_document_evidence: Search text in documents (queries Qdrant + Neo4j + PostgreSQL). 
+         - If document_id is omitted, searches across ALL patient's documents
+         - If document_id is provided, searches within that specific document
+         - The query parameter is REQUIRED and should be a specific search term
+       - get_patient_graph_context: Get anatomical graph context (queries Neo4j)
+       - get_patient_documents: List all patient's uploaded documents (gets document IDs)
+       - resolve_anatomy_id: Resolve anatomy terms to canonical IDs (queries PostgreSQL)
+    
+    Workflow for document questions:
+    1. First, call get_patient_documents to list available documents
+    2. Then call get_document_evidence with the document_id from the list AND a SPECIFIC query
+    3. Or call get_document_evidence WITHOUT document_id to search across ALL documents
+    
+    IMPORTANT: Always provide a meaningful query parameter when calling get_document_evidence.
+    Extract key medical terms from the user's question for the query parameter.
+    
+    Call tools as needed to answer the user's question completely."""
+    
+    messages = [
+        SystemMessage(content=system_prompt),
+        *state["messages"]
+    ]
+    
+    response = llm.invoke(messages)
+    return {"messages": [response]}
 
 
 def should_continue(state: GraphState):
@@ -38,12 +79,20 @@ def call_agent(state: GraphState):
     When the user asks about their health data, lab reports, timeline, or anatomy:
     1. Use the appropriate tools to fetch the relevant clinical data
     2. Available tools:
-       - get_patient_timeline: Get chronological health events
-       - get_current_body_state: Get 3D body state with observations
-       - get_related_observations: Get observations for a specific anatomy
-       - get_document_evidence: Get evidence for a clinical event
-       - get_patient_graph_context: Get anatomical graph context
-       - resolve_anatomy_id: Resolve anatomy terms to canonical IDs
+       - get_patient_timeline: Get chronological health events (queries Neo4j + PostgreSQL)
+       - get_current_body_state: Get 3D body state with observations (queries PostgreSQL)
+       - get_related_observations: Get observations for a specific anatomy (queries PostgreSQL)
+       - get_document_evidence: Search text in documents (queries Qdrant + Neo4j + PostgreSQL). 
+         - If document_id is omitted, searches across ALL patient's documents
+         - If document_id is provided, searches within that specific document
+       - get_patient_graph_context: Get anatomical graph context (queries Neo4j)
+       - get_patient_documents: List all patient's uploaded documents (gets document IDs)
+       - resolve_anatomy_id: Resolve anatomy terms to canonical IDs (queries PostgreSQL)
+    
+    Workflow for document questions:
+    1. First, call get_patient_documents to list available documents
+    2. Then call get_document_evidence with the document_id from the list
+    3. Or call get_document_evidence WITHOUT document_id to search across ALL documents
     
     Call tools as needed to answer the user's question completely."""
     

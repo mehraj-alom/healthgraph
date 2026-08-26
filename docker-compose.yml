@@ -9,6 +9,7 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.aicredits.in/v1}
+      - EMBEDDING_BASE_URL=${OPENAI_API_BASE:-https://api.aicredits.in/v1}
       - DATABASE_URL=postgresql://medgraph:password@postgres:5432/medgraph_db
       - ASYNC_DATABASE_URL=postgresql+asyncpg://medgraph:password@postgres:5432/medgraph_db
       - CELERY_BROKER_URL=redis://redis:6379/0

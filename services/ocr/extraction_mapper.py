@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import datetime, timezone
 from logger import logger
@@ -10,6 +11,41 @@ from models.anatomy import (
 )
 from services.ocr.canonicalization import CanonicalizationResult, Canonicalizer, MatchStatus
 from sqlalchemy import select
+
+
+# Key medical terms for better canonicalization
+MEDICAL_KEY_TERMS = {
+    'chest', 'thorax', 'lung', 'lungs', 'heart', 'head', 'brain',
+    'abdomen', 'pelvis', 'spine', 'neck', 'mediastinum', 'diaphragm',
+    'rib', 'ribs', 'ribcage', 'skull', 'cervical', 'thoracic', 'lumbar',
+    'xray', 'x-ray', 'xray', 'ct', 'mri', 'ultrasound', 'ultrasonography',
+    'ct scan', 'ct scan of the head', 'ct scan of the chest', 'chest x-ray',
+    'chest xray', 'chest x ray', 'head ct', 'chest ct',
+    'radiation dose', 'radiation', 'dose', 'dlp', 'impression', 'findings',
+    'technique', 'comparison', 'clinical history', 'history',
+}
+
+
+def extract_key_medical_terms(text: str) -> list[str]:
+    """Extract key medical terms from text for better canonicalization."""
+    if not text:
+        return []
+    text_lower = text.lower()
+    found_terms = set()
+    for term in MEDICAL_KEY_TERMS:
+        if term in text_lower:
+            found_terms.add(term)
+    return list(found_terms)
+
+
+def resolve_with_key_terms(db: Session, text: str):
+    """Try to resolve concept using key medical terms extracted from text."""
+    key_terms = extract_key_medical_terms(text)
+    for term in key_terms:
+        result = Canonicalizer.resolve_concept(db, raw_term=term)
+        if result.status.value != 'unknown':
+            return result, term
+    return None, None
 
 
 def _resolve_structure_id(db: Session, concept_code: str | None, terminology: str | None) -> str:
@@ -44,7 +80,7 @@ def _lab_severity(abnormal_flag: str | None) -> tuple[VisualStatus, float]:
     return VisualStatus.NORMAL, 0.0
 
 
-class EventBuilder:
+class ExtractionMapper:
     @staticmethod
     def build_clinical_event(
         db: Session,
@@ -70,25 +106,12 @@ class EventBuilder:
         else:
             verification_status = VerificationStatus.UNVERIFIED
 
-        if is_lab_result:
-            event_type = EventType.LAB_RESULT
-            source_type = SourceType.LAB_REPORT
-            observation_type = ObservationType.LAB_ASSOCIATED_FINDING
-            finding_code = canon_res.code or raw_test_name
-            finding_display_name = canon_res.display_name or raw_test_name
-        else:
-            event_type = EventType.IMAGING_RESULT if "IMAGING" in str(raw_test_name).upper() or "RADIOL" in str(raw_test_name).upper() else EventType.DIAGNOSIS
-            source_type = SourceType.IMAGING_REPORT if "IMAGING" in str(raw_test_name).upper() or "RADIOL" in str(raw_test_name).upper() else SourceType.DOCTOR_ENTERED
-            observation_type = ObservationType.IMAGING_FINDING
-            finding_code = canon_res.code or raw_test_name
-            finding_display_name = canon_res.display_name or raw_test_name
-
         event = ClinicalEvent(
             event_id=uuid.uuid4(),
             patient_id=patient_id,
             concept_id=canon_res.concept_id,
-            event_type=event_type,
-            source_type=source_type,
+            event_type=EventType.LAB_RESULT,
+            source_type=SourceType.LAB_REPORT,
             verification_status=verification_status,
             event_time=event_time if event_time else datetime.now(timezone.utc),
         )
@@ -115,21 +138,99 @@ class EventBuilder:
 
         observation = None
         structure_id = _resolve_structure_id(db, canon_res.code, canon_res.terminology)
-
-        if is_lab_result:
-            abnormal_flag = getattr(lab_payload, "abnormal_flag", None)
-            visual_status, visual_severity_score = _lab_severity(abnormal_flag)
-        else:
-            visual_status = VisualStatus.NORMAL
-            visual_severity_score = 0.0
+        abnormal_flag = getattr(lab_payload, "abnormal_flag", None) if is_lab_result else None
+        visual_status, visual_severity_score = _lab_severity(abnormal_flag)
 
         observation = AnatomicalObservation(
             observation_id=uuid.uuid4(),
             patient_id=patient_id,
             structure_id=structure_id,
-            observation_type=observation_type,
-            finding_code=finding_code,
-            finding_display_name=finding_display_name,
+            observation_type=ObservationType.LAB_ASSOCIATED_FINDING,
+            finding_code=canon_res.code or raw_test_name,
+            finding_display_name=canon_res.display_name or raw_test_name,
+            visual_status=visual_status,
+            visual_severity_score=visual_severity_score,
+            trend=FindingTrend.STABLE,
+            source_type=AnatomySourceType.LAB_REPORT if is_lab_result else AnatomySourceType.IMAGING_REPORT,
+            source_id=str(event.event_id),
+            event_id=event.event_id,
+            document_id=document_id,
+            clinical_summary=source_text[:500] if source_text else f"{raw_test_name}: {value} {unit}",
+            recorded_at=event.event_time,
+            ingested_at=datetime.now(timezone.utc),
+        )
+
+        return event, observation
+
+
+class EventBuilder:
+    @staticmethod
+    def build_clinical_event(
+        db: Session,
+        patient_id: uuid.UUID,
+        document_id: uuid.UUID,
+        canon_res: CanonicalizationResult,
+        raw_test_name: str,
+        value: str,
+        unit: str,
+        ref_range: str,
+        source_text: str,
+        bbox: dict = None,
+        event_time: datetime = None,
+        is_lab_result: bool = True,
+    ) -> tuple[ClinicalEvent, AnatomicalObservation | None]:
+        """
+        Build a ClinicalEvent and a corresponding AnatomicalObservation.
+        Returns (clinical_event, anatomical_observation).
+        """
+        match_status = getattr(canon_res, "match_status", getattr(canon_res, "status"))
+        if match_status == MatchStatus.AUTO_MATCH:
+            verification_status = VerificationStatus.EXTRACTED
+        else:
+            verification_status = VerificationStatus.UNVERIFIED
+
+        event = ClinicalEvent(
+            event_id=uuid.uuid4(),
+            patient_id=patient_id,
+            concept_id=canon_res.concept_id,
+            event_type=EventType.LAB_RESULT,
+            source_type=SourceType.LAB_REPORT,
+            verification_status=verification_status,
+            event_time=event_time if event_time else datetime.now(timezone.utc),
+        )
+        db.add(event)
+        db.flush()
+
+        if is_lab_result:
+            lab_payload = LabResult(
+                event_id=event.event_id,
+                value=str(value),
+                unit=unit,
+                reference_range=ref_range,
+            )
+            db.add(lab_payload)
+
+        evidence = EvidenceLink(
+            evidence_id=uuid.uuid4(),
+            event_id=event.event_id,
+            document_id=document_id,
+            extracted_text=source_text or f"{raw_test_name} :{value} {unit}",
+            bounding_box=bbox,
+        )
+        db.add(evidence)
+
+        observation = None
+        structure_id = _resolve_structure_id(db, canon_res.code, canon_res.terminology)
+        abnormal_flag = getattr(lab_payload, "abnormal_flag", None) if is_lab_result else None
+        visual_status, visual_severity_score = _lab_severity(abnormal_flag)
+
+        observation = AnatomicalObservation(
+            observation_id=uuid.uuid4(),
+            patient_id=patient_id,
+            structure_id=structure_id,
+            observation_type=ObservationType.LAB_ASSOCIATED_FINDING,
+            finding_code=canon_res.code or raw_test_name,
+            finding_display_name=canon_res.display_name or raw_test_name,
             visual_status=visual_status,
             visual_severity_score=visual_severity_score,
             trend=FindingTrend.STABLE,
@@ -163,9 +264,11 @@ class ExtractionMapper:
 
         doc_json = raw_record.extraction.get("document", {})
         sections = doc_json.get("sections", [])
+        pages = doc_json.get("pages", [])
         events_created = 0
         observations_created = []
 
+        # Process sections for lab results and diagnostic findings
         for section in sections:
             results = section.get("results", [])
 
@@ -201,6 +304,10 @@ class ExtractionMapper:
             diagnosis = section.get("diagnosis")
             if diagnosis:
                 canon_res = Canonicalizer.resolve_concept(db, raw_term=diagnosis)
+                if canon_res.status.value == 'unknown':
+                    key_res, matched_term = resolve_with_key_terms(db, diagnosis)
+                    if key_res:
+                        canon_res = key_res
                 event, observation = event_builder.build_clinical_event(
                     db=db,
                     patient_id=document.patient_id,
@@ -222,6 +329,10 @@ class ExtractionMapper:
                 comments = section.get("comments")
                 if comments and len(comments) > 20:  # Only meaningful comments
                     canon_res = Canonicalizer.resolve_concept(db, raw_term=comments[:200])
+                    if canon_res.status.value == 'unknown':
+                        key_res, matched_term = resolve_with_key_terms(db, comments[:200])
+                        if key_res:
+                            canon_res = key_res
                     event, observation = event_builder.build_clinical_event(
                         db=db,
                         patient_id=document.patient_id,
@@ -238,6 +349,59 @@ class ExtractionMapper:
                     events_created += 1
                     if observation:
                         observations_created.append(observation)
+
+        # Also process page_text from pages array for findings not in sections
+        # This captures radiology findings that are in page_text but not in structured sections
+        for page in pages:
+            page_text = page.get("page_text", "")
+            page_type = page.get("page_type", "")
+            section_ids = page.get("section_ids", [])
+
+            # Skip non-radiology pages
+            if page_type not in ["Radiology Report", "Medical Report", "Medical Report"]:
+                continue
+
+            # Check which sections were actually processed (had diagnosis or meaningful comments)
+            processed_section_titles = set()
+            for section in sections:
+                section_title = section.get("section_title", "").rstrip(":")
+                diagnosis = section.get("diagnosis")
+                comments = section.get("comments")
+                # Only mark as processed if we actually created events from it
+                if diagnosis or (comments and len(comments) > 20):
+                    processed_section_titles.add(section_title)
+
+                # Extract relevant text from page_text for this section
+                # Use section_id to find relevant content in page_text
+                if section_title and page_text:
+                    # Extract content after the section header
+                    import re
+                    pattern = rf"\*\*{re.escape(section_title)}:?\*\*(.*?)(?:\*\*|\Z)"
+                    match = re.search(pattern, page_text, re.DOTALL)
+                    if match:
+                        content = match.group(1).strip()
+                        if len(content) > 20:
+                            canon_res = Canonicalizer.resolve_concept(db, raw_term=content[:200])
+                            if canon_res.status.value == 'unknown':
+                                key_res, matched_term = resolve_with_key_terms(db, content[:200])
+                                if key_res:
+                                    canon_res = key_res
+                            event, observation = event_builder.build_clinical_event(
+                                db=db,
+                                patient_id=document.patient_id,
+                                document_id=document.document_id,
+                                canon_res=canon_res,
+                                raw_test_name=section_title,
+                                value=content[:500],
+                                unit="",
+                                ref_range="",
+                                source_text=content[:500],
+                                bbox=None,
+                                is_lab_result=False,
+                            )
+                            events_created += 1
+                            if observation:
+                                observations_created.append(observation)
 
         db.commit()
         logger.info(f"Successfully mapped {events_created} events for document {document_id}.")
