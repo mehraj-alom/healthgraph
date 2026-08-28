@@ -66,7 +66,7 @@ class Settings(BaseSettings):
 
     # 450m vision language model for document classification and extraction
     MODEL_PATH: str = "./models/lfm-2.5-vl-450m-q4_k_m.gguf"
-    MMPROJ_PATH: str = "./models/lfm-2.5-vl-450m-mmproj.gguf"
+    MMPROJ_PATH: str = ""
 
     STORAGE_DIR: str = "./storage/documents"
 

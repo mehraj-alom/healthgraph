@@ -51,7 +51,7 @@ async def _get_document_evidence(
         )
         
         results = client.search(
-            collection_name="healthLine",
+            collection_name=vector_db.collection_name,
             query_vector=query_vector,
             query_filter=tenant_filter,
             limit=5,

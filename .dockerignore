@@ -1,60 +1,59 @@
-# Git & version control
+# Git
 .git
 .gitignore
 
-# Virtual environments & caches
+# Python virtual environments & caches
 venv/
+.venv/
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
 .pytest_cache/
 .coverage
 .mypy_cache/
 .ruff_cache/
 
-# IDE & editor files
+# IDE / editor
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Local config & secrets
+# Local configuration & secrets
 .env
 .env.local
 .env.*.local
 firebase_credentials.json
+firebase-adminsdk*.json
 
-# Build artifacts & output
+# Build artifacts
 dist/
 build/
 *.egg-info/
 *.whl
 *.tar.gz
+*.egg
 
-# Logs & runtime data
+# Logs
 logs/
 *.log
 celerybeat-schedule
 
-# Large test/sample files
+# Local/test files
 report1.pdf
-storage/
-volume/
 
-# Documentation & dev files
-*.md
-LICENSE
+# Runtime document storage
+storage/documents/
+storage/__pycache__/
+
+# Docker development files
 .dockerignore
 docker-compose*.yml
 docker-compose*.yaml
 
-# Models (GGUF - download at runtime if needed)
-models/*.gguf
-
-# Python packages (installed via pip)
-*.egg
+# Documentation
+*.md
+LICENSE
 
 # OS files
 .DS_Store

@@ -225,3 +225,5 @@ __marimo__/
 *jpeg
 volume/*
 *gguf
+localdocker-compose.yml
+Dockerfilelocal
