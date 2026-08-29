@@ -127,3 +127,32 @@ export interface AuthTokens {
   refreshToken: string;
   expiresIn: number;
 }
+
+export interface ManualLogConcept {
+  id: string;
+  terminology: string;
+  code: string;
+  display_name: string;
+  short_name: string | null;
+}
+
+export interface DailyCheckInRequest {
+  log_date: string;
+  overall_wellbeing?: number;
+  energy_level?: number;
+  stress_level?: number;
+  sleep?: { duration_minutes: number; sleep_quality?: number; awakenings?: number };
+  nutrition?: { water_ml?: number; meals_count?: number; appetite_level?: number };
+  notes?: string;
+  symptoms: Array<{ concept_id: string; severity: number; duration_minutes?: number; notes?: string }>;
+  vitals: Array<{ concept_id: string; value: number; unit: string }>;
+  pain: Array<{ severity: number; body_location_id?: string; pain_type?: string }>;
+  activities: Array<{ activity_type: string; duration_minutes?: number; calories_burned?: number }>;
+  medications: Array<{ medication_name: string; dosage_value?: number; dosage_unit?: string }>;
+}
+
+export interface DailyCheckInResponse {
+  status: string;
+  group_id: string;
+  message: string;
+}

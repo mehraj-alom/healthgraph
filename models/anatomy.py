@@ -35,9 +35,9 @@ class FindingTrend(str, Enum):
     RESOLVED = "resolved"
 
 class SourceType(str, Enum):
-    PATIENT_REPORTED = "patient_reported"
-    AI_INFERRED = "ai_inferred"
-    DOCTOR_ENTERED = "doctor_entered"
+    PATIENT_REPORTED = "PATIENT_REPORTED"
+    AI_INFERRED = "AI_INFERRED"
+    DOCTOR_ENTERED = "DOCTOR_ENTERED"
     IMAGING_REPORT = "imaging_report"
     LAB_REPORT = "lab_report"
     DEVICE_WEARABLE = "device_wearable"

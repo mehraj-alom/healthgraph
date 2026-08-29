@@ -51,10 +51,11 @@ class DailyCheckInRequest(BaseModel):
     # Singular Logs
     sleep: Optional[SleepCreate] = None
     nutrition: Optional[NutritionCreate] = None
+    notes: Optional[str] = Field(None, max_length=4000)
     
     #Multiple Logs (Arrays)
-    symptoms: List[SymptomCreate] = []
-    vitals: List[VitalSignCreate] = []
-    pain: List[PainCreate] = []
-    activities: List[ActivityCreate] = []
-    medications: List[MedicationTakenCreate] = []
+    symptoms: List[SymptomCreate] = Field(default_factory=list)
+    vitals: List[VitalSignCreate] = Field(default_factory=list)
+    pain: List[PainCreate] = Field(default_factory=list)
+    activities: List[ActivityCreate] = Field(default_factory=list)
+    medications: List[MedicationTakenCreate] = Field(default_factory=list)

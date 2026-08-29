@@ -12,8 +12,10 @@ from app.api.v1 import (
     body_state,
     chat,
     daily_logs,
+    daily_metrics,
     documents,
     logs,
+    ontology,
     provenance,
     review,
     timeline,
@@ -26,15 +28,18 @@ from logger import logger
 from models.base import Base
 from services.deidentification.deidentifier import DeIdentificationService
 from services.vectorization.qdrant_client import vector_db
+from services.ontology_seed import seed_medical_concepts
 
 load_dotenv()
 
+
+from core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI application."""
     logger.info("Starting up the FastAPI application.")
-    secret_key = os.getenv("secret_key")
+    secret_key = settings.secret_key
     if not secret_key:
         logger.error("Secret key not found in environment variables.")
         raise RuntimeError("Secret key not found in environment variables.")
@@ -59,6 +64,16 @@ def create_app() -> FastAPI:
     """Application factory for FastAPI."""
     logger.info("Initializing FastAPI application.")
     Base.metadata.create_all(bind=engine)
+    from core.db import SessionLocal
+    db = SessionLocal()
+    try:
+        seed_medical_concepts(db)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
     app = FastAPI(
         title="MedGraph Core API",
@@ -70,7 +85,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -81,9 +96,11 @@ def create_app() -> FastAPI:
     app.include_router(provenance.router)
     app.include_router(timeline.router)
     app.include_router(daily_logs.router)
+    app.include_router(daily_metrics.router)
     app.include_router(chat.router)
     app.include_router(body_state.router)
     app.include_router(logs.router)
+    app.include_router(ontology.router)
 
     @app.get("/health", tags=["System"])
     def health_check():
@@ -106,7 +123,5 @@ app = create_app()
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
-
-
 
 

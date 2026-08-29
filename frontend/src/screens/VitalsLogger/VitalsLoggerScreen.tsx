@@ -1,720 +1,94 @@
-import {
-  StyleSheet,
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  SafeAreaView,
-  ActivityIndicator,
-} from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
+import { Button, Card, Input } from '@/components';
+import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants';
 import { api } from '@/services/api';
-import { Input, Card } from '@/components';
-import {
-  COLORS,
-  SPACING,
-  BORDER_RADIUS,
-  TYPOGRAPHY,
-  SHADOWS,
-} from '@/constants';
-import { useAuth } from '@/context/AuthContext';
+import type { DailyCheckInRequest, DailyCheckInResponse, ManualLogConcept } from '@/types';
 
-interface VitalInput {
-  label: string;
-  placeholder: string;
-  unit: string;
-  type: 'blood_sugar' | 'resting_pulse' | 'pain_level' | 'notes';
-  keyboardType: 'numeric' | 'decimal-pad' | 'default';
-  min?: number;
-  max?: number;
-  step?: number;
+type ScoreName = 'overall_wellbeing' | 'energy_level' | 'stress_level';
+type SymptomDraft = { id: number; conceptId: string; severity: string; duration: string; notes: string };
+type PainDraft = { id: number; severity: string; painType: string };
+type ActivityDraft = { id: number; activityType: string; duration: string; calories: string };
+type MedicationDraft = { id: number; name: string; dosage: string; unit: string };
+const dateToday = () => new Date().toISOString().slice(0, 10);
+const scores: Record<ScoreName, string> = { overall_wellbeing: 'Overall wellbeing', energy_level: 'Energy', stress_level: 'Stress' };
+const vitalDefinitions = [
+  { terminology: 'LOINC', code: '2339-0', label: 'Blood glucose', unit: 'mg/dL', key: 'glucose' },
+  { terminology: 'LOINC', code: '8867-4', label: 'Heart rate', unit: 'bpm', key: 'heartRate' },
+] as const;
+
+function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return <Card style={styles.section} padding="md"><Text style={styles.sectionTitle}>{title}</Text>{subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}<View style={styles.sectionContent}>{children}</View></Card>;
 }
-
-const VITAL_INPUTS: VitalInput[] = [
-  {
-    label: 'Blood Sugar',
-    placeholder: 'e.g., 95',
-    unit: 'mg/dL',
-    type: 'blood_sugar',
-    keyboardType: 'numeric',
-    min: 40,
-    max: 400,
-  },
-  {
-    label: 'Resting Pulse',
-    placeholder: 'e.g., 72',
-    unit: 'bpm',
-    type: 'resting_pulse',
-    keyboardType: 'numeric',
-    min: 30,
-    max: 200,
-  },
-  {
-    label: 'Pain Level',
-    placeholder: '0-10',
-    unit: '/10',
-    type: 'pain_level',
-    keyboardType: 'numeric',
-    min: 0,
-    max: 10,
-  },
-  {
-    label: 'Notes',
-    placeholder: 'How are you feeling?',
-    unit: '',
-    type: 'notes',
-    keyboardType: 'default',
-  },
-];
+function ChoiceRow({ value, onChange, labels = ['Low', 'High'] }: { value: string; onChange: (value: string) => void; labels?: [string, string] }) {
+  return <View><View style={styles.choiceRow}>{[1, 2, 3, 4, 5].map((option) => <Pressable key={option} onPress={() => onChange(String(option))} style={[styles.choice, value === String(option) && styles.choiceSelected]}><Text style={[styles.choiceText, value === String(option) && styles.choiceTextSelected]}>{option}</Text></Pressable>)}</View><View style={styles.choiceLabels}><Text style={styles.mutedText}>{labels[0]}</Text><Text style={styles.mutedText}>{labels[1]}</Text></View></View>;
+}
+function SeveritySelector({ value, onChange, minimum = 1 }: { value: string; onChange: (value: string) => void; minimum?: 0 | 1 }) {
+  return <View style={styles.severityRow}>{Array.from({ length: 11 - minimum }, (_, index) => index + minimum).map((option) => <Pressable key={option} onPress={() => onChange(String(option))} style={[styles.severity, value === String(option) && styles.severitySelected]}><Text style={[styles.severityText, value === String(option) && styles.choiceTextSelected]}>{option}</Text></Pressable>)}</View>;
+}
+function apiMessage(error: unknown): string {
+  if (!axios.isAxiosError(error)) return 'Unable to reach MedGraph. Check your connection and try again.';
+  if (error.code === 'ECONNABORTED') return 'The request timed out. Please try again.';
+  if (error.response?.status === 401) return 'Your session has expired. Please sign in again.';
+  if (error.response?.status === 403) return 'You do not have permission to save this daily log.';
+  if (error.response?.status === 422) return typeof error.response.data?.detail === 'string' ? error.response.data.detail : 'Please review the highlighted fields.';
+  if ((error.response?.status ?? 0) >= 500) return 'MedGraph could not save your log. Please try again shortly.';
+  return 'Unable to save your daily log. Please try again.';
+}
 
 export default function VitalsLoggerScreen() {
-  const { user } = useAuth();
-
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [localValues, setLocalValues] = useState<Record<string, string>>({});
-  const [saveStatus, setSaveStatus] = useState<
-    'idle' | 'saving' | 'saved' | 'error'
-  >('idle');
-
-  const debounceTimers = useRef<
-    Record<string, ReturnType<typeof setTimeout>>
-  >({});
-
-  /*
-   * Map a UI field to the body structure used by the backend.
-   */
-  const getStructureId = (fieldId: string): string => {
-    const map: Record<string, string> = {
-      blood_sugar: 'BLOOD',
-      resting_pulse: 'HEART',
-      pain_level: 'FULL_BODY',
-      notes: 'FULL_BODY',
-    };
-
-    return map[fieldId] || 'FULL_BODY';
+  const queryClient = useQueryClient();
+  const [checkin, setCheckin] = useState<Record<ScoreName, string>>({ overall_wellbeing: '', energy_level: '', stress_level: '' });
+  const [vitals, setVitals] = useState({ glucose: '', heartRate: '' });
+  const [symptoms, setSymptoms] = useState<SymptomDraft[]>([]); const [pain, setPain] = useState<PainDraft[]>([]);
+  const [sleep, setSleep] = useState({ duration: '', quality: '', awakenings: '' }); const [nutrition, setNutrition] = useState({ water: '', meals: '', appetite: '' });
+  const [activities, setActivities] = useState<ActivityDraft[]>([]); const [medications, setMedications] = useState<MedicationDraft[]>([]);
+  const [notes, setNotes] = useState(''); const [symptomSearch, setSymptomSearch] = useState(''); const [errors, setErrors] = useState<Record<string, string>>({}); const [message, setMessage] = useState<string | null>(null); const [nextId, setNextId] = useState(1);
+  const conceptsQuery = useQuery({ queryKey: ['manual-log-concepts'], queryFn: () => api.get<ManualLogConcept[]>('/api/v1/ontology/manual-log-concepts'), staleTime: 86400000 });
+  const concepts = conceptsQuery.data ?? [];
+  const conceptFor = (terminology: string, code: string) => concepts.find((item) => item.terminology === terminology && item.code === code);
+  const symptomConcepts = useMemo(() => concepts.filter((item) => !vitalDefinitions.some((vital) => vital.terminology === item.terminology && vital.code === item.code)), [concepts]);
+  const filteredSymptomConcepts = useMemo(() => { const search = symptomSearch.trim().toLowerCase(); return search ? symptomConcepts.filter((item) => `${item.short_name ?? ''} ${item.display_name}`.toLowerCase().includes(search)) : symptomConcepts; }, [symptomConcepts, symptomSearch]);
+  const reset = () => { setCheckin({ overall_wellbeing: '', energy_level: '', stress_level: '' }); setVitals({ glucose: '', heartRate: '' }); setSymptoms([]); setPain([]); setSleep({ duration: '', quality: '', awakenings: '' }); setNutrition({ water: '', meals: '', appetite: '' }); setActivities([]); setMedications([]); setNotes(''); setSymptomSearch(''); setErrors({}); };
+  const mutation = useMutation({ mutationFn: (payload: DailyCheckInRequest) => api.post<DailyCheckInResponse>('/api/v1/logs/daily-checkin', payload), onSuccess: async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: ['timeline'] }), queryClient.invalidateQueries({ queryKey: ['bodyState'] }), queryClient.invalidateQueries({ queryKey: ['daily-metrics'] }), queryClient.invalidateQueries({ queryKey: ['daily-log'] })]); reset(); setMessage('Saved successfully. Your timeline is updated.'); }, onError: (error) => setMessage(apiMessage(error)) });
+  const update = <T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, id: number, changes: Partial<T>) => setter((items) => items.map((item) => item.id === id ? { ...item, ...changes } : item));
+  const addSymptom = () => { setSymptoms((items) => [...items, { id: nextId, conceptId: '', severity: '', duration: '', notes: '' }]); setNextId((id) => id + 1); };
+  const addPain = () => { setPain((items) => [...items, { id: nextId, severity: '', painType: '' }]); setNextId((id) => id + 1); };
+  const addActivity = () => { setActivities((items) => [...items, { id: nextId, activityType: '', duration: '', calories: '' }]); setNextId((id) => id + 1); };
+  const addMedication = () => { setMedications((items) => [...items, { id: nextId, name: '', dosage: '', unit: '' }]); setNextId((id) => id + 1); };
+  const save = () => {
+    setMessage(null); const validation: Record<string, string> = {};
+    const hasContent = Object.values(checkin).some(Boolean) || Object.values(vitals).some(Boolean) || symptoms.length > 0 || pain.length > 0 || Object.values(sleep).some(Boolean) || Object.values(nutrition).some(Boolean) || activities.length > 0 || medications.length > 0 || notes.trim();
+    if (!hasContent) validation.form = 'Add at least one item to save a daily log.';
+    (Object.entries(vitals) as Array<[keyof typeof vitals, string]>).forEach(([name, value]) => { if (value && (!Number.isFinite(Number(value)) || Number(value) < 0)) validation[`vital-${name}`] = 'Enter a valid positive value.'; });
+    symptoms.forEach((item) => { if (!item.conceptId) validation[`symptom-${item.id}`] = 'Choose a symptom.'; if (!item.severity) validation[`symptom-severity-${item.id}`] = 'Choose a severity.'; if (item.duration && (!Number.isInteger(Number(item.duration)) || Number(item.duration) < 0)) validation[`symptom-duration-${item.id}`] = 'Use whole minutes.'; });
+    pain.forEach((item) => { if (!item.severity) validation[`pain-${item.id}`] = 'Choose a severity.'; });
+    if ((sleep.quality || sleep.awakenings) && !sleep.duration) validation.sleep = 'Sleep duration is required when recording sleep details.';
+    if (sleep.duration && (!Number.isInteger(Number(sleep.duration)) || Number(sleep.duration) < 1)) validation.sleep = 'Sleep duration must be at least one minute.';
+    if ((checkin.energy_level || checkin.stress_level) && !checkin.overall_wellbeing) validation.checkin = 'Overall wellbeing is required when recording energy or stress.';
+    if (sleep.awakenings && (!Number.isInteger(Number(sleep.awakenings)) || Number(sleep.awakenings) < 0)) validation.awakenings = 'Use zero or more whole awakenings.';
+    if (nutrition.water && (!Number.isInteger(Number(nutrition.water)) || Number(nutrition.water) < 0)) validation.water = 'Use zero or more whole millilitres.';
+    if (nutrition.meals && (!Number.isInteger(Number(nutrition.meals)) || Number(nutrition.meals) < 0)) validation.meals = 'Use zero or more whole meals.';
+    activities.forEach((item) => { if (!item.activityType.trim()) validation[`activity-${item.id}`] = 'Enter an activity type.'; }); medications.forEach((item) => { if (!item.name.trim()) validation[`medication-${item.id}`] = 'Enter a medication name.'; if (item.dosage && !Number.isFinite(Number(item.dosage))) validation[`medication-dose-${item.id}`] = 'Enter a valid dosage.'; }); if (notes.length > 4000) validation.notes = 'Keep the note to 4,000 characters or fewer.';
+    setErrors(validation); if (Object.keys(validation).length) return;
+    const payload: DailyCheckInRequest = { log_date: dateToday(), symptoms: symptoms.map((item) => ({ concept_id: item.conceptId, severity: Number(item.severity), ...(item.duration ? { duration_minutes: Number(item.duration) } : {}), ...(item.notes.trim() ? { notes: item.notes.trim() } : {}) })), vitals: vitalDefinitions.flatMap((definition) => { const value = vitals[definition.key]; const concept = conceptFor(definition.terminology, definition.code); return value && concept ? [{ concept_id: concept.id, value: Number(value), unit: definition.unit }] : []; }), pain: pain.map((item) => ({ severity: Number(item.severity), ...(item.painType.trim() ? { pain_type: item.painType.trim() } : {}) })), activities: activities.map((item) => ({ activity_type: item.activityType.trim(), ...(item.duration ? { duration_minutes: Number(item.duration) } : {}), ...(item.calories ? { calories_burned: Number(item.calories) } : {}) })), medications: medications.map((item) => ({ medication_name: item.name.trim(), ...(item.dosage ? { dosage_value: Number(item.dosage) } : {}), ...(item.unit.trim() ? { dosage_unit: item.unit.trim() } : {}) })), ...(checkin.overall_wellbeing ? { overall_wellbeing: Number(checkin.overall_wellbeing) } : {}), ...(checkin.energy_level ? { energy_level: Number(checkin.energy_level) } : {}), ...(checkin.stress_level ? { stress_level: Number(checkin.stress_level) } : {}), ...(sleep.duration ? { sleep: { duration_minutes: Number(sleep.duration), ...(sleep.quality ? { sleep_quality: Number(sleep.quality) } : {}), ...(sleep.awakenings ? { awakenings: Number(sleep.awakenings) } : {}) } } : {}), ...(Object.values(nutrition).some(Boolean) ? { nutrition: { ...(nutrition.water ? { water_ml: Number(nutrition.water) } : {}), ...(nutrition.meals ? { meals_count: Number(nutrition.meals) } : {}), ...(nutrition.appetite ? { appetite_level: Number(nutrition.appetite) } : {}) } } : {}), ...(notes.trim() ? { notes: notes.trim() } : {}) };
+    mutation.mutate(payload);
   };
-
-  /*
-   * Convert a vital value into a normalized severity score.
-   */
-  const getSeverityScore = (
-    fieldId: string,
-    value: string
-  ): number => {
-    const num = parseFloat(value);
-
-    if (Number.isNaN(num)) {
-      return 0;
-    }
-
-    switch (fieldId) {
-      case 'blood_sugar':
-        if (num < 70 || num > 180) {
-          return 0.8;
-        }
-
-        if (num < 80 || num > 140) {
-          return 0.4;
-        }
-
-        return 0.1;
-
-      case 'resting_pulse':
-        if (num < 50 || num > 100) {
-          return 0.7;
-        }
-
-        if (num < 60 || num > 90) {
-          return 0.4;
-        }
-
-        return 0.1;
-
-      case 'pain_level':
-        return Math.max(0, Math.min(1, num / 10));
-
-      default:
-        return 0;
-    }
-  };
-
-  /*
-   * Convert severity into the visual status consumed by the backend/UI.
-   */
-  const getVisualStatus = (
-    fieldId: string,
-    value: string
-  ): string => {
-    const score = getSeverityScore(fieldId, value);
-
-    if (score >= 0.7) {
-      return 'critical';
-    }
-
-    if (score >= 0.4) {
-      return 'warning';
-    }
-
-    if (score > 0) {
-      return 'mild_attention';
-    }
-
-    return 'normal';
-  };
-
-  /*
-   * Persist one vital to the backend.
-   */
-  const saveVital = async (
-    fieldId: string,
-    value: string
-  ): Promise<void> => {
-    if (!user) {
-      return;
-    }
-
-    const trimmedValue = value.trim();
-
-    /*
-     * Do not send completely empty fields to the backend.
-     */
-    if (!trimmedValue) {
-      return;
-    }
-
-    setSaveStatus('saving');
-
-    try {
-      await api.post('/api/v1/body-state/log', {
-        patient_id: user.uid,
-        structure_id: getStructureId(fieldId),
-        finding_code: fieldId,
-        visual_severity_score: getSeverityScore(
-          fieldId,
-          trimmedValue
-        ),
-        visual_status: getVisualStatus(
-          fieldId,
-          trimmedValue
-        ),
-        clinical_summary:
-          fieldId === 'notes' ? trimmedValue : undefined,
-        source_type: 'PATIENT_REPORTED',
-      });
-
-      setSaveStatus('saved');
-
-      setTimeout(() => {
-        setSaveStatus('idle');
-      }, 2000);
-    } catch (error) {
-      console.error('Failed to save vital:', error);
-
-      setSaveStatus('error');
-
-      setTimeout(() => {
-        setSaveStatus('idle');
-      }, 3000);
-    }
-  };
-
-  /*
-   * Debounced field update.
-   *
-   * Each field has its own timer, so editing one field does not
-   * cancel the pending save of another field.
-   */
-  const handleChange = (
-    fieldId: string,
-    value: string
-  ): void => {
-    setLocalValues(prev => ({
-      ...prev,
-      [fieldId]: value,
-    }));
-
-    setValues(prev => ({
-      ...prev,
-      [fieldId]: value,
-    }));
-
-    const existingTimer = debounceTimers.current[fieldId];
-
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-
-    debounceTimers.current[fieldId] = setTimeout(() => {
-      void saveVital(fieldId, value);
-
-      delete debounceTimers.current[fieldId];
-    }, 5000);
-  };
-
-  /*
-   * Cleanup pending debounce timers when leaving the screen.
-   */
-  useEffect(() => {
-    return () => {
-      Object.values(debounceTimers.current).forEach(timer => {
-        clearTimeout(timer);
-      });
-
-      debounceTimers.current = {};
-    };
-  }, []);
-
-  /*
-   * Keep values synchronized with local values.
-   */
-  useEffect(() => {
-    setValues(prev => ({
-      ...prev,
-      ...localValues,
-    }));
-  }, [localValues]);
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.greeting}>
-                Log Vitals
-              </Text>
-
-              <Text style={styles.subtitle}>
-                Track your daily health metrics
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Vitals Input Cards */}
-        <View>
-          {VITAL_INPUTS.map(input => {
-            const currentValue =
-              localValues[input.type] ??
-              values[input.type] ??
-              '';
-
-            const status = getVisualStatus(
-              input.type,
-              currentValue
-            );
-
-            return (
-              <Card
-                key={input.type}
-                style={styles.inputCard}
-                padding="md"
-              >
-                <View style={styles.inputHeader}>
-                  <View style={styles.inputLabelContainer}>
-                    <Text style={styles.inputLabel}>
-                      {input.label}
-                    </Text>
-
-                    {input.unit ? (
-                      <Text style={styles.inputUnit}>
-                        {input.unit}
-                      </Text>
-                    ) : null}
-                  </View>
-
-                  <View style={styles.valueDisplay}>
-                    <Text
-                      style={[
-                        styles.valueText,
-                        {
-                          color: getStatusColor(status),
-                        },
-                      ]}
-                    >
-                      {currentValue || '—'}
-
-                      {input.unit ? (
-                        <Text style={styles.valueUnit}>
-                          {' '}
-                          {input.unit}
-                        </Text>
-                      ) : null}
-                    </Text>
-                  </View>
-                </View>
-
-                {input.type === 'notes' ? (
-                  <Input
-                    label=""
-                    placeholder={input.placeholder}
-                    value={currentValue}
-                    onChangeText={(text: string) =>
-                      handleChange(input.type, text)
-                    }
-                    multiline
-                    numberOfLines={4}
-                    disabled={saveStatus === 'saving'}
-                    style={{
-                      marginTop: SPACING.sm,
-                    }}
-                  />
-                ) : (
-                  <>
-                    <TextInput
-                      style={[
-                        styles.numberInput,
-                        saveStatus === 'saving' &&
-                          styles.numberInputDisabled,
-                      ]}
-                      value={currentValue}
-                      onChangeText={(text: string) =>
-                        handleChange(input.type, text)
-                      }
-                      placeholder={input.placeholder}
-                      keyboardType={input.keyboardType}
-                      editable={saveStatus !== 'saving'}
-                      placeholderTextColor={
-                        COLORS.textMuted
-                      }
-                      returnKeyType="done"
-                    />
-
-                    <View style={styles.sliderContainer}>
-                      <Text style={styles.sliderMin}>
-                        {input.min ?? 0}
-                      </Text>
-
-                      <View style={styles.sliderTrack}>
-                        <View
-                          style={[
-                            styles.sliderThumb,
-                            {
-                              left: `${getSliderPosition(
-                                input.type,
-                                currentValue
-                              )}%`,
-                            },
-                          ]}
-                        />
-                      </View>
-
-                      <Text style={styles.sliderMax}>
-                        {input.max ?? 10}
-                      </Text>
-                    </View>
-                  </>
-                )}
-              </Card>
-            );
-          })}
-
-          {/* Save Status Indicator */}
-          <View style={styles.saveStatusContainer}>
-            {saveStatus === 'saving' ? (
-              <View
-                style={[
-                  styles.saveStatus,
-                  styles.saveStatusSaving,
-                ]}
-              >
-                <ActivityIndicator
-                  size="small"
-                  color={COLORS.primary}
-                />
-
-                <Text style={styles.saveStatusText}>
-                  Saving...
-                </Text>
-              </View>
-            ) : null}
-
-            {saveStatus === 'saved' ? (
-              <View
-                style={[
-                  styles.saveStatus,
-                  styles.saveStatusSaved,
-                ]}
-              >
-                <Text style={styles.saveStatusText}>
-                  Saved ✓
-                </Text>
-              </View>
-            ) : null}
-
-            {saveStatus === 'error' ? (
-              <View
-                style={[
-                  styles.saveStatus,
-                  styles.saveStatusError,
-                ]}
-              >
-                <Text style={styles.saveStatusText}>
-                  Failed to save
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          {/* Medical Disclaimer */}
-          <Card
-            style={styles.disclaimerCard}
-            padding="sm"
-          >
-            <Text style={styles.disclaimerTitle}>
-              Important Disclaimer
-            </Text>
-
-            <Text style={styles.disclaimerText}>
-              MedGraph is for general wellness, fitness
-              tracking, and record organization. It is not a
-              medical device. MedGraph does not provide medical
-              advice, diagnosis, or treatment. Always consult a
-              physician.
-            </Text>
-          </Card>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
+  return <SafeAreaView style={styles.container} edges={['top']}><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"><View style={styles.header}><Text style={styles.title}>Daily Log</Text><Text style={styles.subtitle}>Today’s health check-in</Text><Text style={styles.date}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</Text></View>{message ? <View style={[styles.message, mutation.isSuccess ? styles.messageSuccess : styles.messageError]}><Text style={styles.messageText}>{message}</Text></View> : null}{errors.form ? <Text style={styles.error}>{errors.form}</Text> : null}
+    <SectionCard title="Today’s check-in" subtitle="A quick view of how today feels."><View style={styles.metricGrid}>{(Object.keys(scores) as ScoreName[]).map((name) => <View key={name} style={styles.metric}><Text style={styles.inputLabel}>{scores[name]}</Text><ChoiceRow value={checkin[name]} onChange={(value) => setCheckin((current) => ({ ...current, [name]: value }))} labels={name === 'stress_level' ? ['Calm', 'High'] : ['Low', 'High']} /></View>)}</View>{errors.checkin ? <Text style={styles.error}>{errors.checkin}</Text> : null}</SectionCard>
+    <SectionCard title="Vitals" subtitle="Canonical measurements from your clinical record.">{conceptsQuery.isLoading ? <Text style={styles.mutedText}>Loading clinical definitions…</Text> : vitalDefinitions.map((definition) => { const found = conceptFor(definition.terminology, definition.code); return <Input key={definition.key} label={`${definition.label} · ${definition.unit}`} value={vitals[definition.key]} onChangeText={(value) => setVitals((current) => ({ ...current, [definition.key]: value }))} placeholder={definition.key === 'glucose' ? 'e.g. 95' : 'e.g. 72'} keyboardType="decimal-pad" disabled={!found || mutation.isPending} error={errors[`vital-${definition.key}`] || (!found ? 'This canonical vital is not currently available.' : undefined)} />; })}</SectionCard>
+    <SectionCard title="Symptoms" subtitle="Add each symptom separately with its severity and context.">{symptoms.map((item) => <View key={item.id} style={styles.repeatItem}><Text style={styles.inputLabel}>Symptom</Text>{symptomConcepts.length ? <><Input label="Search canonical symptoms" value={symptomSearch} onChangeText={setSymptomSearch} placeholder="Search available concepts" /><View style={styles.chips}>{filteredSymptomConcepts.map((concept) => <Pressable key={concept.id} onPress={() => update(setSymptoms, item.id, { conceptId: concept.id })} style={[styles.conceptChip, item.conceptId === concept.id && styles.conceptChipSelected]}><Text style={[styles.conceptText, item.conceptId === concept.id && styles.choiceTextSelected]}>{concept.short_name || concept.display_name}</Text></Pressable>)}</View></> : <Text style={styles.mutedText}>No symptom concepts are currently supplied by the canonical endpoint.</Text>}<Text style={styles.inputLabel}>Severity (1–10)</Text><SeveritySelector value={item.severity} onChange={(severity) => update(setSymptoms, item.id, { severity })} /><Input label="Duration (minutes)" value={item.duration} onChangeText={(duration) => update(setSymptoms, item.id, { duration })} keyboardType="number-pad" error={errors[`symptom-${item.id}`] || errors[`symptom-severity-${item.id}`] || errors[`symptom-duration-${item.id}`]} /><Input label="Notes (optional)" value={item.notes} onChangeText={(noteText) => update(setSymptoms, item.id, { notes: noteText })} multiline autoCapitalize="sentences" /><Pressable onPress={() => setSymptoms((items) => items.filter((entry) => entry.id !== item.id))}><Text style={styles.remove}>Remove symptom</Text></Pressable></View>)}<Button title="Add symptom" variant="outline" fullWidth onPress={addSymptom} disabled={mutation.isPending || !symptomConcepts.length} /></SectionCard>
+    <SectionCard title="Pain" subtitle="Location remains unspecified until a canonical body-region source is available.">{pain.map((item) => <View key={item.id} style={styles.repeatItem}><Text style={styles.inputLabel}>Severity (1–10)</Text><SeveritySelector value={item.severity} onChange={(severity) => update(setPain, item.id, { severity })} /><Input label="Pain type (optional)" value={item.painType} onChangeText={(painType) => update(setPain, item.id, { painType })} placeholder="e.g. aching" autoCapitalize="sentences" error={errors[`pain-${item.id}`]} /><Pressable onPress={() => setPain((items) => items.filter((entry) => entry.id !== item.id))}><Text style={styles.remove}>Remove pain entry</Text></Pressable></View>)}<Button title="Add pain" variant="outline" fullWidth onPress={addPain} disabled={mutation.isPending} /></SectionCard>
+    <SectionCard title="Sleep"><Input label="Duration (minutes)" value={sleep.duration} onChangeText={(duration) => setSleep((current) => ({ ...current, duration }))} keyboardType="number-pad" error={errors.sleep} /><Text style={styles.inputLabel}>Sleep quality</Text><ChoiceRow value={sleep.quality} onChange={(quality) => setSleep((current) => ({ ...current, quality }))} labels={['Poor', 'Restful']} /><Input label="Awakenings" value={sleep.awakenings} onChangeText={(awakenings) => setSleep((current) => ({ ...current, awakenings }))} keyboardType="number-pad" error={errors.awakenings} /></SectionCard>
+    <SectionCard title="Nutrition"><View style={styles.metricGrid}><Input label="Water (mL)" value={nutrition.water} onChangeText={(water) => setNutrition((current) => ({ ...current, water }))} keyboardType="number-pad" error={errors.water} /><Input label="Meals" value={nutrition.meals} onChangeText={(meals) => setNutrition((current) => ({ ...current, meals }))} keyboardType="number-pad" error={errors.meals} /></View><Text style={styles.inputLabel}>Appetite</Text><ChoiceRow value={nutrition.appetite} onChange={(appetite) => setNutrition((current) => ({ ...current, appetite }))} labels={['Low', 'High']} /></SectionCard>
+    <SectionCard title="Activity">{activities.map((item) => <View key={item.id} style={styles.repeatItem}><Input label="Activity type" value={item.activityType} onChangeText={(activityType) => update(setActivities, item.id, { activityType })} placeholder="e.g. Walking" autoCapitalize="words" error={errors[`activity-${item.id}`]} /><View style={styles.metricGrid}><Input label="Duration (minutes)" value={item.duration} onChangeText={(duration) => update(setActivities, item.id, { duration })} keyboardType="number-pad" /><Input label="Calories burned" value={item.calories} onChangeText={(calories) => update(setActivities, item.id, { calories })} keyboardType="decimal-pad" /></View><Pressable onPress={() => setActivities((items) => items.filter((entry) => entry.id !== item.id))}><Text style={styles.remove}>Remove activity</Text></Pressable></View>)}<Button title="Add activity" variant="outline" fullWidth onPress={addActivity} disabled={mutation.isPending} /></SectionCard>
+    <SectionCard title="Medications" subtitle="Record medications you took today.">{medications.map((item) => <View key={item.id} style={styles.repeatItem}><Input label="Medication name" value={item.name} onChangeText={(name) => update(setMedications, item.id, { name })} autoCapitalize="words" error={errors[`medication-${item.id}`]} /><View style={styles.metricGrid}><Input label="Dosage" value={item.dosage} onChangeText={(dosage) => update(setMedications, item.id, { dosage })} keyboardType="decimal-pad" error={errors[`medication-dose-${item.id}`]} /><Input label="Unit" value={item.unit} onChangeText={(unit) => update(setMedications, item.id, { unit })} placeholder="e.g. mg" /></View><Pressable onPress={() => setMedications((items) => items.filter((entry) => entry.id !== item.id))}><Text style={styles.remove}>Remove medication</Text></Pressable></View>)}<Button title="Add medication" variant="outline" fullWidth onPress={addMedication} disabled={mutation.isPending} /></SectionCard>
+    <SectionCard title="Daily note" subtitle="Notes are sent to MedGraph’s existing safe-storage and de-identification pipeline."><Input value={notes} onChangeText={setNotes} placeholder="Anything else you want to record?" multiline autoCapitalize="sentences" error={errors.notes} /><Text style={styles.mutedText}>{notes.length}/4000</Text></SectionCard><Button title="Save Daily Log" onPress={save} fullWidth loading={mutation.isPending} disabled={conceptsQuery.isLoading || mutation.isPending} style={styles.saveButton} />
+  </ScrollView></SafeAreaView>;
 }
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'normal':
-      return COLORS.success;
-
-    case 'mild_attention':
-      return COLORS.warning;
-
-    case 'warning':
-      return COLORS.warning;
-
-    case 'critical':
-      return COLORS.error;
-
-    default:
-      return COLORS.textPrimary;
-  }
-};
-
-const getSliderPosition = (
-  fieldId: string,
-  value: string
-): number => {
-  const input = VITAL_INPUTS.find(
-    vital => vital.type === fieldId
-  );
-
-  if (
-    !input ||
-    input.min === undefined ||
-    input.max === undefined
-  ) {
-    return 0;
-  }
-
-  const num = parseFloat(value);
-
-  if (Number.isNaN(num)) {
-    return 0;
-  }
-
-  return Math.max(
-    0,
-    Math.min(
-      100,
-      ((num - input.min) /
-        (input.max - input.min)) *
-        100
-    )
-  );
-};
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-
-  scrollContent: {
-    paddingBottom: SPACING.xxl,
-  },
-
-  header: {
-    paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
-  },
-
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-
-  greeting: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-  },
-
-  subtitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-  },
-
-  inputCard: {
-    marginHorizontal: SPACING.xl,
-    marginBottom: SPACING.md,
-  },
-
-  inputHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-
-  inputLabelContainer: {
-    flex: 1,
-  },
-
-  inputLabel: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-  },
-
-  inputUnit: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    marginLeft: SPACING.xs,
-  },
-
-  valueDisplay: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-
-  valueText: {
-    ...TYPOGRAPHY.h2,
-    fontWeight: '700',
-  },
-
-  valueUnit: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-  },
-
-  sliderContainer: {
-    marginTop: SPACING.md,
-  },
-
-  sliderMin: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    position: 'absolute',
-    left: -30,
-  },
-
-  sliderTrack: {
-    height: 4,
-    backgroundColor: COLORS.border,
-    borderRadius: 2,
-    marginHorizontal: 30,
-    position: 'relative',
-  },
-
-  sliderThumb: {
-    position: 'absolute',
-    top: -6,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary,
-    ...SHADOWS.sm,
-  },
-
-  sliderMax: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    position: 'absolute',
-    right: -30,
-  },
-
-  numberInput: {
-    ...TYPOGRAPHY.h2,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    textAlign: 'center',
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  numberInputDisabled: {
-    opacity: 0.6,
-  },
-
-  saveStatusContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xl,
-  },
-
-  saveStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.full,
-  },
-
-  saveStatusSaving: {
-    backgroundColor: 'rgba(20, 184, 166, 0.1)',
-  },
-
-  saveStatusSaved: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-  },
-
-  saveStatusError: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-  },
-
-  saveStatusText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.primary,
-  },
-
-  disclaimerCard: {
-    marginHorizontal: SPACING.xl,
-    marginBottom: SPACING.xl,
-    backgroundColor: 'rgba(16, 185, 129, 0.05)',
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-    borderWidth: 1,
-  },
-
-  disclaimerTitle: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.accent,
-    marginBottom: SPACING.xs,
-  },
-
-  disclaimerText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    lineHeight: 18,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background }, content: { padding: SPACING.md, paddingBottom: SPACING.xxl, gap: SPACING.md }, header: { paddingVertical: SPACING.md }, title: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary }, subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginTop: SPACING.xs }, date: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary, marginTop: SPACING.sm }, section: { gap: SPACING.xs }, sectionTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary }, sectionSubtitle: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary }, sectionContent: { gap: SPACING.md, marginTop: SPACING.sm }, metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md }, metric: { flexGrow: 1, flexBasis: 92 }, inputLabel: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary, marginBottom: SPACING.xs }, choiceRow: { flexDirection: 'row', gap: SPACING.xs }, choice: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: BORDER_RADIUS.sm, backgroundColor: COLORS.surfaceElevated }, choiceSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary }, choiceText: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textSecondary }, choiceTextSelected: { color: '#ffffff' }, choiceLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACING.xs }, mutedText: { ...TYPOGRAPHY.caption, color: COLORS.textMuted }, severityRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs }, severity: { width: 31, height: 31, borderRadius: BORDER_RADIUS.full, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceElevated, borderWidth: 1, borderColor: COLORS.border }, severitySelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary }, severityText: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary }, repeatItem: { gap: SPACING.sm, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border }, remove: { ...TYPOGRAPHY.captionStrong, color: COLORS.error, paddingVertical: SPACING.xs }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs }, conceptChip: { paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderWidth: 1, borderColor: COLORS.border, borderRadius: BORDER_RADIUS.full }, conceptChipSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary }, conceptText: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary }, saveButton: { marginTop: SPACING.sm }, message: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md }, messageSuccess: { backgroundColor: COLORS.accentBg }, messageError: { backgroundColor: '#feecec' }, messageText: { ...TYPOGRAPHY.body, color: COLORS.textPrimary }, error: { ...TYPOGRAPHY.captionStrong, color: COLORS.error },
 });

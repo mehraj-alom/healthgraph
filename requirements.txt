@@ -15,7 +15,7 @@ celery>=5.3.6
 redis>=5.0.1              # Broker and backend for Celery
 
 # Authentication 
-firebase-admin>=6.4.0     # For JWT verification in get_current_user
+firebase-admin>=6.4.0     # For Firebase ID-token verification
 
 # NLP & De-identification
 presidio-analyzer>=2.2.35

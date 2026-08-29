@@ -36,7 +36,7 @@ class WellbeingPayload(Base):
 class PainPayload(Base):
     __tablename__ = "payload_pain"
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clinical_events.event_id", ondelete="CASCADE"), primary_key=True)
-    body_location_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True)) # Links to ontology
+    body_location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("body_regions.region_id", ondelete="SET NULL")) # Links to ontology
     severity: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     pain_type: Mapped[str | None] = mapped_column(String(100)) # Sharp, dull, throbbing
     __table_args__ = (CheckConstraint("severity BETWEEN 1 AND 10", name="ck_pain_severity"),)
@@ -70,3 +70,12 @@ class MedicationTakenPayload(Base):
     medication_name: Mapped[str] = mapped_column(String(255), nullable=False)
     dosage_value: Mapped[float | None] = mapped_column(Float)
     dosage_unit: Mapped[str | None] = mapped_column(String(50))
+
+
+class PatientNotePayload(Base):
+    """Free-text manual note associated with a canonical clinical event."""
+    __tablename__ = "payload_patient_notes"
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("clinical_events.event_id", ondelete="CASCADE"), primary_key=True
+    )
+    safe_notes: Mapped[str] = mapped_column(Text, nullable=False)

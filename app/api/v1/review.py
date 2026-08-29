@@ -5,24 +5,21 @@ from sqlalchemy import select
 from typing import List
 from logger import logger
 from core.db import get_db
-from core.security import get_current_user
+from app.api.dependencies import get_authenticated_patient_id
 from models.identity import Patient
 from models.events import ClinicalEvent, VerificationStatus,EvidenceLink,LabResult
 from models.ontology import MedicalConcept
 from schemas.events import PendingReviewItem, ResolveEventRequest
 from services.ocr.canonicalization import Canonicalizer
 
-router = APIRouter(prefix="/v1/review", tags=["review"])
+router = APIRouter(prefix="/api/v1/review", tags=["review"])
 
 @router.get("/pending", response_model=List[PendingReviewItem])
 def get_pending_reviews(
     db: Session = Depends(get_db),
-    current_patient_uid: str = Depends(get_current_user)
+    patient_id: UUID = Depends(get_authenticated_patient_id)
 ):
     """Fetches all events that failed automatic canonicalization."""
-    patient = db.scalar(select(Patient).where(Patient.firebase_uid == current_patient_uid))
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found.")
 
     # Fetch UNVERIFIED events joined with their payloads and evidence
     events = db.query(ClinicalEvent, LabResult, EvidenceLink).outerjoin(
@@ -30,7 +27,7 @@ def get_pending_reviews(
     ).outerjoin(
         EvidenceLink, ClinicalEvent.event_id == EvidenceLink.event_id
     ).filter(
-        ClinicalEvent.patient_id == patient.patient_id,
+        ClinicalEvent.patient_id == patient_id,
         ClinicalEvent.verification_status == VerificationStatus.UNVERIFIED,
         ClinicalEvent.concept_id.is_(None)
     ).all()
@@ -56,15 +53,14 @@ def resolve_pending_event(
     event_id: UUID,
     request: ResolveEventRequest,
     db: Session = Depends(get_db),
-    current_patient_uid: str = Depends(get_current_user)
+    patient_id: UUID = Depends(get_authenticated_patient_id)
 ):
     """Maps an unknown event to a concept and permanently learns the alias."""
-    patient = db.scalar(select(Patient).where(Patient.firebase_uid == current_patient_uid))
-    logger.info(f"Resolving pending event for patient: {patient.patient_id}")
+    logger.info(f"Resolving pending event for patient: {patient_id}")
     # Lock the event and verify ownership
     event = db.scalar(select(ClinicalEvent).where(
         ClinicalEvent.event_id == event_id,
-        ClinicalEvent.patient_id == patient.patient_id
+        ClinicalEvent.patient_id == patient_id
     ))
     
     if not event:

@@ -70,11 +70,7 @@ client.interceptors.request.use(
  * Firebase refreshes its own ID token.
  * We force-refresh once and retry the request once.
  *
- * We deliberately do NOT call:
- *
- *   /api/v1/auth/refresh
- *
- * because that endpoint is not part of the backend architecture.
+ * No backend refresh endpoint is used; Firebase owns token refresh.
  */
 client.interceptors.response.use(
   (response) => response,

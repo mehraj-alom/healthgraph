@@ -1,26 +1,10 @@
-from firebase_admin import auth
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+"""Compatibility import for the single canonical authentication dependency.
 
-from logger import auth_logger as logger
+New endpoints must depend on ``get_authenticated_patient_id`` directly from
+``app.api.dependencies``.  This module deliberately does not expose a second
+Firebase-token verification path.
+"""
 
-security = HTTPBearer()
+from app.api.dependencies import get_authenticated_patient_id
 
-
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        user = auth.verify_id_token(credentials.credentials)
-        uid = user.get("uid") if isinstance(user, dict) else None
-        if not uid:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token payload: missing uid",
-            )
-        logger.info(f"User authenticated: {uid}")
-        return uid
-    except Exception as e:
-        logger.error(f"Error occurred while verifying token: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid or expired token: {str(e)}",
-        )
+__all__ = ["get_authenticated_patient_id"]

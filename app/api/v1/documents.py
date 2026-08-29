@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.db import get_db
-from core.security import get_current_user
+from app.api.dependencies import get_authenticated_patient_id
 from models.events import Document
 from models.identity import Patient
 from storage.save_doc import StorageService
@@ -14,20 +14,15 @@ from schemas.events import DocumentResponse
 from workers.ingestion_tasks import process_document_pipeline
 
 
-router = APIRouter(prefix="/v1/documents", tags=["documents"])
+router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_patient_uid: str = Depends(get_current_user),
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
 ):
-    # Resolve Firebase UID to internal PostgreSQL Patient record
-    patient = db.scalar(select(Patient).where(Patient.firebase_uid == current_patient_uid))
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient profile not found.")
-
     allowed_extensions = {".pdf", ".png", ".jpg", ".jpeg"}
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext not in allowed_extensions:
@@ -38,7 +33,7 @@ def upload_document(
     existing_doc = db.scalar(
         select(Document).where(
             Document.file_hash == file_hash,
-            Document.patient_id == patient.patient_id,
+            Document.patient_id == patient_id,
         )
     )
     if existing_doc:
@@ -46,13 +41,13 @@ def upload_document(
 
     document_id = uuid.uuid4()
     try:
-        storage_url = StorageService.save_document(file, patient.patient_id, document_id)
+        storage_url = StorageService.save_document(file, patient_id, document_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File persistence failed: {str(e)}")
 
     new_document = Document(
         document_id=document_id,
-        patient_id=patient.patient_id,
+        patient_id=patient_id,
         file_hash=file_hash,
         storage_url=storage_url,
         status="UPLOADED",

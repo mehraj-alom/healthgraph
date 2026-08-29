@@ -6,12 +6,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, desc
 
 from core.db import get_db
-from core.security import get_current_user
+from app.api.dependencies import get_authenticated_patient_id
 from models.identity import Patient
 from models.events import ClinicalEvent, EventType
 from models.events import LabResult
 from models.events import EvidenceLink
 from models.ontology import MedicalConcept
+from models.daily_logs.events import PatientNotePayload, VitalSignPayload
 from schemas.events import ClinicalEventResponse
 
 router = APIRouter(prefix="/api/v1/timeline", tags=["timeline"])
@@ -22,15 +23,11 @@ def get_timeline(
     end_date: Optional[datetime] = Query(None, description="Filter events before this date"),
     event_type: Optional[EventType] = Query(None, description="Filter by specific event type (e.g., LAB_RESULT)"),
     db: Session = Depends(get_db),
-    current_patient_uid: str = Depends(get_current_user)
+    patient_id: UUID = Depends(get_authenticated_patient_id)
 ):
     """
     Fetches the unified, chronological health timeline for the patient.
     """
-    # Authenticate patient
-    patient = db.scalar(select(Patient).where(Patient.firebase_uid == current_patient_uid))
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found.")
 
     #Build the optimized joined query
     query = db.query(
@@ -38,14 +35,19 @@ def get_timeline(
         MedicalConcept, 
         LabResult, 
         EvidenceLink
+        , VitalSignPayload, PatientNotePayload
     ).outerjoin(
         MedicalConcept, ClinicalEvent.concept_id == MedicalConcept.id
     ).outerjoin(
         LabResult, ClinicalEvent.event_id == LabResult.event_id
     ).outerjoin(
         EvidenceLink, ClinicalEvent.event_id == EvidenceLink.event_id
+    ).outerjoin(
+        VitalSignPayload, ClinicalEvent.event_id == VitalSignPayload.event_id
+    ).outerjoin(
+        PatientNotePayload, ClinicalEvent.event_id == PatientNotePayload.event_id
     ).filter(
-        ClinicalEvent.patient_id == patient.patient_id
+        ClinicalEvent.patient_id == patient_id
     )
 
     # 3. Apply optional filters
@@ -63,7 +65,7 @@ def get_timeline(
     results = query.all()
     
     timeline_response = []
-    for event, concept, lab, evidence in results:
+    for event, concept, lab, evidence, vital, note in results:
         
         # Assemble the Pydantic object manually to handle the outer joins safely
         event_dict = {
@@ -87,6 +89,8 @@ def get_timeline(
                 "reference_range": lab.reference_range,
                 "abnormal_flag": getattr(lab, 'abnormal_flag', None)
             } if lab else None,
+            "vital_sign": {"value": vital.value, "unit": vital.unit} if vital else None,
+            "safe_notes": note.safe_notes if note else None,
             
             # The Provenance Layer
             "evidence": {

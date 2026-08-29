@@ -27,7 +27,7 @@ class BodyRegionResponse(BaseModel):
 class EvidenceResponse(BaseModel):
     document_id: UUID
     extracted_text: str
-    bounding_box: Optional[List[float]] = None  # [0.1, 0.2, 0.5, 0.3]
+    bounding_box: Optional[Dict[str, Any] | List[float]] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -37,6 +37,12 @@ class LabResultResponse(BaseModel):
     unit: Optional[str] = None
     reference_range: Optional[str] = None
     abnormal_flag: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class VitalSignResponse(BaseModel):
+    value: float
+    unit: str
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -66,6 +72,8 @@ class ClinicalEventResponse(BaseModel):
     # Joined contextual fields for the UI
     concept_display_name: Optional[str] = None 
     lab_result: Optional[LabResultResponse] = None
+    vital_sign: Optional[VitalSignResponse] = None
+    safe_notes: Optional[str] = None
     evidence: Optional[EvidenceResponse] = None
 
     created_at: datetime

@@ -31,7 +31,7 @@ import { COLORS } from '@/constants';
 
 export type MainTabParamList = {
   Dashboard: undefined;
-  Vitals: undefined;
+  DailyLog: undefined;
   Timeline: undefined;
   Chat: undefined;
 };
@@ -108,10 +108,10 @@ function MainTabs() {
       />
 
       <Tab.Screen
-        name="Vitals"
+        name="DailyLog"
         component={VitalsLoggerScreen}
         options={{
-          tabBarLabel: 'Vitals',
+          tabBarLabel: 'Daily Log',
         }}
       />
 

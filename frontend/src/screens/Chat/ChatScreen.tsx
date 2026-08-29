@@ -4,10 +4,10 @@ import {
   Text,
   TextInput,
   FlatList,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 import { api } from '@/services/api';

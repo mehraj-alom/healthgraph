@@ -1,25 +1,25 @@
 export const COLORS = {
   // Base
-  background: '#0f172a',      // Slate 950
-  surface: '#1e293b',         // Slate 800
-  surfaceElevated: '#334155', // Slate 700
-  border: '#475569',          // Slate 600
+  background: '#f7f9f8',
+  surface: '#ffffff',
+  surfaceElevated: '#f0f5f3',
+  border: '#dbe5e1',
   
   // Text
-  textPrimary: '#f8fafc',     // Slate 50
-  textSecondary: '#94a3b8',   // Slate 400
-  textMuted: '#64748b',       // Slate 500
+  textPrimary: '#18332d',
+  textSecondary: '#59716b',
+  textMuted: '#778c87',
   
   // Brand - Teal/Emerald for health
-  primary: '#14b8a6',         // Teal 500
-  primaryLight: '#2dd4bf',    // Teal 400
-  primaryDark: '#0d9488',     // Teal 600
-  primaryBg: 'rgba(20, 184, 166, 0.1)',
+  primary: '#087a69',
+  primaryLight: '#159b84',
+  primaryDark: '#056657',
+  primaryBg: '#e4f4f0',
   
   // Accent - Emerald
-  accent: '#10b981',          // Emerald 500
-  accentLight: '#34d399',     // Emerald 400
-  accentBg: 'rgba(16, 185, 129, 0.1)',
+  accent: '#23836b',
+  accentLight: '#52a98d',
+  accentBg: '#e7f4ed',
   
   // Semantic
   success: '#10b981',         // Emerald 500
@@ -34,8 +34,8 @@ export const COLORS = {
   statusAttention: '#f97316', // Orange
   
   // Gradients
-  gradientPrimary: ['#14b8a6', '#0d9488'] as const,
-  gradientSurface: ['#1e293b', '#0f172a'] as const,
+  gradientPrimary: ['#159b84', '#087a69'] as const,
+  gradientSurface: ['#ffffff', '#f7f9f8'] as const,
 } as const;
 
 export const SPACING = {
