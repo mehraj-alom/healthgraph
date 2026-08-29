@@ -14,7 +14,7 @@ from models.events import EvidenceLink
 from models.ontology import MedicalConcept
 from schemas.events import ClinicalEventResponse
 
-router = APIRouter(prefix="/v1/timeline", tags=["timeline"])
+router = APIRouter(prefix="/api/v1/timeline", tags=["timeline"])
 
 @router.get("", response_model=List[ClinicalEventResponse])
 def get_timeline(

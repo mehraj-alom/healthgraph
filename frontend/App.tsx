@@ -7,37 +7,49 @@ import {
 } from 'react-native';
 
 import { NavigationContainer } from '@react-navigation/native';
-import {
-  createNativeStackNavigator,
-  NativeStackScreenProps,
-} from '@react-navigation/native-stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
+import DashboardScreen from '@/screens/Dashboard/DashboardScreen';
 import VitalsLoggerScreen from '@/screens/VitalsLogger/VitalsLoggerScreen';
+import TimelineScreen from '@/screens/Timeline/TimelineScreen';
 import ChatScreen from '@/screens/Chat/ChatScreen';
 
 import { COLORS } from '@/constants';
 
-/*
- * Add your other authenticated screens here when they exist.
- *
- * Example:
- * import DashboardScreen from '@/screens/Dashboard/DashboardScreen';
- * import TimelineScreen from '@/screens/Timeline/TimelineScreen';
- */
+/* ============================================================================
+ * Navigation types
+ * ========================================================================== */
 
-export type RootStackParamList = {
-  Onboarding: undefined;
+export type MainTabParamList = {
   Dashboard: undefined;
   Vitals: undefined;
   Timeline: undefined;
   Chat: undefined;
 };
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+export type RootStackParamList = {
+  Onboarding: undefined;
+  Main: undefined;
+};
+
+const RootStack =
+  createNativeStackNavigator<RootStackParamList>();
+
+const Tab =
+  createBottomTabNavigator<MainTabParamList>();
+
+/* ============================================================================
+ * React Query
+ * ========================================================================== */
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,25 +60,111 @@ const queryClient = new QueryClient({
   },
 });
 
-/**
- * Authentication-aware navigation.
- *
- * Firebase AuthContext determines whether the user is authenticated.
- * Unauthenticated users see Onboarding.
- * Authenticated users see the application stack.
- */
+/* ============================================================================
+ * Main authenticated application
+ * ========================================================================== */
+
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      initialRouteName="Dashboard"
+      screenOptions={{
+        headerShown: false,
+
+        tabBarActiveTintColor:
+          COLORS.primary,
+
+        tabBarInactiveTintColor:
+          COLORS.textSecondary,
+
+        tabBarStyle: {
+          backgroundColor:
+            COLORS.background,
+
+          borderTopColor:
+            COLORS.border,
+
+          height: 64,
+
+          paddingBottom: 8,
+
+          paddingTop: 6,
+        },
+
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
+
+        tabBarHideOnKeyboard: true,
+      }}
+    >
+      <Tab.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{
+          tabBarLabel: 'Home',
+        }}
+      />
+
+      <Tab.Screen
+        name="Vitals"
+        component={VitalsLoggerScreen}
+        options={{
+          tabBarLabel: 'Vitals',
+        }}
+      />
+
+      <Tab.Screen
+        name="Timeline"
+        component={TimelineScreen}
+        options={{
+          tabBarLabel: 'Timeline',
+        }}
+      />
+
+      <Tab.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{
+          tabBarLabel: 'Chat',
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+/* ============================================================================
+ * Authentication-aware root navigator
+ * ========================================================================== */
+
 function AppNavigator() {
-  const { user, loading } = useAuth();
+  const {
+    user,
+    loading,
+  } = useAuth();
+
+  /* --------------------------------------------------------------------------
+   * Firebase authentication state is still restoring.
+   * ------------------------------------------------------------------------ */
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View
+        style={
+          styles.loadingContainer
+        }
+      >
         <ActivityIndicator
           size="large"
           color={COLORS.primary}
         />
 
-        <Text style={styles.loadingText}>
+        <Text
+          style={
+            styles.loadingText
+          }
+        >
           Loading MedGraph...
         </Text>
       </View>
@@ -75,76 +173,41 @@ function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator
+      <RootStack.Navigator
         screenOptions={{
           headerShown: false,
-          contentStyle: {
-            backgroundColor: COLORS.background,
-          },
           animation: 'fade',
+          contentStyle: {
+            backgroundColor:
+              COLORS.background,
+          },
         }}
       >
         {!user ? (
-          <Stack.Screen
+          <RootStack.Screen
             name="Onboarding"
             component={OnboardingScreen}
           />
         ) : (
-          <>
-            {/*
-             * Temporary Dashboard route.
-             *
-             * Replace this with your real DashboardScreen when
-             * that screen is ready.
-             */}
-            <Stack.Screen
-              name="Dashboard"
-              component={DashboardPlaceholder}
-            />
-
-            <Stack.Screen
-              name="Vitals"
-              component={VitalsLoggerScreen}
-            />
-
-            <Stack.Screen
-              name="Chat"
-              component={ChatScreen}
-            />
-          </>
+          <RootStack.Screen
+            name="Main"
+            component={MainTabs}
+          />
         )}
-      </Stack.Navigator>
+      </RootStack.Navigator>
     </NavigationContainer>
   );
 }
 
-/**
- * Temporary authenticated landing screen.
- *
- * This prevents us from referencing a DashboardScreen that may
- * not yet exist in the frontend.
- */
-function DashboardPlaceholder() {
-  return (
-    <View style={styles.dashboardContainer}>
-      <Text style={styles.dashboardTitle}>
-        MedGraph
-      </Text>
-
-      <Text style={styles.dashboardSubtitle}>
-        Health Dashboard
-      </Text>
-
-      <Text style={styles.dashboardStatus}>
-        Authentication successful
-      </Text>
-    </View>
-  );
-}
+/* ============================================================================
+ * Application root
+ * ========================================================================== */
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider
+      client={queryClient}
+    >
       <AuthProvider>
         <AppNavigator />
       </AuthProvider>
@@ -152,45 +215,30 @@ export default function App() {
   );
 }
 
+/* ============================================================================
+ * Styles
+ * ========================================================================== */
+
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
+
     alignItems: 'center',
+
     justifyContent: 'center',
-    backgroundColor: COLORS.background,
+
+    backgroundColor:
+      COLORS.background,
+
     paddingHorizontal: 24,
   },
 
   loadingText: {
     marginTop: 16,
+
     fontSize: 16,
-    color: COLORS.textSecondary,
-  },
 
-  dashboardContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 24,
-  },
-
-  dashboardTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: COLORS.primary,
-    marginBottom: 8,
-  },
-
-  dashboardSubtitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-    marginBottom: 12,
-  },
-
-  dashboardStatus: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
+    color:
+      COLORS.textSecondary,
   },
 });

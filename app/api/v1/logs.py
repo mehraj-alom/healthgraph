@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from core.log_collector import pipeline_logs
 
-router = APIRouter(prefix="/v1/logs", tags=["logs"])
+router = APIRouter(prefix="/api/v1/logs", tags=["logs"])
 
 
 @router.get("/recent")

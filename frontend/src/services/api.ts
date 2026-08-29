@@ -1,143 +1,214 @@
-import axios, { AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import axios, {
+  AxiosInstance,
+  AxiosRequestConfig,
+  InternalAxiosRequestConfig,
+} from 'axios';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+import { auth } from '@/context/AuthContext';
 
-class ApiService {
-  private client: AxiosInstance;
-  private isRefreshing = false;
-  private failedQueue: Array<{
-    resolve: (token: string) => void;
-    reject: (error: Error) => void;
-  }> = [];
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  'http://localhost:8000';
 
-  constructor() {
-    this.client = axios.create({
-      baseURL: API_URL,
-      timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+/**
+ * Axios configuration.
+ */
+const client = axios.create({
+  baseURL: API_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-    this.setupInterceptors();
-  }
+/**
+ * Prevent an infinite retry loop.
+ */
+type RetryableRequestConfig =
+  InternalAxiosRequestConfig & {
+    _retry?: boolean;
+  };
 
-  private setupInterceptors() {
-    // Request interceptor to attach auth token
-    this.client.interceptors.request.use(
-      async (config: InternalAxiosRequestConfig) => {
-        const token = await SecureStore.getItemAsync('access_token');
+/**
+ * Attach the current Firebase ID token.
+ *
+ * Firebase Auth is responsible for refreshing the token.
+ * We do NOT maintain a separate refresh-token system here.
+ */
+client.interceptors.request.use(
+  async (
+    config: InternalAxiosRequestConfig
+  ) => {
+    try {
+      const currentUser = auth.currentUser;
+
+      if (currentUser) {
+        const token =
+          await currentUser.getIdToken();
+
         if (token && config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
+          config.headers.Authorization =
+            `Bearer ${token}`;
         }
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
-
-    // Response interceptor for token refresh
-    this.client.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        const originalRequest = error.config;
-
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          if (this.isRefreshing) {
-            return new Promise((resolve, reject) => {
-              this.failedQueue.push({ resolve, reject });
-            })
-              .then((token) => {
-                originalRequest.headers.Authorization = `Bearer ${token}`;
-                return this.client(originalRequest);
-              })
-              .catch((err) => Promise.reject(err));
-            }
-
-            originalRequest._retry = true;
-            this.isRefreshing = true;
-
-            try {
-              const refreshToken = await SecureStore.getItemAsync('refresh_token');
-              if (!refreshToken) {
-                throw new Error('No refresh token');
-              }
-
-              const response = await axios.post(`${process.env.EXPO_PUBLIC_API_URL}/api/v1/auth/refresh`, {
-                refresh_token: refreshToken,
-              });
-
-              const { access_token, refresh_token: newRefreshToken } = response.data;
-
-              await SecureStore.setItemAsync('access_token', access_token);
-              if (newRefreshToken) {
-                await SecureStore.setItemAsync('refresh_token', newRefreshToken);
-              }
-
-              this.processQueue(access_token, null);
-              originalRequest.headers.Authorization = `Bearer ${access_token}`;
-
-              return this.client(originalRequest);
-            } catch (err) {
-              this.processQueue(null, err as Error);
-              await this.clearAuth();
-              return Promise.reject(err);
-            } finally {
-              this.isRefreshing = false;
-            }
-          }
-
-        return Promise.reject(error);
       }
-    );
-  }
+    } catch (error) {
+      console.error(
+        '[MedGraph] Failed to obtain Firebase ID token:',
+        error
+      );
+    }
 
-  private processQueue(token: string | null, error: Error | null) {
-    this.failedQueue.forEach(({ resolve, reject }) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(token!);
+    return config;
+  },
+  (error) =>
+    Promise.reject(error)
+);
+
+/**
+ * Handle authentication failures.
+ *
+ * Firebase refreshes its own ID token.
+ * We force-refresh once and retry the request once.
+ *
+ * We deliberately do NOT call:
+ *
+ *   /api/v1/auth/refresh
+ *
+ * because that endpoint is not part of the backend architecture.
+ */
+client.interceptors.response.use(
+  (response) => response,
+
+  async (error) => {
+    const originalRequest =
+      error.config as RetryableRequestConfig | undefined;
+
+    if (
+      error.response?.status !== 401 ||
+      !originalRequest ||
+      originalRequest._retry
+    ) {
+      return Promise.reject(error);
+    }
+
+    const currentUser =
+      auth.currentUser;
+
+    if (!currentUser) {
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+
+    try {
+      /**
+       * Force Firebase to refresh the ID token.
+       */
+      const freshToken =
+        await currentUser.getIdToken(true);
+
+      if (originalRequest.headers) {
+        originalRequest.headers.Authorization =
+          `Bearer ${freshToken}`;
       }
-    });
-    this.failedQueue = [];
-  }
 
-  private async clearAuth() {
-    await SecureStore.deleteItemAsync('access_token');
-    await SecureStore.deleteItemAsync('refresh_token');
-    await SecureStore.deleteItemAsync('user_data');
-  }
+      return client.request(
+        originalRequest
+      );
+    } catch (refreshError) {
+      console.error(
+        '[MedGraph] Firebase token refresh failed:',
+        refreshError
+      );
 
-  async get<T>(url: string, config?: AxiosRequestConfig) {
-    const response = await this.client.get<T>(url, config);
+      return Promise.reject(
+        refreshError
+      );
+    }
+  }
+);
+
+/**
+ * API service.
+ */
+class ApiService {
+  async get<T>(
+    url: string,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
+    const response =
+      await client.get<T>(
+        url,
+        config
+      );
+
     return response.data;
   }
 
-  async post<T>(url: string, data?: unknown, config?: AxiosRequestConfig) {
-    const response = await this.client.post<T>(url, data, config);
+  async post<T>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
+    const response =
+      await client.post<T>(
+        url,
+        data,
+        config
+      );
+
     return response.data;
   }
 
-  async put<T>(url: string, data?: unknown, config?: AxiosRequestConfig) {
-    const response = await this.client.put<T>(url, data, config);
+  async put<T>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
+    const response =
+      await client.put<T>(
+        url,
+        data,
+        config
+      );
+
     return response.data;
   }
 
-  async patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig) {
-    const response = await this.client.patch<T>(url, data, config);
+  async patch<T>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
+    const response =
+      await client.patch<T>(
+        url,
+        data,
+        config
+      );
+
     return response.data;
   }
 
-  async delete<T>(url: string, config?: AxiosRequestConfig) {
-    const response = await this.client.delete<T>(url, config);
+  async delete<T>(
+    url: string,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
+    const response =
+      await client.delete<T>(
+        url,
+        config
+      );
+
     return response.data;
   }
 
-  getClient() {
-    return this.client;
+  getClient(): AxiosInstance {
+    return client;
   }
 }
 
-export const api = new ApiService();
+export const api =
+  new ApiService();
+
 export default api;
