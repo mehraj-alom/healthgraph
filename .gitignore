@@ -220,6 +220,11 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 *json
+!/*/eas.json
+!/*/package.json
+!/*/package-lock.json
+!/*/app.json
+!/*/tsconfig.json
 *pdf
 *jpg
 *jpeg
