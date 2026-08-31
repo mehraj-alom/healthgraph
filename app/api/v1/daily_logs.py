@@ -17,6 +17,17 @@ from models.events import (
 )
 from models.outbox import enqueue_clinical_event
 from models.ontology import MedicalConcept
+from models.anatomy import (
+    AnatomicalObservation,
+    AnatomicalStructure,
+    FindingTrend,
+    ObservationType,
+    SourceType as AnatomySourceType,
+    VisualStatus,
+)
+from services.anatomy.body_state_service import (
+    record_anatomical_observation,
+)
 
 from models.daily_logs.events import (
     ActivityPayload,
@@ -293,6 +304,57 @@ def submit_daily_checkin(
                 pain_type=pain.pain_type,
             )
         )
+
+        # -----------------------------------------------------------------
+        # Anatomical observation (only when structure_id is provided)
+        # -----------------------------------------------------------------
+
+        if pain.structure_id:
+            anatomical_structure = db.scalar(
+                select(AnatomicalStructure).where(
+                    AnatomicalStructure.structure_id
+                    == pain.structure_id
+                )
+            )
+
+            if anatomical_structure:
+                severity_score = (
+                    pain.severity / 10.0
+                )
+
+                visual_status = (
+                    VisualStatus.NORMAL
+                    if pain.severity <= 3
+                    else VisualStatus.MILD_ATTENTION
+                    if pain.severity <= 6
+                    else VisualStatus.WARNING
+                    if pain.severity <= 8
+                    else VisualStatus.CRITICAL
+                )
+
+                pain_observation = AnatomicalObservation(
+                    observation_id=uuid.uuid4(),
+                    patient_id=patient_id,
+                    structure_id=pain.structure_id,
+                    observation_type=ObservationType.SYMPTOM,
+                    finding_code="pain_level",
+                    finding_display_name="Pain",
+                    visual_status=visual_status,
+                    visual_severity_score=severity_score,
+                    trend=FindingTrend.STABLE,
+                    source_type=AnatomySourceType.PATIENT_REPORTED,
+                    source_id=str(pain_event_id),
+                    event_id=pain_event_id,
+                    clinical_summary=pain.pain_type,
+                    recorded_at=timestamp,
+                    ingested_at=datetime.now(timezone.utc),
+                )
+
+                record_anatomical_observation(
+                    db,
+                    pain_observation,
+                    auto_commit=False,
+                )
 
     # =========================================================================
     # Sleep

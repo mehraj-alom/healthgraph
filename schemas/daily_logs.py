@@ -16,6 +16,7 @@ class SymptomCreate(BaseModel):
 
 class PainCreate(BaseModel):
     body_location_id: Optional[UUID] = None
+    structure_id: Optional[str] = Field(None, max_length=64)
     severity: int = Field(ge=1, le=10)
     pain_type: Optional[str] = None
 

@@ -15,9 +15,11 @@ from models.anatomy import (
     AnatomicalStructure,
     FindingTrend,
     ObservationType,
-    PatientBodyStateSnapshot,
     SourceType,
     VisualStatus,
+)
+from services.anatomy.body_state_service import (
+    record_anatomical_observation,
 )
 from models.events import (
     ClinicalEvent,
@@ -70,6 +72,44 @@ class BodyStateLogResponse(BaseModel):
     event_id: uuid.UUID
     structure_id: str
     status: str
+
+
+class AnatomicalStructureItem(BaseModel):
+    structure_id: str
+    display_name: str
+    category: str
+    parent_id: str | None
+    is_internal_organ: bool
+
+
+@router.get(
+    "/structures",
+    response_model=List[AnatomicalStructureItem],
+)
+def list_anatomical_structures(
+    db: Session = Depends(get_db),
+):
+    """
+    Return the full anatomical structure registry.
+    Used by the frontend body-location picker.
+    """
+    structures = db.execute(
+        select(AnatomicalStructure).order_by(
+            AnatomicalStructure.parent_id.nulls_first(),
+            AnatomicalStructure.structure_id,
+        )
+    ).scalars().all()
+
+    return [
+        AnatomicalStructureItem(
+            structure_id=s.structure_id,
+            display_name=s.display_name,
+            category=s.category.value,
+            parent_id=s.parent_id,
+            is_internal_organ=s.is_internal_organ,
+        )
+        for s in structures
+    ]
 
 
 @router.get(
@@ -204,66 +244,11 @@ def log_body_state(
         ingested_at=datetime.now(timezone.utc),
     )
 
-    db.add(observation)
-
-    # -------------------------------------------------------------------------
-    # Upsert materialized body-state snapshot.
-    # -------------------------------------------------------------------------
-
-    snapshot = db.scalar(
-        select(PatientBodyStateSnapshot).where(
-            PatientBodyStateSnapshot.patient_id
-            == patient_id,
-            PatientBodyStateSnapshot.structure_id
-            == structure.structure_id,
-        )
+    record_anatomical_observation(
+        db,
+        observation,
+        auto_commit=False,
     )
-
-    now = datetime.now(timezone.utc)
-
-    if snapshot:
-        snapshot.mesh_asset_id = (
-            structure.mesh_asset_id
-        )
-        snapshot.mesh_node_name = (
-            structure.mesh_node_name
-        )
-        snapshot.mesh_version = (
-            structure.mesh_version
-        )
-        snapshot.visual_status = (
-            payload.visual_status
-        )
-        snapshot.visual_severity_score = (
-            payload.visual_severity_score
-        )
-        snapshot.trend = FindingTrend.STABLE
-        snapshot.latest_observation_id = (
-            observation_id
-        )
-        snapshot.latest_summary = (
-            payload.clinical_summary
-        )
-        snapshot.observation_recorded_at = now
-        snapshot.observation_ingested_at = now
-
-    else:
-        snapshot = PatientBodyStateSnapshot(
-            patient_id=patient_id,
-            structure_id=structure.structure_id,
-            mesh_asset_id=structure.mesh_asset_id,
-            mesh_node_name=structure.mesh_node_name,
-            mesh_version=structure.mesh_version,
-            visual_status=payload.visual_status,
-            visual_severity_score=payload.visual_severity_score,
-            trend=FindingTrend.STABLE,
-            latest_observation_id=observation_id,
-            latest_summary=payload.clinical_summary,
-            observation_recorded_at=now,
-            observation_ingested_at=now,
-        )
-
-        db.add(snapshot)
 
 
     try:
