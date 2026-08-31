@@ -43,5 +43,9 @@
     "ios": "expo run:ios",
     "web": "expo start --web"
   },
+  "overrides": {
+    "expo-router": false,
+    "@expo/router-server": false
+  },
   "private": true
 }
