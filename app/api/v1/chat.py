@@ -1,11 +1,11 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from langchain_core.messages import HumanMessage
 
 from core.db import get_db
-from agents.agent_setup import medical_agent
+from agents.agent_setup import medical_agent, initialize_agent, get_medical_agent
 from models.chat import ConversationThread
 from models.anatomy import AnatomicalStructure, PatientBodyStateSnapshot
 from schemas.chat import ChatRequest, ChatResponse, HydratedUIAction, AgentStructuredOutput
@@ -53,8 +53,47 @@ async def process_chat(
         # Force final_output to None to clear stale checkpoints
         graph_result = await medical_agent.ainvoke({"messages": [HumanMessage(content=user_prompt)], "final_output": None}, config=config)
     except Exception as e:
-        logger.error(f"Agent execution failed: {e}")
-        raise HTTPException(status_code=500, detail="Clinical processing error.")
+        logger.exception(f"Agent execution failed: {type(e).__name__}: {e}")
+
+        # If the checkpointer connection is closed/stale, reinitialize
+        # the agent with a fresh connection pool and retry once.
+        err_str = str(e).lower()
+        _CONN_ERROR_MARKERS = (
+            "ssl", "eof", "closed", "broken", "connection refused",
+            "connection reset", "operationalerror", "pool",
+        )
+        is_conn_error = any(m in err_str for m in _CONN_ERROR_MARKERS)
+
+        if is_conn_error:
+            logger.warning(
+                "Detected stale checkpointer connection (pool). "
+                "Force-reinitializing LangGraph agent and retrying..."
+            )
+            try:
+                # force=True tears down the old pool and creates a fresh one
+                await initialize_agent(force=True)
+                medical_agent_retry = get_medical_agent()
+                http_request.app.state.medical_agent = medical_agent_retry
+                graph_result = await medical_agent_retry.ainvoke(
+                    {
+                        "messages": [HumanMessage(content=user_prompt)],
+                        "final_output": None,
+                    },
+                    config=config,
+                )
+            except Exception as retry_err:
+                logger.exception(
+                    f"Retry after pool reinit also failed: {type(retry_err).__name__}: {retry_err}"
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail="Clinical processing error."
+                )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Clinical processing error."
+            )
 
     final_output: AgentStructuredOutput = graph_result.get("final_output")
     hydrated_actions = []

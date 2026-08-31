@@ -31,9 +31,12 @@ def _get_patient_timeline( patient_id: uuid.UUID, limit: int, db: Session, drive
     RETURN 
         t.id AS event_id, 
         t.level_number AS level_number, 
-        t.date AS event_date,
+        COALESCE(t.event_time, t.date) AS event_date,
+        t.event_type AS event_type,
+        t.source_type AS source_type,
+        t.verification_status AS verification_status,
         collect(o.id) AS observation_ids
-    ORDER BY t.level_number DESC, t.date DESC, t.id DESC
+    ORDER BY t.level_number DESC, COALESCE(t.event_time, t.date) DESC, t.id DESC
     LIMIT $limit
     """
     
@@ -64,6 +67,9 @@ def _get_patient_timeline( patient_id: uuid.UUID, limit: int, db: Session, drive
                 "event_id": record["event_id"],
                 "level_number": record["level_number"],
                 "date": record["event_date"],
+                "event_type": record.get("event_type"),
+                "source_type": record.get("source_type"),
+                "verification_status": record.get("verification_status"),
                 "observations": obs_ids
             })
             

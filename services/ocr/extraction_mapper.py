@@ -5,6 +5,7 @@ from logger import logger
 from sqlalchemy.orm import Session
 from models.events import ClinicalEvent, EventType, SourceType, VerificationStatus, LabResult
 from models.events import EvidenceLink, RawExtractionData, Document
+from models.outbox import enqueue_clinical_event
 from models.anatomy import (
     AnatomicalObservation, AnatomicalStructure,
     ObservationType, VisualStatus, FindingTrend, SourceType as AnatomySourceType,
@@ -200,6 +201,16 @@ class EventBuilder:
         )
         db.add(event)
         db.flush()
+
+        enqueue_clinical_event(
+            db,
+            event_id=event.event_id,
+            patient_id=patient_id,
+            event_type=event.event_type,
+            source_type=event.source_type,
+            verification_status=event.verification_status,
+            event_time=event.event_time,
+        )
 
         if is_lab_result:
             lab_payload = LabResult(

@@ -25,6 +25,7 @@ from models.events import (
     SourceType as EventSourceType,
     VerificationStatus,
 )
+from models.outbox import enqueue_clinical_event
 from schemas.body_state import BodyStateItem
 
 
@@ -159,6 +160,17 @@ def log_body_state(
     )
 
     db.add(clinical_event)
+    db.flush()
+
+    enqueue_clinical_event(
+        db,
+        event_id=clinical_event.event_id,
+        patient_id=patient_id,
+        event_type=clinical_event.event_type,
+        source_type=clinical_event.source_type,
+        verification_status=clinical_event.verification_status,
+        event_time=clinical_event.event_time,
+    )
 
     # -------------------------------------------------------------------------
     # Create authoritative anatomical observation.

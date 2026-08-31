@@ -8,14 +8,16 @@ import { auth } from '@/context/AuthContext';
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
-  'http://localhost:8000';
+  'http://10.210.149.11:8000';
+
+console.log('[MedGraph] API_URL:', API_URL);
 
 /**
  * Axios configuration.
  */
 const client = axios.create({
   baseURL: API_URL,
-  timeout: 30000,
+  timeout: 120000,
   headers: {
     'Content-Type': 'application/json',
   },

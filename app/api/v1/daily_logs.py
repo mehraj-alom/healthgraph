@@ -15,6 +15,7 @@ from models.events import (
     SourceType,
     VerificationStatus,
 )
+from models.outbox import enqueue_clinical_event
 from models.ontology import MedicalConcept
 
 from models.daily_logs.events import (
@@ -124,6 +125,16 @@ def submit_daily_checkin(
         db.add(event)
         db.flush()
 
+        enqueue_clinical_event(
+            db,
+            event_id=event.event_id,
+            patient_id=patient_id,
+            event_type=event.event_type,
+            source_type=event.source_type,
+            verification_status=event.verification_status,
+            event_time=event.event_time,
+        )
+
         db.add(
             WellbeingPayload(
                 event_id=event_id,
@@ -184,6 +195,16 @@ def submit_daily_checkin(
         db.add(symptom_event)
         db.flush()
 
+        enqueue_clinical_event(
+            db,
+            event_id=symptom_event.event_id,
+            patient_id=patient_id,
+            event_type=symptom_event.event_type,
+            source_type=symptom_event.source_type,
+            verification_status=symptom_event.verification_status,
+            event_time=symptom_event.event_time,
+        )
+
         db.add(
             SymptomPayload(
                 event_id=symptom_event_id,
@@ -215,6 +236,16 @@ def submit_daily_checkin(
         db.add(vital_event)
         db.flush()
 
+        enqueue_clinical_event(
+            db,
+            event_id=vital_event.event_id,
+            patient_id=patient_id,
+            event_type=vital_event.event_type,
+            source_type=vital_event.source_type,
+            verification_status=vital_event.verification_status,
+            event_time=vital_event.event_time,
+        )
+
         db.add(
             VitalSignPayload(
                 event_id=vital_event_id,
@@ -243,6 +274,16 @@ def submit_daily_checkin(
 
         db.add(pain_event)
         db.flush()
+
+        enqueue_clinical_event(
+            db,
+            event_id=pain_event.event_id,
+            patient_id=patient_id,
+            event_type=pain_event.event_type,
+            source_type=pain_event.source_type,
+            verification_status=pain_event.verification_status,
+            event_time=pain_event.event_time,
+        )
 
         db.add(
             PainPayload(
@@ -274,6 +315,16 @@ def submit_daily_checkin(
         db.add(sleep_event)
         db.flush()
 
+        enqueue_clinical_event(
+            db,
+            event_id=sleep_event.event_id,
+            patient_id=patient_id,
+            event_type=sleep_event.event_type,
+            source_type=sleep_event.source_type,
+            verification_status=sleep_event.verification_status,
+            event_time=sleep_event.event_time,
+        )
+
         db.add(
             SleepPayload(
                 event_id=sleep_event_id,
@@ -303,6 +354,16 @@ def submit_daily_checkin(
 
         db.add(activity_event)
         db.flush()
+
+        enqueue_clinical_event(
+            db,
+            event_id=activity_event.event_id,
+            patient_id=patient_id,
+            event_type=activity_event.event_type,
+            source_type=activity_event.source_type,
+            verification_status=activity_event.verification_status,
+            event_time=activity_event.event_time,
+        )
 
         db.add(
             ActivityPayload(
@@ -334,6 +395,16 @@ def submit_daily_checkin(
         db.add(nutrition_event)
         db.flush()
 
+        enqueue_clinical_event(
+            db,
+            event_id=nutrition_event.event_id,
+            patient_id=patient_id,
+            event_type=nutrition_event.event_type,
+            source_type=nutrition_event.source_type,
+            verification_status=nutrition_event.verification_status,
+            event_time=nutrition_event.event_time,
+        )
+
         db.add(
             NutritionPayload(
                 event_id=nutrition_event_id,
@@ -363,6 +434,16 @@ def submit_daily_checkin(
 
         db.add(medication_event)
         db.flush()
+
+        enqueue_clinical_event(
+            db,
+            event_id=medication_event.event_id,
+            patient_id=patient_id,
+            event_type=medication_event.event_type,
+            source_type=medication_event.source_type,
+            verification_status=medication_event.verification_status,
+            event_time=medication_event.event_time,
+        )
 
         db.add(
             MedicationTakenPayload(
@@ -416,6 +497,16 @@ def submit_daily_checkin(
 
         db.add(note_event)
         db.flush()
+
+        enqueue_clinical_event(
+            db,
+            event_id=note_event.event_id,
+            patient_id=patient_id,
+            event_type=note_event.event_type,
+            source_type=note_event.source_type,
+            verification_status=note_event.verification_status,
+            event_time=note_event.event_time,
+        )
 
         db.add(
             PatientNotePayload(

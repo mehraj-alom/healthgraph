@@ -1,4 +1,3 @@
-import uuid
 from typing import Annotated, Optional, Sequence, TypedDict
 
 from langchain_core.messages import BaseMessage
@@ -14,5 +13,5 @@ class GraphState(TypedDict):
     never exposed as an LLM tool argument.
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
-    session_patient_id: uuid.UUID
+    session_patient_id: Optional[str]
     final_output: Optional[AgentStructuredOutput]

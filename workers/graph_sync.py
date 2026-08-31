@@ -14,6 +14,14 @@ from models.outbox import GraphSyncOutbox, OutboxStatus, OutboxEventType
 
 from logger import logger
 
+
+# Validation schemas for each outbox event type
+REQUIRED_CLINICAL_EVENT_KEYS = {
+    "patient_id", "event_id", "event_type",
+    "source_type", "verification_status",
+    "event_time", "level_number",
+}
+
 MAX_RETRIES = 5
 BACKOFF_BASE_SECONDS = 10
 STALE_LEASE_MINUTES = 5
@@ -62,6 +70,8 @@ def _process_outbox_events(db: Session, driver, batch_size: int = 50):
                 # Explicitly route event types (or fail permanently)
                 if event.event_type == OutboxEventType.OBSERVATION_RECORDED:
                     neo4j_session.execute_write(_project_observation_tx, event.payload)
+                elif event.event_type == OutboxEventType.CLINICAL_EVENT_RECORDED:
+                    neo4j_session.execute_write(_project_clinical_event_tx, event.payload)
                 else:
                     raise PermanentProjectionError(f"Unsupported outbox event type: {event.event_type}")
                 
@@ -144,3 +154,34 @@ def _project_observation_tx(tx, payload: dict):
 
     result = tx.run(cypher, **parameters)
     result.consume() # Ensures the transaction fully executes
+
+
+def _project_clinical_event_tx(tx, payload: dict):
+    """Project a general ClinicalEvent into a TimelineEvent node in Neo4j.
+
+    Creates:
+        (:Patient {id})-[:HAS_TIMELINE_EVENT]->(:TimelineEvent {id})
+
+    Uses MERGE for idempotency: reprocessing the same outbox event will
+    never create duplicate nodes or relationships.
+    """
+    missing_keys = REQUIRED_CLINICAL_EVENT_KEYS - set(payload.keys())
+    if missing_keys:
+        raise PermanentProjectionError(
+            f"Clinical event payload missing required keys: {missing_keys}"
+        )
+
+    cypher = """
+    MERGE (p:Patient {id: $patient_id})
+    MERGE (t:TimelineEvent {id: $event_id})
+    SET t.date         = $event_time,
+        t.event_time   = $event_time,
+        t.event_type   = $event_type,
+        t.source_type  = $source_type,
+        t.verification_status = $verification_status,
+        t.level_number = $level_number
+    MERGE (p)-[:HAS_TIMELINE_EVENT]->(t)
+    """
+
+    result = tx.run(cypher, **payload)
+    result.consume()
