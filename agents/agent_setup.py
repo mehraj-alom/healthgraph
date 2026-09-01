@@ -1,30 +1,85 @@
+"""LangGraph agent lifecycle management.
+
+Design principles
+-----------------
+1. The AsyncConnectionPool is created **once** at startup and destroyed
+   only at application shutdown.  Request handlers must never close or
+   recreate the pool — that is what causes the ``PoolClosed`` race.
+
+2. ``psycopg_pool.AsyncConnectionPool`` already handles stale/dead
+   connections: when a checkout gives a dead connection, the pool
+   discards it and creates a fresh one on the next checkout.  The
+   ``max_lifetime``, ``max_idle``, and ``reconnect_timeout`` knobs
+   control recycling.  A simple ``ainvoke`` retry is sufficient after
+   a transient ``OperationalError``.
+
+3. An in-flight request counter lets ``close_agent()`` at shutdown wait
+   for active ``ainvoke`` calls to finish before closing the pool,
+   preventing the old shutdown race (close pool → in-flight request
+   hits ``PoolClosed``).
+"""
+
+import asyncio
 from typing import Optional
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph.state import CompiledStateGraph
 from psycopg_pool import AsyncConnectionPool
 
 from core.config import settings
 from agents.orchestrator import workflow
 from logger import logger
+from schemas.chat import AgentStructuredOutput
 
 
 
-# Global agent state
 _checkpointer: Optional[AsyncPostgresSaver] = None
 _medical_agent: Optional[CompiledStateGraph] = None
 _pool: Optional[AsyncConnectionPool] = None
 
+# In-flight request tracking for graceful shutdown.
+_active_requests: int = 0
+_draining: bool = False
+_request_counter_lock: Optional[asyncio.Lock] = None
 
-# Connection pool factory
+
+def _get_request_counter_lock() -> asyncio.Lock:
+    """Lazily create the request-counter lock (needs a running event loop)."""
+    global _request_counter_lock
+    if _request_counter_lock is None:
+        _request_counter_lock = asyncio.Lock()
+    return _request_counter_lock
+
+
+async def begin_request() -> None:
+    """Mark a request as in-flight.  Raises if the server is draining.
+
+    Must be called in a ``try``/``finally`` with :func:`end_request`.
+    """
+    async with _get_request_counter_lock():
+        if _draining:
+            raise RuntimeError("Server is shutting down — refusing new requests.")
+        global _active_requests
+        _active_requests += 1
+
+
+async def end_request() -> None:
+    """Mark an in-flight request as finished."""
+    async with _get_request_counter_lock():
+        global _active_requests
+        _active_requests -= 1
+
+
 
 def _build_pool() -> AsyncConnectionPool:
     """Create an AsyncConnectionPool for the LangGraph checkpointer.
 
-    Uses a connection pool instead of a single connection so that:
-    - Dead connections are automatically replaced.
+    The pool manages the full connection lifecycle:
+    - Dead connections are automatically discarded and replaced.
     - Idle connections are recycled before cloud PostgreSQL closes them.
-    - Concurrent requests each get their own connection from the pool.
+    - ``reconnect_timeout`` controls how long a checkout waits when all
+      connections are exhausted or being replaced.
     """
     conninfo = settings.ASYNC_DATABASE_URL.replace(
         "postgresql+asyncpg://",
@@ -38,37 +93,26 @@ def _build_pool() -> AsyncConnectionPool:
         kwargs={
             "autocommit": True,
             "prepare_threshold": 0,
-            "row_factory": None,  # psycopg default dict_row handled by saver
+            "row_factory": None,
         },
         max_lifetime=30 * 60.0,   # Recycle after 30 minutes
         max_idle=10 * 60.0,        # Close idle connections after 10 minutes
-        reconnect_timeout=30.0,
+        reconnect_timeout=30.0,    # Wait up to 30s for a fresh connection
         num_workers=3,
         open=False,                # We call pool.open() explicitly
         name="langgraph-checkpointer",
     )
 
-
-# Agent initialization
-
-async def initialize_agent(force: bool = False) -> None:
+async def initialize_agent() -> None:
     """Initialize the LangGraph medical agent with a connection pool.
 
-    The AsyncConnectionPool + AsyncPostgresSaver are kept alive for the
-    entire FastAPI application lifespan.
-
-    Args:
-        force: If True, tear down any existing checkpointer/pool and
-               reinitialize from scratch.  Used by the chat retry path.
+    Called **once** during the FastAPI lifespan startup.  The pool,
+    checkpointer, and compiled agent live for the entire process
+    lifetime — they are never destroyed or recreated from request
+    handlers.
     """
-    global _checkpointer
-    global _medical_agent
-    global _pool
+    global _checkpointer, _medical_agent, _pool
 
-    if force:
-        await _teardown_checkpointer()
-
-    # Prevent accidental double initialization.
     if _medical_agent is not None:
         logger.info("LangGraph medical_agent already initialized.")
         return
@@ -76,50 +120,50 @@ async def initialize_agent(force: bool = False) -> None:
     logger.info("Initializing LangGraph AsyncPostgresSaver with connection pool...")
 
     try:
-        
         # Create and open the connection pool.
-
         _pool = _build_pool()
         await _pool.open(wait=True, timeout=30)
         logger.info("LangGraph checkpointer connection pool opened.")
 
+        # Register our custom Pydantic models with the serde so
+        # checkpoint deserialization does not emit warnings.
+        from schemas.chat import LLMUIAction, UIActionType
+
+        _checkpoint_types = (
+            AgentStructuredOutput,
+            LLMUIAction,
+            UIActionType,
+        )
+        serde = JsonPlusSerializer(
+            allowed_msgpack_modules=[
+                (cls.__module__, cls.__qualname__) for cls in _checkpoint_types
+            ],
+        )
 
         # Create the checkpointer backed by the pool.
-        #
-        # When conn is an AsyncConnectionPool, each checkout gets its own
-        # connection.  Failed connections are retried transparently.
+        _checkpointer = AsyncPostgresSaver(conn=_pool, serde=serde)
 
-        _checkpointer = AsyncPostgresSaver(conn=_pool)
-
-    
         # Initialize checkpoint tables / migrations.
-
         await _checkpointer.setup()
         logger.info("LangGraph checkpoint database setup completed.")
 
         # Compile the graph with the live checkpointer.
-
         _medical_agent = workflow.compile(checkpointer=_checkpointer)
         logger.info("LangGraph medical_agent compiled with AsyncPostgresSaver.")
 
     except Exception:
         logger.exception("Failed to initialize LangGraph medical agent.")
-
-        # Clean up a partially-created state.
         await _teardown_checkpointer()
         raise
 
 
 async def _teardown_checkpointer() -> None:
-    """Tear down checkpointer + pool without touching global _medical_agent."""
-    global _checkpointer, _pool
+    """Tear down checkpointer + pool.  Only called at shutdown or on
+    partial-initialization failure."""
+    global _checkpointer, _pool, _medical_agent
 
-    if _checkpointer is not None:
-        try:
-            await _checkpointer.conn.close()
-        except Exception:
-            logger.debug("Error closing checkpointer connection (ignored).")
-        _checkpointer = None
+    _medical_agent = None
+    _checkpointer = None
 
     if _pool is not None:
         try:
@@ -129,29 +173,50 @@ async def _teardown_checkpointer() -> None:
         _pool = None
 
 
-# Agent accesso
-
 def get_medical_agent() -> CompiledStateGraph:
     """Return the initialized medical agent.
 
-    Raises a clear error instead of returning None if the FastAPI
-    application was started incorrectly.
+    Raises a clear error if the application was started incorrectly.
     """
     if _medical_agent is None:
         raise RuntimeError("LangGraph medical_agent is not initialized.")
     return _medical_agent
 
 
-# Application shutdown
 
 async def close_agent() -> None:
-    """Close the LangGraph checkpointer and connection pool during shutdown."""
-    global _medical_agent
+    """Gracefully close the LangGraph checkpointer and connection pool.
+
+    Order of operations:
+    1. Set ``_draining = True`` so :func:`begin_request` rejects new
+       incoming requests immediately.
+    2. Wait (up to 30 s) for in-flight ``ainvoke`` calls to finish.
+    3. Close the pool.
+
+    This prevents the old race where shutdown closed the pool while a
+    request handler was still mid-``ainvoke``.
+    """
+    global _draining
 
     if _pool is None and _checkpointer is None:
-        _medical_agent = None
         logger.info("LangGraph agent was already closed.")
         return
+
+    # Signal draining — begin_request() will reject new callers.
+    _draining = True
+    logger.info("LangGraph agent draining — waiting for in-flight requests...")
+
+    # Wait for in-flight requests to complete (with timeout).
+    deadline = asyncio.get_event_loop().time() + 30.0
+    while _active_requests > 0:
+        if asyncio.get_event_loop().time() > deadline:
+            logger.warning(
+                "Timed out waiting for %d in-flight request(s). "
+                "Closing pool anyway.",
+                _active_requests,
+            )
+            break
+        await asyncio.sleep(0.1)
 
     logger.info("Closing LangGraph AsyncPostgresSaver + connection pool...")
 
@@ -160,11 +225,7 @@ async def close_agent() -> None:
     except Exception:
         logger.exception("Error while closing LangGraph checkpointer.")
 
-    _medical_agent = None
     logger.info("LangGraph AsyncPostgresSaver closed.")
 
 
-# Backward compatibility
-# Keep this exported name because existing code may import
-# `medical_agent` from this module.
 medical_agent = None
