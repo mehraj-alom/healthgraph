@@ -9,8 +9,10 @@ from agents.state import GraphState
 
 from agents.tools.anatomy_resolver import resolve_anatomy_id
 from agents.tools.body_state import get_current_body_state
+from agents.tools.daily_health_summary import get_daily_health_summary
 from agents.tools.evidence import get_document_evidence
 from agents.tools.patient_graph_context import get_patient_graph_context
+from agents.tools.patient_overview import get_patient_overview
 from agents.tools.observations import get_related_observations
 from agents.tools.timeline import get_patient_timeline
 from agents.tools.documents import get_patient_documents
@@ -20,6 +22,8 @@ from schemas.chat import AgentStructuredOutput
 
 # Tools
 tools = [
+    get_daily_health_summary,
+    get_patient_overview,
     resolve_anatomy_id,
     get_current_body_state,
     get_document_evidence,
@@ -87,7 +91,41 @@ timeline, documents, observations, or anatomy:
 4. Base patient-specific answers only on retrieved data.
 5. If relevant data is unavailable, clearly say so.
 
+Tool selection guide:
+
+Daily questions ("What did I log today?", "Summarize my day"):
+  → Use get_daily_health_summary
+
+Patient-wide questions ("What do you know about my health?",
+"Give me a complete health summary", "What patterns do you see?"):
+  → Use get_patient_overview
+
+Specific anatomy questions ("What's happening with my knee?"):
+  → Use resolve_anatomy_id, then get_current_body_state or
+    get_related_observations
+
+Document questions ("What does my MRI say?"):
+  → Use get_patient_documents + get_document_evidence
+
+Chronological questions ("Show me my recent events"):
+  → Use get_patient_timeline
+
 Available tools:
+
+- get_daily_health_summary
+  Get the structured daily summary for a specific date.
+  Returns vitals, symptoms, pain, sleep, nutrition,
+  activities, medications, wellbeing, notes, and
+  anatomical observations for that day.
+  Use for "What did I log today?" type questions.
+
+- get_patient_overview
+  Get the compact longitudinal patient health overview.
+  Returns current body state, recent symptoms, vital
+  trends, sleep trends, wellbeing trends, medication
+  history, recurring pain, document findings, and
+  event totals.
+  Use for broad health questions.
 
 - get_patient_timeline
   Get chronological health events.
@@ -211,6 +249,32 @@ Rules:
    specific anatomical structure on the 3D model.
 
 7. ui_actions must use canonical anatomy IDs.
+
+Facts vs. gaps:
+- Only state facts directly present in the patient records.
+- For trends/patterns, only mention those supported by
+  multiple data points.
+- Never say something is "normal" merely because no
+  abnormality was found.
+- Never turn absence of data into a medical conclusion.
+
+Broad summary organization:
+When providing a comprehensive health summary, organize
+the response clearly with sections:
+
+- Current health picture
+- Recent concerns
+- Vitals
+- Sleep
+- Pain / symptoms
+- Medications
+- Documents / findings
+- Longitudinal patterns
+- Information gaps
+
+Only include sections for which actual data exists.
+If a section has no data, omit it rather than stating
+"no data".
 
 Examples:
 
