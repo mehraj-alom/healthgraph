@@ -1,11 +1,16 @@
 import uuid
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from langchain_core.messages import HumanMessage
 
 from core.db import get_db
-from agents.agent_setup import medical_agent, initialize_agent, get_medical_agent
+from agents.agent_setup import (
+    get_medical_agent,
+    begin_request,
+    end_request,
+)
 from models.chat import ConversationThread
 from models.anatomy import AnatomicalStructure, PatientBodyStateSnapshot
 from schemas.chat import ChatRequest, ChatResponse, HydratedUIAction, AgentStructuredOutput
@@ -49,32 +54,38 @@ async def process_chat(
 
     config = {"configurable": {"session_patient_id": str(patient_id), "thread_id": str(conversation_id)}, "recursion_limit": 15}
 
+    # Track this request for graceful shutdown.
+    await begin_request()
     try:
         # Force final_output to None to clear stale checkpoints
         graph_result = await medical_agent.ainvoke({"messages": [HumanMessage(content=user_prompt)], "final_output": None}, config=config)
     except Exception as e:
         logger.exception(f"Agent execution failed: {type(e).__name__}: {e}")
 
-        # If the checkpointer connection is closed/stale, reinitialize
-        # the agent with a fresh connection pool and retry once.
+        # Connection errors indicate a transient dead/stale connection.
+        # The AsyncConnectionPool's ``check`` callback already verifies
+        # connections on checkout with SELECT 1, so a failure here means
+        # the connection died between checkout and use, or the pool's
+        # background replacement hasn't caught up yet.
+        #
+        # Strategy: sleep briefly to let the pool create replacement
+        # connections, then retry once.
         err_str = str(e).lower()
         _CONN_ERROR_MARKERS = (
             "ssl", "eof", "closed", "broken", "connection refused",
             "connection reset", "operationalerror", "pool",
+            "consuming input", "server closed",
         )
         is_conn_error = any(m in err_str for m in _CONN_ERROR_MARKERS)
 
         if is_conn_error:
             logger.warning(
-                "Detected stale checkpointer connection (pool). "
-                "Force-reinitializing LangGraph agent and retrying..."
+                "Connection error detected — waiting 2s for pool to "
+                "create replacement connections, then retrying..."
             )
+            await asyncio.sleep(2.0)
             try:
-                # force=True tears down the old pool and creates a fresh one
-                await initialize_agent(force=True)
-                medical_agent_retry = get_medical_agent()
-                http_request.app.state.medical_agent = medical_agent_retry
-                graph_result = await medical_agent_retry.ainvoke(
+                graph_result = await medical_agent.ainvoke(
                     {
                         "messages": [HumanMessage(content=user_prompt)],
                         "final_output": None,
@@ -83,17 +94,19 @@ async def process_chat(
                 )
             except Exception as retry_err:
                 logger.exception(
-                    f"Retry after pool reinit also failed: {type(retry_err).__name__}: {retry_err}"
+                    f"Retry also failed: {type(retry_err).__name__}: {retry_err}"
                 )
                 raise HTTPException(
                     status_code=500,
-                    detail="Clinical processing error."
+                    detail="Clinical processing error.",
                 )
         else:
             raise HTTPException(
                 status_code=500,
-                detail="Clinical processing error."
+                detail="Clinical processing error.",
             )
+    finally:
+        await end_request()
 
     final_output: AgentStructuredOutput = graph_result.get("final_output")
     hydrated_actions = []

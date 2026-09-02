@@ -1,0 +1,168 @@
+Anatria3D — anatomical mesh assets
+==================================
+
+The 3D meshes and anatomical nomenclature in this directory are NOT covered by
+the Anatria3D application licence. They come from open anatomical datasets and
+keep the terms their authors set.
+
+**There are two atlases here, from two unrelated sources, under two different
+licences.** See the LICENSE file alongside this one for which files are which.
+The short version: `*_male.glb` and `manifest.json` are CC BY-SA 4.0;
+`*_female.glb` and `manifest_female.json` are CC BY 4.0.
+
+
+THE MALE ATLAS — CC BY-SA 4.0
+=============================
+
+Attribution chain
+-----------------
+
+1. BodyParts3D
+   The Database Center for Life Science (DBCLS), Japan
+   Licensed under Creative Commons Attribution-ShareAlike 2.1 Japan
+   https://creativecommons.org/licenses/by-sa/2.1/jp/
+
+2. Z-Anatomy — the libre 3D atlas of anatomy
+   Derived from BodyParts3D.
+   Licensed under Creative Commons Attribution-ShareAlike 4.0 International
+   https://creativecommons.org/licenses/by-sa/4.0/
+   https://www.z-anatomy.com/
+
+3. Anatria3D adaptations
+   The .glb files here are adaptations of the Z-Anatomy meshes, produced by a
+   headless Blender export (tools/asset-pipeline/): conversion from .blend to
+   glTF binary, Blender modifiers baked into the exported geometry, lossy Draco
+   compression (position quantisation 14 bits, normal 10), materials dropped in
+   favour of shading applied by the viewer, and the addition of stable organ
+   identifiers. The anatomical hierarchy in manifest.json is derived from
+   Z-Anatomy's own collection nesting. No polygon reduction is applied beyond
+   what Draco quantisation implies.
+
+   Anatomical labels are taken from Z-Anatomy's TA2.csv (Terminologia
+   Anatomica 2). That file is shipped unmodified, and it is not a clean copy of
+   the standard: an audit of every label found 61 terms misspelled, truncated,
+   or naming a structure other than the English beside them — `Truncus
+   coeiiacus` for *coeliacus*, `Venae pudendales extemae` for *externae*,
+   `Arteria pancreaticoduodenalis` for the *inferior* one, and fifty rows that
+   had taken the French spelling from the neighbouring column. All are
+   corrected as the file is read, never in the file itself, so the vendored
+   standard stays byte-identical to upstream and the corrections stay
+   reviewable.
+
+   Every correction is listed with its evidence in
+   `tools/asset-pipeline/ta2.mjs`, and the build fails if one of them stops
+   matching a row. Corrections to rows that the vendored file adds *past the
+   end of the standard* are kept in a separate table, because those are our own
+   compositions rather than restorations of anything TA2 published.
+
+   These corrections apply to both atlases: the female one joins the same file.
+
+   As adaptations of CC BY-SA 4.0 material, these files are themselves licensed
+   under Creative Commons Attribution-ShareAlike 4.0 International:
+   https://creativecommons.org/licenses/by-sa/4.0/
+
+What this means in practice
+---------------------------
+
+- These asset files may be redistributed, including commercially, provided the
+  attribution above is preserved and they remain under CC BY-SA 4.0.
+- The share-alike obligation attaches to the meshes and their derived label
+  data. It does not extend to the Anatria3D application source code, which
+  merely aggregates these assets rather than adapting them.
+- Do not relicense, or claim exclusive rights over, anything in this directory.
+
+
+THE FEMALE ATLAS — CC BY 4.0
+============================
+
+`*_female.glb` and `manifest_female.json` are the trunk — spine, abdominal
+organs, pelvis and breast. They are not a female whole body, and no open
+dataset provides one.
+
+Attribution chain
+-----------------
+
+1. Visible Human Female
+   U.S. National Library of Medicine, National Institutes of Health.
+   The cryosection dataset every model below is ultimately reconstructed from.
+   The Visible Human Project
+   https://www.nlm.nih.gov/research/visible/visible_human.html
+
+2. Human Reference Atlas (HRA) 3D Reference Organ Library
+   HuBMAP Consortium / NIH — https://humanatlas.io/
+   Digital object: ref-organ/united-female v1.5
+   https://cdn.humanatlas.io/digital-objects/ref-organ/united-female/v1.5/
+   Licensed under Creative Commons Attribution 4.0 International
+   https://creativecommons.org/licenses/by/4.0/
+
+   Cite: Börner K, et al. Human Reference Atlas. The licence statement is
+   machine-readable in the digital object's own metadata.json.
+
+3. Anatria3D adaptations
+   Produced by `tools/asset-pipeline/extract-hra.mjs`, entirely inside glTF —
+   no Blender round trip, so the node names are byte-identical to the published
+   digital object and any structure here can be checked against the HRA portal.
+   The changes are: selection of 264 of the 888 structures, the node hierarchy
+   flattened with transforms baked in, source materials and UV sets dropped in
+   favour of shading applied by the viewer, lossy Draco compression (position
+   quantisation 14 bits, normal 10), and stable organ identifiers added. No
+   polygon reduction beyond what Draco quantisation implies.
+
+   As adaptations of CC BY 4.0 material these files remain CC BY 4.0. There is
+   no share-alike obligation on them, and none is imposed here.
+
+Nomenclature, and where it differs from the source
+---------------------------------------------------
+
+The HRA labels structures with UBERON and FMA terms, which is right for its
+purpose — mapping cell types — and wrong for teaching: the labels are not
+unique (six pelvic meshes are labelled "compact bone tissue", naming the tissue
+rather than the bone), and they word many structures differently from
+Terminologia Anatomica.
+
+So each structure was matched by hand to a TA2 term, recorded in
+`tools/asset-pipeline/hra-selection.mjs`, and the build fails if any term is
+absent from TA2. Eleven structures present in the source are deliberately not
+shipped, because TA2 does not list them and inventing Latin for them would be
+worse than omitting them. Three more that TA2 *does* name are left out by
+judgement — the placenta's umbilical vessels, which alone would be a placenta
+made of three tubes — and those are recorded in a separate list, so a decision
+cannot borrow the standard's authority. The reasons for all fourteen are in
+that same file.
+
+Where the source and this atlas disagree, the reason is written down rather
+than applied silently — including one upstream mesh whose label and ontology id
+belong to a different vessel from the one its node names.
+
+Provenance for every shipped structure — original node name, UBERON or FMA id,
+source label, polygon count — is committed in
+`tools/asset-pipeline/vendor/reports-female/`.
+
+What this means in practice
+---------------------------
+
+- These files may be redistributed, including commercially, provided the
+  attribution above is preserved.
+- They may be modified and the result kept closed. CC BY does not require
+  otherwise. This is a real difference from the male atlas.
+- **Do not merge them with the male meshes or manifests.** Combining CC BY
+  material into a CC BY-SA work forces share-alike onto it, which is a
+  condition the HRA's authors did not choose to impose.
+
+Nomenclature, and why nothing here is translated
+------------------------------------------------
+
+manifest.json carries two names per structure and no others: the Terminologia
+Anatomica 2 Latin term, and the clinical English term. There are no localised
+labels in this data and no machine translation of any kind.
+
+That is deliberate. Rendering "Ventriculus sinister" for a layperson, a student
+and a clinician calls for three different explanations, in each of the
+languages the application supports — that is teaching, not a lookup table. It
+is done at runtime by the AI assistant, with the reader's profile and language
+in hand, and no such text is stored or redistributed here.
+
+Redistributing this directory therefore redistributes professional
+nomenclature only. If you add localised medical terminology to it, that
+terminology is yours: have it reviewed by someone qualified before presenting
+it as authoritative.

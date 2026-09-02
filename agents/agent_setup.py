@@ -6,14 +6,16 @@ Design principles
    only at application shutdown.  Request handlers must never close or
    recreate the pool — that is what causes the ``PoolClosed`` race.
 
-2. ``psycopg_pool.AsyncConnectionPool`` already handles stale/dead
-   connections: when a checkout gives a dead connection, the pool
-   discards it and creates a fresh one on the next checkout.  The
-   ``max_lifetime``, ``max_idle``, and ``reconnect_timeout`` knobs
-   control recycling.  A simple ``ainvoke`` retry is sufficient after
-   a transient ``OperationalError``.
+2. The pool uses a lightweight ``check`` callback (``SELECT 1``) on every
+   checkout to detect dead connections **before** the checkpointer tries
+   to use them.  If the check fails, the pool discards the connection
+   and loops until a fresh one is available or the timeout expires.
 
-3. An in-flight request counter lets ``close_agent()`` at shutdown wait
+3. After a transient ``OperationalError`` during ``ainvoke``, the retry
+   sleeps briefly (2 s) to give the pool time to create replacement
+   connections before retrying.
+
+4. An in-flight request counter lets ``close_agent()`` at shutdown wait
    for active ``ainvoke`` calls to finish before closing the pool,
    preventing the old shutdown race (close pool → in-flight request
    hits ``PoolClosed``).
@@ -71,13 +73,33 @@ async def end_request() -> None:
         _active_requests -= 1
 
 
+# ---------------------------------------------------------------------------
+# Connection pool health check callback
+# ---------------------------------------------------------------------------
+
+async def _check_conn(conn) -> None:
+    """Lightweight health check called by the pool on every checkout.
+
+    Runs ``SELECT 1`` to verify the connection is alive.  If it fails,
+    the pool discards the connection and loops to create a fresh one.
+    """
+    await conn.execute("SELECT 1")
+
+
+# ---------------------------------------------------------------------------
+# Connection pool factory
+# ---------------------------------------------------------------------------
 
 def _build_pool() -> AsyncConnectionPool:
     """Create an AsyncConnectionPool for the LangGraph checkpointer.
 
     The pool manages the full connection lifecycle:
-    - Dead connections are automatically discarded and replaced.
-    - Idle connections are recycled before cloud PostgreSQL closes them.
+    - ``check`` validates every connection on checkout with ``SELECT 1``
+      so dead/stale connections are caught **before** use.
+    - ``max_idle`` aggressively recycles idle connections before a cloud
+      PostgreSQL server can close them server-side.
+    - ``max_lifetime`` hard-cycles connections to avoid cumulative
+      transient corruption.
     - ``reconnect_timeout`` controls how long a checkout waits when all
       connections are exhausted or being replaced.
     """
@@ -88,17 +110,18 @@ def _build_pool() -> AsyncConnectionPool:
 
     return AsyncConnectionPool(
         conninfo,
-        min_size=1,
+        min_size=2,               # Keep 2 warm connections ready
         max_size=5,
         kwargs={
             "autocommit": True,
             "prepare_threshold": 0,
             "row_factory": None,
         },
-        max_lifetime=30 * 60.0,   # Recycle after 30 minutes
-        max_idle=10 * 60.0,        # Close idle connections after 10 minutes
+        max_lifetime=15 * 60.0,   # Recycle after 15 minutes
+        max_idle=5 * 60.0,        # Close idle connections after 5 minutes
         reconnect_timeout=30.0,    # Wait up to 30s for a fresh connection
         num_workers=3,
+        check=_check_conn,         # Validate connections on checkout
         open=False,                # We call pool.open() explicitly
         name="langgraph-checkpointer",
     )
@@ -123,7 +146,12 @@ async def initialize_agent() -> None:
         # Create and open the connection pool.
         _pool = _build_pool()
         await _pool.open(wait=True, timeout=30)
-        logger.info("LangGraph checkpointer connection pool opened.")
+        logger.info(
+            "LangGraph checkpointer connection pool opened "
+            "(min_size=%d, check=SELECT 1, max_idle=%ds).",
+            _pool.min_size,
+            int(_pool.max_idle),
+        )
 
         # Register our custom Pydantic models with the serde so
         # checkpoint deserialization does not emit warnings.

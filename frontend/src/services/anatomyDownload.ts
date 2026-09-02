@@ -1,0 +1,431 @@
+/**
+ * anatomyDownload.ts — Offline-first 3D anatomy download service.
+ *
+ * Downloads gender-specific GLB model packages to persistent device storage.
+ * Each gender is independent: downloading Male never touches Female and vice versa.
+ * Downloads use atomic temp-file-then-rename to prevent partial installs.
+ * Installation state is verified by checking actual file existence on disk.
+ *
+ * Uses expo-file-system SDK 57 new API (Paths, File, Directory).
+ */
+
+import { Paths, File, Directory } from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type Gender = 'male' | 'female';
+export type DownloadState = 'NOT_INSTALLED' | 'DOWNLOADING' | 'INSTALLED' | 'UPDATING' | 'ERROR';
+
+export interface ModelEntry {
+  id: string;
+  filename: string;
+  size: number;
+  version: string;
+}
+
+export interface GenderManifest {
+  version: string;
+  models: ModelEntry[];
+}
+
+export interface InstallRecord {
+  version: string;
+  installedAt: number;
+  fileCount: number;
+}
+
+export interface DownloadProgress {
+  totalBytes: number;
+  receivedBytes: number;
+  currentFile: string;
+  fileIndex: number;
+  fileCount: number;
+  percent: number;
+}
+
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+
+/**
+ * Base URL for remote GLB assets.
+ *
+ * Priority:
+ * 1. EXPO_PUBLIC_ANATOMY_CDN_URL (explicit override, production CDN)
+ * 2. Derived from EXPO_PUBLIC_API_URL host + port 8081 (Expo Go dev server)
+ * 3. localhost:8081 (web browser on dev machine)
+ *
+ * On physical Android via Expo Go, localhost refers to the device itself,
+ * NOT the development machine. We must use the LAN IP.
+ */
+function resolveRemoteBase(): string {
+  // Explicit override always wins
+  if (process.env.EXPO_PUBLIC_ANATOMY_CDN_URL) {
+    return process.env.EXPO_PUBLIC_ANATOMY_CDN_URL;
+  }
+
+  // Derive host from the existing API URL (which already uses LAN IP for dev)
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL || '';
+  if (apiUrl) {
+    try {
+      const url = new URL(apiUrl);
+      // Metro dev server runs on port 8081, API on 8000
+      return `${url.protocol}//${url.hostname}:8081/anatomy`;
+    } catch { /* ignore parse errors */ }
+  }
+
+  // Fallback for web browser on dev machine
+  return 'http://localhost:8081/anatomy';
+}
+
+const REMOTE_BASE = resolveRemoteBase();
+
+const ASYNC_KEYS = {
+  gender: '@medgraph/selected_gender',
+  maleInstall: '@medgraph/anatomy_male_install',
+  femaleInstall: '@medgraph/anatomy_female_install',
+};
+
+/** Base directory for anatomy storage: <Documents>/medgraph/anatomy/ */
+function anatomyBaseDir(): Directory {
+  return new Directory(Paths.document, 'medgraph', 'anatomy');
+}
+
+function genderDir(gender: Gender): Directory {
+  return new Directory(anatomyBaseDir(), gender);
+}
+
+// ---------------------------------------------------------------------------
+// Manifest definitions (bundled — no network needed for manifest lookup)
+// ---------------------------------------------------------------------------
+
+const MALE_MANIFEST: GenderManifest = {
+  version: '1.0.0',
+  models: [
+    { id: 'regional_male',       filename: 'regional_male.glb',       size: 786432,   version: '1.0.0' },
+    { id: 'muscular_male',       filename: 'muscular_male.glb',       size: 12582912, version: '1.0.0' },
+    { id: 'skeletal_male',       filename: 'skeletal_male.glb',       size: 2831360,  version: '1.0.0' },
+    { id: 'digestive_male',      filename: 'digestive_male.glb',      size: 933888,   version: '1.0.0' },
+    { id: 'renal_male',          filename: 'renal_male.glb',          size: 61440,    version: '1.0.0' },
+    { id: 'reproductive_male',   filename: 'reproductive_male.glb',   size: 65536,    version: '1.0.0' },
+    { id: 'respiratory_male',    filename: 'respiratory_male.glb',    size: 585728,   version: '1.0.0' },
+    { id: 'endocrine_male',      filename: 'endocrine_male.glb',      size: 40960,    version: '1.0.0' },
+    { id: 'lymphatic_male',      filename: 'lymphatic_male.glb',      size: 512000,   version: '1.0.0' },
+    { id: 'articular_male',      filename: 'articular_male.glb',      size: 1572864,  version: '1.0.0' },
+    { id: 'nervous_male',        filename: 'nervous_male.glb',        size: 8598528,  version: '1.0.0' },
+    { id: 'visceral_male',       filename: 'visceral_male.glb',       size: 1782579,  version: '1.0.0' },
+    { id: 'cardiovascular_male', filename: 'cardiovascular_male.glb', size: 7237632,  version: '1.0.0' },
+  ],
+};
+
+const FEMALE_MANIFEST: GenderManifest = {
+  version: '1.0.0',
+  models: [
+    { id: 'skeletal_female',       filename: 'skeletal_female.glb',       size: 1363149,  version: '1.0.0' },
+    { id: 'digestive_female',      filename: 'digestive_female.glb',      size: 479232,   version: '1.0.0' },
+    { id: 'renal_female',          filename: 'renal_female.glb',          size: 618496,   version: '1.0.0' },
+    { id: 'reproductive_female',   filename: 'reproductive_female.glb',   size: 430080,   version: '1.0.0' },
+    { id: 'cardiovascular_female', filename: 'cardiovascular_female.glb', size: 450560,   version: '1.0.0' },
+    { id: 'lymphatic_female',      filename: 'lymphatic_female.glb',      size: 45056,    version: '1.0.0' },
+    { id: 'integumentary_female',  filename: 'integumentary_female.glb',  size: 2202009,  version: '1.0.0' },
+  ],
+};
+
+function getManifest(gender: Gender): GenderManifest {
+  return gender === 'male' ? MALE_MANIFEST : FEMALE_MANIFEST;
+}
+
+function getRemoteUrl(gender: Gender, filename: string): string {
+  return `${REMOTE_BASE}/${gender}/${filename}`;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function fileExists(dir: Directory, filename: string): Promise<boolean> {
+  try {
+    const file = new File(dir, filename);
+    const info = await file.info();
+    return info.exists && info.size !== undefined && info.size > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureDir(dir: Directory): Promise<void> {
+  // Create the full directory path including all intermediates.
+  // idempotent: true — safe to call even if already exists.
+  // intermediates: true — creates medgraph/ and anatomy/ if missing.
+  try {
+    await dir.create({ intermediates: true, idempotent: true });
+  } catch (err) {
+    console.warn('[AnatomyDownload] ensureDir fallback:', err);
+    // Second attempt — directory creation can be flaky on first call
+    try {
+      await dir.create({ intermediates: true, idempotent: true });
+    } catch { /* ignore — will fail later with clear error */ }
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ---------------------------------------------------------------------------
+// Gender persistence
+// ---------------------------------------------------------------------------
+
+export async function getSelectedGender(): Promise<Gender | null> {
+  try {
+    const val = await AsyncStorage.getItem(ASYNC_KEYS.gender);
+    if (val === 'male' || val === 'female') return val;
+  } catch { /* ignore */ }
+  return null;
+}
+
+export async function setSelectedGender(gender: Gender): Promise<void> {
+  await AsyncStorage.setItem(ASYNC_KEYS.gender, gender);
+}
+
+// ---------------------------------------------------------------------------
+// Installation check — verifies actual files on disk
+// ---------------------------------------------------------------------------
+
+export async function getInstallationStatus(gender: Gender): Promise<{
+  state: DownloadState;
+  manifest: GenderManifest;
+  installRecord: InstallRecord | null;
+}> {
+  const manifest = getManifest(gender);
+  const dir = genderDir(gender);
+
+  let installRecord: InstallRecord | null = null;
+  try {
+    const raw = await AsyncStorage.getItem(
+      gender === 'male' ? ASYNC_KEYS.maleInstall : ASYNC_KEYS.femaleInstall,
+    );
+    if (raw) installRecord = JSON.parse(raw) as InstallRecord;
+  } catch { /* ignore */ }
+
+  // Verify ALL files actually exist on disk
+  let allExist = true;
+  for (const model of manifest.models) {
+    const exists = await fileExists(dir, model.filename);
+    if (!exists) {
+      allExist = false;
+      break;
+    }
+  }
+
+  if (!allExist || !installRecord) {
+    return { state: 'NOT_INSTALLED', manifest, installRecord: null };
+  }
+
+  // Check if an update is available
+  if (installRecord.version !== manifest.version) {
+    return { state: 'UPDATING', manifest, installRecord };
+  }
+
+  return { state: 'INSTALLED', manifest, installRecord };
+}
+
+// ---------------------------------------------------------------------------
+// Get all installed genders
+// ---------------------------------------------------------------------------
+
+export async function getInstalledGenders(): Promise<Gender[]> {
+  const result: Gender[] = [];
+  for (const g of ['male', 'female'] as Gender[]) {
+    const status = await getInstallationStatus(g);
+    if (status.state === 'INSTALLED') result.push(g);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Download a gender package
+// ---------------------------------------------------------------------------
+
+export async function downloadAnatomy(
+  gender: Gender,
+  onProgress?: (progress: DownloadProgress) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const manifest = getManifest(gender);
+  const dir = genderDir(gender);
+  await ensureDir(dir);
+
+  const totalSize = manifest.models.reduce((sum, m) => sum + m.size, 0);
+  let receivedBytes = 0;
+
+  // Log the actual URL and destination being used
+  const sampleUrl = getRemoteUrl(gender, manifest.models[0].filename);
+  console.log(`[AnatomyDownload] REMOTE_BASE: ${REMOTE_BASE}`);
+  console.log(`[AnatomyDownload] Sample URL: ${sampleUrl}`);
+  console.log(`[AnatomyDownload] Destination dir: ${dir.uri}`);
+  const dirInfo = await dir.info();
+  console.log(`[AnatomyDownload] Directory exists: ${dirInfo.exists}`);
+  if (REMOTE_BASE.includes('localhost') || REMOTE_BASE.includes('127.0.0.1')) {
+    console.warn('[AnatomyDownload] ⚠ URL contains localhost — will NOT work on physical Android device!');
+  }
+
+  for (let i = 0; i < manifest.models.length; i++) {
+    if (signal?.aborted) throw new Error('Download cancelled');
+
+    const model = manifest.models[i];
+    const finalFile = new File(dir, model.filename);
+    const tempFile = new File(dir, `${model.filename}.download`);
+
+    // Skip if already downloaded with correct size (resume support)
+    try {
+      const existingInfo = await finalFile.info();
+      if (existingInfo.exists && existingInfo.size === model.size) {
+        receivedBytes += model.size;
+        onProgress?.({
+          totalBytes: totalSize,
+          receivedBytes,
+          currentFile: model.filename,
+          fileIndex: i,
+          fileCount: manifest.models.length,
+          percent: Math.round((receivedBytes / totalSize) * 100),
+        });
+        continue;
+      }
+    } catch { /* file doesn't exist — proceed to download */ }
+
+    // Remove any leftover temp file
+    try {
+      const tempInfo = await tempFile.info();
+      if (tempInfo.exists) await tempFile.delete();
+    } catch { /* ignore */ }
+
+    const remoteUrl = getRemoteUrl(gender, model.filename);
+    console.log(`[AnatomyDownload] File ${i + 1}/${manifest.models.length}: ${model.filename}`);
+    console.log(`[AnatomyDownload]   source: ${remoteUrl}`);
+    console.log(`[AnatomyDownload]   dest: ${tempFile.uri}`);
+
+    // Download using the new SDK 57 API
+    try {
+      await File.downloadFileAsync(remoteUrl, tempFile, {
+        headers: { 'Cache-Control': 'no-cache' },
+        idempotent: true,
+        onProgress: (data) => {
+          const fileReceived = receivedBytes + data.bytesWritten;
+          onProgress?.({
+            totalBytes: totalSize,
+            receivedBytes: fileReceived,
+            currentFile: model.filename,
+            fileIndex: i,
+            fileCount: manifest.models.length,
+            percent: Math.round((fileReceived / totalSize) * 100),
+          });
+        },
+        signal,
+      });
+    } catch (err: any) {
+      // Clean up temp file on failure
+      try { await tempFile.delete(); } catch { /* ignore */ }
+      if (signal?.aborted) throw new Error('Download cancelled');
+
+      // Differentiate error types for better user messaging
+      const msg = String(err.message || err);
+      if (msg.includes('FileNotFoundException') || msg.includes('IOException') || msg.includes('No such file')) {
+        throw new Error(`LOCAL_STORAGE_ERROR: Cannot save ${model.filename} — storage directory missing or inaccessible.`);
+      }
+      if (msg.includes('ECONNREFUSED') || msg.includes('ConnectException') || msg.includes('fetch failed')) {
+        throw new Error(`NETWORK_ERROR: Cannot reach anatomy server for ${model.filename}.`);
+      }
+      throw new Error(`Failed to download ${model.filename}: ${msg}`);
+    }
+
+    if (signal?.aborted) {
+      try { await tempFile.delete(); } catch { /* ignore */ }
+      throw new Error('Download cancelled');
+    }
+
+    // Validate downloaded file size
+    try {
+      const tempInfo = await tempFile.info();
+      if (!tempInfo.exists || (tempInfo.size !== undefined && tempInfo.size < model.size * 0.9)) {
+        await tempFile.delete();
+        throw new Error(`Incomplete download: ${model.filename}`);
+      }
+    } catch (err: any) {
+      if (err.message?.includes('Incomplete')) throw err;
+      // If we can't check size, proceed — the file was downloaded
+    }
+
+    // Atomic rename: move temp → final
+    await tempFile.move(finalFile);
+
+    receivedBytes += model.size;
+    onProgress?.({
+      totalBytes: totalSize,
+      receivedBytes,
+      currentFile: model.filename,
+      fileIndex: i,
+      fileCount: manifest.models.length,
+      percent: Math.round((receivedBytes / totalSize) * 100),
+    });
+  }
+
+  // Mark as installed
+  const installRecord: InstallRecord = {
+    version: manifest.version,
+    installedAt: Date.now(),
+    fileCount: manifest.models.length,
+  };
+  await AsyncStorage.setItem(
+    gender === 'male' ? ASYNC_KEYS.maleInstall : ASYNC_KEYS.femaleInstall,
+    JSON.stringify(installRecord),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Delete a gender package
+// ---------------------------------------------------------------------------
+
+export async function deleteAnatomy(gender: Gender): Promise<void> {
+  try {
+    const dir = genderDir(gender);
+    const info = await dir.info();
+    if (info.exists) {
+      await dir.delete();
+    }
+  } catch { /* ignore */ }
+
+  try {
+    await AsyncStorage.removeItem(
+      gender === 'male' ? ASYNC_KEYS.maleInstall : ASYNC_KEYS.femaleInstall,
+    );
+  } catch { /* ignore */ }
+}
+
+// ---------------------------------------------------------------------------
+// Get local file URI for a model
+// ---------------------------------------------------------------------------
+
+export function getLocalModelUri(gender: Gender, filename: string): string {
+  const dir = genderDir(gender);
+  const file = new File(dir, filename);
+  return file.uri;
+}
+
+// ---------------------------------------------------------------------------
+// Get human-readable storage size for a gender
+// ---------------------------------------------------------------------------
+
+export async function getStorageSize(gender: Gender): Promise<string> {
+  const manifest = getManifest(gender);
+  const totalBytes = manifest.models.reduce((sum, m) => sum + m.size, 0);
+  return formatBytes(totalBytes);
+}
+
+export { formatBytes };

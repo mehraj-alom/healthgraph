@@ -16,6 +16,7 @@ import {
 } from '@tanstack/react-query';
 
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { AnatomyProvider } from '@/context/AnatomyContext';
 
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
 import DashboardScreen from '@/screens/Dashboard/DashboardScreen';
@@ -23,7 +24,20 @@ import VitalsLoggerScreen from '@/screens/VitalsLogger/VitalsLoggerScreen';
 import TimelineScreen from '@/screens/Timeline/TimelineScreen';
 import ChatScreen from '@/screens/Chat/ChatScreen';
 
+// Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
+// and prevent the WebGL renderer from blocking app startup on Android.
+const LazyBodyScreen = React.lazy(() => import('@/screens/Body/BodyScreen'));
+
+function BodyScreenWrapper() {
+  return (
+    <React.Suspense fallback={null}>
+      <LazyBodyScreen />
+    </React.Suspense>
+  );
+}
+
 import { COLORS } from '@/constants';
+
 
 /* ============================================================================
  * Navigation types
@@ -32,6 +46,7 @@ import { COLORS } from '@/constants';
 export type MainTabParamList = {
   Dashboard: undefined;
   DailyLog: undefined;
+  Body: undefined;
   Timeline: undefined;
   Chat: undefined;
 };
@@ -112,6 +127,14 @@ function MainTabs() {
         component={VitalsLoggerScreen}
         options={{
           tabBarLabel: 'Daily Log',
+        }}
+      />
+
+      <Tab.Screen
+        name="Body"
+        component={BodyScreenWrapper}
+        options={{
+          tabBarLabel: '3D Body',
         }}
       />
 
@@ -209,7 +232,9 @@ export default function App() {
       client={queryClient}
     >
       <AuthProvider>
-        <AppNavigator />
+        <AnatomyProvider>
+          <AppNavigator />
+        </AnatomyProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -39,7 +39,8 @@ async def _get_document_evidence(
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY is not set.")
-        embedding_service = EmbeddingService(api_key=api_key)
+        base_url = os.getenv("EMBEDDING_BASE_URL") or os.getenv("OPENAI_API_BASE")
+        embedding_service = EmbeddingService(api_key=api_key, base_url=base_url)
         query_vector = (await embedding_service.generate_embeddings([query]))[0]
         tenant_filter = models.Filter(
             must=[
@@ -50,12 +51,13 @@ async def _get_document_evidence(
             ]
         )
         
-        results = client.search(
+        results = client.query_points(
             collection_name=vector_db.collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             query_filter=tenant_filter,
             limit=5,
-        )
+            with_payload=True,
+        ).points
         
         if not results:
             return [{"message": "No relevant evidence found across patient's documents for the given query."}]
@@ -102,9 +104,9 @@ async def _get_document_evidence(
             return [{"error": "DOCUMENT_NOT_PROJECTED: Document exists but lacks clinical graph provenance."}]
     
     api_key = os.getenv("OPENAI_API_KEY")
-    base_url = os.getenv("EMBEDDING_BASE_URL", "https://api.openai.com/v1")
     if not api_key:
         raise ValueError("OPENAI_API_KEY is not set.")
+    base_url = os.getenv("EMBEDDING_BASE_URL") or os.getenv("OPENAI_API_BASE")
     embedding_service = EmbeddingService(api_key=api_key, base_url=base_url)
     # Qdrant Semantic Search (Mandatory Tenant Isolation Filter)
     query_vector = (await embedding_service.generate_embeddings([query]))[0]

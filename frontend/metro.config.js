@@ -3,8 +3,11 @@ const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
-// Add .glb and .gltf asset support
-config.resolver.assetExts.push('glb', 'gltf');
+// Add .glb, .gltf, .wasm, and .txt asset support
+// .wasm — Draco decoder binary
+// .txt  — Draco decoder JS loaded as raw text (renamed from .js to avoid
+//         Metro treating them as executable modules)
+config.resolver.assetExts.push('glb', 'gltf', 'wasm', 'txt');
 
 // Ensure TypeScript files in node_modules are handled
 config.resolver.sourceExts = [

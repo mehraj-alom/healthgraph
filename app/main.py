@@ -19,6 +19,7 @@ from app.api.v1 import (
     ontology,
     provenance,
     review,
+    summaries,
     timeline,
 )
 from core.config import initialize_firebase, settings
@@ -26,6 +27,7 @@ from core.db import SessionLocal, engine
 from core.neo4j_client import close_neo4j_driver
 from logger import logger
 from models.base import Base
+import models.summaries  # noqa: F401 — ensure summary tables are registered with Base.metadata
 from services.deidentification.deidentifier import DeIdentificationService
 from scripts.migrate_outbox_enum import ensure_enum_values
 from services.ontology_seed import seed_medical_concepts
@@ -64,6 +66,11 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutting down the FastAPI application.")
+
+    # Stop handing out the agent to new requests BEFORE closing the
+    # connection pool so in-flight handlers fail fast instead of
+    # hitting a closed pool.
+    app.state.medical_agent = None
 
     await close_agent()
 
@@ -118,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(daily_metrics.router)
     app.include_router(chat.router)
     app.include_router(body_state.router)
+    app.include_router(summaries.router)
     app.include_router(logs.router)
     app.include_router(ontology.router)
 

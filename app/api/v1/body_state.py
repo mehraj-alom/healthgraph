@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
+from logger import logger
 from app.api.dependencies import get_authenticated_patient_id
 from agents.tools.body_state import _get_current_body_state
 from core.db import get_db
@@ -29,6 +29,7 @@ from models.events import (
 )
 from models.outbox import enqueue_clinical_event
 from schemas.body_state import BodyStateItem
+from services.summaries.daily_summary_service import upsert_daily_summary
 
 
 router = APIRouter(
@@ -258,6 +259,21 @@ def log_body_state(
         raise HTTPException(
             status_code=500,
             detail="Failed to persist body-state observation.",
+        )
+
+    # Daily summary update (best-effort)
+    try:
+        from datetime import date as _date
+        upsert_daily_summary(
+            db,
+            patient_id,
+            _date.today(),
+            auto_commit=True,
+        )
+    except Exception:
+        logger.warning(
+            "Daily summary update failed for body-state observation",
+            exc_info=True,
         )
 
     return BodyStateLogResponse(

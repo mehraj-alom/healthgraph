@@ -42,6 +42,7 @@ from models.daily_logs.events import (
 )
 
 from schemas.daily_logs import DailyCheckInRequest
+from services.summaries.daily_summary_service import upsert_daily_summary
 
 
 router = APIRouter(
@@ -594,6 +595,28 @@ def submit_daily_checkin(
         raise HTTPException(
             status_code=500,
             detail="Failed to save daily log.",
+        )
+
+    # =========================================================================
+    # Daily summary update (best-effort, non-blocking)
+    # =========================================================================
+    # The summary is a derived read-model cache.  If the update fails
+    # the clinical data is already committed and the summary can be
+    # rebuilt later.
+
+    try:
+        upsert_daily_summary(
+            db,
+            patient_id,
+            payload.log_date,
+            auto_commit=True,
+        )
+    except Exception:
+        logger.warning(
+            "Daily summary update failed for patient=%s date=%s",
+            patient_id,
+            payload.log_date,
+            exc_info=True,
         )
 
     return {
