@@ -26,6 +26,7 @@ import TimelineScreen from '@/screens/Timeline/TimelineScreen';
 import ChatScreen from '@/screens/Chat/ChatScreen';
 import DocumentUploadScreen from '@/screens/Documents/DocumentUploadScreen';
 import DocumentDetailScreen from '@/screens/Documents/DocumentDetailScreen';
+import SettingsScreen from '@/screens/Settings/SettingsScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
 // and prevent the WebGL renderer from blocking app startup on Android.
@@ -158,6 +159,13 @@ function AppNavigator() {
     loading,
   } = useAuth();
 
+  React.useEffect(() => {
+    if (user !== null) return;
+    queryClient.removeQueries({
+      predicate: (query) => ['bodyState', 'daily-metrics', 'timeline'].includes(String(query.queryKey[0])),
+    });
+  }, [user]);
+
   /* --------------------------------------------------------------------------
    * Firebase authentication state is still restoring.
    * ------------------------------------------------------------------------ */
@@ -188,6 +196,7 @@ function AppNavigator() {
   return (
     <NavigationContainer>
       <RootStack.Navigator
+        key={user ? 'authenticated' : 'unauthenticated'}
         screenOptions={{
           headerShown: false,
           animation: 'fade',
@@ -207,6 +216,16 @@ function AppNavigator() {
             <RootStack.Screen
               name="Main"
               component={MainTabs}
+            />
+            <RootStack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Account',
+                headerTintColor: COLORS.primary,
+                headerStyle: { backgroundColor: COLORS.background },
+              }}
             />
             <RootStack.Screen
               name="DocumentUpload"

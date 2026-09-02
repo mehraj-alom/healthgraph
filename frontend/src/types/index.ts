@@ -244,6 +244,7 @@ export interface PendingReviewItem {
 export type RootStackParamList = {
   Onboarding: undefined;
   Main: undefined;
+  Settings: undefined;
   DocumentUpload: undefined;
   DocumentDetail: { documentId: string };
 };

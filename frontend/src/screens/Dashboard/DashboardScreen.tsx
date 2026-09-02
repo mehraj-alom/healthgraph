@@ -48,13 +48,18 @@ export default function DashboardScreen() {
             <Text style={styles.title}>Health overview</Text>
             <Text style={styles.subtitle}>Your current clinical record</Text>
           </View>
-          <Text style={styles.date}>
-            {new Date().toLocaleDateString('en-US', {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </Text>
+          <View style={styles.headerActions}>
+            <Text style={styles.date}>
+              {new Date().toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </Text>
+            <Pressable accessibilityRole="button" onPress={() => navigation.navigate('Settings')}>
+              <Text style={styles.accountAction}>Account</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Active processing indicator */}
@@ -343,6 +348,8 @@ const styles = StyleSheet.create({
   title: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginTop: SPACING.xs },
   date: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, textAlign: 'right', maxWidth: 120 },
+  headerActions: { alignItems: 'flex-end', gap: SPACING.sm },
+  accountAction: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary },
 
   // Upload card
   uploadCard: { gap: SPACING.sm },

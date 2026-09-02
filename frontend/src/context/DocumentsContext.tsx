@@ -260,6 +260,9 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     // Auth not ready (loading or signed out) — clear stale data
     setDocuments([]);
     setDocumentsLoading(true);
+    activeProcessingRef.current = [];
+    stageSubscribersRef.current.clear();
+    setProcessingVersion((v) => v + 1);
   }, [authReady]);
 
   // ---- Upload and process ----
