@@ -12,15 +12,17 @@ const API_URL =
 
 console.log('[MedGraph] API_URL:', API_URL);
 
+// ── Temporary structured logging for upload/poll tracing ──────────────
+// Remove after diagnosing the Network Error.
+const _reqSeq = { n: 0 };
+
+
 /**
  * Axios configuration.
  */
 const client = axios.create({
   baseURL: API_URL,
   timeout: 120000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 /**
@@ -41,6 +43,11 @@ client.interceptors.request.use(
   async (
     config: InternalAxiosRequestConfig
   ) => {
+    const seq = ++_reqSeq.n;
+    (config as any).__seq = seq;
+    console.log(
+      `[HTTP] #${seq} → ${String(config.method ?? '??').toUpperCase()} ${config.baseURL ?? ''}${config.url ?? ''}`,
+    );
     try {
       const currentUser = auth.currentUser;
 
@@ -52,10 +59,12 @@ client.interceptors.request.use(
           config.headers.Authorization =
             `Bearer ${token}`;
         }
+      } else {
+        console.warn(`[HTTP] #${seq} ⚠ No Firebase currentUser — sending WITHOUT auth header`);
       }
     } catch (error) {
       console.error(
-        '[MedGraph] Failed to obtain Firebase ID token:',
+        `[HTTP] #${seq} ✖ Failed to obtain Firebase ID token:`,
         error
       );
     }
@@ -75,9 +84,24 @@ client.interceptors.request.use(
  * No backend refresh endpoint is used; Firebase owns token refresh.
  */
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const seq = (response.config as any).__seq ?? '?';
+    console.log(
+      `[HTTP] #${seq} ← ${response.status} ${String(response.config.method ?? '??').toUpperCase()} ${response.config.url ?? ''}`,
+    );
+    return response;
+  },
 
   async (error) => {
+    const seq = (error.config as any)?.__seq ?? '?';
+    console.error(
+      `[HTTP] #${seq} ✖ ${String(error.config?.method ?? '??').toUpperCase()} ${error.config?.url ?? ''}`,
+      `code=${error.code} message=${error.message}`,
+      error.response ? `status=${error.response.status}` : 'NO_RESPONSE',
+    );
+    if (error.response) {
+      console.error(`[HTTP] #${seq} response body:`, error.response.data);
+    }
     const originalRequest =
       error.config as RetryableRequestConfig | undefined;
 

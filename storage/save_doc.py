@@ -4,6 +4,7 @@ from typing import BinaryIO
 from uuid import UUID
 
 from fastapi import UploadFile
+from logger import logger
 
 from core.config import Settings
 
@@ -35,8 +36,17 @@ class StorageService:
         file.extension = os.path.splitext(file.filename)[-1]
         file_path = os.path.join(STORAGE_DIR, f"{patient_id}_{document_id}{file.extension}")
 
+        # Resolve to absolute path for logging
+        abs_path = os.path.abspath(file_path)
+        logger.info(f"[Storage] Saving document to: {abs_path}")
+
         file.file.seek(0)  # Ensure at the start of the file before saving
         with open(file_path, "wb") as buffer:
             while chunk := file.file.read(65536):
                 buffer.write(chunk)
+
+        file_exists = os.path.exists(abs_path)
+        file_size = os.path.getsize(abs_path) if file_exists else 0
+        logger.info(f"[Storage] File exists after save: {file_exists}, size: {file_size} bytes")
+
         return file_path

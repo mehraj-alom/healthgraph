@@ -1,5 +1,6 @@
 import os
 import uuid
+from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
@@ -15,6 +16,76 @@ from workers.ingestion_tasks import process_document_pipeline
 
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
+
+
+@router.get("", response_model=List[DocumentResponse])
+def list_documents(
+    db: Session = Depends(get_db),
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+):
+    """List all documents for the authenticated patient, newest first."""
+    from typing import List
+    from sqlalchemy import desc
+
+    docs = (
+        db.query(Document)
+        .filter(Document.patient_id == patient_id)
+        .order_by(desc(Document.created_at))
+        .limit(50)
+        .all()
+    )
+    return docs
+
+
+@router.get("/{document_id}", response_model=DocumentResponse)
+def get_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+):
+    """Get a single document by ID, verifying patient ownership."""
+    doc = db.query(Document).filter(
+        Document.document_id == document_id,
+        Document.patient_id == patient_id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return doc
+
+
+@router.get("/{document_id}/extraction")
+def get_document_extraction(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+):
+    """Return the raw extraction data for a document (for review/detail)."""
+    from sqlalchemy import select
+    from models.events import RawExtractionData
+
+    doc = db.query(Document).filter(
+        Document.document_id == document_id,
+        Document.patient_id == patient_id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    raw = db.scalars(
+        select(RawExtractionData).where(RawExtractionData.document_id == document_id)
+    ).first()
+
+    if not raw:
+        return {"document_id": str(document_id), "status": doc.status, "extraction": None}
+
+    return {
+        "document_id": str(document_id),
+        "status": doc.status,
+        "gateway_json": raw.gateway_json,
+        "raw_ade_json": raw.raw_ade_json,
+        "markdown_text": raw.markdown_text,
+        "extraction": raw.extraction,
+        "deidentified_markdown": raw.deidentified_markdown,
+    }
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)

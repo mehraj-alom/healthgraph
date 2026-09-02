@@ -156,3 +156,102 @@ export interface DailyCheckInResponse {
   group_id: string;
   message: string;
 }
+
+// ============================================================================
+// Document / OCR types
+// ============================================================================
+
+export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'EXTRACTED' | 'COMPLETED' | 'FAILED' | 'FAILED_TRIAGE';
+
+export interface DocumentListItem {
+  document_id: string;
+  patient_id: string;
+  file_hash: string;
+  storage_url: string;
+  status: DocumentStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentExtraction {
+  document_id: string;
+  status: DocumentStatus;
+  gateway_json: {
+    is_medical: boolean;
+    document_type: string;
+    type_text: string | null;
+    bbox: number[] | null;
+    image_width: number;
+    image_height: number;
+  } | null;
+  raw_ade_json: Record<string, unknown> | null;
+  markdown_text: string | null;
+  extraction: {
+    document?: {
+      document_id?: string;
+      document_type?: string;
+      title?: string;
+      total_pages?: number;
+      language?: string;
+      source_file?: string;
+      patient?: { name?: string; patient_id?: string; date_of_birth?: string; age?: string; sex?: string };
+      requester?: { name?: string; role?: string; organisation?: string; department?: string };
+      clinical_information?: string;
+      sections?: Array<{
+        section_id?: string;
+        section_type?: string;
+        section_title?: string;
+        results?: Array<{
+          test_name?: string;
+          result?: string | number;
+          unit?: string;
+          reference_range?: string;
+          flag?: string;
+          source_text?: string;
+          confidence?: number;
+        }>;
+        diagnosis?: string;
+        comments?: string;
+      }>;
+      alerts?: Array<{ message?: string; severity?: string; page_number?: number }>;
+    };
+  } | null;
+  deidentified_markdown: string | null;
+}
+
+export interface ProvenanceResponse {
+  event_id: string;
+  document_id: string;
+  storage_url: string;
+  extracted_text: string;
+  bounding_box: number[] | null;
+}
+
+export interface PendingReviewItem {
+  event_id: string;
+  event_time: string;
+  event_type: string;
+  extracted_text: string | null;
+  document_id: string | null;
+  value: string | null;
+  unit: string | null;
+}
+
+// ============================================================================
+// Navigation types
+// ============================================================================
+
+export type RootStackParamList = {
+  Onboarding: undefined;
+  Main: undefined;
+  DocumentUpload: undefined;
+  DocumentDetail: { documentId: string };
+};
+
+export type MainTabParamList = {
+  Dashboard: undefined;
+  DailyLog: undefined;
+  Body: undefined;
+  Timeline: undefined;
+  Chat: undefined;
+};

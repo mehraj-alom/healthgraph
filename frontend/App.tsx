@@ -17,12 +17,15 @@ import {
 
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AnatomyProvider } from '@/context/AnatomyContext';
+import { DocumentsProvider } from '@/context/DocumentsContext';
 
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
 import DashboardScreen from '@/screens/Dashboard/DashboardScreen';
 import VitalsLoggerScreen from '@/screens/VitalsLogger/VitalsLoggerScreen';
 import TimelineScreen from '@/screens/Timeline/TimelineScreen';
 import ChatScreen from '@/screens/Chat/ChatScreen';
+import DocumentUploadScreen from '@/screens/Documents/DocumentUploadScreen';
+import DocumentDetailScreen from '@/screens/Documents/DocumentDetailScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
 // and prevent the WebGL renderer from blocking app startup on Android.
@@ -37,24 +40,12 @@ function BodyScreenWrapper() {
 }
 
 import { COLORS } from '@/constants';
+import type { RootStackParamList, MainTabParamList } from '@/types';
 
 
 /* ============================================================================
  * Navigation types
  * ========================================================================== */
-
-export type MainTabParamList = {
-  Dashboard: undefined;
-  DailyLog: undefined;
-  Body: undefined;
-  Timeline: undefined;
-  Chat: undefined;
-};
-
-export type RootStackParamList = {
-  Onboarding: undefined;
-  Main: undefined;
-};
 
 const RootStack =
   createNativeStackNavigator<RootStackParamList>();
@@ -212,10 +203,32 @@ function AppNavigator() {
             component={OnboardingScreen}
           />
         ) : (
-          <RootStack.Screen
-            name="Main"
-            component={MainTabs}
-          />
+          <>
+            <RootStack.Screen
+              name="Main"
+              component={MainTabs}
+            />
+            <RootStack.Screen
+              name="DocumentUpload"
+              component={DocumentUploadScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Upload Document',
+                headerTintColor: COLORS.primary,
+                headerStyle: { backgroundColor: COLORS.background },
+              }}
+            />
+            <RootStack.Screen
+              name="DocumentDetail"
+              component={DocumentDetailScreen}
+              options={{
+                headerShown: true,
+                headerTitle: 'Document Details',
+                headerTintColor: COLORS.primary,
+                headerStyle: { backgroundColor: COLORS.background },
+              }}
+            />
+          </>
         )}
       </RootStack.Navigator>
     </NavigationContainer>
@@ -233,7 +246,9 @@ export default function App() {
     >
       <AuthProvider>
         <AnatomyProvider>
-          <AppNavigator />
+          <DocumentsProvider>
+            <AppNavigator />
+          </DocumentsProvider>
         </AnatomyProvider>
       </AuthProvider>
     </QueryClientProvider>

@@ -8,6 +8,7 @@ services:
       - .env
     volumes:
       - ./firebase_credentials.json:/app/firebase_credentials.json:ro
+      - document_storage:/app/storage
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -16,9 +17,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: celery -A core.celery_app worker --loglevel=info
+    command: celery -A core.celery_app worker -Q celery,ingestion --loglevel=info
     env_file:
       - .env
+    volumes:
+      - document_storage:/app/storage
     restart: unless-stopped
 
   celery-beat:
@@ -29,3 +32,6 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+
+volumes:
+  document_storage:

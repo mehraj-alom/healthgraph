@@ -1,6 +1,7 @@
 # celery broker and result backend configuration
 
 from celery import Celery
+from kombu import Queue
 
 from core.config import settings
 
@@ -21,8 +22,17 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
     timezone="UTC",
     enable_utc=True,
+    task_queues=(
+        Queue("celery", routing_key="celery"),
+        Queue("ingestion", routing_key="ingestion"),
+    ),
+    task_routes={
+        "ingestion_tasks.process_document": {
+            "queue": "ingestion",
+            "routing_key": "ingestion",
+        }
+    },
 )
-
 
 celery_app.conf.beat_schedule = {
     "drain-graph-outbox-every-5-seconds": {

@@ -40,6 +40,14 @@ def process_document_pipeline(self, document_id_str: str):
         document.status = "PROCESSING"
         db.commit()
 
+        # Log storage path diagnostics
+        abs_storage_path = os.path.abspath(document.storage_url)
+        _log("info", f"[Worker] Looking for document at: {abs_storage_path}", document_id_str)
+        _log("info", f"[Worker] storage_url from DB: {document.storage_url}", document_id_str)
+        _log("info", f"[Worker] File exists before OCR: {os.path.exists(abs_storage_path)}", document_id_str)
+        if os.path.exists(abs_storage_path):
+            _log("info", f"[Worker] File size: {os.path.getsize(abs_storage_path)} bytes", document_id_str)
+
         #sTriage Phase
         _log("info", f"Starting OCR triage for Document {document_id_str}...", document_id_str)
         ocr_gateway = OCRGateway()
