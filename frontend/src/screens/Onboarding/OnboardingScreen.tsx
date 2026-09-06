@@ -126,13 +126,10 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={
-          Platform.OS === 'ios'
-            ? 'padding'
-            : 'height'
-        }
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoiding}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : undefined}
+        enabled={Platform.OS === 'ios'}
       >
         <ScrollView
           contentContainerStyle={
@@ -370,6 +367,10 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.display,
     color: COLORS.primary,
     fontWeight: '700',
+    letterSpacing: -1,
+    textShadowColor: 'rgba(244, 197, 27, 0.22)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 12,
   },
 
   tagline: {
@@ -385,6 +386,13 @@ const styles = StyleSheet.create({
 
   formCard: {
     width: '100%',
+    backgroundColor: COLORS.surfaceElevated,
+    borderColor: COLORS.borderFaint,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 6,
   },
 
   formTitle: {
@@ -476,7 +484,8 @@ const styles = StyleSheet.create({
     marginTop:
       SPACING.xl,
     backgroundColor:
-      COLORS.surface,
+      COLORS.surfaceSunken,
+    borderColor: COLORS.borderFaint,
   },
 
   disclaimerTitle: {

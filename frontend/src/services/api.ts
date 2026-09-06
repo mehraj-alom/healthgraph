@@ -5,10 +5,11 @@ import axios, {
 } from 'axios';
 
 import { auth } from '@/context/AuthContext';
+import { waitForIdentityReady } from '@/services/backendIdentity';
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
-  'http://10.210.149.11:8000';
+  'http://10.22.93.11:8000';
 
 console.log('[MedGraph] API_URL:', API_URL);
 
@@ -22,6 +23,10 @@ const _reqSeq = { n: 0 };
  */
 const client = axios.create({
   baseURL: API_URL,
+  // Generous default: the agent/chat pipeline (multi-step LLM tool calls +
+  // structured synthesis) routinely takes longer than 15s. A short timeout
+  // aborts the request client-side while the backend keeps running and later
+  // returns 200 — which surfaces as a bogus "encountered an error" in the UI.
   timeout: 120000,
 });
 
@@ -49,6 +54,12 @@ client.interceptors.request.use(
       `[HTTP] #${seq} → ${String(config.method ?? '??').toUpperCase()} ${config.baseURL ?? ''}${config.url ?? ''}`,
     );
     try {
+      // Wait for backend identity sync to complete (max 3s) before
+      // attaching token. This prevents 403 errors when the Patient
+      // row hasn't been created yet. The Dashboard UI is not blocked —
+      // only this specific request waits.
+      await waitForIdentityReady();
+
       const currentUser = auth.currentUser;
 
       if (currentUser) {
@@ -94,13 +105,18 @@ client.interceptors.response.use(
 
   async (error) => {
     const seq = (error.config as any)?.__seq ?? '?';
-    console.error(
-      `[HTTP] #${seq} ✖ ${String(error.config?.method ?? '??').toUpperCase()} ${error.config?.url ?? ''}`,
-      `code=${error.code} message=${error.message}`,
-      error.response ? `status=${error.response.status}` : 'NO_RESPONSE',
-    );
-    if (error.response) {
-      console.error(`[HTTP] #${seq} response body:`, error.response.data);
+    // Suppress 404 logging — these are expected for resources that don't exist yet
+    // (e.g., daily check-in for a date with no entry)
+    const is404 = error.response?.status === 404;
+    if (!is404) {
+      console.error(
+        `[HTTP] #${seq} ✖ ${String(error.config?.method ?? '??').toUpperCase()} ${error.config?.url ?? ''}`,
+        `code=${error.code} message=${error.message}`,
+        error.response ? `status=${error.response.status}` : 'NO_RESPONSE',
+      );
+      if (error.response) {
+        console.error(`[HTTP] #${seq} response body:`, error.response.data);
+      }
     }
     const originalRequest =
       error.config as RetryableRequestConfig | undefined;

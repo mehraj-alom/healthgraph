@@ -26,6 +26,19 @@ import { useAnatomy } from '@/context/AnatomyContext';
 import AnatomyDownloadOverlay, { NotInstalledPrompt } from '@/components/AnatomyDownloadOverlay';
 import { getLocalModelUri, type Gender } from '@/services/anatomyDownload';
 
+// ── Filament conditional import ──
+// react-native-filament requires a native build (EAS/Expo Dev Client).
+// In Expo Go the native module is unavailable, so we lazy-require it
+// and fall back to a safe placeholder.
+let FilamentBody: React.ComponentType<any> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const _filament = require('./FilamentBody');
+  FilamentBody = _filament.default;
+} catch (_filamentNotAvailable) {
+  // Expo Go or web — Filament native module not bundled
+}
+
 // ---------------------------------------------------------------------------
 // React Native / Hermes polyfills required by three.js
 // ---------------------------------------------------------------------------
@@ -1607,6 +1620,30 @@ function WebCanvas({ gender, onStructureSelected, sceneRef, localFiles }: WebCan
 }
 
 // ---------------------------------------------------------------------------
+// Expo Go native-safe fallback (NO browser <canvas>)
+// ---------------------------------------------------------------------------
+
+interface NativePlaceholderProps {
+  gender: Gender;
+  onStructureSelected: (structureId: string | null) => void;
+}
+
+function NativePlaceholder({ gender, onStructureSelected }: NativePlaceholderProps) {
+  return (
+    <View style={styles.nativePlaceholder}>
+      <Text style={styles.nativePlaceholderIcon}>🦴</Text>
+      <Text style={styles.nativePlaceholderTitle}>3D Body View</Text>
+      <Text style={styles.nativePlaceholderText}>
+        The 3D anatomy viewer requires a development build with native modules.
+      </Text>
+      <Text style={styles.nativePlaceholderHint}>
+        Use EAS Build or Expo Dev Client for the full 3D experience.
+      </Text>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Platform-switching canvas wrapper
 // ---------------------------------------------------------------------------
 
@@ -1621,7 +1658,12 @@ function ThreeCanvas(props: ThreeCanvasProps) {
   if (Platform.OS === 'web') {
     return <WebCanvas {...props} />;
   }
-  return <NativeCanvas {...props} />;
+  // Filament is only available in native builds (EAS / Expo Dev Client).
+  // In Expo Go the conditional require above will have left it null.
+  if (!FilamentBody) {
+    return <NativePlaceholder gender={props.gender} onStructureSelected={props.onStructureSelected} />;
+  }
+  return <FilamentBody {...props as any} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -2090,7 +2132,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xxl + SPACING.xs,
-    paddingBottom: SPACING.xs,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderFaint,
   },
   headerTitle: {
     ...TYPOGRAPHY.h1,
@@ -2138,22 +2182,55 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(247, 249, 248, 0.8)',
+    backgroundColor: 'rgba(7, 17, 31, 0.82)',
   } as any,
   loadingText: {
     ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     marginTop: SPACING.sm,
   },
-  infoPanel: {
+  nativePlaceholder: {
+    width: SCREEN_WIDTH,
+    height: CANVAS_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.xl,
+    gap: SPACING.sm,
+  },
+  nativePlaceholderIcon: {
+    fontSize: 48,
+    marginBottom: SPACING.sm,
+  },
+  nativePlaceholderTitle: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.textPrimary,
+  },
+  nativePlaceholderText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  nativePlaceholderHint: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+  },
+  infoPanel: {
+    backgroundColor: COLORS.surfaceElevated,
     marginHorizontal: SPACING.md,
     marginTop: SPACING.sm,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    ...SHADOWS.sm,
+    borderColor: COLORS.borderFaint,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    elevation: 4,
   },
   infoPanelHeader: {
     flexDirection: 'row',
@@ -2167,10 +2244,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   closeButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.surfaceElevated,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.surfaceSunken,
+    borderWidth: 1,
+    borderColor: COLORS.borderFaint,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2319,11 +2398,16 @@ const styles = StyleSheet.create({
   storageSection: {
     marginHorizontal: SPACING.md,
     marginTop: SPACING.sm,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceElevated,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.borderFaint,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
   },
   storageSectionTitle: {
     ...TYPOGRAPHY.captionStrong,

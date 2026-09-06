@@ -4,16 +4,17 @@ import {
   Text,
   TextInput,
   type TextInputProps,
+  type ViewStyle,
   type TextStyle,
 } from 'react-native';
-import { useRef } from 'react';
 
 import {
   COLORS,
   SPACING,
   BORDER_RADIUS,
   TYPOGRAPHY,
-  SHADOWS,
+  CONTROL_HEIGHTS,
+  type ControlSize,
 } from '@/constants';
 
 interface InputProps {
@@ -22,6 +23,7 @@ interface InputProps {
   value: string;
   onChangeText: (text: string) => void;
   error?: string;
+  hint?: string;
   secureTextEntry?: boolean;
   keyboardType?: TextInputProps['keyboardType'];
   autoCapitalize?: TextInputProps['autoCapitalize'];
@@ -29,18 +31,40 @@ interface InputProps {
   autoCorrect?: TextInputProps['autoCorrect'];
   textContentType?: TextInputProps['textContentType'];
   rightElement?: React.ReactNode;
-  style?: TextStyle;
+  leftElement?: React.ReactNode;
+  style?: ViewStyle;
+  inputStyle?: TextStyle;
   disabled?: boolean;
   multiline?: boolean;
   numberOfLines?: number;
+  size?: ControlSize;
+  maxLength?: number;
+  returnKeyType?: TextInputProps['returnKeyType'];
+  onSubmitEditing?: () => void;
+  blurOnSubmit?: boolean;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  testID?: string;
+  accessibilityLabel?: string;
 }
 
+/**
+ * MedGraph text input — dark recessed glass well with subtle inner depth.
+ *
+ * Functional contract:
+ *  - TextInput is never wrapped in a Pressable or covered by an overlay.
+ *  - The value passed in MUST be a string while editing (convert to a number
+ *    only when saving).
+ *  - Focus callbacks are forwarded without changing the native input hierarchy.
+ *  - Disabled inputs reduce contrast and remain non-editable.
+ */
 export const Input = ({
   label,
   placeholder,
   value,
   onChangeText,
   error,
+  hint,
   secureTextEntry = false,
   keyboardType = 'default',
   autoCapitalize = 'none',
@@ -48,32 +72,54 @@ export const Input = ({
   autoCorrect,
   textContentType,
   rightElement,
+  leftElement,
   style,
+  inputStyle,
   disabled = false,
   multiline = false,
   numberOfLines = 4,
+  size = 'medium',
+  maxLength,
+  returnKeyType,
+  onSubmitEditing,
+  blurOnSubmit,
+  onFocus: onFocusExternal,
+  onBlur: onBlurExternal,
+  testID,
+  accessibilityLabel,
 }: InputProps) => {
   const hasError = Boolean(error);
-  const focused = useRef(false);
-
-  const inputContainerStyles = [
-    styles.inputContainer,
-    hasError && styles.inputContainerError,
-    disabled && styles.inputContainerDisabled,
-  ];
+  const height = CONTROL_HEIGHTS[size];
 
   return (
     <View style={styles.container}>
-      {label && (
-        <Text style={styles.label}>
+      {label ? (
+        <Text style={[styles.label, hasError && styles.labelError]}>
           {label}
         </Text>
-      )}
+      ) : null}
 
-      <View style={inputContainerStyles}>
+      <View
+        style={[
+          styles.inputContainer,
+          { minHeight: height },
+          hasError && styles.inputContainerError,
+          disabled && styles.inputContainerDisabled,
+          multiline && styles.inputContainerMultiline,
+          style,
+        ]}
+      >
+        {leftElement ? (
+          <View style={styles.leftElement} pointerEvents="none">
+            {leftElement}
+          </View>
+        ) : null}
+
         <TextInput
+          testID={testID}
+          accessibilityLabel={accessibilityLabel ?? label ?? placeholder}
           placeholder={placeholder}
-          placeholderTextColor={COLORS.textMuted}
+          placeholderTextColor={COLORS.textDisabled}
           value={value}
           onChangeText={onChangeText}
           secureTextEntry={secureTextEntry}
@@ -83,38 +129,40 @@ export const Input = ({
           autoCorrect={autoCorrect}
           textContentType={textContentType}
           multiline={multiline}
-          numberOfLines={
-            multiline ? numberOfLines : undefined
-          }
+          numberOfLines={multiline ? numberOfLines : undefined}
           editable={!disabled}
-          style={[
-            styles.input,
-            multiline && styles.inputMultiline,
-            disabled && styles.inputDisabled,
-            hasError && styles.inputError,
-            style,
-          ]}
+          maxLength={maxLength}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
+          blurOnSubmit={blurOnSubmit}
           onFocus={() => {
-            focused.current = true;
+            onFocusExternal?.();
           }}
           onBlur={() => {
-            focused.current = false;
+            onBlurExternal?.();
           }}
-          selectionColor={COLORS.primary}
+          selectionColor={COLORS.accentBlue}
+          style={[
+            styles.input,
+            { minHeight: height },
+            multiline && styles.inputMultiline,
+            disabled && styles.inputDisabled,
+            inputStyle,
+          ]}
         />
 
-        {rightElement && (
-          <View style={styles.rightElement}>
+        {rightElement ? (
+          <View style={styles.rightElement} pointerEvents="box-none">
             {rightElement}
           </View>
-        )}
+        ) : null}
       </View>
 
-      {error && (
-        <Text style={styles.errorText}>
-          {error}
-        </Text>
-      )}
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : hint && !hasError ? (
+        <Text style={styles.hintText}>{hint}</Text>
+      ) : null}
     </View>
   );
 };
@@ -122,64 +170,85 @@ export const Input = ({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'column',
-    gap: SPACING.xs,
+    gap: SPACING.xs + 2,
   },
 
   label: {
     ...TYPOGRAPHY.label,
     color: COLORS.textSecondary,
+    fontSize: 11,
   },
 
+  labelError: {
+    color: COLORS.error,
+  },
+
+  // Recessed dark well: sunken surface, hairline border, no external glow
+  // unless focused (accent) or in error.
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceSunken,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.medium,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    ...SHADOWS.sm,
   },
 
   inputContainerError: {
     borderColor: COLORS.error,
-    borderWidth: 2,
+    borderWidth: 1.5,
   },
 
   inputContainerDisabled: {
-    backgroundColor: COLORS.surfaceElevated,
+    backgroundColor: COLORS.surfaceDisabled,
+    borderColor: COLORS.borderFaint,
+    opacity: 0.7,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+
+  inputContainerMultiline: {
+    alignItems: 'flex-start',
   },
 
   input: {
     flex: 1,
     ...TYPOGRAPHY.body,
     color: COLORS.textPrimary,
-    minHeight: 48,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
   },
 
   inputMultiline: {
     minHeight: 100,
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.sm,
+    paddingTop: SPACING.sm + 4,
+    paddingBottom: SPACING.sm + 4,
     textAlignVertical: 'top',
   },
 
   inputDisabled: {
-    opacity: 0.6,
+    color: COLORS.textDisabled,
   },
 
-  inputError: {
-    color: COLORS.error,
+  leftElement: {
+    marginRight: SPACING.sm,
+    justifyContent: 'center',
   },
 
   rightElement: {
     marginLeft: SPACING.sm,
+    justifyContent: 'center',
   },
 
   errorText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.error,
-    marginTop: SPACING.xs,
+  },
+
+  hintText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    fontSize: 12,
   },
 });

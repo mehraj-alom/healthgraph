@@ -15,13 +15,20 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f172a"
       },
-      "package": "com.medgraph.app"
+      "package": "com.medgraph.app",
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-dev-client",
+        {
+          "urlScheme": "medgraph"
+        }
+      ]
     ],
     "extra": {
       "eas": {

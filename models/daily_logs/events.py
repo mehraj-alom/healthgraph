@@ -7,8 +7,8 @@ from models.base import Base
 class VitalSignPayload(Base):
     __tablename__ = "payload_vital_signs"
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clinical_events.event_id", ondelete="CASCADE"), primary_key=True)
-    value: Mapped[float] = mapped_column(Float, nullable=False)
-    unit: Mapped[str] = mapped_column(String(30), nullable=False)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
 class SymptomPayload(Base):
     __tablename__ = "payload_symptoms"
@@ -24,9 +24,9 @@ class SymptomPayload(Base):
 class WellbeingPayload(Base):
     __tablename__ = "payload_wellbeing"
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clinical_events.event_id", ondelete="CASCADE"), primary_key=True)
-    overall_wellbeing: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    energy_level: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    stress_level: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    overall_wellbeing: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    energy_level: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    stress_level: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     
     __table_args__ = (
         CheckConstraint("overall_wellbeing BETWEEN 1 AND 5", name="ck_wellbeing_range"),

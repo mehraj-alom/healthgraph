@@ -75,6 +75,9 @@ async function syncBackendIdentity(): Promise<void> {
   await api.post('/api/v1/auth/sync');
 }
 
+// Import the readiness tracker (no circular dep — this is a pure module)
+import { setSyncPromise } from '@/services/backendIdentity';
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -83,7 +86,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let mounted = true;
-    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onIdTokenChanged(auth, (firebaseUser) => {
       if (!mounted) return;
       if (firebaseUser) {
         setUser(firebaseUser);
@@ -93,13 +96,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           displayName: firebaseUser.displayName ?? undefined,
           createdAt: firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime) : new Date(),
         });
-        try {
-          await syncBackendIdentity();
-        } catch (syncError) {
-          // Do not turn a valid Firebase session into a failed login when the
-          // API is temporarily unavailable. Protected API calls will surface it.
-          console.error('[MedGraph] Backend auth sync failed:', syncError);
-        }
+        // Fire-and-forget: sync backend identity in the background.
+        // The API request interceptor awaits this promise (bounded 3s)
+        // before attaching tokens, so Dashboard API requests coordinate
+        // with identity readiness without blocking the UI.
+        const syncPromise = syncBackendIdentity().catch((syncError) => {
+          console.error('[MedGraph] Backend auth sync failed (non-blocking):', syncError);
+        });
+        setSyncPromise(syncPromise);
       } else {
         setUser(null);
         setUserProfile(null);
@@ -134,6 +138,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async (): Promise<void> => {
     setError(null);
+    // Clear home cache before signing out
+    const { homeCache } = await import('@/services/homeCache');
+    await homeCache.clearAll();
     await firebaseSignOut(auth);
     setUser(null);
     setUserProfile(null);

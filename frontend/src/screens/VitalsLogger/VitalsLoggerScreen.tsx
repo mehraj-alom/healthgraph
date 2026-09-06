@@ -1,108 +1,1746 @@
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Button, Card, Input } from '@/components';
-import { useDocuments } from '@/context/DocumentsContext';
-import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants';
+import { Button, Input } from '@/components';
+import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, SHADOWS } from '@/constants';
 import { api } from '@/services/api';
-import type { DailyCheckInRequest, DailyCheckInResponse, ManualLogConcept, RootStackParamList } from '@/types';
+import { useDailyMetrics } from '@/hooks/useDailyMetrics';
+import { useMedicationSchedule } from '@/hooks/useMedications';
+import type {
+  DailyCheckInRequest,
+  DailyCheckInResponse,
+  DailyCheckInDetail,
+  ManualLogConcept,
+  RootStackParamList,
+} from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+// ---------------------------------------------------------------------------
+// Backend field names
+// ---------------------------------------------------------------------------
 type ScoreName = 'overall_wellbeing' | 'energy_level' | 'stress_level';
-type SymptomDraft = { id: number; conceptId: string; severity: string; duration: string; notes: string };
-type PainDraft = { id: number; severity: string; painType: string; structureId: string };
-type ActivityDraft = { id: number; activityType: string; duration: string; calories: string };
-type MedicationDraft = { id: number; name: string; dosage: string; unit: string };
-const dateToday = () => new Date().toISOString().slice(0, 10);
-const scores: Record<ScoreName, string> = { overall_wellbeing: 'Overall wellbeing', energy_level: 'Energy', stress_level: 'Stress' };
-const vitalDefinitions = [
-  { terminology: 'LOINC', code: '2339-0', label: 'Blood glucose', unit: 'mg/dL', key: 'glucose' },
-  { terminology: 'LOINC', code: '8867-4', label: 'Heart rate', unit: 'bpm', key: 'heartRate' },
+
+// ---------------------------------------------------------------------------
+// Mood labels mapped to backend 1–5
+// ---------------------------------------------------------------------------
+const MOOD_OPTIONS = [
+  { value: 1, label: 'Very low' },
+  { value: 2, label: 'Low' },
+  { value: 3, label: 'Neutral' },
+  { value: 4, label: 'Good' },
+  { value: 5, label: 'Very good' },
 ] as const;
 
-function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
-  return <Card style={styles.section} padding="md"><Text style={styles.sectionTitle}>{title}</Text>{subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}<View style={styles.sectionContent}>{children}</View></Card>;
-}
-function ChoiceRow({ value, onChange, labels = ['Low', 'High'] }: { value: string; onChange: (value: string) => void; labels?: [string, string] }) {
-  return <View><View style={styles.choiceRow}>{[1, 2, 3, 4, 5].map((option) => <Pressable key={option} onPress={() => onChange(String(option))} style={[styles.choice, value === String(option) && styles.choiceSelected]}><Text style={[styles.choiceText, value === String(option) && styles.choiceTextSelected]}>{option}</Text></Pressable>)}</View><View style={styles.choiceLabels}><Text style={styles.mutedText}>{labels[0]}</Text><Text style={styles.mutedText}>{labels[1]}</Text></View></View>;
-}
-function SeveritySelector({ value, onChange, minimum = 1 }: { value: string; onChange: (value: string) => void; minimum?: 0 | 1 }) {
-  return <View style={styles.severityRow}>{Array.from({ length: 11 - minimum }, (_, index) => index + minimum).map((option) => <Pressable key={option} onPress={() => onChange(String(option))} style={[styles.severity, value === String(option) && styles.severitySelected]}><Text style={[styles.severityText, value === String(option) && styles.choiceTextSelected]}>{option}</Text></Pressable>)}</View>;
-}
+const ENERGY_LABELS: Record<number, string> = {
+  1: 'Very low',
+  2: 'Low',
+  3: 'Moderate',
+  4: 'High',
+  5: 'Very high',
+};
+
+const STRESS_LABELS: Record<number, string> = {
+  1: 'Very calm',
+  2: 'Calm',
+  3: 'Moderate',
+  4: 'High',
+  5: 'Very high',
+};
+
+// ---------------------------------------------------------------------------
+// Sleep quality 1–5 labels
+// ---------------------------------------------------------------------------
+const SLEEP_QUALITY_LABELS: Record<number, string> = {
+  1: 'Very poor',
+  2: 'Poor',
+  3: 'Fair',
+  4: 'Good',
+  5: 'Excellent',
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const dateToday = () => new Date().toISOString().slice(0, 10);
+
+const shiftDate = (value: string, days: number) => {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
+const formatRelativeDate = (dateStr: string): string => {
+  const today = new Date();
+  const date = new Date(dateStr + 'T00:00:00');
+  const diffDays = Math.floor(
+    (today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const formatSleepDuration = (minutes: number): string => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+};
+
 function apiMessage(error: unknown): string {
-  if (!axios.isAxiosError(error)) return 'Unable to reach MedGraph. Check your connection and try again.';
-  if (error.code === 'ECONNABORTED') return 'The request timed out. Please try again.';
-  if (error.response?.status === 401) return 'Your session has expired. Please sign in again.';
-  if (error.response?.status === 403) return 'You do not have permission to save this daily log.';
-  if (error.response?.status === 422) return typeof error.response.data?.detail === 'string' ? error.response.data.detail : 'Please review the highlighted fields.';
-  if ((error.response?.status ?? 0) >= 500) return 'MedGraph could not save your log. Please try again shortly.';
+  if (!axios.isAxiosError(error))
+    return 'Unable to reach MedGraph. Check your connection and try again.';
+  if (error.code === 'ECONNABORTED')
+    return 'The request timed out. Please try again.';
+  if (error.response?.status === 401)
+    return 'Your session has expired. Please sign in again.';
+  if (error.response?.status === 403)
+    return 'You do not have permission to save this daily log.';
+  if (error.response?.status === 422)
+    return typeof error.response.data?.detail === 'string'
+      ? error.response.data.detail
+      : 'Please review the highlighted fields.';
+  if ((error.response?.status ?? 0) >= 500)
+    return 'MedGraph could not save your log. Please try again shortly.';
   return 'Unable to save your daily log. Please try again.';
 }
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+// Per-category accents — same restrained palette as the Health Graph nodes.
+const SECTION_ACCENTS: Record<string, { icon: string; color: string }> = {
+  sleep: { icon: '🌙', color: COLORS.catSleep },
+  symptomsPain: { icon: '🤕', color: COLORS.catPain },
+  activity: { icon: '🏃', color: COLORS.catActivity },
+  nutrition: { icon: '💧', color: COLORS.catNutrition },
+  medication: { icon: '💊', color: COLORS.catMedication },
+  vitals: { icon: '❤️', color: COLORS.catVitals },
+  wellbeing: { icon: '✨', color: COLORS.catMood },
+  symptoms: { icon: '🩺', color: COLORS.catSymptom },
+  notes: { icon: '📝', color: COLORS.textMuted },
+};
+
+/** Section wrapper with optional heading, accent icon and category color. */
+function Section({
+  title,
+  subtitle,
+  category,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  category?: keyof typeof SECTION_ACCENTS;
+  children: React.ReactNode;
+}) {
+  const accent = category ? SECTION_ACCENTS[category] : null;
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        {accent ? (
+          <View style={[styles.sectionAccent, { backgroundColor: `${accent.color}1A`, borderColor: `${accent.color}55` }]}>
+            <Text style={styles.sectionAccentIcon}>{accent.icon}</Text>
+          </View>
+        ) : null}
+        <View style={styles.sectionHeading}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {subtitle ? (
+            <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+          ) : null}
+        </View>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+/** Horizontal divider */
+function Divider() {
+  return <View style={styles.divider} />;
+}
+
+/** Single-select pill row for mood (shows label text) */
+function MoodSelector({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <View style={styles.moodRow}>
+      {MOOD_OPTIONS.map((opt) => {
+        const selected = value === opt.value;
+        return (
+          <Pressable
+            key={opt.value}
+            onPress={() => onChange(opt.value)}
+            style={[styles.moodPill, selected && styles.moodPillSelected]}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            accessibilityLabel={opt.label}
+          >
+            <Text
+              style={[styles.moodPillText, selected && styles.moodPillTextSelected]}
+            >
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** 1–5 number selector with label underneath */
+function ScaleSelector({
+  value,
+  onChange,
+  labels,
+}: {
+  value: number | null;
+  onChange: (v: number) => void;
+  labels: Record<number, string>;
+}) {
+  return (
+    <View>
+      <View style={styles.scaleRow}>
+        {[1, 2, 3, 4, 5].map((n) => {
+          const selected = value === n;
+          return (
+            <Pressable
+              key={n}
+              onPress={() => onChange(n)}
+              style={[styles.scaleDot, selected && styles.scaleDotSelected]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${n} out of 5`}
+            >
+              <Text
+                style={[
+                  styles.scaleDotText,
+                  selected && styles.scaleDotTextSelected,
+                ]}
+              >
+                {n}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {value != null && labels[value] ? (
+        <Text style={styles.scaleLabel}>{labels[value]}</Text>
+      ) : (
+        <View style={styles.scaleLabelRow}>
+          <Text style={styles.scaleHint}>Low</Text>
+          <Text style={styles.scaleHint}>High</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** Sleep duration stepper (hours + minutes) */
+function SleepDurationPicker({
+  totalMinutes,
+  onChange,
+}: {
+  totalMinutes: number;
+  onChange: (minutes: number) => void;
+}) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  const adjust = (delta: number) => {
+    const next = Math.max(0, Math.min(24 * 60, totalMinutes + delta));
+    onChange(next);
+  };
+
+  return (
+    <View style={styles.stepperRow}>
+      <Pressable
+        onPress={() => adjust(-30)}
+        style={styles.stepperBtn}
+        accessibilityLabel="Decrease by 30 minutes"
+      >
+        <Text style={styles.stepperBtnText}>−30m</Text>
+      </Pressable>
+      <Pressable
+        onPress={() => adjust(-15)}
+        style={styles.stepperBtn}
+        accessibilityLabel="Decrease by 15 minutes"
+      >
+        <Text style={styles.stepperBtnText}>−15m</Text>
+      </Pressable>
+      <View style={styles.stepperDisplay}>
+        <Text style={styles.stepperValue}>
+          {hours > 0 ? `${hours}h` : ''}
+          {hours > 0 && minutes > 0 ? ' ' : ''}
+          {minutes > 0 || hours === 0 ? `${minutes}m` : ''}
+        </Text>
+      </View>
+      <Pressable
+        onPress={() => adjust(15)}
+        style={styles.stepperBtn}
+        accessibilityLabel="Increase by 15 minutes"
+      >
+        <Text style={styles.stepperBtnText}>+15m</Text>
+      </Pressable>
+      <Pressable
+        onPress={() => adjust(30)}
+        style={styles.stepperBtn}
+        accessibilityLabel="Increase by 30 minutes"
+      >
+        <Text style={styles.stepperBtnText}>+30m</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Compact 1–5 quality selector for sleep */
+function QualitySelector({
+  value,
+  onChange,
+  labels,
+}: {
+  value: number | null;
+  onChange: (v: number) => void;
+  labels: Record<number, string>;
+}) {
+  return (
+    <View style={styles.qualityRow}>
+      {[1, 2, 3, 4, 5].map((n) => {
+        const selected = value === n;
+        return (
+          <Pressable
+            key={n}
+            onPress={() => onChange(n)}
+            style={[styles.qualityDot, selected && styles.qualityDotSelected]}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            accessibilityLabel={labels[n] || `${n} out of 5`}
+          >
+            <Text
+              style={[
+                styles.qualityDotText,
+                selected && styles.qualityDotTextSelected,
+              ]}
+            >
+              {n}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main screen
+// ---------------------------------------------------------------------------
+
+type SymptomDraft = {
+  id: number;
+  conceptId: string;
+  severity: string;
+  duration: string;
+  notes: string;
+};
+
+type ActivityDraft = { id: number; activityType: string; duration: string; calories: string };
+type MedicationDraft = { id: number; name: string; dosage: string; unit: string };
+type VitalDraft = { id: number; conceptId: string; value: string; unit: string };
+type PainDraft = { id: number; structureId: string; bodyLocationId: string; severity: string; painType: string };
 
 export default function VitalsLoggerScreen() {
   const navigation = useNavigation<Nav>();
   const queryClient = useQueryClient();
-  const { documents, isProcessing } = useDocuments();
-  const [checkin, setCheckin] = useState<Record<ScoreName, string>>({ overall_wellbeing: '', energy_level: '', stress_level: '' });
-  const [vitals, setVitals] = useState({ glucose: '', heartRate: '' });
-  const [symptoms, setSymptoms] = useState<SymptomDraft[]>([]); const [pain, setPain] = useState<PainDraft[]>([]);
-  const [sleep, setSleep] = useState({ duration: '', quality: '', awakenings: '' }); const [nutrition, setNutrition] = useState({ water: '', meals: '', appetite: '' });
-  const [activities, setActivities] = useState<ActivityDraft[]>([]); const [medications, setMedications] = useState<MedicationDraft[]>([]);
-  const [notes, setNotes] = useState(''); const [symptomSearch, setSymptomSearch] = useState(''); const [errors, setErrors] = useState<Record<string, string>>({}); const [message, setMessage] = useState<string | null>(null); const [nextId, setNextId] = useState(1);
-  const conceptsQuery = useQuery({ queryKey: ['manual-log-concepts'], queryFn: () => api.get<ManualLogConcept[]>('/api/v1/ontology/manual-log-concepts'), staleTime: 86400000 });
-  const anatomyQuery = useQuery({ queryKey: ['anatomy-structures'], queryFn: () => api.get<Array<{ structure_id: string; display_name: string; category: string; parent_id: string | null; is_internal_organ: boolean }>>('/api/v1/body-state/structures'), staleTime: 86400000 });
-  const anatomyStructures = useMemo(() => (anatomyQuery.data ?? []).filter((s) => !s.is_internal_organ && s.category !== 'root'), [anatomyQuery.data]);
+
+  // --- Form state ---
+  const [mood, setMood] = useState<number | null>(null);
+  const [energy, setEnergy] = useState<number | null>(null);
+  const [stress, setStress] = useState<number | null>(null);
+  const [sleepMinutes, setSleepMinutes] = useState(0);
+  const [sleepQuality, setSleepQuality] = useState<number | null>(null);
+  const [waterMl, setWaterMl] = useState('');
+  const [mealsCount, setMealsCount] = useState('');
+  const [appetiteLevel, setAppetiteLevel] = useState<number | null>(null);
+  const [symptoms, setSymptoms] = useState<SymptomDraft[]>([]);
+  const [pain, setPain] = useState<PainDraft[]>([]);
+  const [activities, setActivities] = useState<ActivityDraft[]>([]);
+  const [medications, setMedications] = useState<MedicationDraft[]>([]);
+  const [vitals, setVitals] = useState<VitalDraft[]>([]);
+  const [symptomSearch, setSymptomSearch] = useState('');
+  const [vitalSearch, setVitalSearch] = useState('');
+  const [notes, setNotes] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [feedback, setFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+  const [nextId, setNextId] = useState(1);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [formInitialized, setFormInitialized] = useState(false);
+
+  // --- Data queries ---
+  const conceptsQuery = useQuery({
+    queryKey: ['manual-log-concepts'],
+    queryFn: () =>
+      api.get<ManualLogConcept[]>('/api/v1/ontology/manual-log-concepts'),
+    staleTime: 86_400_000,
+  });
+
+  const metrics = useDailyMetrics();
+
+  // Fetch today's medication schedule
+  const today = dateToday();
+  const { data: medicationSchedule, refetch: refetchMedSchedule } = useMedicationSchedule(today);
+
+  // Fetch today's existing check-in for edit mode
+  const [selectedDate, setSelectedDate] = useState(dateToday());
+  const todayCheckinQuery = useQuery<DailyCheckInDetail | null>({
+    queryKey: ['daily-checkin', selectedDate],
+    queryFn: async () => {
+      try {
+        return await api.get<DailyCheckInDetail>(`/api/v1/logs/daily-checkin/${selectedDate}`);
+      } catch (err: any) {
+        // 404 means no check-in exists for this date — return null (not an error)
+        if (err?.response?.status === 404) return null;
+        throw err;
+      }
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  // Initialize form from existing entry for the selected date.
+  useEffect(() => {
+    if (formInitialized || todayCheckinQuery.isLoading) return;
+    const existing = todayCheckinQuery.data;
+    if (!existing) {
+      setEditingGroupId(null);
+      setFormInitialized(true);
+      return;
+    }
+
+    setEditingGroupId(existing.group_id);
+    if (existing.overall_wellbeing != null) setMood(existing.overall_wellbeing);
+    if (existing.energy_level != null) setEnergy(existing.energy_level);
+    if (existing.stress_level != null) setStress(existing.stress_level);
+    if (existing.sleep_duration_minutes != null) setSleepMinutes(existing.sleep_duration_minutes);
+    if (existing.sleep_quality != null) setSleepQuality(existing.sleep_quality);
+    if (existing.water_ml != null) setWaterMl(String(existing.water_ml));
+    if (existing.meals_count != null) setMealsCount(String(existing.meals_count));
+    if (existing.appetite_level != null) setAppetiteLevel(existing.appetite_level);
+    if (existing.notes) setNotes(existing.notes);
+    if (existing.symptoms.length > 0) {
+      setSymptoms(existing.symptoms.map((s, i) => ({
+        id: i + 1,
+        conceptId: s.concept_id ?? '',
+        severity: String(s.severity),
+        duration: s.duration_minutes != null ? String(s.duration_minutes) : '',
+        notes: s.notes ?? '',
+      })));
+      setNextId(existing.symptoms.length + 1);
+    }
+    setPain(existing.pain.map((item, i) => ({ id: i + 1, structureId: '', bodyLocationId: item.body_location_id ?? '', severity: String(item.severity), painType: item.pain_type ?? '' })));
+    setActivities(existing.activities.map((item, i) => ({ id: i + 1, activityType: item.activity_type, duration: item.duration_minutes == null ? '' : String(item.duration_minutes), calories: item.calories_burned == null ? '' : String(item.calories_burned) })));
+    setMedications(existing.medications.map((item, i) => ({ id: i + 1, name: item.medication_name, dosage: item.dosage_value == null ? '' : String(item.dosage_value), unit: item.dosage_unit ?? '' })));
+    setVitals(existing.vitals.map((item, i) => ({ id: i + 1, conceptId: item.concept_id ?? '', value: item.value == null ? '' : String(item.value), unit: item.unit ?? '' })));
+    setFormInitialized(true);
+  }, [todayCheckinQuery.data, todayCheckinQuery.isLoading, formInitialized]);
+
+  useEffect(() => {
+    setFormInitialized(false);
+    setEditingGroupId(null);
+    setMood(null); setEnergy(null); setStress(null); setSleepMinutes(0); setSleepQuality(null);
+    setWaterMl(''); setMealsCount(''); setAppetiteLevel(null); setSymptoms([]); setPain([]);
+    setActivities([]); setMedications([]); setVitals([]); setNotes(''); setErrors({});
+  }, [selectedDate]);
+
   const concepts = conceptsQuery.data ?? [];
-  const conceptFor = (terminology: string, code: string) => concepts.find((item) => item.terminology === terminology && item.code === code);
-  const symptomConcepts = useMemo(() => concepts.filter((item) => !vitalDefinitions.some((vital) => vital.terminology === item.terminology && vital.code === item.code)), [concepts]);
-  const filteredSymptomConcepts = useMemo(() => { const search = symptomSearch.trim().toLowerCase(); return search ? symptomConcepts.filter((item) => `${item.short_name ?? ''} ${item.display_name}`.toLowerCase().includes(search)) : symptomConcepts; }, [symptomConcepts, symptomSearch]);
-  const reset = () => { setCheckin({ overall_wellbeing: '', energy_level: '', stress_level: '' }); setVitals({ glucose: '', heartRate: '' }); setSymptoms([]); setPain([]); setSleep({ duration: '', quality: '', awakenings: '' }); setNutrition({ water: '', meals: '', appetite: '' }); setActivities([]); setMedications([]); setNotes(''); setSymptomSearch(''); setErrors({}); };
-  const mutation = useMutation({ mutationFn: (payload: DailyCheckInRequest) => api.post<DailyCheckInResponse>('/api/v1/logs/daily-checkin', payload), onSuccess: async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: ['timeline'] }), queryClient.invalidateQueries({ queryKey: ['bodyState'] }), queryClient.invalidateQueries({ queryKey: ['daily-metrics'] }), queryClient.invalidateQueries({ queryKey: ['daily-log'] })]); reset(); setMessage('Saved successfully. Your timeline is updated.'); }, onError: (error) => setMessage(apiMessage(error)) });
-  const update = <T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, id: number, changes: Partial<T>) => setter((items) => items.map((item) => item.id === id ? { ...item, ...changes } : item));
-  const addSymptom = () => { setSymptoms((items) => [...items, { id: nextId, conceptId: '', severity: '', duration: '', notes: '' }]); setNextId((id) => id + 1); };
-  const addPain = () => { setPain((items) => [...items, { id: nextId, severity: '', painType: '', structureId: '' }]); setNextId((id) => id + 1); };
-  const addActivity = () => { setActivities((items) => [...items, { id: nextId, activityType: '', duration: '', calories: '' }]); setNextId((id) => id + 1); };
-  const addMedication = () => { setMedications((items) => [...items, { id: nextId, name: '', dosage: '', unit: '' }]); setNextId((id) => id + 1); };
+  // All concepts are available for symptom selection.
+  // LOINC concepts (Blood glucose, Heart rate) are vitals;
+  // SNOMED concepts (Headache, Nausea, etc.) are symptoms.
+  // Users pick whichever is relevant to their daily log entry.
+  const symptomConcepts = concepts;
+  const filteredSymptomConcepts = useMemo(() => {
+    const q = symptomSearch.trim().toLowerCase();
+    return q
+      ? symptomConcepts.filter(
+          (c) =>
+            `${c.short_name ?? ''} ${c.display_name}`
+              .toLowerCase()
+              .includes(q),
+        )
+      : symptomConcepts;
+  }, [symptomConcepts, symptomSearch]);
+
+  const filteredVitalConcepts = useMemo(() => {
+    const q = vitalSearch.trim().toLowerCase();
+    return q
+      ? concepts.filter(
+          (c) =>
+            `${c.short_name ?? ''} ${c.display_name}`
+              .toLowerCase()
+              .includes(q),
+        )
+      : concepts;
+  }, [concepts, vitalSearch]);
+
+  // Today's logged data from daily-metrics
+  const todayWellbeing = metrics.data?.today_wellbeing;
+  const latestSleep = metrics.data?.latest_sleep;
+  const recentLogs = metrics.data?.recent_daily_logs ?? [];
+
+  // --- Mutations ---
+  const mutation = useMutation({
+    mutationFn: async (payload: DailyCheckInRequest) => {
+      if (editingGroupId) {
+        // Update existing entry
+        return api.put<DailyCheckInResponse>(
+          `/api/v1/logs/daily-checkin/${editingGroupId}`,
+          payload,
+        );
+      }
+      // Create new entry
+      return api.post<DailyCheckInResponse>('/api/v1/logs/daily-checkin', payload);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['timeline'] }),
+        queryClient.invalidateQueries({ queryKey: ['bodyState'] }),
+        queryClient.invalidateQueries({ queryKey: ['daily-metrics'] }),
+        queryClient.invalidateQueries({ queryKey: ['daily-log'] }),
+        queryClient.invalidateQueries({ queryKey: ['daily-checkin'] }),
+      ]);
+      setFeedback({
+        type: 'success',
+        message: editingGroupId
+          ? 'Daily log updated. Your timeline and dashboard are updated.'
+          : 'Daily log saved. Your timeline and dashboard are updated.',
+      });
+    },
+    onError: (error) => {
+      setFeedback({ type: 'error', message: apiMessage(error) });
+    },
+  });
+
+  // --- Symptom helpers ---
+  const updateSymptom = (id: number, changes: Partial<SymptomDraft>) =>
+    setSymptoms((items) =>
+      items.map((s) => (s.id === id ? { ...s, ...changes } : s)),
+    );
+
+  const addSymptom = () => {
+    setSymptoms((items) => [
+      ...items,
+      { id: nextId, conceptId: '', severity: '', duration: '', notes: '' },
+    ]);
+    setNextId((n) => n + 1);
+  };
+
+  const removeSymptom = (id: number) =>
+    setSymptoms((items) => items.filter((s) => s.id !== id));
+
+  const addPain = () => setPain((items) => [...items, { id: Date.now(), structureId: '', bodyLocationId: '', severity: '', painType: '' }]);
+  const addActivity = () => setActivities((items) => [...items, { id: Date.now(), activityType: '', duration: '', calories: '' }]);
+  const addMedication = () => setMedications((items) => [...items, { id: Date.now(), name: '', dosage: '', unit: '' }]);
+  const addVital = () => setVitals((items) => [...items, { id: Date.now(), conceptId: '', value: '', unit: '' }]);
+
+  // --- Validation ---
+  const validate = (): boolean => {
+    const e: Record<string, string> = {};
+    const hasContent =
+      mood != null ||
+      energy != null ||
+      stress != null ||
+      sleepMinutes > 0 ||
+      symptoms.length > 0 ||
+      pain.length > 0 ||
+      activities.length > 0 ||
+      medications.length > 0 ||
+      vitals.length > 0 ||
+      waterMl.trim() !== '' ||
+      mealsCount.trim() !== '' ||
+      appetiteLevel != null ||
+      notes.trim().length > 0;
+
+    if (!hasContent) {
+      e.form = 'Add at least one item to save a daily log.';
+    }
+
+    symptoms.forEach((s) => {
+      if (!s.conceptId) e[`symptom-${s.id}`] = 'Choose a symptom.';
+      if (!s.severity) e[`symptom-sev-${s.id}`] = 'Choose a severity.';
+      if (
+        s.duration &&
+        (!Number.isInteger(Number(s.duration)) || Number(s.duration) < 0)
+      ) {
+        e[`symptom-dur-${s.id}`] = 'Use whole minutes.';
+      }
+    });
+
+    if (notes.length > 4000) {
+      e.notes = 'Keep the note to 4,000 characters or fewer.';
+    }
+
+    if (waterMl && (!Number.isInteger(Number(waterMl)) || Number(waterMl) < 0)) e.water = 'Use whole millilitres.';
+    if (mealsCount && (!Number.isInteger(Number(mealsCount)) || Number(mealsCount) < 0)) e.meals = 'Use a whole meal count.';
+    pain.forEach((item) => {
+      if (!item.severity || Number(item.severity) < 1 || Number(item.severity) > 10) e[`pain-${item.id}`] = 'Choose a severity from 1 to 10.';
+    });
+    activities.forEach((item) => { if (!item.activityType.trim()) e[`activity-${item.id}`] = 'Enter an activity type.'; });
+    medications.forEach((item) => { if (!item.name.trim()) e[`medication-${item.id}`] = 'Enter a medication name.'; });
+    vitals.forEach((item) => {
+      if (!item.conceptId.trim()) e[`vital-${item.id}`] = 'Choose a vital sign.';
+    });
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  // --- Submit ---
   const save = () => {
-    setMessage(null); const validation: Record<string, string> = {};
-    const hasContent = Object.values(checkin).some(Boolean) || Object.values(vitals).some(Boolean) || symptoms.length > 0 || pain.length > 0 || Object.values(sleep).some(Boolean) || Object.values(nutrition).some(Boolean) || activities.length > 0 || medications.length > 0 || notes.trim();
-    if (!hasContent) validation.form = 'Add at least one item to save a daily log.';
-    (Object.entries(vitals) as Array<[keyof typeof vitals, string]>).forEach(([name, value]) => { if (value && (!Number.isFinite(Number(value)) || Number(value) < 0)) validation[`vital-${name}`] = 'Enter a valid positive value.'; });
-    symptoms.forEach((item) => { if (!item.conceptId) validation[`symptom-${item.id}`] = 'Choose a symptom.'; if (!item.severity) validation[`symptom-severity-${item.id}`] = 'Choose a severity.'; if (item.duration && (!Number.isInteger(Number(item.duration)) || Number(item.duration) < 0)) validation[`symptom-duration-${item.id}`] = 'Use whole minutes.'; });
-    pain.forEach((item) => { if (!item.severity) validation[`pain-${item.id}`] = 'Choose a severity.'; });
-    if ((sleep.quality || sleep.awakenings) && !sleep.duration) validation.sleep = 'Sleep duration is required when recording sleep details.';
-    if (sleep.duration && (!Number.isInteger(Number(sleep.duration)) || Number(sleep.duration) < 1)) validation.sleep = 'Sleep duration must be at least one minute.';
-    if ((checkin.energy_level || checkin.stress_level) && !checkin.overall_wellbeing) validation.checkin = 'Overall wellbeing is required when recording energy or stress.';
-    if (sleep.awakenings && (!Number.isInteger(Number(sleep.awakenings)) || Number(sleep.awakenings) < 0)) validation.awakenings = 'Use zero or more whole awakenings.';
-    if (nutrition.water && (!Number.isInteger(Number(nutrition.water)) || Number(nutrition.water) < 0)) validation.water = 'Use zero or more whole millilitres.';
-    if (nutrition.meals && (!Number.isInteger(Number(nutrition.meals)) || Number(nutrition.meals) < 0)) validation.meals = 'Use zero or more whole meals.';
-    activities.forEach((item) => { if (!item.activityType.trim()) validation[`activity-${item.id}`] = 'Enter an activity type.'; }); medications.forEach((item) => { if (!item.name.trim()) validation[`medication-${item.id}`] = 'Enter a medication name.'; if (item.dosage && !Number.isFinite(Number(item.dosage))) validation[`medication-dose-${item.id}`] = 'Enter a valid dosage.'; }); if (notes.length > 4000) validation.notes = 'Keep the note to 4,000 characters or fewer.';
-    setErrors(validation); if (Object.keys(validation).length) return;
-    const payload: DailyCheckInRequest = { log_date: dateToday(), symptoms: symptoms.map((item) => ({ concept_id: item.conceptId, severity: Number(item.severity), ...(item.duration ? { duration_minutes: Number(item.duration) } : {}), ...(item.notes.trim() ? { notes: item.notes.trim() } : {}) })), vitals: vitalDefinitions.flatMap((definition) => { const value = vitals[definition.key]; const concept = conceptFor(definition.terminology, definition.code); return value && concept ? [{ concept_id: concept.id, value: Number(value), unit: definition.unit }] : []; }),      pain: pain.map((item) => ({ severity: Number(item.severity), ...(item.structureId ? { structure_id: item.structureId } : {}), ...(item.painType.trim() ? { pain_type: item.painType.trim() } : {}) })), activities: activities.map((item) => ({ activity_type: item.activityType.trim(), ...(item.duration ? { duration_minutes: Number(item.duration) } : {}), ...(item.calories ? { calories_burned: Number(item.calories) } : {}) })), medications: medications.map((item) => ({ medication_name: item.name.trim(), ...(item.dosage ? { dosage_value: Number(item.dosage) } : {}), ...(item.unit.trim() ? { dosage_unit: item.unit.trim() } : {}) })), ...(checkin.overall_wellbeing ? { overall_wellbeing: Number(checkin.overall_wellbeing) } : {}), ...(checkin.energy_level ? { energy_level: Number(checkin.energy_level) } : {}), ...(checkin.stress_level ? { stress_level: Number(checkin.stress_level) } : {}), ...(sleep.duration ? { sleep: { duration_minutes: Number(sleep.duration), ...(sleep.quality ? { sleep_quality: Number(sleep.quality) } : {}), ...(sleep.awakenings ? { awakenings: Number(sleep.awakenings) } : {}) } } : {}), ...(Object.values(nutrition).some(Boolean) ? { nutrition: { ...(nutrition.water ? { water_ml: Number(nutrition.water) } : {}), ...(nutrition.meals ? { meals_count: Number(nutrition.meals) } : {}), ...(nutrition.appetite ? { appetite_level: Number(nutrition.appetite) } : {}) } } : {}), ...(notes.trim() ? { notes: notes.trim() } : {}) };
+    setFeedback(null);
+    if (!validate()) return;
+
+    const payload: DailyCheckInRequest = {
+      log_date: selectedDate,
+      ...(mood != null ? { overall_wellbeing: mood } : {}),
+      ...(energy != null ? { energy_level: energy } : {}),
+      ...(stress != null ? { stress_level: stress } : {}),
+      ...(sleepMinutes > 0
+        ? {
+            sleep: {
+              duration_minutes: sleepMinutes,
+              ...(sleepQuality != null ? { sleep_quality: sleepQuality } : {}),
+            },
+          }
+        : {}),
+      symptoms: symptoms.map((s) => ({
+        concept_id: s.conceptId,
+        severity: Number(s.severity),
+        ...(s.duration ? { duration_minutes: Number(s.duration) } : {}),
+        ...(s.notes.trim() ? { notes: s.notes.trim() } : {}),
+      })),
+      vitals: vitals.map((item) => ({
+        concept_id: item.conceptId.trim(),
+        value: item.value.trim() ? Number(item.value) : null,
+        unit: item.unit.trim() || null,
+      })),
+      pain: pain.map((item) => ({ severity: Number(item.severity), ...(item.bodyLocationId.trim() ? { body_location_id: item.bodyLocationId.trim() } : {}), ...(item.structureId.trim() ? { structure_id: item.structureId.trim() } : {}), ...(item.painType.trim() ? { pain_type: item.painType.trim() } : {}) })),
+      activities: activities.map((item) => ({ activity_type: item.activityType.trim(), ...(item.duration ? { duration_minutes: Number(item.duration) } : {}), ...(item.calories ? { calories_burned: Number(item.calories) } : {}) })),
+      medications: medications.map((item) => ({ medication_name: item.name.trim(), ...(item.dosage ? { dosage_value: Number(item.dosage) } : {}), ...(item.unit.trim() ? { dosage_unit: item.unit.trim() } : {}) })),
+      ...((waterMl || mealsCount || appetiteLevel != null) ? { nutrition: { ...(waterMl ? { water_ml: Number(waterMl) } : {}), ...(mealsCount ? { meals_count: Number(mealsCount) } : {}), ...(appetiteLevel != null ? { appetite_level: appetiteLevel } : {}) } } : {}),
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
+    };
+
     mutation.mutate(payload);
   };
-  return <SafeAreaView style={styles.container} edges={['top']}><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled"><View style={styles.header}><View style={styles.headerRow}><View><Text style={styles.title}>Daily Log</Text><Text style={styles.subtitle}>Track how you're feeling today</Text></View><View style={styles.dateBadge}><Text style={styles.dateBadgeDay}>{new Date().getDate()}</Text><Text style={styles.dateBadgeMonth}>{new Date().toLocaleDateString('en-US', { month: 'short' })}</Text></View></View></View>{message ? <View style={[styles.message, mutation.isSuccess ? styles.messageSuccess : styles.messageError]}><Text style={styles.messageText}>{message}</Text></View> : null}{errors.form ? <Text style={styles.error}>{errors.form}</Text> : null}
-    <SectionCard title="Today’s check-in" subtitle="A quick view of how today feels."><View style={styles.metricGrid}>{(Object.keys(scores) as ScoreName[]).map((name) => <View key={name} style={styles.metric}><Text style={styles.inputLabel}>{scores[name]}</Text><ChoiceRow value={checkin[name]} onChange={(value) => setCheckin((current) => ({ ...current, [name]: value }))} labels={name === 'stress_level' ? ['Calm', 'High'] : ['Low', 'High']} /></View>)}</View>{errors.checkin ? <Text style={styles.error}>{errors.checkin}</Text> : null}</SectionCard>
-    <SectionCard title="Vitals" subtitle="Canonical measurements from your clinical record.">{conceptsQuery.isLoading ? <Text style={styles.mutedText}>Loading clinical definitions…</Text> : vitalDefinitions.map((definition) => { const found = conceptFor(definition.terminology, definition.code); return <Input key={definition.key} label={`${definition.label} · ${definition.unit}`} value={vitals[definition.key]} onChangeText={(value) => setVitals((current) => ({ ...current, [definition.key]: value }))} placeholder={definition.key === 'glucose' ? 'e.g. 95' : 'e.g. 72'} keyboardType="decimal-pad" disabled={!found || mutation.isPending} error={errors[`vital-${definition.key}`] || (!found ? 'This canonical vital is not currently available.' : undefined)} />; })}</SectionCard>
-    <SectionCard title="Symptoms" subtitle="Add each symptom separately with its severity and context.">{symptoms.map((item) => <View key={item.id} style={styles.repeatItem}><Text style={styles.inputLabel}>Symptom</Text>{symptomConcepts.length ? <><Input label="Search canonical symptoms" value={symptomSearch} onChangeText={setSymptomSearch} placeholder="Search available concepts" /><View style={styles.chips}>{filteredSymptomConcepts.map((concept) => <Pressable key={concept.id} onPress={() => update(setSymptoms, item.id, { conceptId: concept.id })} style={[styles.conceptChip, item.conceptId === concept.id && styles.conceptChipSelected]}><Text style={[styles.conceptText, item.conceptId === concept.id && styles.choiceTextSelected]}>{concept.short_name || concept.display_name}</Text></Pressable>)}</View></> : <Text style={styles.mutedText}>No symptom concepts are currently supplied by the canonical endpoint.</Text>}<Text style={styles.inputLabel}>Severity (1–10)</Text><SeveritySelector value={item.severity} onChange={(severity) => update(setSymptoms, item.id, { severity })} /><Input label="Duration (minutes)" value={item.duration} onChangeText={(duration) => update(setSymptoms, item.id, { duration })} keyboardType="number-pad" error={errors[`symptom-${item.id}`] || errors[`symptom-severity-${item.id}`] || errors[`symptom-duration-${item.id}`]} /><Input label="Notes (optional)" value={item.notes} onChangeText={(noteText) => update(setSymptoms, item.id, { notes: noteText })} multiline autoCapitalize="sentences" /><Pressable onPress={() => setSymptoms((items) => items.filter((entry) => entry.id !== item.id))}><Text style={styles.remove}>Remove symptom</Text></Pressable></View>)}<Button title="Add symptom" variant="outline" fullWidth onPress={addSymptom} disabled={mutation.isPending || !symptomConcepts.length} /></SectionCard>
-    <SectionCard title="Pain" subtitle="Optionally attach a body location to update the 3D body map.">{pain.map((item) => <View key={item.id} style={styles.repeatItem}><Text style={styles.inputLabel}>Body location (optional)</Text>{anatomyQuery.isLoading ? <Text style={styles.mutedText}>Loading body locations…</Text> : <View style={styles.chips}>{anatomyStructures.map((s) => <Pressable key={s.structure_id} onPress={() => update(setPain, item.id, { structureId: item.structureId === s.structure_id ? '' : s.structure_id })} style={[styles.conceptChip, item.structureId === s.structure_id && styles.conceptChipSelected]}><Text style={[styles.conceptText, item.structureId === s.structure_id && styles.choiceTextSelected]}>{s.display_name}</Text></Pressable>)}</View>}<Text style={styles.inputLabel}>Severity (1–10)</Text><SeveritySelector value={item.severity} onChange={(severity) => update(setPain, item.id, { severity })} /><Input label="Pain type (optional)" value={item.painType} onChangeText={(painType) => update(setPain, item.id, { painType })} placeholder="e.g. aching" autoCapitalize="sentences" error={errors[`pain-${item.id}`]} /><Pressable onPress={() => setPain((items) => items.filter((entry) => entry.id !== item.id))}><Text style={styles.remove}>Remove pain entry</Text></Pressable></View>)}<Button title="Add pain" variant="outline" fullWidth onPress={addPain} disabled={mutation.isPending} /></SectionCard>
-    <SectionCard title="Sleep"><Input label="Duration (minutes)" value={sleep.duration} onChangeText={(duration) => setSleep((current) => ({ ...current, duration }))} keyboardType="number-pad" error={errors.sleep} /><Text style={styles.inputLabel}>Sleep quality</Text><ChoiceRow value={sleep.quality} onChange={(quality) => setSleep((current) => ({ ...current, quality }))} labels={['Poor', 'Restful']} /><Input label="Awakenings" value={sleep.awakenings} onChangeText={(awakenings) => setSleep((current) => ({ ...current, awakenings }))} keyboardType="number-pad" error={errors.awakenings} /></SectionCard>
-    <SectionCard title="Nutrition"><View style={styles.metricGrid}><Input label="Water (mL)" value={nutrition.water} onChangeText={(water) => setNutrition((current) => ({ ...current, water }))} keyboardType="number-pad" error={errors.water} /><Input label="Meals" value={nutrition.meals} onChangeText={(meals) => setNutrition((current) => ({ ...current, meals }))} keyboardType="number-pad" error={errors.meals} /></View><Text style={styles.inputLabel}>Appetite</Text><ChoiceRow value={nutrition.appetite} onChange={(appetite) => setNutrition((current) => ({ ...current, appetite }))} labels={['Low', 'High']} /></SectionCard>
-    <SectionCard title="Activity">{activities.map((item) => <View key={item.id} style={styles.repeatItem}><Input label="Activity type" value={item.activityType} onChangeText={(activityType) => update(setActivities, item.id, { activityType })} placeholder="e.g. Walking" autoCapitalize="words" error={errors[`activity-${item.id}`]} /><View style={styles.metricGrid}><Input label="Duration (minutes)" value={item.duration} onChangeText={(duration) => update(setActivities, item.id, { duration })} keyboardType="number-pad" /><Input label="Calories burned" value={item.calories} onChangeText={(calories) => update(setActivities, item.id, { calories })} keyboardType="decimal-pad" /></View><Pressable onPress={() => setActivities((items) => items.filter((entry) => entry.id !== item.id))}><Text style={styles.remove}>Remove activity</Text></Pressable></View>)}<Button title="Add activity" variant="outline" fullWidth onPress={addActivity} disabled={mutation.isPending} /></SectionCard>
-    <SectionCard title="Medications" subtitle="Record medications you took today.">{medications.map((item) => <View key={item.id} style={styles.repeatItem}><Input label="Medication name" value={item.name} onChangeText={(name) => update(setMedications, item.id, { name })} autoCapitalize="words" error={errors[`medication-${item.id}`]} /><View style={styles.metricGrid}><Input label="Dosage" value={item.dosage} onChangeText={(dosage) => update(setMedications, item.id, { dosage })} keyboardType="decimal-pad" error={errors[`medication-dose-${item.id}`]} /><Input label="Unit" value={item.unit} onChangeText={(unit) => update(setMedications, item.id, { unit })} placeholder="e.g. mg" /></View><Pressable onPress={() => setMedications((items) => items.filter((entry) => entry.id !== item.id))}><Text style={styles.remove}>Remove medication</Text></Pressable></View>)}<Button title="Add medication" variant="outline" fullWidth onPress={addMedication} disabled={mutation.isPending} /></SectionCard>
-    <SectionCard title="Medical Records" subtitle="Attach a medical document to this daily log."><Text style={styles.mutedText}>Reference a processed document or upload a new one.</Text><Button title="Upload New Document" variant="outline" fullWidth onPress={() => navigation.navigate('DocumentUpload')} disabled={mutation.isPending} /><View style={styles.docListHeader}><Text style={styles.mutedText}>Existing records:</Text></View>{documents.length === 0 ? <Text style={styles.mutedText}>No documents uploaded yet.</Text> : documents.slice(0, 10).map((doc) => <Pressable key={doc.document_id} style={styles.docItem} onPress={() => navigation.navigate('DocumentDetail', { documentId: doc.document_id })}><Text style={styles.docItemName} numberOfLines={1}>📄 {doc.file_hash.slice(0, 16)}...</Text><Text style={styles.docItemStatus}>{doc.status === 'COMPLETED' ? '✓ Processed' : doc.status === 'PROCESSING' ? '● Processing...' : doc.status}</Text></Pressable>)}</SectionCard>
-    <SectionCard title="Daily note" subtitle="Notes are sent to MedGraph’s existing safe-storage and de-identification pipeline."><Input value={notes} onChangeText={setNotes} placeholder="Anything else you want to record?" multiline autoCapitalize="sentences" error={errors.notes} /><Text style={styles.mutedText}>{notes.length}/4000</Text></SectionCard><Button title="Save Daily Log" onPress={save} fullWidth loading={mutation.isPending} disabled={conceptsQuery.isLoading || mutation.isPending} style={styles.saveButton} />
-  </ScrollView></SafeAreaView>;
+
+  // =========================================================================
+  // Render
+  // =========================================================================
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* ── Header ── */}
+        <View style={styles.header}>
+          <View style={styles.headerRow}>
+            <View style={styles.headerText}>
+              <Text style={styles.title}>Daily Log</Text>
+              <Text style={styles.subtitle}>
+                How are you feeling today?
+              </Text>
+            </View>
+            <View style={styles.dateBadge}>
+              <Text style={styles.dateBadgeDay}>
+                {new Date(`${selectedDate}T00:00:00`).getDate()}
+              </Text>
+              <Text style={styles.dateBadgeMonth}>
+                {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short' })}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.dateControls}>
+            <Pressable onPress={() => setSelectedDate((value) => shiftDate(value, -1))} style={styles.dateControl}>
+              <Text style={styles.dateControlText}>Previous</Text>
+            </Pressable>
+            <Text style={styles.selectedDateText}>{new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</Text>
+            <Pressable onPress={() => setSelectedDate(dateToday())} style={styles.dateControl}>
+              <Text style={styles.dateControlText}>Today</Text>
+            </Pressable>
+            <Pressable onPress={() => setSelectedDate((value) => shiftDate(value, 1))} style={styles.dateControl}>
+              <Text style={styles.dateControlText}>Next</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* ── Feedback banner ── */}
+        {feedback ? (
+          <View
+            style={[
+              styles.banner,
+              feedback.type === 'success' ? styles.bannerSuccess : styles.bannerError,
+            ]}
+          >
+            <Text style={styles.bannerText}>{feedback.message}</Text>
+            <Pressable onPress={() => setFeedback(null)} accessibilityLabel="Dismiss">
+              <Text style={styles.bannerDismiss}>✕</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* ── Today's logged data (read-only summary) ── */}
+        {selectedDate === dateToday() && todayWellbeing && (
+          <View style={styles.todaySummary}>
+            <Text style={styles.todaySummaryTitle}>Today's log</Text>
+            <View style={styles.todayGrid}>
+              {todayWellbeing.overall_wellbeing != null && <View style={styles.todayItem}>
+                <Text style={styles.todayLabel}>Mood</Text>
+                <Text style={styles.todayValue}>
+                  {MOOD_OPTIONS.find((m) => m.value === todayWellbeing.overall_wellbeing)?.label ??
+                    `${todayWellbeing.overall_wellbeing}/5`}
+                </Text>
+              </View>}
+              {todayWellbeing.energy_level != null && <View style={styles.todayItem}>
+                <Text style={styles.todayLabel}>Energy</Text>
+                <Text style={styles.todayValue}>{todayWellbeing.energy_level}/5</Text>
+              </View>}
+              {todayWellbeing.stress_level != null && <View style={styles.todayItem}>
+                <Text style={styles.todayLabel}>Stress</Text>
+                <Text style={styles.todayValue}>{todayWellbeing.stress_level}/5</Text>
+              </View>}
+              {latestSleep && (
+                <View style={styles.todayItem}>
+                  <Text style={styles.todayLabel}>Sleep</Text>
+                  <Text style={styles.todayValue}>
+                    {formatSleepDuration(latestSleep.duration_minutes)}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.todayNote}>
+              Saving again updates this day's log when one exists.
+            </Text>
+          </View>
+        )}
+
+        {/* ── Form error ── */}
+        {errors.form ? <Text style={styles.formError}>{errors.form}</Text> : null}
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* SLEEP                                                             */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        <Section category="sleep" title="Sleep" subtitle="How much did you sleep last night?">
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>Duration</Text>
+            <SleepDurationPicker
+              totalMinutes={sleepMinutes}
+              onChange={setSleepMinutes}
+            />
+
+            <View style={styles.fieldSpacer} />
+            <Text style={styles.fieldLabel}>Quality</Text>
+            <QualitySelector
+              value={sleepQuality}
+              onChange={setSleepQuality}
+              labels={SLEEP_QUALITY_LABELS}
+            />
+            {sleepQuality != null && (
+              <Text style={styles.qualityHint}>
+                {SLEEP_QUALITY_LABELS[sleepQuality]}
+              </Text>
+            )}
+          </View>
+        </Section>
+
+        <Divider />
+
+        <Section category="symptomsPain" title="Symptoms & pain" subtitle="Record symptoms and pain only when present.">
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>Pain entries</Text>
+            {pain.map((item) => (
+              <View key={item.id} style={styles.entryBlock}>
+                <Input label="Structure ID (optional)" value={item.structureId} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, structureId: value } : painItem))} placeholder="e.g. RIGHT_KNEE" />
+                <Input label="Body location ID (optional)" value={item.bodyLocationId} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, bodyLocationId: value } : painItem))} />
+                <Input label="Pain severity (1–10)" value={item.severity} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, severity: value } : painItem))} keyboardType="number-pad" error={errors[`pain-${item.id}`]} />
+                <Input label="Pain type (optional)" value={item.painType} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, painType: value } : painItem))} placeholder="Sharp, dull, throbbing" />
+                <Pressable onPress={() => setPain((items) => items.filter((painItem) => painItem.id !== item.id))}><Text style={styles.removeBtn}>Remove pain</Text></Pressable>
+              </View>
+            ))}
+            <Pressable onPress={addPain} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add pain</Text></Pressable>
+          </View>
+        </Section>
+
+        <Divider />
+
+        <Section category="activity" title="Activity" subtitle="Exercise type, duration, and calories.">
+          <View style={styles.card}>
+            {activities.map((item) => (
+              <View key={item.id} style={styles.entryBlock}>
+                <Input label="Activity type" value={item.activityType} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, activityType: value } : activity))} placeholder="Walking, yoga, running" error={errors[`activity-${item.id}`]} />
+                <Input label="Duration (minutes)" value={item.duration} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, duration: value } : activity))} keyboardType="number-pad" />
+                <Input label="Calories (optional)" value={item.calories} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, calories: value } : activity))} keyboardType="decimal-pad" />
+                <Pressable onPress={() => setActivities((items) => items.filter((activity) => activity.id !== item.id))}><Text style={styles.removeBtn}>Remove activity</Text></Pressable>
+              </View>
+            ))}
+            <Pressable onPress={addActivity} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add activity</Text></Pressable>
+          </View>
+        </Section>
+
+        <Divider />
+
+        <Section category="nutrition" title="Hydration & nutrition" subtitle="Use the fields recorded by HealthGraph.">
+          <View style={styles.card}>
+            <Input label="Water (ml)" value={waterMl} onChangeText={setWaterMl} keyboardType="number-pad" error={errors.water} />
+            <Input label="Meals count" value={mealsCount} onChangeText={setMealsCount} keyboardType="number-pad" error={errors.meals} />
+            <Text style={styles.fieldLabel}>Appetite</Text>
+            <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={ENERGY_LABELS} />
+          </View>
+        </Section>
+
+        <Divider />
+
+        {/* ── Today's Scheduled Medications ── */}
+        {medicationSchedule && medicationSchedule.length > 0 && (
+          <Section category="medication" title="Today's Medications" subtitle="Mark doses as taken.">
+            <View style={styles.card}>
+              {medicationSchedule.map((item) => {
+                const med = item.medication;
+                const timeStr = item.scheduled_time;
+                const [hours, minutes] = timeStr.split(':').map(Number);
+                const period = hours >= 12 ? 'PM' : 'AM';
+                const displayHours = hours % 12 || 12;
+                const formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+
+                return (
+                  <View key={`${med.medication_id}-${item.scheduled_time}`} style={styles.medScheduleRow}>
+                    <View style={styles.medScheduleInfo}>
+                      <Text style={styles.medScheduleName}>{med.name}</Text>
+                      <Text style={styles.medScheduleDetail}>
+                        {med.strength}{med.strength_unit ? ` ${med.strength_unit}` : ''}
+                        {` · ${formattedTime}`}
+                      </Text>
+                    </View>
+                    {item.taken ? (
+                      <View style={styles.medTakenBadge}>
+                        <Text style={styles.medTakenText}>✓ Taken</Text>
+                        {item.taken_at && (
+                          <Text style={styles.medTakenTime}>
+                            {new Date(item.taken_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                          </Text>
+                        )}
+                      </View>
+                    ) : (
+                      <Pressable
+                        style={styles.medTakeButton}
+                        onPress={async () => {
+                          try {
+                            const scheduledFor = new Date();
+                            scheduledFor.setHours(hours, minutes, 0, 0);
+                            await api.post('/api/v1/medications/taken', {
+                              medication_id: med.medication_id,
+                              taken_at: new Date().toISOString(),
+                              scheduled_for: scheduledFor.toISOString(),
+                              dose_taken: med.dose_amount,
+                              dose_unit: med.dose_unit,
+                              status: 'TAKEN',
+                            });
+                            refetchMedSchedule();
+                          } catch (error) {
+                            // Silent fail - user can retry
+                          }
+                        }}
+                      >
+                        <Text style={styles.medTakeButtonText}>Taken</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </Section>
+        )}
+
+        <Divider />
+
+        <Section category="medication" title="Additional Medications" subtitle="Record any other medicine taken today.">
+          <View style={styles.card}>
+            {medications.map((item) => (
+              <View key={item.id} style={styles.entryBlock}>
+                <Input label="Medication name" value={item.name} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, name: value } : medication))} error={errors[`medication-${item.id}`]} />
+                <View style={styles.inlineFields}>
+                  <Input label="Dosage" value={item.dosage} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, dosage: value } : medication))} keyboardType="decimal-pad" style={styles.inlineInput} />
+                  <Input label="Unit" value={item.unit} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, unit: value } : medication))} placeholder="mg" style={styles.inlineInput} />
+                </View>
+                <Pressable onPress={() => setMedications((items) => items.filter((medication) => medication.id !== item.id))}><Text style={styles.removeBtn}>Remove medication</Text></Pressable>
+              </View>
+            ))}
+            <Pressable onPress={addMedication} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add medication</Text></Pressable>
+          </View>
+        </Section>
+
+        <Divider />
+
+        <Section category="vitals" title="Vitals" subtitle="Select a vital sign, enter a value and unit.">
+          <View style={styles.card}>
+            {vitals.map((item) => {
+              const selectedConcept = concepts.find((c) => c.id === item.conceptId);
+              return (
+                <View key={item.id} style={styles.entryBlock}>
+                  {selectedConcept ? (
+                    <View style={styles.selectedVitalRow}>
+                      <View style={styles.selectedVitalInfo}>
+                        <Text style={styles.selectedVitalName}>{selectedConcept.short_name || selectedConcept.display_name}</Text>
+                        <Text style={styles.selectedVitalSub}>{selectedConcept.display_name}</Text>
+                      </View>
+                      <Pressable onPress={() => setVitals((items) => items.map((v) => v.id === item.id ? { ...v, conceptId: '' } : v))}>
+                        <Text style={styles.removeBtn}>Change</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <>
+                      <Input
+                        label="Search vitals"
+                        value={vitalSearch}
+                        onChangeText={setVitalSearch}
+                        placeholder="Heart Rate, Blood Pressure…"
+                      />
+                      <View style={styles.chipGrid}>
+                        {filteredVitalConcepts.slice(0, 20).map((concept) => (
+                          <Pressable
+                            key={concept.id}
+                            onPress={() => setVitals((items) => items.map((v) => v.id === item.id ? { ...v, conceptId: concept.id } : v))}
+                            style={[styles.chip, item.conceptId === concept.id && styles.chipSelected]}
+                          >
+                            <Text style={[styles.chipText, item.conceptId === concept.id && styles.chipTextSelected]}>
+                              {concept.short_name || concept.display_name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </>
+                  )}
+                  <View style={styles.inlineFields}>
+                    <Input label="Value (optional)" value={item.value} onChangeText={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, value } : vital))} keyboardType="decimal-pad" style={styles.inlineInput} />
+                    <Input label="Unit (optional)" value={item.unit} onChangeText={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, unit: value } : vital))} placeholder="bpm, mmHg" style={styles.inlineInput} />
+                  </View>
+                  {errors[`vital-${item.id}`] ? <Text style={styles.fieldError}>{errors[`vital-${item.id}`]}</Text> : null}
+                  <Pressable onPress={() => setVitals((items) => items.filter((vital) => vital.id !== item.id))}><Text style={styles.removeBtn}>Remove vital</Text></Pressable>
+                </View>
+              );
+            })}
+            <Pressable onPress={addVital} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add vital</Text></Pressable>
+          </View>
+        </Section>
+
+        <Divider />
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* HOW YOU FEEL                                                     */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        <Section
+          category="wellbeing"
+          title="How you feel"
+          subtitle="Rate your mood, energy, and stress today."
+        >
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>Mood</Text>
+            <MoodSelector value={mood} onChange={setMood} />
+
+            <View style={styles.fieldSpacer} />
+            <Text style={styles.fieldLabel}>Energy</Text>
+            <ScaleSelector value={energy} onChange={setEnergy} labels={ENERGY_LABELS} />
+
+            <View style={styles.fieldSpacer} />
+            <Text style={styles.fieldLabel}>Stress</Text>
+            <ScaleSelector value={stress} onChange={setStress} labels={STRESS_LABELS} />
+          </View>
+        </Section>
+
+        <Divider />
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* SYMPTOMS                                                         */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        <Section
+          category="symptoms"
+          title="Symptoms"
+          subtitle="Select symptoms and rate their severity."
+        >
+          {symptoms.map((item) => (
+            <View key={item.id} style={styles.symptomCard}>
+              <View style={styles.symptomHeader}>
+                <Text style={styles.symptomIndex}>Symptom</Text>
+                <Pressable
+                  onPress={() => removeSymptom(item.id)}
+                  accessibilityLabel="Remove symptom"
+                >
+                  <Text style={styles.removeBtn}>Remove</Text>
+                </Pressable>
+              </View>
+
+              {symptomConcepts.length > 0 ? (
+                <>
+                  <Input
+                    label="Search symptoms"
+                    value={symptomSearch}
+                    onChangeText={setSymptomSearch}
+                    placeholder="Type to search…"
+                  />
+                  <View style={styles.chipGrid}>
+                    {filteredSymptomConcepts.slice(0, 20).map((concept) => (
+                      <Pressable
+                        key={concept.id}
+                        onPress={() =>
+                          updateSymptom(item.id, { conceptId: concept.id })
+                        }
+                        style={[
+                          styles.chip,
+                          item.conceptId === concept.id && styles.chipSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.chipText,
+                            item.conceptId === concept.id && styles.chipTextSelected,
+                          ]}
+                        >
+                          {concept.short_name || concept.display_name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              ) : (
+                <Text style={styles.muted}>
+                  No symptom concepts available.
+                </Text>
+              )}
+
+              {errors[`symptom-${item.id}`] ? (
+                <Text style={styles.fieldError}>
+                  {errors[`symptom-${item.id}`]}
+                </Text>
+              ) : null}
+
+              <View style={styles.fieldSpacer} />
+              <Text style={styles.fieldLabel}>Severity (1–10)</Text>
+              <View style={styles.severityRow}>
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                  <Pressable
+                    key={n}
+                    onPress={() => updateSymptom(item.id, { severity: String(n) })}
+                    style={[
+                      styles.severityDot,
+                      item.severity === String(n) && styles.severityDotSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.severityDotText,
+                        item.severity === String(n) && styles.severityDotTextSelected,
+                      ]}
+                    >
+                      {n}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {errors[`symptom-sev-${item.id}`] ? (
+                <Text style={styles.fieldError}>
+                  {errors[`symptom-sev-${item.id}`]}
+                </Text>
+              ) : null}
+
+              <View style={styles.fieldSpacer} />
+              <Input
+                label="Duration (minutes, optional)"
+                value={item.duration}
+                onChangeText={(duration) =>
+                  updateSymptom(item.id, { duration })
+                }
+                keyboardType="number-pad"
+                error={errors[`symptom-dur-${item.id}`]}
+              />
+
+              <Input
+                label="Notes (optional)"
+                value={item.notes}
+                onChangeText={(text) => updateSymptom(item.id, { notes: text })}
+                multiline
+                autoCapitalize="sentences"
+                placeholder="Any additional context…"
+              />
+            </View>
+          ))}
+
+          <Pressable
+            onPress={addSymptom}
+            style={styles.addBtn}
+            disabled={mutation.isPending || !symptomConcepts.length}
+          >
+            <Text style={styles.addBtnText}>+ Add symptom</Text>
+          </Pressable>
+        </Section>
+
+        <Divider />
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* NOTES                                                            */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        <Section
+          category="notes"
+          title="Notes"
+          subtitle="Optional. Anything else you want to record."
+        >
+          <View style={styles.card}>
+            <Input
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Write a note…"
+              multiline
+              autoCapitalize="sentences"
+              disabled={mutation.isPending}
+              error={errors.notes}
+              hint={`${notes.length}/4000`}
+            />
+          </View>
+        </Section>
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* SAVE                                                             */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        <Button           title={mutation.isPending ? 'Saving…' : editingGroupId ? "Update today's log" : "Save today's log"}
+          onPress={save}
+          fullWidth
+          loading={mutation.isPending}
+          disabled={conceptsQuery.isLoading || mutation.isPending}
+          style={styles.saveButton}
+        />
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* RECENT HISTORY                                                   */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {recentLogs.length > 0 && (
+          <>
+            <Divider />
+            <Section title="Recent history" subtitle="Your past daily logs.">
+              {recentLogs.slice(0, 14).map((log) => (
+                <View key={log.log_date} style={styles.historyRow}>
+                  <View style={styles.historyLeft}>
+                    <Text style={styles.historyDate}>
+                      {formatRelativeDate(log.log_date)}
+                    </Text>
+                    <Text style={styles.historyCats}>
+                      {log.categories
+                        .map((c) =>
+                          c
+                            .replaceAll('_', ' ')
+                            .toLowerCase()
+                            .replace(/\b\w/g, (l) => l.toUpperCase()),
+                        )
+                        .join(' · ')}
+                    </Text>
+                  </View>
+                  <Text style={styles.historyCount}>
+                    {log.event_count} {log.event_count === 1 ? 'event' : 'events'}
+                  </Text>
+                </View>
+              ))}
+            </Section>
+          </>
+        )}
+
+        {metrics.isError ? (
+          <Text style={styles.globalError}>
+            Daily data is temporarily unavailable. Pull down to retry.
+          </Text>
+        ) : null}
+
+        {/* Spacer */}
+        <View style={{ height: SPACING.xxl }} />
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
+
+// ===========================================================================
+// Styles
+// ===========================================================================
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background }, content: { padding: SPACING.md, paddingBottom: SPACING.xxl, gap: SPACING.lg }, header: { paddingVertical: SPACING.lg }, headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, title: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary }, subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginTop: SPACING.xs }, dateBadge: { width: 52, height: 52, borderRadius: BORDER_RADIUS.lg, backgroundColor: COLORS.primaryBg, alignItems: 'center', justifyContent: 'center' }, dateBadgeDay: { ...TYPOGRAPHY.h2, color: COLORS.primary, lineHeight: 26 }, dateBadgeMonth: { ...TYPOGRAPHY.label, color: COLORS.primaryLight, fontSize: 10, lineHeight: 14 }, section: { gap: SPACING.xs }, sectionTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary }, sectionSubtitle: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary }, sectionContent: { gap: SPACING.md, marginTop: SPACING.sm }, metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md }, metric: { flexGrow: 1, flexBasis: 92 }, inputLabel: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary, marginBottom: SPACING.xs }, choiceRow: { flexDirection: 'row', gap: SPACING.xs }, choice: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: BORDER_RADIUS.sm, backgroundColor: COLORS.surfaceElevated }, choiceSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary }, choiceText: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textSecondary }, choiceTextSelected: { color: '#ffffff' }, choiceLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACING.xs }, mutedText: { ...TYPOGRAPHY.caption, color: COLORS.textMuted }, severityRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs }, severity: { width: 31, height: 31, borderRadius: BORDER_RADIUS.full, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surfaceElevated, borderWidth: 1, borderColor: COLORS.border }, severitySelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary }, severityText: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary }, repeatItem: { gap: SPACING.sm, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border }, remove: { ...TYPOGRAPHY.captionStrong, color: COLORS.error, paddingVertical: SPACING.xs }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs }, conceptChip: { paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderWidth: 1, borderColor: COLORS.border, borderRadius: BORDER_RADIUS.full }, conceptChipSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary }, conceptText: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary }, saveButton: { marginTop: SPACING.sm }, message: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md }, messageSuccess: { backgroundColor: COLORS.accentBg }, messageError: { backgroundColor: '#feecec' }, messageText: { ...TYPOGRAPHY.body, color: COLORS.textPrimary }, error: { ...TYPOGRAPHY.captionStrong, color: COLORS.error },
-  docListHeader: { marginTop: SPACING.sm },
-  docItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: SPACING.sm, paddingHorizontal: SPACING.sm, backgroundColor: COLORS.surfaceElevated, borderRadius: BORDER_RADIUS.sm, marginTop: SPACING.xs },
-  docItemName: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, flex: 1 },
-  docItemStatus: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary, marginLeft: SPACING.sm },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  content: {
+    padding: SPACING.md,
+    paddingBottom: SPACING.xxl,
+  },
+
+  // ── Header ──
+  header: {
+    paddingVertical: SPACING.lg,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerText: {
+    flex: 1,
+  },
+  title: {
+    ...TYPOGRAPHY.h1,
+    color: COLORS.textPrimary,
+  },
+  subtitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+  },
+  dateBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primaryBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateBadgeDay: {
+    ...TYPOGRAPHY.h2,
+    color: COLORS.primary,
+    lineHeight: 26,
+  },
+  dateBadgeMonth: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.primaryLight,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  dateControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.xs,
+    marginTop: SPACING.md,
+  },
+  dateControl: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.surface,
+  },
+  dateControlText: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary },
+  selectedDateText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, flex: 1, textAlign: 'center' },
+
+  // ── Banner ──
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.md,
+  },
+  bannerSuccess: {
+    backgroundColor: COLORS.successBg,
+  },
+  bannerError: {
+    backgroundColor: COLORS.errorBg,
+  },
+  bannerText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  bannerDismiss: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.textMuted,
+    marginLeft: SPACING.sm,
+  },
+
+  // ── Today's summary ──
+  todaySummary: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  todaySummaryTitle: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.sm,
+  },
+  todayGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.md,
+  },
+  todayItem: {
+    minWidth: 72,
+    flexGrow: 1,
+  },
+  todayLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+  },
+  todayValue: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.textPrimary,
+    marginTop: 2,
+  },
+  todayNote: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    marginTop: SPACING.sm,
+    fontStyle: 'italic',
+  },
+
+  // ── Form error ──
+  formError: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.error,
+    marginBottom: SPACING.md,
+  },
+
+  // ── Sections ──
+  section: {
+    marginBottom: SPACING.lg,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  sectionAccent: {
+    width: 34,
+    height: 34,
+    borderRadius: BORDER_RADIUS.medium,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionAccentIcon: {
+    fontSize: 16,
+  },
+  sectionHeading: {
+    flex: 1,
+  },
+  sectionTitle: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.textPrimary,
+  },
+  sectionSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: SPACING.sm,
+  },
+
+  // ── Card (section surface) ──
+  card: {
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.borderFaint,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+
+  // ── Field labels ──
+  fieldLabel: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  fieldSpacer: {
+    height: SPACING.md,
+  },
+  fieldError: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.error,
+    marginTop: SPACING.xs,
+  },
+  entryBlock: { gap: SPACING.sm, marginBottom: SPACING.md, paddingBottom: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  inlineFields: { flexDirection: 'row', gap: SPACING.sm },
+  inlineInput: { flex: 1 },
+  selectedVitalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: SPACING.sm },
+  selectedVitalInfo: { flex: 1 },
+  selectedVitalName: { ...TYPOGRAPHY.bodyStrong, color: COLORS.primary },
+  selectedVitalSub: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: 2 },
+
+  // ── Mood selector ──
+  moodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  moodPill: {
+    flex: 1,
+    minWidth: 56,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.xs,
+    borderRadius: BORDER_RADIUS.sm,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+  },
+  moodPillSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  moodPillText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    fontSize: 12,
+  },
+  moodPillTextSelected: {
+    color: COLORS.textOnAccent,
+    fontWeight: '700',
+  },
+
+  // ── Scale selector (energy / stress) ──
+  scaleRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  scaleDot: {
+    width: 44,
+    height: 44,
+    borderRadius: BORDER_RADIUS.sm,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scaleDotSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  scaleDotText: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.textSecondary,
+  },
+  scaleDotTextSelected: {
+    color: '#FFFFFF',
+  },
+  scaleLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+  },
+  scaleLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: SPACING.xs,
+  },
+  scaleHint: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+  },
+
+  // ── Sleep duration stepper ──
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  stepperBtn: {
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm + 2,
+    borderRadius: BORDER_RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceElevated,
+  },
+  stepperBtnText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textSecondary,
+  },
+  stepperDisplay: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  stepperValue: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.textPrimary,
+  },
+
+  // ── Sleep quality ──
+  qualityRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  qualityDot: {
+    width: 40,
+    height: 40,
+    borderRadius: BORDER_RADIUS.full,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qualityDotSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  qualityDotText: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.textSecondary,
+  },
+  qualityDotTextSelected: {
+    color: '#FFFFFF',
+  },
+  qualityHint: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+  },
+
+  // ── Symptoms ──
+  symptomCard: {
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.borderFaint,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  symptomHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  symptomIndex: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.textPrimary,
+  },
+  removeBtn: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.error,
+  },
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  chip: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs + 2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: COLORS.surfaceSunken,
+  },
+  chipSelected: {
+    backgroundColor: COLORS.primaryBg,
+    borderColor: COLORS.primary,
+  },
+  chipText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textSecondary,
+  },
+  chipTextSelected: {
+    color: COLORS.primary,
+  },
+  severityRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  severityDot: {
+    width: 32,
+    height: 32,
+    borderRadius: BORDER_RADIUS.full,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  severityDotSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  severityDotText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textSecondary,
+  },
+  severityDotTextSelected: {
+    color: COLORS.textOnAccent,
+    fontWeight: '700',
+  },
+  addBtn: {
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+  },
+  addBtnText: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.primary,
+  },
+
+  // ── Today's Medications ──
+  medScheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  medScheduleInfo: {
+    flex: 1,
+  },
+  medScheduleName: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.textPrimary,
+  },
+  medScheduleDetail: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  medTakenBadge: {
+    alignItems: 'center',
+  },
+  medTakenText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.green,
+  },
+  medTakenTime: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    fontSize: 10,
+  },
+  medTakeButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  medTakeButtonText: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: '#07111F',
+  },
+
+  // ── Notes ──
+  textArea: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    paddingTop: SPACING.sm,
+  },
+  notesFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+  },
+  charCount: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+  },
+
+  // ── Save ──
+  saveButton: {
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+
+  // ── History ──
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  historyLeft: {
+    flex: 1,
+  },
+  historyDate: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.textPrimary,
+  },
+  historyCats: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  historyCount: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.primary,
+    marginLeft: SPACING.sm,
+  },
+
+  // ── Muted text ──
+  muted: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+  },
+
+  // ── Global error ──
+  globalError: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.error,
+    textAlign: 'center',
+    marginTop: SPACING.md,
+  },
 });

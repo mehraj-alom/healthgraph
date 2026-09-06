@@ -299,20 +299,20 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(247, 249, 248, 0.92)',
+    backgroundColor: 'rgba(7, 17, 31, 0.92)',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     zIndex: 100,
   },
   card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    backgroundColor: 'rgba(17, 28, 44, 0.95)',
     borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.xl,
     width: SCREEN_WIDTH - SPACING.xl * 2,
     maxWidth: 380,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(219, 229, 225, 0.6)',
+    borderColor: 'rgba(38, 52, 71, 0.6)',
     ...SHADOWS.lg,
   },
 
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
   },
   downloadButtonText: {
     ...TYPOGRAPHY.bodyStrong,
-    color: '#ffffff',
+    color: '#07111F',
   },
   hint: {
     ...TYPOGRAPHY.caption,
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     ...TYPOGRAPHY.bodyStrong,
-    color: '#ffffff',
+    color: '#07111F',
   },
 
   // ── Mini prompt (gender switch) ──
@@ -490,13 +490,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(247, 249, 248, 0.90)',
+    backgroundColor: 'rgba(7, 17, 31, 0.90)',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     zIndex: 100,
   },
   miniCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(17, 28, 44, 0.95)',
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.lg,
     width: SCREEN_WIDTH - SPACING.xl * 2,
@@ -534,6 +534,6 @@ const styles = StyleSheet.create({
   },
   miniDownloadText: {
     ...TYPOGRAPHY.bodyStrong,
-    color: '#ffffff',
+    color: '#07111F',
   },
 });

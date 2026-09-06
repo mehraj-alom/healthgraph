@@ -5,8 +5,8 @@ from uuid import UUID
 
 class VitalSignCreate(BaseModel):
     concept_id: UUID
-    value: float
-    unit: str
+    value: Optional[float] = None
+    unit: Optional[str] = None
 
 class SymptomCreate(BaseModel):
     concept_id: UUID

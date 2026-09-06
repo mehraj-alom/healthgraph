@@ -284,6 +284,47 @@ SEED_DATA = [
 MESH_ASSET_ID = "human_body_v1"
 MESH_VERSION  = 1
 
+# ── SNOMED CT Concept IDs ──────────────────────────────────────────────────
+# Maps structure_id → SNOMED CT identifier.
+# Used by extraction_mapper._resolve_structure_id() to link OCR-extracted
+# medical concepts (which carry SNOMED/LOINC codes) to anatomical structures.
+#
+# Only body-region and common organ structures are mapped here.
+# Internal bones/joints are not individually SNOMED-mapped because clinical
+# findings rarely reference them at that granularity.
+SNOMED_MAP: dict[str, str] = {
+    # Body regions
+    "HEAD":      "818981005",   # Head structure (body region)
+    "NECK":      "45048000",    # Neck structure
+    "CHEST":     "51185008",    # Thorax structure
+    "ABDOMEN":   "818982003",   # Abdominal cavity
+    "PELVIS":    "129103003",   # Pelvis structure
+    "SPINE":     "422587006",   # Spinal column
+    "LEFT_ARM":  "40983000",    # Left upper limb
+    "RIGHT_ARM": "72693000",    # Right upper limb
+    "LEFT_LEG":  "61685007",    # Left lower limb
+    "RIGHT_LEG": "30021000",    # Right lower limb
+    # Chest sub-structures
+    "HEART":     "80891009",    # Heart structure
+    "LEFT_LUNG":  "240488003",  # Left lung
+    "RIGHT_LUNG": "373875006",  # Right lung
+    "RIB_CAGE":  "41695006",    # Rib cage
+    "ESOPHAGUS": "32849002",    # Esophagus
+    # Abdomen sub-structures
+    "LIVER":     "361267004",   # Liver
+    "STOMACH":   "36997003",    # Stomach
+    "SPLEEN":    "78960004",    # Spleen
+    "PANCREAS":  "15776005",    # Pancreas
+    "LEFT_KIDNEY":  "72318003", # Left kidney
+    "RIGHT_KIDNEY": "32841005", # Right kidney
+    # Head sub-structures
+    "BRAIN":     "127295002",   # Cerebral structure
+    "JAW":       "59539008",    # Mandible
+    # Neck sub-structures
+    "THYROID":   "181960002",   # Thyroid gland
+    "THROAT":    "49757009",    # Pharyngeal structure
+}
+
 
 # ---------------------------------------------------------------------------
 # Hierarchy validation
@@ -390,24 +431,40 @@ def seed_anatomical_structures() -> None:
             mesh_node_name,
             is_internal_organ,
         ) in SEED_DATA:
-            structure = AnatomicalStructure(
-                structure_id=structure_id,
-                display_name=display_name,
-                category=category,
-                parent_id=parent_id,
-                snomed_concept_id=None,  # requirement 4
-                mesh_asset_id=MESH_ASSET_ID,
-                mesh_node_name=mesh_node_name,
-                mesh_version=MESH_VERSION,
-                is_internal_organ=is_internal_organ,
-            )
-
-            # merge() performs INSERT … ON CONFLICT (pk) UPDATE in effect.
-            db.merge(structure)
+            snomed_code = SNOMED_MAP.get(structure_id)
 
             if structure_id in existing_ids:
+                # Explicit UPDATE — merge() can fail to overwrite NULL
+                # snomed_concept_id on existing rows.
+                from sqlalchemy import update as sql_update
+                db.execute(
+                    sql_update(AnatomicalStructure)
+                    .where(AnatomicalStructure.structure_id == structure_id)
+                    .values(
+                        display_name=display_name,
+                        category=category,
+                        parent_id=parent_id,
+                        snomed_concept_id=snomed_code,
+                        mesh_asset_id=MESH_ASSET_ID,
+                        mesh_node_name=mesh_node_name,
+                        mesh_version=MESH_VERSION,
+                        is_internal_organ=is_internal_organ,
+                    )
+                )
                 updated += 1
             else:
+                structure = AnatomicalStructure(
+                    structure_id=structure_id,
+                    display_name=display_name,
+                    category=category,
+                    parent_id=parent_id,
+                    snomed_concept_id=snomed_code,
+                    mesh_asset_id=MESH_ASSET_ID,
+                    mesh_node_name=mesh_node_name,
+                    mesh_version=MESH_VERSION,
+                    is_internal_organ=is_internal_organ,
+                )
+                db.add(structure)
                 created += 1
 
         db.commit()

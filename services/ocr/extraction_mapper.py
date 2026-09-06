@@ -49,8 +49,30 @@ def resolve_with_key_terms(db: Session, text: str):
     return None, None
 
 
-def _resolve_structure_id(db: Session, concept_code: str | None, terminology: str | None) -> str:
-    """Best-effort mapping from medical concept SNOMED code to AnatomicalStructure."""
+def _resolve_structure_id(
+    db: Session,
+    concept_code: str | None,
+    terminology: str | None,
+    concept_display_name: str | None = None,
+    raw_text: str | None = None,
+) -> str:
+    """Best-effort mapping from medical concept to AnatomicalStructure.
+
+    Resolution priority:
+      1. Direct SNOMED concept_id match on AnatomicalStructure.
+         (Most reliable — exact ontology mapping.)
+      2. Conservative text fallback on the concept's display name.
+         Only matches when the display name clearly and unambiguously
+         refers to a specific body region.  Uses longest-match-first
+         to avoid false positives ("left lung" → LEFT_LUNG, not CHEST).
+      3. FULL_BODY — only when no reliable mapping exists.
+
+    The text fallback intentionally does NOT match generic terms like
+    "chest" to CHEST when a more specific organ (e.g., HEART, LEFT_LUNG)
+    is also a possible match.  The fallback only fires when the SNOMED
+    code lookup (priority 1) has already failed.
+    """
+    # 1. Direct SNOMED code match (most reliable)
     if concept_code and terminology:
         structure = db.execute(
             select(AnatomicalStructure.structure_id)
@@ -59,6 +81,66 @@ def _resolve_structure_id(db: Session, concept_code: str | None, terminology: st
         ).scalar_one_or_none()
         if structure:
             return structure
+
+    # 2. Conservative text fallback on concept display name.
+    #    Terms are ordered longest-first so "left lung" matches before
+    #    "lung", preventing false escalation to a parent region.
+    #    Each entry maps a specific text pattern to exactly one structure.
+    #    Generic organs (heart, brain, etc.) map to their own structure,
+    #    NOT to a parent body region.
+    region_terms: list[tuple[str, list[str]]] = [
+        # --- Specific laterality first (must precede generic counterparts) ---
+        ("LEFT_LUNG",   ["left lung"],),
+        ("RIGHT_LUNG",  ["right lung"],),
+        ("LEFT_KIDNEY",  ["left kidney"],),
+        ("RIGHT_KIDNEY", ["right kidney"],),
+        # --- Specific organs (single site, no laterality ambiguity) ---
+        ("HEART",       ["heart", "cardiac"],),
+        ("LIVER",       ["liver", "hepatic"],),
+        ("STOMACH",     ["stomach", "gastric"],),
+        ("SPLEEN",      ["spleen", "splenic"],),
+        ("PANCREAS",    ["pancreas", "pancreatic"],),
+        ("BLADDER",     ["bladder", "vesical"],),
+        ("THYROID",     ["thyroid"],),
+        ("BRAIN",       ["brain", "cerebral", "cranial"],),
+        # NOTE: generic "lung" has no single LUNG structure — only LEFT_LUNG
+        # and RIGHT_LUNG exist.  Mapping generic "lung" to either side would
+        # be clinically wrong.  Instead we map it to the containing region
+        # CHEST, which is a safe conservative highlight.
+        # --- Body regions (reached only when no organ matched) ---
+        ("CHEST",       ["chest", "thorax", "thoracic", "pulmonary", "lung"],),
+        ("HEAD",        ["head", "skull", "cephalic"],),
+        ("ABDOMEN",     ["abdomen", "abdominal"],),
+        ("NECK",        ["neck", "cervical", "throat"],),
+        ("PELVIS",      ["pelvis", "pelvic"],),
+        ("SPINE",       ["spine", "spinal", "vertebral", "lumbar"],),
+        ("LEFT_ARM",    ["left arm", "left shoulder", "left elbow", "left wrist", "left hand"],),
+        ("RIGHT_ARM",   ["right arm", "right shoulder", "right elbow", "right wrist", "right hand"],),
+        ("LEFT_LEG",    ["left leg", "left hip", "left knee", "left ankle", "left foot"],),
+        ("RIGHT_LEG",   ["right leg", "right hip", "right knee", "right ankle", "right foot"],),
+    ]
+
+    # Build searchable text from the concept's display name AND the raw
+    # OCR text.  The raw text catches cases where canonicalization failed
+    # (no MedicalConcept for the term) but the OCR text clearly refers
+    # to a body region (e.g., "chest x-ray" → CHEST).
+    search_text = " ".join(
+        filter(None, [concept_display_name, raw_text])
+    ).lower()
+
+    if search_text:
+        for structure_id, terms in region_terms:
+            for term in terms:
+                if term in search_text:
+                    exists = db.execute(
+                        select(AnatomicalStructure.structure_id)
+                        .where(AnatomicalStructure.structure_id == structure_id)
+                        .limit(1)
+                    ).scalar_one_or_none()
+                    if exists:
+                        return structure_id
+
+    # 3. Fall back to FULL_BODY — conservative default when no mapping found
     default = db.execute(
         select(AnatomicalStructure.structure_id)
         .where(AnatomicalStructure.structure_id == "FULL_BODY")
@@ -138,7 +220,11 @@ class ExtractionMapper:
         db.add(evidence)
 
         observation = None
-        structure_id = _resolve_structure_id(db, canon_res.code, canon_res.terminology)
+        structure_id = _resolve_structure_id(
+            db, canon_res.code, canon_res.terminology,
+            concept_display_name=canon_res.display_name or raw_test_name,
+            raw_text=source_text,
+        )
         abnormal_flag = getattr(lab_payload, "abnormal_flag", None) if is_lab_result else None
         visual_status, visual_severity_score = _lab_severity(abnormal_flag)
 
@@ -231,7 +317,11 @@ class EventBuilder:
         db.add(evidence)
 
         observation = None
-        structure_id = _resolve_structure_id(db, canon_res.code, canon_res.terminology)
+        structure_id = _resolve_structure_id(
+            db, canon_res.code, canon_res.terminology,
+            concept_display_name=canon_res.display_name or raw_test_name,
+            raw_text=source_text,
+        )
         abnormal_flag = getattr(lab_payload, "abnormal_flag", None) if is_lab_result else None
         visual_status, visual_severity_score = _lab_severity(abnormal_flag)
 

@@ -27,6 +27,8 @@ import ChatScreen from '@/screens/Chat/ChatScreen';
 import DocumentUploadScreen from '@/screens/Documents/DocumentUploadScreen';
 import DocumentDetailScreen from '@/screens/Documents/DocumentDetailScreen';
 import SettingsScreen from '@/screens/Settings/SettingsScreen';
+import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
+import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
 // and prevent the WebGL renderer from blocking app startup on Android.
@@ -82,14 +84,15 @@ function MainTabs() {
           COLORS.primary,
 
         tabBarInactiveTintColor:
-          COLORS.textSecondary,
+          COLORS.textMuted,
 
         tabBarStyle: {
           backgroundColor:
-            COLORS.background,
+            COLORS.surface,
 
           borderTopColor:
             COLORS.border,
+          borderTopWidth: 1,
 
           height: 64,
 
@@ -103,7 +106,7 @@ function MainTabs() {
           fontWeight: '600',
         },
 
-        tabBarHideOnKeyboard: true,
+        tabBarHideOnKeyboard: false,
       }}
     >
       <Tab.Screen
@@ -245,6 +248,20 @@ function AppNavigator() {
                 headerTitle: 'Document Details',
                 headerTintColor: COLORS.primary,
                 headerStyle: { backgroundColor: COLORS.background },
+              }}
+            />
+            <RootStack.Screen
+              name="HealthGraph"
+              component={HealthGraphScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <RootStack.Screen
+              name="Medications"
+              component={MedicationsScreen}
+              options={{
+                headerShown: false,
               }}
             />
           </>

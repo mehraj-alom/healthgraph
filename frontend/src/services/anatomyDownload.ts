@@ -283,20 +283,31 @@ export async function downloadAnatomy(
     const finalFile = new File(dir, model.filename);
     const tempFile = new File(dir, `${model.filename}.download`);
 
-    // Skip if already downloaded with correct size (resume support)
+    // Skip if already downloaded with a plausible size (within 10% tolerance)
+    // The manifest size is an estimate — the actual file may differ slightly
+    // due to compression, platform differences, or server-side rounding.
     try {
       const existingInfo = await finalFile.info();
-      if (existingInfo.exists && existingInfo.size === model.size) {
-        receivedBytes += model.size;
-        onProgress?.({
-          totalBytes: totalSize,
-          receivedBytes,
-          currentFile: model.filename,
-          fileIndex: i,
-          fileCount: manifest.models.length,
-          percent: Math.round((receivedBytes / totalSize) * 100),
-        });
-        continue;
+      if (existingInfo.exists && existingInfo.size !== undefined && existingInfo.size > 0) {
+        const sizeRatio = existingInfo.size / model.size;
+        if (sizeRatio >= 0.9 && sizeRatio <= 1.1) {
+          receivedBytes += model.size;
+          onProgress?.({
+            totalBytes: totalSize,
+            receivedBytes,
+            currentFile: model.filename,
+            fileIndex: i,
+            fileCount: manifest.models.length,
+            percent: Math.round((receivedBytes / totalSize) * 100),
+          });
+          continue;
+        }
+        // File exists but wrong size — replace it.
+        // Delete the existing file before downloading the replacement.
+        try {
+          await finalFile.delete();
+          console.log(`[AnatomyDownload] Replacing ${model.filename} (size mismatch: ${existingInfo.size} vs ${model.size})`);
+        } catch { /* ignore — move will handle it */ }
       }
     } catch { /* file doesn't exist — proceed to download */ }
 
@@ -362,7 +373,16 @@ export async function downloadAnatomy(
       // If we can't check size, proceed — the file was downloaded
     }
 
-    // Atomic rename: move temp → final
+    // Atomic rename: move temp → final.
+    // Delete existing destination first to avoid "Destination already exists"
+    // errors when a file was partially written or size check was missed.
+    try {
+      const destInfo = await finalFile.info();
+      if (destInfo.exists) {
+        console.log(`[AnatomyDownload] Removing existing ${model.filename} before move`);
+        await finalFile.delete();
+      }
+    } catch { /* file doesn't exist — proceed */ }
     await tempFile.move(finalFile);
 
     receivedBytes += model.size;

@@ -13,9 +13,9 @@ class LatestVitalMetric(BaseModel):
 
 
 class WellbeingMetric(BaseModel):
-    overall_wellbeing: int
-    energy_level: int
-    stress_level: int
+    overall_wellbeing: int | None
+    energy_level: int | None
+    stress_level: int | None
     event_time: datetime
 
 
@@ -32,6 +32,13 @@ class SleepMetric(BaseModel):
     event_time: datetime
 
 
+class ActivityMetric(BaseModel):
+    duration_minutes: int
+    calories_burned: float | None
+    activity_count: int
+    event_time: datetime
+
+
 class RecentDailyLog(BaseModel):
     log_date: date
     event_count: int
@@ -43,4 +50,5 @@ class DailyMetricsResponse(BaseModel):
     today_wellbeing: WellbeingMetric | None
     latest_pain: PainMetric | None
     latest_sleep: SleepMetric | None
+    today_activity: ActivityMetric | None
     recent_daily_logs: list[RecentDailyLog]

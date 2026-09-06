@@ -31,6 +31,8 @@ def get_patient_overview(config: RunnableConfig = None) -> dict:
     - vital trends
     - sleep trends
     - wellbeing trends
+    - activity history
+    - nutrition and hydration history
     - medication history
     - recurring pain
     - document findings

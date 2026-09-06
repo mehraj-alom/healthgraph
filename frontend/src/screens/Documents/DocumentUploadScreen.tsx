@@ -412,13 +412,13 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
 
-  // File picker
+  // File picker — sunken dashed well with subtle glow on dark
   dropZone: {
     borderWidth: 2,
-    borderColor: COLORS.border,
+    borderColor: COLORS.borderStrong,
     borderStyle: 'dashed',
     borderRadius: BORDER_RADIUS.lg,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceSunken,
     paddingVertical: SPACING.xxl * 1.2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -457,12 +457,14 @@ const styles = StyleSheet.create({
   },
   changeFileText: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary },
 
-  // Errors
+  // Errors — dark error well with hairline
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
-    backgroundColor: '#feecec',
+    backgroundColor: COLORS.errorBg,
+    borderWidth: 1,
+    borderColor: 'rgba(232, 93, 104, 0.25)',
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
   },

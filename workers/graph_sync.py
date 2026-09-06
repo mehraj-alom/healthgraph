@@ -72,6 +72,10 @@ def _process_outbox_events(db: Session, driver, batch_size: int = 50):
                     neo4j_session.execute_write(_project_observation_tx, event.payload)
                 elif event.event_type == OutboxEventType.CLINICAL_EVENT_RECORDED:
                     neo4j_session.execute_write(_project_clinical_event_tx, event.payload)
+                elif event.event_type == OutboxEventType.MEDICATION_RECORDED:
+                    neo4j_session.execute_write(_project_medication_tx, event.payload)
+                elif event.event_type == OutboxEventType.MEDICATION_TAKEN_RECORDED:
+                    neo4j_session.execute_write(_project_medication_taken_tx, event.payload)
                 else:
                     raise PermanentProjectionError(f"Unsupported outbox event type: {event.event_type}")
                 
@@ -181,6 +185,70 @@ def _project_clinical_event_tx(tx, payload: dict):
         t.verification_status = $verification_status,
         t.level_number = $level_number
     MERGE (p)-[:HAS_TIMELINE_EVENT]->(t)
+    """
+
+    result = tx.run(cypher, **payload)
+    result.consume()
+
+
+def _project_medication_tx(tx, payload: dict):
+    """Project a Medication into a Medication node in Neo4j.
+
+    Creates:
+        (:Patient {id})-[:ACTIVE_MEDICATION]->(:Medication {id})
+
+    Uses MERGE for idempotency.
+    """
+    cypher = """
+    MERGE (p:Patient {id: $patient_id})
+    MERGE (m:Medication {id: $medication_id})
+    SET m.name = $name,
+        m.generic_name = $generic_name,
+        m.brand_name = $brand_name,
+        m.strength = $strength,
+        m.strength_unit = $strength_unit,
+        m.dose_amount = $dose_amount,
+        m.dose_unit = $dose_unit,
+        m.route = $route,
+        m.frequency = $frequency,
+        m.scheduled_times = $scheduled_times,
+        m.start_date = $start_date,
+        m.end_date = $end_date,
+        m.status = $status,
+        m.purpose = $purpose,
+        m.instructions = $instructions,
+        m.prescriber = $prescriber,
+        m.prn = $prn,
+        m.reminder_enabled = $reminder_enabled,
+        m.notes = $notes
+    MERGE (p)-[:ACTIVE_MEDICATION]->(m)
+    """
+
+    result = tx.run(cypher, **payload)
+    result.consume()
+
+
+def _project_medication_taken_tx(tx, payload: dict):
+    """Project a MedicationTakenEvent into a MedicationTakenEvent node in Neo4j.
+
+    Creates:
+        (:Patient {id})-[:HAS_MEDICATION_TAKEN]->(:MedicationTakenEvent {id})
+        (:MedicationTakenEvent {id})-[:TAKEN_FROM]->(:Medication {id})
+
+    Uses MERGE for idempotency.
+    """
+    cypher = """
+    MERGE (p:Patient {id: $patient_id})
+    MERGE (e:MedicationTakenEvent {id: $event_id})
+    SET e.taken_at = $taken_at,
+        e.scheduled_for = $scheduled_for,
+        e.dose_taken = $dose_taken,
+        e.dose_unit = $dose_unit,
+        e.status = $status,
+        e.notes = $notes
+    MERGE (p)-[:HAS_MEDICATION_TAKEN]->(e)
+    MERGE (m:Medication {id: $medication_id})
+    MERGE (e)-[:TAKEN_FROM]->(m)
     """
 
     result = tx.run(cypher, **payload)

@@ -17,6 +17,8 @@ class OutboxStatus(str, Enum):
 class OutboxEventType(str, Enum):
     OBSERVATION_RECORDED = "observation_recorded"
     CLINICAL_EVENT_RECORDED = "clinical_event_recorded"
+    MEDICATION_RECORDED = "medication_recorded"
+    MEDICATION_TAKEN_RECORDED = "medication_taken_recorded"
 
 class GraphSyncOutbox(Base):
     """Reliable queue for projecting PostgreSQL state into Neo4j."""
@@ -115,3 +117,93 @@ def enqueue_clinical_events_batch(
             verification_status=event.verification_status,
             event_time=event.event_time,
         )
+
+
+def enqueue_medication(
+    db,
+    medication_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    name: str,
+    generic_name: str | None = None,
+    brand_name: str | None = None,
+    strength: str | None = None,
+    strength_unit: str | None = None,
+    dose_amount: float | None = None,
+    dose_unit: str | None = None,
+    route: str | None = None,
+    frequency: str | None = None,
+    scheduled_times: list | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    status: str = "ACTIVE",
+    purpose: str | None = None,
+    instructions: str | None = None,
+    prescriber: str | None = None,
+    prn: bool = False,
+    reminder_enabled: bool = False,
+    notes: str | None = None,
+) -> None:
+    """
+    Enqueue a Medication for projection into Neo4j.
+    """
+    db.add(
+        GraphSyncOutbox(
+            event_type=OutboxEventType.MEDICATION_RECORDED,
+            payload={
+                "patient_id": str(patient_id),
+                "medication_id": str(medication_id),
+                "name": name,
+                "generic_name": generic_name,
+                "brand_name": brand_name,
+                "strength": strength,
+                "strength_unit": strength_unit,
+                "dose_amount": dose_amount,
+                "dose_unit": dose_unit,
+                "route": route,
+                "frequency": frequency,
+                "scheduled_times": scheduled_times,
+                "start_date": start_date,
+                "end_date": end_date,
+                "status": status,
+                "purpose": purpose,
+                "instructions": instructions,
+                "prescriber": prescriber,
+                "prn": prn,
+                "reminder_enabled": reminder_enabled,
+                "notes": notes,
+            },
+        )
+    )
+
+
+def enqueue_medication_taken(
+    db,
+    event_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    medication_id: uuid.UUID,
+    taken_at: str,
+    scheduled_for: str | None = None,
+    dose_taken: float | None = None,
+    dose_unit: str | None = None,
+    status: str = "TAKEN",
+    notes: str | None = None,
+) -> None:
+    """
+    Enqueue a MedicationTakenEvent for projection into Neo4j.
+    """
+    db.add(
+        GraphSyncOutbox(
+            event_type=OutboxEventType.MEDICATION_TAKEN_RECORDED,
+            payload={
+                "patient_id": str(patient_id),
+                "event_id": str(event_id),
+                "medication_id": str(medication_id),
+                "taken_at": taken_at,
+                "scheduled_for": scheduled_for,
+                "dose_taken": dose_taken,
+                "dose_unit": dose_unit,
+                "status": status,
+                "notes": notes,
+            },
+        )
+    )

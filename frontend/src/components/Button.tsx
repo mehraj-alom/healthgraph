@@ -1,61 +1,95 @@
 import {
   StyleSheet,
-  View,
   Text,
   Pressable,
   ActivityIndicator,
-  TextInput,
-  Platform,
-  ViewStyle,
-  TextStyle,
+  type ViewStyle,
+  type TextStyle,
 } from 'react-native';
-import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY, SHADOWS } from '@/constants';
+import {
+  COLORS,
+  SPACING,
+  BORDER_RADIUS,
+  TYPOGRAPHY,
+  CONTROL_HEIGHTS,
+  type ControlSize,
+} from '@/constants';
+
+type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'outline'
+  | 'ghost'
+  | 'danger'
+  | 'success';
 
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: ButtonVariant;
   disabled?: boolean;
   loading?: boolean;
   fullWidth?: boolean;
+  size?: ControlSize;
+  pill?: boolean;
   style?: ViewStyle;
+  textStyle?: TextStyle;
+  accessibilityLabel?: string;
 }
 
-export const Button = ({ 
-  title, 
-  onPress, 
-  variant = 'primary', 
-  disabled = false, 
+/**
+ * MedGraph button — shared variants with pressed / disabled / loading states.
+ *
+ * Pressed: slightly darker fill + ~2% compression (100–150 ms feel).
+ * Loading: spinner while preserving button dimensions.
+ * Glow is reserved for the focused/active accent, never constant everywhere.
+ */
+export const Button = ({
+  title,
+  onPress,
+  variant = 'primary',
+  disabled = false,
   loading = false,
   fullWidth = false,
-  style 
+  size = 'medium',
+  pill = false,
+  style,
+  textStyle,
+  accessibilityLabel,
 }: ButtonProps) => {
-  const baseStyles = [
-    styles.container,
-    fullWidth && styles.fullWidth,
-    variantStyles[variant],
-    disabled && styles.disabled,
-    style
-  ];
+  const height = CONTROL_HEIGHTS[size];
+  const isDisabled = disabled || loading;
 
   return (
-    <Pressable 
-      onPress={onPress} 
-      disabled={disabled || loading}
-      style={baseStyles}
-      android_ripple={{ color: COLORS.primary, borderless: false }}
+    <Pressable
+      onPress={onPress}
+      disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      style={({ pressed }) => [
+        styles.container,
+        { minHeight: height },
+        pill && styles.pill,
+        variantStyles[variant],
+        isDisabled && styles.disabled,
+        pressed && !isDisabled && styles.pressed,
+        pressed && !isDisabled && variantPressedStyles[variant],
+        fullWidth && styles.fullWidth,
+        style,
+      ]}
     >
       {loading ? (
-        <ActivityIndicator 
-          size="small" 
-          color={variant === 'primary' || variant === 'secondary' ? COLORS.textPrimary : COLORS.primary} 
-        />
+        <ActivityIndicator size="small" color={textColors[variant].color} />
       ) : (
-        <Text style={[
-          styles.text, 
-          variantTextStyles[variant],
-          disabled && styles.textDisabled
-        ]}>
+        <Text
+          style={[
+            styles.text,
+            textColors[variant],
+            isDisabled && styles.textDisabled,
+            textStyle,
+          ]}
+        >
           {title}
         </Text>
       )}
@@ -65,21 +99,44 @@ export const Button = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xl,
-    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.medium,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: SPACING.sm,
-    ...SHADOWS.sm,
+  },
+  pill: {
+    borderRadius: BORDER_RADIUS.pill,
+    paddingHorizontal: SPACING.xl,
   },
   fullWidth: {
     width: '100%',
   },
+  pressed: {
+    transform: [{ scale: 0.975 }],
+  },
+  disabled: {
+    opacity: 0.45,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  text: {
+    ...TYPOGRAPHY.button,
+    fontSize: 15,
+  },
+  textDisabled: {
+    opacity: 0.7,
+  },
+
+  // ── Variant surfaces ──
   primary: {
-    backgroundColor: COLORS.primary,
-    borderWidth: 0,
+    backgroundColor: COLORS.accentGold,
+    shadowColor: COLORS.accentGold,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 5,
   },
   secondary: {
     backgroundColor: COLORS.surfaceElevated,
@@ -88,47 +145,55 @@ const styles = StyleSheet.create({
   },
   outline: {
     backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: COLORS.primary,
+    borderWidth: 1.5,
+    borderColor: COLORS.borderStrong,
   },
   ghost: {
     backgroundColor: 'transparent',
     borderWidth: 0,
   },
-  disabled: {
-    opacity: 0.5,
+  danger: {
+    backgroundColor: COLORS.error,
+    shadowColor: COLORS.error,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  text: {
-    ...TYPOGRAPHY.label,
-    fontSize: 14,
-  },
-  textPrimary: {
-    color: COLORS.textPrimary,
-  },
-  textSecondary: {
-    color: COLORS.textPrimary,
-  },
-  textOutline: {
-    color: COLORS.primary,
-  },
-  textGhost: {
-    color: COLORS.primary,
-  },
-  textDisabled: {
-    opacity: 0.6,
+  success: {
+    backgroundColor: COLORS.success,
+    shadowColor: COLORS.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
 });
 
-const variantStyles: Record<NonNullable<ButtonProps['variant']>, ViewStyle> = {
+const variantStyles: Record<ButtonVariant, ViewStyle> = {
   primary: styles.primary,
   secondary: styles.secondary,
   outline: styles.outline,
   ghost: styles.ghost,
+  danger: styles.danger,
+  success: styles.success,
 };
 
-const variantTextStyles: Record<NonNullable<ButtonProps['variant']>, TextStyle> = {
-  primary: styles.textPrimary,
-  secondary: styles.textSecondary,
-  outline: styles.textOutline,
-  ghost: styles.textGhost,
+// Pressed fills: one step darker for tactile feedback.
+const variantPressedStyles: Record<ButtonVariant, ViewStyle> = {
+  primary: { backgroundColor: '#D9B016' },
+  secondary: { backgroundColor: COLORS.surfacePressed },
+  outline: { backgroundColor: 'rgba(77, 141, 255, 0.08)' },
+  ghost: { backgroundColor: 'rgba(255, 255, 255, 0.06)' },
+  danger: { backgroundColor: '#C94A55' },
+  success: { backgroundColor: '#4FA95F' },
+};
+
+const textColors: Record<ButtonVariant, TextStyle> = {
+  primary: { color: COLORS.textOnAccent },
+  secondary: { color: COLORS.textPrimary },
+  outline: { color: COLORS.textPrimary },
+  ghost: { color: COLORS.textSecondary },
+  danger: { color: '#FFFFFF' },
+  success: { color: COLORS.textOnAccent },
 };

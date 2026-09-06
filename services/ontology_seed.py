@@ -10,6 +10,7 @@ from services.ocr.term_normalization import MedicalTermNormalizer
 # Database UUIDs are identifiers, not terminology codes. Stable identity is
 # therefore the terminology/code pair below.
 MANUAL_LOG_CONCEPTS = (
+    # ── Vitals (LOINC) ──
     {
         "terminology": "LOINC", "code": "2339-0",
         "display_name": "Glucose [Mass/volume] in Blood", "short_name": "Blood glucose",
@@ -19,6 +20,77 @@ MANUAL_LOG_CONCEPTS = (
         "terminology": "LOINC", "code": "8867-4",
         "display_name": "Heart rate", "short_name": "Resting pulse",
         "aliases": ("heart rate", "pulse", "resting pulse", "resting heart rate"),
+    },
+    # ── Symptoms (SNOMED CT) ──
+    {
+        "terminology": "SNOMED", "code": "25064002",
+        "display_name": "Headache", "short_name": "Headache",
+        "aliases": ("headache", "head pain", "cephalalgia"),
+    },
+    {
+        "terminology": "SNOMED", "code": "422587007",
+        "display_name": "Nausea", "short_name": "Nausea",
+        "aliases": ("nausea", "nauseous", "feeling sick", "queasy"),
+    },
+    {
+        "terminology": "SNOMED", "code": "84229001",
+        "display_name": "Fatigue", "short_name": "Fatigue",
+        "aliases": ("fatigue", "tiredness", "tired", "exhaustion", "exhausted", "lack of energy"),
+    },
+    {
+        "terminology": "SNOMED", "code": "404640003",
+        "display_name": "Dizziness", "short_name": "Dizziness",
+        "aliases": ("dizziness", "dizzy", "lightheaded", "lightheadedness", "vertigo"),
+    },
+    {
+        "terminology": "SNOMED", "code": "29857009",
+        "display_name": "Chest pain", "short_name": "Chest pain",
+        "aliases": ("chest pain", "chest discomfort", "chest tightness"),
+    },
+    {
+        "terminology": "SNOMED", "code": "49727002",
+        "display_name": "Cough", "short_name": "Cough",
+        "aliases": ("cough", "coughing"),
+    },
+    {
+        "terminology": "SNOMED", "code": "386661006",
+        "display_name": "Fever", "short_name": "Fever",
+        "aliases": ("fever", "feverish", "high temperature", "raised temperature", "pyrexia"),
+    },
+    {
+        "terminology": "SNOMED", "code": "51848002",
+        "display_name": "Back pain", "short_name": "Back pain",
+        "aliases": ("back pain", "backache", "lower back pain", "back ache"),
+    },
+    {
+        "terminology": "SNOMED", "code": "271807003",
+        "display_name": "Skin rash", "short_name": "Rash",
+        "aliases": ("rash", "skin rash", "eruption"),
+    },
+    {
+        "terminology": "SNOMED", "code": "44065004",
+        "display_name": "Sore throat", "short_name": "Sore throat",
+        "aliases": ("sore throat", "throat pain", "pharyngitis"),
+    },
+    {
+        "terminology": "SNOMED", "code": "267036007",
+        "display_name": "Shortness of breath", "short_name": "Shortness of breath",
+        "aliases": ("shortness of breath", "breathlessness", "dyspnea", "difficulty breathing", "can't breathe"),
+    },
+    {
+        "terminology": "SNOMED", "code": "422400008",
+        "display_name": "Joint pain", "short_name": "Joint pain",
+        "aliases": ("joint pain", "arthralgia", "aching joints"),
+    },
+    {
+        "terminology": "SNOMED", "code": "62315008",
+        "display_name": "Diarrhea", "short_name": "Diarrhea",
+        "aliases": ("diarrhea", "loose stools", "upset stomach"),
+    },
+    {
+        "terminology": "SNOMED", "code": "306700007",
+        "display_name": "Insomnia", "short_name": "Insomnia",
+        "aliases": ("insomnia", "can't sleep", "trouble sleeping", "sleeplessness"),
     },
 )
 

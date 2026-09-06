@@ -217,6 +217,66 @@ def _wellbeing_trends(
     ]
 
 
+def _activity_history(
+    db: Session,
+    patient_id: uuid.UUID,
+    since: datetime,
+) -> list[dict]:
+    stmt = (
+        select(ActivityPayload, ClinicalEvent.event_time)
+        .join(ClinicalEvent, ClinicalEvent.event_id == ActivityPayload.event_id)
+        .where(
+            and_(
+                ClinicalEvent.patient_id == patient_id,
+                ClinicalEvent.event_time >= since,
+                ClinicalEvent.event_type == EventType.ACTIVITY_LOG,
+            )
+        )
+        .order_by(desc(ClinicalEvent.event_time))
+        .limit(100)
+    )
+    rows = db.execute(stmt).all()
+    return [
+        {
+            "activity_type": r.ActivityPayload.activity_type,
+            "duration_minutes": r.ActivityPayload.duration_minutes,
+            "calories_burned": r.ActivityPayload.calories_burned,
+            "event_time": r.event_time.isoformat() if r.event_time else None,
+        }
+        for r in rows
+    ]
+
+
+def _nutrition_history(
+    db: Session,
+    patient_id: uuid.UUID,
+    since: datetime,
+) -> list[dict]:
+    stmt = (
+        select(NutritionPayload, ClinicalEvent.event_time)
+        .join(ClinicalEvent, ClinicalEvent.event_id == NutritionPayload.event_id)
+        .where(
+            and_(
+                ClinicalEvent.patient_id == patient_id,
+                ClinicalEvent.event_time >= since,
+                ClinicalEvent.event_type == EventType.NUTRITION_LOG,
+            )
+        )
+        .order_by(desc(ClinicalEvent.event_time))
+        .limit(100)
+    )
+    rows = db.execute(stmt).all()
+    return [
+        {
+            "water_ml": r.NutritionPayload.water_ml,
+            "meals_count": r.NutritionPayload.meals_count,
+            "appetite_level": r.NutritionPayload.appetite_level,
+            "event_time": r.event_time.isoformat() if r.event_time else None,
+        }
+        for r in rows
+    ]
+
+
 def _medication_history(
     db: Session,
     patient_id: uuid.UUID,
@@ -420,6 +480,16 @@ def build_health_summary(
     wellbeing = _wellbeing_trends(db, patient_id, since)
     if wellbeing:
         sections["wellbeing_trends"] = wellbeing
+
+    # Activity history
+    activities = _activity_history(db, patient_id, since)
+    if activities:
+        sections["activity_history"] = activities
+
+    # Nutrition and hydration history
+    nutrition = _nutrition_history(db, patient_id, since)
+    if nutrition:
+        sections["nutrition_history"] = nutrition
 
     # Medication history
     medications = _medication_history(db, patient_id, since)

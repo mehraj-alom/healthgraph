@@ -169,8 +169,10 @@ export default function DocumentDetailScreen() {
                     document.status === 'COMPLETED'
                       ? COLORS.accentBg
                       : document.status === 'FAILED'
-                        ? '#feecec'
+                        ? COLORS.errorBg
                         : COLORS.surfaceElevated,
+                  borderWidth: 1,
+                  borderColor: document.status === 'FAILED' ? 'rgba(232,93,104,0.25)' : COLORS.borderFaint,
                 },
               ]}
             >
@@ -478,6 +480,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: BORDER_RADIUS.full,
+    borderWidth: 1,
   },
   statusText: {
     ...TYPOGRAPHY.label,

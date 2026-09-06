@@ -145,8 +145,8 @@ export interface DailyCheckInRequest {
   nutrition?: { water_ml?: number; meals_count?: number; appetite_level?: number };
   notes?: string;
   symptoms: Array<{ concept_id: string; severity: number; duration_minutes?: number; notes?: string }>;
-  vitals: Array<{ concept_id: string; value: number; unit: string }>;
-  pain: Array<{ severity: number; body_location_id?: string; pain_type?: string }>;
+  vitals: Array<{ concept_id: string; value: number | null; unit: string | null }>;
+  pain: Array<{ severity: number; body_location_id?: string; structure_id?: string; pain_type?: string }>;
   activities: Array<{ activity_type: string; duration_minutes?: number; calories_burned?: number }>;
   medications: Array<{ medication_name: string; dosage_value?: number; dosage_unit?: string }>;
 }
@@ -155,6 +155,106 @@ export interface DailyCheckInResponse {
   status: string;
   group_id: string;
   message: string;
+}
+
+export interface DailyCheckInDetail {
+  group_id: string;
+  log_date: string;
+  overall_wellbeing: number | null;
+  energy_level: number | null;
+  stress_level: number | null;
+  sleep_duration_minutes: number | null;
+  sleep_quality: number | null;
+  sleep_awakenings: number | null;
+  water_ml: number | null;
+  meals_count: number | null;
+  appetite_level: number | null;
+  symptoms: Array<{ concept_id: string | null; severity: number; duration_minutes: number | null; notes: string | null }>;
+  vitals: Array<{ concept_id: string | null; value: number | null; unit: string | null }>;
+  pain: Array<{ body_location_id: string | null; severity: number; pain_type: string | null }>;
+  activities: Array<{ activity_type: string; duration_minutes: number | null; calories_burned: number | null }>;
+  medications: Array<{ medication_name: string; dosage_value: number | null; dosage_unit: string | null }>;
+  notes: string | null;
+}
+
+// ============================================================================
+// Medication types
+// ============================================================================
+
+export type MedicationStatus = 'ACTIVE' | 'SCHEDULED' | 'COMPLETED' | 'PAUSED' | 'DISCONTINUED';
+export type MedicationFrequency = 'ONCE_DAILY' | 'TWICE_DAILY' | 'THREE_TIMES_DAILY' | 'FOUR_TIMES_DAILY' | 'EVERY_MORNING' | 'EVERY_EVENING' | 'EVERY_NIGHT' | 'EVERY_8_HOURS' | 'EVERY_12_HOURS' | 'WEEKLY' | 'AS_NEEDED' | 'CUSTOM';
+export type MedicationRoute = 'ORAL' | 'TOPICAL' | 'INJECTION' | 'INHALED' | 'SUBLINGUAL' | 'RECTAL' | 'NASAL' | 'OPHTHALMIC' | 'OTHER';
+export type DoseTakenStatus = 'TAKEN' | 'MISSED' | 'SKIPPED' | 'LATE';
+
+export interface Medication {
+  medication_id: string;
+  patient_id: string;
+  name: string;
+  generic_name: string | null;
+  brand_name: string | null;
+  strength: string | null;
+  strength_unit: string | null;
+  dose_amount: number | null;
+  dose_unit: string | null;
+  route: MedicationRoute | null;
+  frequency: MedicationFrequency;
+  scheduled_times: string[] | null;
+  scheduled_weekdays: number[] | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: MedicationStatus;
+  purpose: string | null;
+  instructions: string | null;
+  prescriber: string | null;
+  prn: boolean;
+  reminder_enabled: boolean;
+  notes: string | null;
+  source_document_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MedicationTakenEvent {
+  event_id: string;
+  medication_id: string;
+  patient_id: string;
+  taken_at: string;
+  scheduled_for: string | null;
+  dose_taken: number | null;
+  dose_unit: string | null;
+  status: DoseTakenStatus;
+  notes: string | null;
+  clinical_event_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActiveMedicationForDailyLog {
+  medication_id: string;
+  name: string;
+  strength: string | null;
+  strength_unit: string | null;
+  dose_amount: number | null;
+  dose_unit: string | null;
+  frequency: MedicationFrequency;
+  scheduled_times: string[] | null;
+  route: MedicationRoute | null;
+  prn: boolean;
+}
+
+export interface DailyMedicationSchedule {
+  medication: ActiveMedicationForDailyLog;
+  scheduled_time: string;
+  taken: boolean;
+  taken_event_id: string | null;
+  taken_at: string | null;
+}
+
+export interface PatientProfile {
+  display_name: string | null;
+  phone_number: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
 }
 
 // ============================================================================
@@ -243,16 +343,113 @@ export interface PendingReviewItem {
 
 export type RootStackParamList = {
   Onboarding: undefined;
-  Main: undefined;
+  Main: { screen?: string } | undefined;
   Settings: undefined;
   DocumentUpload: undefined;
   DocumentDetail: { documentId: string };
+  HealthGraph: { focusStructureId?: string; source?: 'body' | 'graph' } | undefined;
+  Medications: undefined;
 };
+
+// ============================================================================
+// Trends types
+// ============================================================================
+
+export interface TrendIndicator {
+  direction: 'improving' | 'declining' | 'stable' | 'insufficient_data';
+  label: string;
+}
+
+export interface DailyWellbeingPoint {
+  date: string;
+  wellbeing: number | null;
+  energy: number | null;
+  stress: number | null;
+}
+
+export interface DailySleepPoint {
+  date: string;
+  duration_minutes: number | null;
+  sleep_quality: number | null;
+}
+
+export interface SymptomSummary {
+  concept_id: string | null;
+  display_name: string;
+  count: number;
+  avg_severity: number | null;
+  latest_date: string;
+}
+
+export interface ScatterPoint {
+  x: number;
+  y: number;
+  date: string;
+}
+
+export interface CorrelationResult {
+  paired_count: number;
+  r: number | null;
+  strength: string;
+  description: string;
+}
+
+export interface SymptomTimePoint {
+  date: string;
+  severity: number;
+}
+
+export interface SymptomTimeSeries {
+  concept_id: string | null;
+  display_name: string;
+  points: SymptomTimePoint[];
+}
+
+export interface MedicalRecordActivityPoint {
+  date: string;
+  event_count: number;
+}
+
+export interface Insight {
+  text: string;
+}
+
+export interface TrendsResponse {
+  period_days: number;
+  logged_days: number;
+  wellbeing_points: DailyWellbeingPoint[];
+  avg_wellbeing: number | null;
+  avg_energy: number | null;
+  avg_stress: number | null;
+  wellbeing_trend: TrendIndicator;
+  sleep_points: DailySleepPoint[];
+  avg_sleep_minutes: number | null;
+  min_sleep_minutes: number | null;
+  max_sleep_minutes: number | null;
+  avg_sleep_quality: number | null;
+  sleep_trend: TrendIndicator;
+  sleep_energy_scatter: ScatterPoint[];
+  sleep_energy_correlation: CorrelationResult;
+  sleep_stress_scatter: ScatterPoint[];
+  sleep_stress_correlation: CorrelationResult;
+  symptom_summaries: SymptomSummary[];
+  symptom_time_series: SymptomTimeSeries[];
+  available_symptoms: string[];
+  documents_processed: number;
+  clinical_events_extracted: number;
+  medical_record_activity: MedicalRecordActivityPoint[];
+  insights: Insight[];
+}
 
 export type MainTabParamList = {
   Dashboard: undefined;
   DailyLog: undefined;
-  Body: undefined;
+  Body: { focusStructureId?: string } | undefined;
   Timeline: undefined;
   Chat: undefined;
+};
+
+export type BodyStackParamList = {
+  BodyView: undefined;
+  HealthGraph: undefined;
 };

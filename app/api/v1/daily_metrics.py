@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_authenticated_patient_id
 from core.db import get_db
-from models.daily_logs.events import PainPayload, SleepPayload, VitalSignPayload, WellbeingPayload
+from models.daily_logs.events import ActivityPayload, PainPayload, SleepPayload, VitalSignPayload, WellbeingPayload
 from models.events import ClinicalEvent, EventType, SourceType
 from models.ontology import MedicalConcept
-from schemas.daily_metrics import DailyMetricsResponse, LatestVitalMetric, PainMetric, RecentDailyLog, SleepMetric, WellbeingMetric
+from schemas.daily_metrics import ActivityMetric, DailyMetricsResponse, LatestVitalMetric, PainMetric, RecentDailyLog, SleepMetric, WellbeingMetric
 
 router = APIRouter(prefix="/api/v1/daily-metrics", tags=["daily_metrics"])
 
@@ -33,6 +33,11 @@ def get_daily_metrics(
     today_wellbeing: WellbeingMetric | None = None
     latest_pain: PainMetric | None = None
     latest_sleep: SleepMetric | None = None
+    today_activity: ActivityMetric | None = None
+    activity_duration_minutes = 0
+    activity_calories_burned = 0.0
+    activity_count = 0
+    latest_activity_time = None
     daily_groups: dict[tuple[object, UUID | None], set[str]] = defaultdict(set)
     daily_counts: dict[tuple[object, UUID | None], int] = defaultdict(int)
     today = datetime.now(timezone.utc).date()
@@ -80,6 +85,23 @@ def get_daily_metrics(
             if payload:
                 latest_sleep = SleepMetric(duration_minutes=payload.duration_minutes, sleep_quality=payload.sleep_quality, awakenings=payload.awakenings, event_time=event.event_time)
 
+        if event.event_type == EventType.ACTIVITY_LOG and event_date == today:
+            payload = db.get(ActivityPayload, event.event_id)
+            if payload:
+                activity_duration_minutes += payload.duration_minutes or 0
+                if payload.calories_burned is not None:
+                    activity_calories_burned += payload.calories_burned
+                activity_count += 1
+                latest_activity_time = max(latest_activity_time or event.event_time, event.event_time)
+
+    if activity_count:
+        today_activity = ActivityMetric(
+            duration_minutes=activity_duration_minutes,
+            calories_burned=activity_calories_burned or None,
+            activity_count=activity_count,
+            event_time=latest_activity_time,
+        )
+
     cutoff = today - timedelta(days=30)
     recent_daily_logs = [
         RecentDailyLog(log_date=event_date, event_count=sum(count for (day, _), count in daily_counts.items() if day == event_date), categories=sorted({category for (day, _), categories in daily_groups.items() if day == event_date for category in categories}))
@@ -90,5 +112,6 @@ def get_daily_metrics(
         today_wellbeing=today_wellbeing,
         latest_pain=latest_pain,
         latest_sleep=latest_sleep,
+        today_activity=today_activity,
         recent_daily_logs=recent_daily_logs,
     )

@@ -15,12 +15,16 @@ from app.api.v1 import (
     daily_logs,
     daily_metrics,
     documents,
+    health_graph,
     logs,
+    medications,
     ontology,
+    profile,
     provenance,
     review,
     summaries,
     timeline,
+    trends,
 )
 from core.config import initialize_firebase, settings
 from core.db import SessionLocal, engine
@@ -128,6 +132,10 @@ def create_app() -> FastAPI:
     app.include_router(summaries.router)
     app.include_router(logs.router)
     app.include_router(ontology.router)
+    app.include_router(profile.router)
+    app.include_router(trends.router)
+    app.include_router(health_graph.router)
+    app.include_router(medications.router)
 
     @app.get("/health", tags=["System"])
     def health_check():

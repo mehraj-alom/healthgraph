@@ -117,7 +117,7 @@ export function AnatomyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // -----------------------------------------------------------------------
-  // Refresh installation status
+  // Refresh installation status — fire-and-forget on mount, never blocks UI
   // -----------------------------------------------------------------------
   const refreshStatus = useCallback(async () => {
     try {
@@ -132,6 +132,7 @@ export function AnatomyProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Fire-and-forget: do not block children from rendering
   useEffect(() => { refreshStatus(); }, [refreshStatus]);
 
   // -----------------------------------------------------------------------
