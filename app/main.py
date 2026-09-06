@@ -112,9 +112,20 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # CORS configuration: restrict to explicit origins.
+    # React Native/Expo does not enforce browser CORS, so this only
+    # affects browser-based access (dev console, web admin).
+    # Set CORS_ORIGINS env var to a comma-separated list for production.
+    cors_origins_str = os.getenv("CORS_ORIGINS", "")
+    cors_origins = [
+        origin.strip()
+        for origin in cors_origins_str.split(",")
+        if origin.strip()
+    ] if cors_origins_str else []
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],

@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from pydantic import BaseModel
 from sqlalchemy import select, delete, func
 from sqlalchemy.orm import Session
@@ -59,6 +59,7 @@ def submit_daily_checkin(
     request: Request,
     db: Session = Depends(get_db),
     patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """
     Persist a complete daily health check-in as a set of
@@ -69,7 +70,24 @@ def submit_daily_checkin(
 
     All child payload rows are inserted only after their
     parent ClinicalEvent has been flushed to PostgreSQL.
+
+    Supports idempotency via the Idempotency-Key header.
+    If the same key is reused with the same payload, the original result is returned.
+    If the same key is reused with a different payload, 409 is returned.
     """
+    from services.idempotency import compute_request_hash, check_idempotency, store_idempotency_key
+
+    # Compute request hash for comparison
+    request_hash = compute_request_hash(payload.model_dump())
+
+    # Check idempotency if key provided
+    if idempotency_key:
+        existing = check_idempotency(db, patient_id, idempotency_key, request_hash)
+        if existing:
+            if existing["status"] == "conflict":
+                raise HTTPException(status_code=409, detail=existing["error"])
+            if existing["status"] == "replay":
+                return existing["response"]
 
     deidentifier = request.app.state.deidentifier
 
@@ -573,6 +591,25 @@ def submit_daily_checkin(
         )
 
     # =========================================================================
+    # Store idempotency key INSIDE the transaction before commit
+    # This ensures atomicity: either both the mutation and idempotency key
+    # are committed, or neither is.
+    # =========================================================================
+
+    if idempotency_key:
+        store_idempotency_key(
+            db, patient_id, idempotency_key, "submit_daily_checkin",
+            request_hash, 200, {
+                "status": "success",
+                "group_id": daily_group_id,
+                "message": (
+                    "Daily log successfully persisted "
+                    "to the longitudinal timeline."
+                ),
+            },
+        )
+
+    # =========================================================================
     # Atomic commit
     # =========================================================================
 
@@ -613,7 +650,7 @@ def submit_daily_checkin(
             exc_info=True,
         )
 
-    return {
+    response = {
         "status": "success",
         "group_id": daily_group_id,
         "message": (
@@ -621,6 +658,16 @@ def submit_daily_checkin(
             "to the longitudinal timeline."
         ),
     }
+
+    # Store idempotency key if provided
+    if idempotency_key:
+        store_idempotency_key(
+            db, patient_id, idempotency_key, "submit_daily_checkin",
+            request_hash, 200, response,
+        )
+        db.commit()
+
+    return response
 
 
 # ===========================================================================
@@ -800,6 +847,7 @@ def update_daily_checkin(
     request: Request,
     db: Session = Depends(get_db),
     patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """
     Update an existing daily check-in group.
@@ -809,7 +857,26 @@ def update_daily_checkin(
     a consistent reference.
 
     Security: verifies that the group belongs to the authenticated patient.
+
+    Supports idempotency via the Idempotency-Key header.
+    If the same key is reused with the same payload, the original result is returned.
+    If the same key is reused with a different payload, 409 is returned.
     """
+    from services.idempotency import compute_request_hash, check_idempotency, store_idempotency_key
+
+    # Compute request hash for comparison
+    request_hash = compute_request_hash(payload.model_dump())
+
+    # Check idempotency if key provided
+    # IMPORTANT: This check happens INSIDE the transaction to ensure atomicity
+    if idempotency_key:
+        existing = check_idempotency(db, patient_id, idempotency_key, request_hash)
+        if existing:
+            if existing["status"] == "conflict":
+                raise HTTPException(status_code=409, detail=existing["error"])
+            if existing["status"] == "replay":
+                return existing["response"]
+
     # -----------------------------------------------------------------------
     # Verify the group belongs to this patient and is safe to replace
     # -----------------------------------------------------------------------
@@ -1124,6 +1191,19 @@ def update_daily_checkin(
             verification_status=note_event.verification_status, event_time=note_event.event_time,
         )
         db.add(PatientNotePayload(event_id=note_event_id, safe_notes=result.text))
+
+    # Store idempotency key INSIDE the transaction before commit
+    # This ensures atomicity: either both the mutation and idempotency key
+    # are committed, or neither is.
+    if idempotency_key:
+        store_idempotency_key(
+            db, patient_id, idempotency_key, "update_daily_checkin",
+            request_hash, 200, {
+                "status": "success",
+                "group_id": str(group_id),
+                "message": "Daily log updated successfully.",
+            },
+        )
 
     # Atomic commit
     try:

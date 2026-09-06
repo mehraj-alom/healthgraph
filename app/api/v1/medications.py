@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone, date, timedelta
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import Session
 
@@ -200,8 +200,28 @@ def create_medication(
     payload: MedicationCreate,
     patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
     db: Session = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
-    """Create a new medication."""
+    """Create a new medication.
+
+    Supports idempotency via the Idempotency-Key header.
+    If the same key is reused with the same payload, the original result is returned.
+    If the same key is reused with a different payload, 409 is returned.
+    """
+    from services.idempotency import compute_request_hash, check_idempotency, store_idempotency_key
+
+    # Compute request hash for comparison
+    request_hash = compute_request_hash(payload.model_dump())
+
+    # Check idempotency if key provided
+    if idempotency_key:
+        existing = check_idempotency(db, patient_id, idempotency_key, request_hash)
+        if existing:
+            if existing["status"] == "conflict":
+                raise HTTPException(status_code=409, detail=existing["error"])
+            if existing["status"] == "replay":
+                return existing["response"]
+
     medication = Medication(
         patient_id=patient_id,
         name=payload.name,
@@ -255,6 +275,15 @@ def create_medication(
         reminder_enabled=medication.reminder_enabled,
         notes=medication.notes,
     )
+    
+    # Store idempotency key INSIDE the transaction before commit
+    # This ensures atomicity: either both the mutation and idempotency key
+    # are committed, or neither is.
+    if idempotency_key:
+        store_idempotency_key(
+            db, patient_id, idempotency_key, "create_medication",
+            request_hash, 201, MedicationResponse.model_validate(medication).model_dump(mode="json"),
+        )
     
     db.commit()
     db.refresh(medication)
@@ -403,8 +432,28 @@ def record_medication_taken(
     payload: MedicationTakenCreate,
     patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
     db: Session = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
-    """Record that a medication dose was taken."""
+    """Record that a medication dose was taken.
+
+    Supports idempotency via the Idempotency-Key header.
+    If the same key is reused with the same payload, the original result is returned.
+    If the same key is reused with a different payload, 409 is returned.
+    """
+    from services.idempotency import compute_request_hash, check_idempotency, store_idempotency_key
+
+    # Compute request hash for comparison
+    request_hash = compute_request_hash(payload.model_dump())
+
+    # Check idempotency if key provided
+    if idempotency_key:
+        existing = check_idempotency(db, patient_id, idempotency_key, request_hash)
+        if existing:
+            if existing["status"] == "conflict":
+                raise HTTPException(status_code=409, detail=existing["error"])
+            if existing["status"] == "replay":
+                return existing["response"]
+
     # Verify medication exists and belongs to patient
     medication = db.execute(
         select(Medication).where(
@@ -478,6 +527,15 @@ def record_medication_taken(
         status=taken_event.status.value,
         notes=taken_event.notes,
     )
+    
+    # Store idempotency key INSIDE the transaction before commit
+    # This ensures atomicity: either both the mutation and idempotency key
+    # are committed, or neither is.
+    if idempotency_key:
+        store_idempotency_key(
+            db, patient_id, idempotency_key, "record_medication_taken",
+            request_hash, 201, MedicationTakenResponse.model_validate(taken_event).model_dump(mode="json"),
+        )
     
     db.commit()
     db.refresh(taken_event)
