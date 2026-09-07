@@ -4,7 +4,8 @@ import enum
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy import Enum, ForeignKey, DateTime, String, Float
+from sqlalchemy import Enum, ForeignKey, DateTime, String, Float, LargeBinary
+from sqlalchemy.sql import func
 from models.base import Base, TimestampMixin
 
 class EventType(str, enum.Enum):
@@ -82,6 +83,29 @@ class Document(Base, TimestampMixin):
     file_hash: Mapped[str] = mapped_column(String, unique=True, index=True)
     storage_url: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String) # UPLOADED, PROCESSED, FAILED
+
+
+class DocumentBlob(Base):
+    """Durable binary payload for an uploaded document.
+
+    Production note: on Voroa (and most container PaaS platforms) the
+    per-container filesystem is ephemeral and is wiped on every deploy or
+    restart. Uploaded health documents therefore MUST NOT live on the
+    container filesystem. Storing the bytes here (in the durable, backed-up
+    managed PostgreSQL) guarantees they survive deploys and are readable by
+    both the web service and the Celery worker, which do not share a
+    filesystem.
+    """
+    __tablename__ = "document_blobs"
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.document_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    filename: Mapped[str] = mapped_column(String)
+    content_type: Mapped[str] = mapped_column(String, nullable=True)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     
 
 class EvidenceLink(Base):

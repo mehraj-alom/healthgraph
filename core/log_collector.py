@@ -59,9 +59,19 @@ class LogCollector:
     def _get_redis(self):
         if self._redis is None:
             import os
-            host = os.getenv("REDIS_HOST", "redis")
-            port = int(os.getenv("REDIS_PORT", "6379"))
-            self._redis = redis.Redis(host=host, port=port, db=0, decode_responses=True)
+            # Production (Voroa) uses the same Redis as the Celery broker
+            # (Upstash rediss:// with TLS + password). Reuse it so pipeline
+            # logs stream across the API and worker processes with no extra
+            # configuration. Fall back to REDIS_HOST/REDIS_PORT for local dev.
+            broker_url = os.getenv("CELERY_BROKER_URL")
+            if broker_url:
+                self._redis = redis.from_url(
+                    broker_url, decode_responses=True, db=0
+                )
+            else:
+                host = os.getenv("REDIS_HOST", "redis")
+                port = int(os.getenv("REDIS_PORT", "6379"))
+                self._redis = redis.Redis(host=host, port=port, db=0, decode_responses=True)
         return self._redis
 
     def append(self, level: str, message: str, document_id: Optional[str] = None):

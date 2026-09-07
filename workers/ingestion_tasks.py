@@ -14,6 +14,7 @@ from services.ocr.extraction_mapper import ExtractionMapper
 from services.deidentification.deidentifier import DeIdentificationService
 from services.vectorization.vector_indexing import VectorIndexingService as VectorIndexer
 from services.anatomy.body_state_service import record_anatomical_observation
+from storage.save_doc import StorageService
 from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 import os
@@ -28,6 +29,7 @@ def _log(level: str, msg: str, doc_id: str = None):
 def process_document_pipeline(self, document_id_str: str):
     db = SessionLocal()
     document_id = None
+    temp_doc_path = None
     try:
         document_id = UUID(document_id_str)
         document = db.query(Document).filter(Document.document_id == document_id).first()
@@ -40,20 +42,20 @@ def process_document_pipeline(self, document_id_str: str):
         document.status = "PROCESSING"
         db.commit()
 
-        # Log storage path diagnostics
-        abs_storage_path = os.path.abspath(document.storage_url)
-        _log("info", f"[Worker] Looking for document at: {abs_storage_path}", document_id_str)
-        _log("info", f"[Worker] storage_url from DB: {document.storage_url}", document_id_str)
-        _log("info", f"[Worker] File exists before OCR: {os.path.exists(abs_storage_path)}", document_id_str)
-        if os.path.exists(abs_storage_path):
-            _log("info", f"[Worker] File size: {os.path.getsize(abs_storage_path)} bytes", document_id_str)
+        # Materialize the durable document bytes (stored in PostgreSQL) to a
+        # TEMPORARY file so OCR/extraction (pdf2image, PIL, LandingAI ADE) can
+        # read them. The container filesystem is ephemeral and not shared
+        # between the web service and this worker, so the bytes must come from
+        # the database, never from document.storage_url on disk.
+        temp_doc_path = StorageService.materialize_document(db, document.document_id)
+        _log("info", f"[Worker] Materialized document {document_id_str} to temp file: {temp_doc_path}", document_id_str)
 
-        #sTriage Phase
+        # Triage Phase
         _log("info", f"Starting OCR triage for Document {document_id_str}...", document_id_str)
         ocr_gateway = OCRGateway()
-        ocr_gateway_result = ocr_gateway.classify_document(document.storage_url)
+        ocr_gateway_result = ocr_gateway.classify_document(temp_doc_path)
         _log("info", f"Triage result: type={ocr_gateway_result.get('document_type')}, medical={ocr_gateway_result.get('is_medical')}", document_id_str)
-        
+
         # Unload immediately to free up RAM before API calls
         ocr_gateway.unload_model()
         
@@ -69,7 +71,7 @@ def process_document_pipeline(self, document_id_str: str):
 
         #LandingAI Extraction Phase
         _log("info", f"Starting LandingAI ADE for Document {document_id_str}...", document_id_str)
-        extraction_result = Extraction.parse_and_extract(document.storage_url, schema=EXTRACTION_SCHEMA)
+        extraction_result = Extraction.parse_and_extract(temp_doc_path, schema=EXTRACTION_SCHEMA)
         
         # Database Persistence
         ocr_record = RawExtractionData(
@@ -138,4 +140,10 @@ def process_document_pipeline(self, document_id_str: str):
         raise self.retry(exc=e, countdown=2 ** self.request.retries)
         
     finally:
+        if temp_doc_path and os.path.exists(temp_doc_path):
+            try:
+                os.unlink(temp_doc_path)
+                _log("info", f"[Worker] Cleaned up temp file: {temp_doc_path}", document_id_str)
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp file {temp_doc_path}: {e}")
         db.close()

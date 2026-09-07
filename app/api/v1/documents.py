@@ -3,6 +3,7 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -111,22 +112,59 @@ def upload_document(
         return existing_doc
 
     document_id = uuid.uuid4()
-    try:
-        storage_url = StorageService.save_document(file, patient_id, document_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File persistence failed: {str(e)}")
 
     new_document = Document(
         document_id=document_id,
         patient_id=patient_id,
         file_hash=file_hash,
-        storage_url=storage_url,
+        storage_url="",  # set below after the durable blob is queued
         status="UPLOADED",
     )
     db.add(new_document)
-    db.commit()
+    # Persist the documents row first so the document_blobs FK holds.
+    try:
+        db.flush()
+        storage_url = StorageService.save_document(db, file, patient_id, document_id)
+        new_document.storage_url = storage_url
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"File persistence failed: {str(e)}")
+
     db.refresh(new_document)
 
     process_document_pipeline.delay(str(new_document.document_id))
 
     return new_document
+
+
+@router.get("/{document_id}/file")
+def get_document_file(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+):
+    """Stream the original uploaded document bytes to the authenticated patient.
+
+    The binary is served from durable PostgreSQL storage; the container
+    filesystem is never trusted to hold documents.
+    """
+    from models.events import DocumentBlob
+
+    doc = db.query(Document).filter(
+        Document.document_id == document_id,
+        Document.patient_id == patient_id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    blob = db.get(DocumentBlob, document_id)
+    if blob is None:
+        raise HTTPException(status_code=404, detail="Document file not found.")
+
+    filename = blob.filename or f"{document_id}"
+    return Response(
+        content=blob.data,
+        media_type=blob.content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )

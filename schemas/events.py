@@ -10,6 +10,7 @@ class DocumentResponse(BaseModel):
     document_id: UUID
     patient_id: UUID
     file_hash: str
+    storage_url: Optional[str] = None
     status: str
     created_at: datetime
 
@@ -108,7 +109,7 @@ class ResolveEventRequest(BaseModel):
 class ProvenanceResponse(BaseModel):
     event_id: UUID
     document_id: UUID
-    storage_url: str          # The frontend uses this to fetch/render the PDF or Image
+    storage_url: str          # Authenticated download path: /api/v1/documents/{document_id}/file
     extracted_text: str       # The text the AI claims was here
     bounding_box: Optional[List[float]] = None  # Coordinates [x1, y1, x2, y2]
     

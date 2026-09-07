@@ -17,12 +17,30 @@ def initialize_firebase():
     if firebase_admin._apps:
         return
 
-    try:
-        cred_path = os.getenv("FIREBASE_CREDENTIALS_JSON") or os.getenv("FIREBASE_CREDENTIALS_PATH")
-        if cred_path and os.path.exists(cred_path):
-            with open(cred_path, "r", encoding="utf-8") as f:
-                cred_data = json.load(f)
+    # Fail fast: if neither credential source is set, do not fall through
+    # to default credentials (which don't exist on Voroa).
+    cred_value = os.getenv("FIREBASE_CREDENTIALS_JSON") or os.getenv("FIREBASE_CREDENTIALS_PATH")
+    if not cred_value:
+        raise RuntimeError(
+            "Firebase credentials not configured. "
+            "Set FIREBASE_CREDENTIALS_JSON (inline JSON) or "
+            "FIREBASE_CREDENTIALS_PATH (path to service-account file)."
+        )
 
+    try:
+        cred_data = None
+        if cred_value and cred_value.lstrip().startswith("{"):
+            # The env var itself contains the serialized service-account JSON
+            # (the practical delivery mechanism on container PaaS such as
+            # Voroa, where a secret can be injected as an env var directly).
+            cred_data = json.loads(cred_value)
+            cred_path = None
+        elif cred_value and os.path.exists(cred_value):
+            with open(cred_value, "r", encoding="utf-8") as f:
+                cred_data = json.load(f)
+            cred_path = cred_value
+
+        if cred_data:
             credential_project_id = cred_data.get("project_id")
             configured_project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
 
@@ -36,7 +54,10 @@ def initialize_firebase():
                         f"({configured_project_id} != {credential_project_id})"
                     )
 
-            cred = credentials.Certificate(cred_path)
+            if cred_path:
+                cred = credentials.Certificate(cred_path)
+            else:
+                cred = credentials.Certificate(cred_data)
             firebase_admin.initialize_app(cred)
             logger.info(
                 "Firebase Admin SDK initialized using certificate for project %s.",
@@ -44,8 +65,15 @@ def initialize_firebase():
             )
             return
 
-        firebase_admin.initialize_app()
-        logger.info("Firebase Admin SDK initialized using default credentials.")
+        # Neither FIREBASE_CREDENTIALS_JSON nor FIREBASE_CREDENTIALS_PATH provided
+        # a usable credential. Default credentials (GCP metadata) are not available
+        # on Voroa, so falling through here would silently leave Firebase un-initialized
+        # and cause every authenticated endpoint to 401. Fail loudly at startup.
+        raise RuntimeError(
+            "Firebase credentials not configured. "
+            "Set FIREBASE_CREDENTIALS_JSON (inline JSON) or "
+            "FIREBASE_CREDENTIALS_PATH (path to service-account file)."
+        )
     except Exception as e:
         logger.warning(f"Firebase Admin SDK not initialized; continuing without it: {e}")
         return False
