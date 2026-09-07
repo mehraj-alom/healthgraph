@@ -438,9 +438,9 @@ class OCRGateway:
                 response["choices"][0]["message"]["content"]
             )
         except (KeyError, IndexError, TypeError) as exc:
-            logger.error(f"Error parsing model response: {response}")
+            logger.error("Error parsing model response: unexpected response structure")
             raise ValueError(
-                f"Unexpected model response: {response}"
+                "Unexpected model response structure"
             ) from exc
 
         result = cls._parse_model_response(

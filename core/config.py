@@ -70,5 +70,11 @@ class Settings(BaseSettings):
 
     STORAGE_DIR: str = "./storage/documents"
 
+    # CORS origins — comma-separated list of allowed origins.
+    # React Native/Expo does not enforce CORS, so this only affects
+    # browser-based access (dev console, web admin).
+    # Empty string = no cross-origin allowed (most restrictive).
+    CORS_ORIGINS: str = ""
+
 
 settings = Settings()

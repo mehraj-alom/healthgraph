@@ -16,6 +16,12 @@ import {
 import { getFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Legacy HomeCache key pattern: home:{uid}:{key}:v{version}
+// We remove these on first auth to clear plaintext health data.
+const LEGACY_HOME_CACHE_PREFIX = 'home:';
+const LEGACY_CACHE_VERSION = 1;
+const LEGACY_CACHE_KEYS = ['profile', 'dailyMetrics', 'bodyState', 'trends', 'documents', 'medications'] as const;
+
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -72,11 +78,55 @@ async function syncBackendIdentity(): Promise<void> {
   // The Axios interceptor obtains the current Firebase ID token. No token or
   // refresh token is persisted independently by MedGraph.
   const { api } = await import('@/services/api');
-  await api.post('/api/v1/auth/sync');
+  const syncResult = await api.post<{ patient_id: string; status: string }>('/api/v1/auth/sync');
+  // Store patient_id for local SQLite scoping
+  const { updatePatientId } = await import('@/services/patientIdentity');
+  await updatePatientId(syncResult.patient_id);
 }
 
 // Import the readiness tracker (no circular dep — this is a pure module)
 import { setSyncPromise } from '@/services/backendIdentity';
+
+/**
+ * One-time cleanup of legacy plaintext HomeCache keys from AsyncStorage.
+ *
+ * Removes: home:{uid}:{key}:v1 for all health-data keys.
+ * Preserves: Firebase Auth, gender preference, anatomy state.
+ *
+ * Idempotent: safe to call multiple times.
+ * Non-blocking: failures are logged but do not affect the app.
+ */
+async function cleanupLegacyHomeCache(uid: string): Promise<void> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const legacyKeys = keys.filter((key) => {
+      // Match pattern: home:{uid}:{key}:v{version}
+      if (!key.startsWith(LEGACY_HOME_CACHE_PREFIX)) return false;
+      const parts = key.split(':');
+      if (parts.length !== 4) return false;
+      const [, keyUserId, cacheKey, versionPart] = parts;
+      // Must match this user's UID
+      if (keyUserId !== uid) return false;
+      // Must be a known health-data cache key
+      if (!LEGACY_CACHE_KEYS.includes(cacheKey as any)) return false;
+      // Must be version 1 (the only historical version)
+      if (versionPart !== `v${LEGACY_CACHE_VERSION}`) return false;
+      return true;
+    });
+
+    if (legacyKeys.length > 0) {
+      await AsyncStorage.multiRemove(legacyKeys);
+      if (__DEV__) {
+        console.log(`[Auth] Legacy HomeCache cleanup: removed ${legacyKeys.length} keys`);
+      }
+    }
+  } catch (error) {
+    // Non-blocking: cleanup failure does not affect the app
+    if (__DEV__) {
+      console.error('[Auth] Legacy HomeCache cleanup failed (non-blocking):', error);
+    }
+  }
+}
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -85,6 +135,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Load patient ID from SecureStore on mount
+    const { loadPatientId } = require('@/services/patientIdentity');
+    loadPatientId();
+
     let mounted = true;
     const unsubscribe = onIdTokenChanged(auth, (firebaseUser) => {
       if (!mounted) return;
@@ -97,13 +151,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           createdAt: firebaseUser.metadata.creationTime ? new Date(firebaseUser.metadata.creationTime) : new Date(),
         });
         // Fire-and-forget: sync backend identity in the background.
-        // The API request interceptor awaits this promise (bounded 3s)
-        // before attaching tokens, so Dashboard API requests coordinate
-        // with identity readiness without blocking the UI.
         const syncPromise = syncBackendIdentity().catch((syncError) => {
           console.error('[MedGraph] Backend auth sync failed (non-blocking):', syncError);
         });
         setSyncPromise(syncPromise);
+        // One-time cleanup: remove legacy plaintext HomeCache keys
+        cleanupLegacyHomeCache(firebaseUser.uid).catch(() => {});
       } else {
         setUser(null);
         setUserProfile(null);
@@ -118,7 +171,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
       if (displayName?.trim()) await updateProfile(result.user, { displayName: displayName.trim() });
-      await syncBackendIdentity();
+      // Backend identity sync is handled by onIdTokenChanged listener
     } catch (authError: unknown) {
       setError(authError instanceof Error ? authError.message : 'Signup failed');
       throw authError;
@@ -129,7 +182,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      await syncBackendIdentity();
+      // Backend identity sync is handled by onIdTokenChanged listener
     } catch (authError: unknown) {
       setError(authError instanceof Error ? authError.message : 'Login failed');
       throw authError;
@@ -138,9 +191,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async (): Promise<void> => {
     setError(null);
-    // Clear home cache before signing out
-    const { homeCache } = await import('@/services/homeCache');
-    await homeCache.clearAll();
+    // Clear SQLite health cache and patient identity before signing out
+    const { getCachedPatientId, clearPatientId } = await import('@/services/patientIdentity');
+    const { clearHomeCache } = await import('@/db/queries/homeCache');
+    const patientId = getCachedPatientId();
+    if (patientId) {
+      await clearHomeCache(patientId);
+    }
+    await clearPatientId();
     await firebaseSignOut(auth);
     setUser(null);
     setUserProfile(null);

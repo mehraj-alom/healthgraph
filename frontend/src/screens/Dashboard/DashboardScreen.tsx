@@ -9,6 +9,7 @@ import { useDocuments } from '@/context/DocumentsContext';
 import { useAuth } from '@/context/AuthContext';
 import { useCachedQuery } from '@/hooks/useCachedQuery';
 import { useMedications } from '@/hooks/useMedications';
+import { useSyncStatus, getSyncStatusMessage } from '@/hooks/useSyncStatus';
 import { Card, ProcessingBadge } from '@/components';
 import TrendsScreen from '@/screens/Trends/TrendsScreen';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, CATEGORY_COLORS } from '@/constants';
@@ -71,6 +72,7 @@ export default function DashboardScreen() {
   const metrics = useDailyMetrics();
   const docs = useDocuments();
   const { data: medications, refetch: refetchMedications } = useMedications();
+  const syncStatus = useSyncStatus();
   const activeMedications = useMemo(
     () => (medications ?? []).filter(m => m.status === 'ACTIVE'),
     [medications],
@@ -205,6 +207,20 @@ export default function DashboardScreen() {
       >
         {/* ── HEADER ── */}
         <HeaderSection profileName={profileName} greeting={greeting} navigation={navigation} />
+
+        {/* ── SYNC STATUS ── */}
+        {syncStatus.status !== 'SYNCED' && (
+          <View style={styles.syncStatusContainer}>
+            <Text style={styles.syncStatusText}>
+              {getSyncStatusMessage(syncStatus.status)}
+            </Text>
+            {syncStatus.status === 'SYNC_FAILED' && (
+              <Pressable onPress={syncStatus.retry} style={styles.syncRetryButton}>
+                <Text style={styles.syncRetryText}>Retry</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
 
         {/* ── HEALTH OVERVIEW ── */}
         <View style={[styles.healthOverview, isNarrow && styles.healthOverviewNarrow]}>
@@ -822,6 +838,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#07111F',
+  },
+
+  // ── Sync Status ──
+  syncStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.sm,
+    marginBottom: SPACING.sm,
+  },
+  syncStatusText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  syncRetryButton: {
+    marginLeft: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  syncRetryText: {
+    fontSize: 11,
+    color: '#fff',
+    fontWeight: '600',
   },
 
   // ── Health Overview ──

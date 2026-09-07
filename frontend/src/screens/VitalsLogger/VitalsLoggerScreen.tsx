@@ -15,8 +15,14 @@ import axios from 'axios';
 import { Button, Input } from '@/components';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, SHADOWS } from '@/constants';
 import { api } from '@/services/api';
+import { getCachedPatientId } from '@/services/patientIdentity';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
-import { useMedicationSchedule } from '@/hooks/useMedications';
+import { useMedicationSchedule, recordMedicationTaken } from '@/hooks/useMedications';
+import {
+  getDailyLogDetail as dbGetDailyLogDetail,
+  upsertDailyLog as dbUpsertDailyLog,
+  hydrateDailyLog as dbHydrateDailyLog,
+} from '@/db/queries/dailyLogs';
 import type {
   DailyCheckInRequest,
   DailyCheckInResponse,
@@ -411,13 +417,28 @@ export default function VitalsLoggerScreen() {
   const today = dateToday();
   const { data: medicationSchedule, refetch: refetchMedSchedule } = useMedicationSchedule(today);
 
-  // Fetch today's existing check-in for edit mode
+  // Fetch today's existing check-in for edit mode — local-first
   const [selectedDate, setSelectedDate] = useState(dateToday());
   const todayCheckinQuery = useQuery<DailyCheckInDetail | null>({
     queryKey: ['daily-checkin', selectedDate],
     queryFn: async () => {
+      const patientId = getCachedPatientId();
+      if (!patientId) return null;
+
+      // Try local SQLite first
+      const localDetail = await dbGetDailyLogDetail(patientId, selectedDate);
+      if (localDetail) {
+        // Hydrate from server in background (fire-and-forget)
+        hydrateFromServer(selectedDate).catch(() => {});
+        return localDetail;
+      }
+
+      // Fallback: fetch from server
       try {
-        return await api.get<DailyCheckInDetail>(`/api/v1/logs/daily-checkin/${selectedDate}`);
+        const serverDetail = await api.get<DailyCheckInDetail>(`/api/v1/logs/daily-checkin/${selectedDate}`);
+        // Hydrate local SQLite
+        await dbHydrateDailyLog(patientId, serverDetail);
+        return serverDetail;
       } catch (err: any) {
         // 404 means no check-in exists for this date — return null (not an error)
         if (err?.response?.status === 404) return null;
@@ -427,6 +448,18 @@ export default function VitalsLoggerScreen() {
     retry: false,
     staleTime: 60_000,
   });
+
+  // Background hydration from server
+  const hydrateFromServer = async (date: string) => {
+    const patientId = getCachedPatientId();
+    if (!patientId) return;
+    try {
+      const serverDetail = await api.get<DailyCheckInDetail>(`/api/v1/logs/daily-checkin/${date}`);
+      await dbHydrateDailyLog(patientId, serverDetail);
+    } catch {
+      // Offline or 404 — ignore
+    }
+  };
 
   // Initialize form from existing entry for the selected date.
   useEffect(() => {
@@ -511,15 +544,30 @@ export default function VitalsLoggerScreen() {
   // --- Mutations ---
   const mutation = useMutation({
     mutationFn: async (payload: DailyCheckInRequest) => {
-      if (editingGroupId) {
-        // Update existing entry
-        return api.put<DailyCheckInResponse>(
-          `/api/v1/logs/daily-checkin/${editingGroupId}`,
-          payload,
-        );
+      const patientId = getCachedPatientId();
+      if (!patientId) throw new Error('Not authenticated');
+
+      // Step 1: Write to SQLite immediately
+      const groupId = await dbUpsertDailyLog(patientId, payload);
+
+      // Step 2: Try server persistence (fire-and-forget)
+      let serverGroupId: string | null = null;
+      try {
+        if (editingGroupId) {
+          const response = await api.put<DailyCheckInResponse>(
+            `/api/v1/logs/daily-checkin/${editingGroupId}`,
+            payload,
+          );
+          serverGroupId = response.group_id;
+        } else {
+          const response = await api.post<DailyCheckInResponse>('/api/v1/logs/daily-checkin', payload);
+          serverGroupId = response.group_id;
+        }
+      } catch {
+        // API failed — local data is preserved, will sync later
       }
-      // Create new entry
-      return api.post<DailyCheckInResponse>('/api/v1/logs/daily-checkin', payload);
+
+      return { groupId, serverGroupId };
     },
     onSuccess: async () => {
       await Promise.all([
@@ -856,16 +904,15 @@ export default function VitalsLoggerScreen() {
                         style={styles.medTakeButton}
                         onPress={async () => {
                           try {
-                            const scheduledFor = new Date();
-                            scheduledFor.setHours(hours, minutes, 0, 0);
-                            await api.post('/api/v1/medications/taken', {
-                              medication_id: med.medication_id,
-                              taken_at: new Date().toISOString(),
-                              scheduled_for: scheduledFor.toISOString(),
-                              dose_taken: med.dose_amount,
-                              dose_unit: med.dose_unit,
-                              status: 'TAKEN',
-                            });
+                            const patientId = getCachedPatientId();
+                            if (!patientId) return;
+                            await recordMedicationTaken(
+                              patientId,
+                              med.medication_id,
+                              med.dose_amount,
+                              med.dose_unit,
+                              timeStr,
+                            );
                             refetchMedSchedule();
                           } catch (error) {
                             // Silent fail - user can retry

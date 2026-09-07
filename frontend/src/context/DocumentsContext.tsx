@@ -36,6 +36,12 @@ import {
   getDocumentExtraction,
   pollDocumentStatus,
 } from '@/services/documents';
+import { getCachedPatientId } from '@/services/patientIdentity';
+import {
+  getDocuments as dbGetDocuments,
+  upsertDocument as dbUpsertDocument,
+  hydrateDocuments as dbHydrateDocuments,
+} from '@/db/queries/documents';
 import type {
   DocumentListItem,
   DocumentExtraction,
@@ -234,19 +240,49 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
     stageSubscribersRef.current.delete(docId);
   }, []);
 
-  // ---- Fetch document list ----
+  // ---- Fetch document list — local-first ----
 
   const refetchDocuments = useCallback(async () => {
     try {
       setDocumentsLoading(true);
+      const patientId = getCachedPatientId();
+
+      // Try local SQLite first
+      if (patientId) {
+        const localDocs = await dbGetDocuments(patientId);
+        if (localDocs.length > 0) {
+          setDocuments(localDocs);
+          // Hydrate from server in background (fire-and-forget)
+          hydrateFromServer(patientId).catch(() => {});
+          setDocumentsLoading(false);
+          return;
+        }
+      }
+
+      // Fallback: fetch from server
       const docs = await listDocuments();
       setDocuments(docs);
+
+      // Hydrate local SQLite
+      if (patientId && docs.length > 0) {
+        await dbHydrateDocuments(patientId, docs);
+      }
     } catch (err) {
       console.error('[Documents] Failed to fetch documents:', err);
     } finally {
       setDocumentsLoading(false);
     }
   }, []);
+
+  // Background hydration from server
+  const hydrateFromServer = async (patientId: string): Promise<void> => {
+    try {
+      const serverDocs = await listDocuments();
+      await dbHydrateDocuments(patientId, serverDocs);
+    } catch {
+      // Offline or error — ignore
+    }
+  };
 
   // ---- Initial fetch: only after auth is ready ----
   useEffect(() => {
@@ -293,6 +329,19 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
           resolvedId = realId;
           console.log(`[UploadFlow] ✓ Upload succeeded → document_id=${realId}`);
           onUploaded?.(realId);
+
+          // 1b. Store metadata in SQLite
+          const patientId = getCachedPatientId();
+          if (patientId) {
+            await dbUpsertDocument(patientId, {
+              document_id: realId,
+              file_hash: doc.file_hash,
+              storage_url: doc.storage_url,
+              status: doc.status,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
 
           // 2. Replace temp entry with real document ID
           activeProcessingRef.current = activeProcessingRef.current.map((e) =>

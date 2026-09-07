@@ -24,6 +24,13 @@
     "plugins": [
       "expo-secure-store",
       [
+        "expo-sqlite",
+        {
+          "enableFTS": true,
+          "useSQLCipher": true
+        }
+      ],
+      [
         "expo-dev-client",
         {
           "urlScheme": "medgraph"

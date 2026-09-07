@@ -232,3 +232,6 @@ volume/*
 *gguf
 localdocker-compose.yml
 Dockerfilelocal
+
+# Uploaded patient documents (contains PHI)
+storage/documents/

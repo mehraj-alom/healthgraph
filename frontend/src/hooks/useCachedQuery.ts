@@ -1,9 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { homeCache, CACHE_TTL } from '@/services/homeCache';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/services/api';
+import { getCachedPatientId } from '@/services/patientIdentity';
+import {
+  CACHE_TTL,
+  getProfileCache,
+  setProfileCache,
+  getDailyMetricsCache,
+  setDailyMetricsCache,
+  getTrendsCache,
+  setTrendsCache,
+} from '@/db/queries/homeCache';
 
-type CacheKey = keyof typeof CACHE_TTL;
+type CacheKey = 'profile' | 'dailyMetrics' | 'trends';
 
 interface UseCachedQueryOptions<T> {
   cacheKey: CacheKey;
@@ -20,6 +29,34 @@ interface UseCachedQueryResult<T> {
   isError: boolean;
   refetch: () => Promise<void>;
   isFromCache: boolean;
+}
+
+// Helper to get cache based on key
+async function getCache(patientId: string, key: CacheKey): Promise<{ data: any | null; cachedAt: number }> {
+  switch (key) {
+    case 'profile':
+      return getProfileCache(patientId);
+    case 'dailyMetrics':
+      return getDailyMetricsCache(patientId);
+    case 'trends':
+      return getTrendsCache(patientId, 30); // Default 30 days
+    default:
+      return { data: null, cachedAt: 0 };
+  }
+}
+
+// Helper to set cache based on key
+async function setCache(patientId: string, key: CacheKey, data: any): Promise<void> {
+  switch (key) {
+    case 'profile':
+      return setProfileCache(patientId, data);
+    case 'dailyMetrics':
+      return setDailyMetricsCache(patientId, data);
+    case 'trends':
+      return setTrendsCache(patientId, 30, data); // Default 30 days
+    default:
+      return;
+  }
 }
 
 export function useCachedQuery<T>({
@@ -53,6 +90,7 @@ export function useCachedQuery<T>({
     if (!enabled || !user) return;
 
     const fetchId = ++fetchCountRef.current;
+    const patientId = getCachedPatientId();
     
     try {
       if (showRefreshing) {
@@ -62,19 +100,28 @@ export function useCachedQuery<T>({
       }
       setError(null);
 
-      // Check cache first
-      const cached = showRefreshing
-        ? { data: null, fromCache: false, age: 0 }
-        : await homeCache.get<T>(userId, cacheKey);
-      
+      // Check SQLite cache first — cache failure must NOT block the API call.
+      // On first launch the DB may not exist yet; on crypto init failure the
+      // DB cannot open. In both cases we skip the cache and go straight to
+      // the network.
+      let cached: { data: T | null; cachedAt: number } = { data: null, cachedAt: 0 };
+      if (!showRefreshing && patientId) {
+        try {
+          cached = await getCache(patientId, cacheKey);
+        } catch {
+          // SQLite not ready or cache corrupted — proceed to API
+        }
+      }
+
       if (mountedRef.current && fetchId === fetchCountRef.current) {
         if (cached.data) {
+          const age = Date.now() - cached.cachedAt;
           setData(cached.data);
           dataRef.current = cached.data;
           setIsFromCache(true);
           
           // If cache is fresh enough, don't fetch
-          if (!cached.fromCache || cached.age < CACHE_TTL[cacheKey] * 0.5) {
+          if (age < CACHE_TTL[cacheKey] * 0.5) {
             setIsLoading(false);
             setIsRefreshing(false);
             return;
@@ -82,7 +129,7 @@ export function useCachedQuery<T>({
         }
       }
 
-      // Fetch fresh data
+      // Fetch fresh data from the network
       const freshData = await queryFn();
       
       if (mountedRef.current && fetchId === fetchCountRef.current) {
@@ -91,8 +138,14 @@ export function useCachedQuery<T>({
         setIsFromCache(false);
         lastFetchTimeRef.current = Date.now();
         
-        // Cache the fresh data
-        await homeCache.set(userId, cacheKey, freshData);
+        // Best-effort: cache the fresh data in SQLite (ignore write failure)
+        if (patientId) {
+          try {
+            await setCache(patientId, cacheKey, freshData);
+          } catch {
+            // SQLite not ready — data is still held in memory state
+          }
+        }
         
         onSuccess?.(freshData);
       }

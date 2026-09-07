@@ -114,9 +114,6 @@ client.interceptors.response.use(
         `code=${error.code} message=${error.message}`,
         error.response ? `status=${error.response.status}` : 'NO_RESPONSE',
       );
-      if (error.response) {
-        console.error(`[HTTP] #${seq} response body:`, error.response.data);
-      }
     }
     const originalRequest =
       error.config as RetryableRequestConfig | undefined;

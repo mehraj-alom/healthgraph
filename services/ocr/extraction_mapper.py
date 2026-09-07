@@ -72,7 +72,7 @@ def _resolve_structure_id(
     is also a possible match.  The fallback only fires when the SNOMED
     code lookup (priority 1) has already failed.
     """
-    # 1. Direct SNOMED code match (most reliable)
+    #  Direct SNOMED code match (most reliable)
     if concept_code and terminology:
         structure = db.execute(
             select(AnatomicalStructure.structure_id)
@@ -82,7 +82,7 @@ def _resolve_structure_id(
         if structure:
             return structure
 
-    # 2. Conservative text fallback on concept display name.
+    # Conservative text fallback on concept display name.
     #    Terms are ordered longest-first so "left lung" matches before
     #    "lung", preventing false escalation to a parent region.
     #    Each entry maps a specific text pattern to exactly one structure.
@@ -377,7 +377,7 @@ class ExtractionMapper:
                 raw_test_name = result.get("test_name", "")
                 value = result.get("result", "")
                 if not raw_test_name or not value:
-                    logger.warning(f"Missing test name or value in result: {result}. Skipping.")
+                    logger.warning("Missing test name or value in result: skipping entry")
                     continue
                 canon_res = Canonicalizer.resolve_concept(db, raw_term=raw_test_name)
 

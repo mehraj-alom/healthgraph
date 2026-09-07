@@ -38,8 +38,8 @@ class EmbeddingService:
                 embeddings = [item["embedding"] for item in data["data"]]
                 return embeddings
             except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
+                logger.error(f"HTTP error occurred: {e.response.status_code}")
                 raise
             except Exception as e:
-                logger.error(f"An error occurred while generating embeddings: {str(e)}")
+                logger.error(f"An error occurred while generating embeddings: {type(e).__name__}")
                 raise

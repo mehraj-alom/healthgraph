@@ -279,9 +279,6 @@ export default function ChatScreen() {
       const errMsg = error?.message ?? String(error);
       const errStatus = error?.response?.status ?? 'NO_RESPONSE';
       console.warn(`[Chat] request FAILED code=${errCode} status=${errStatus} duration=${elapsed}ms message=${errMsg}`);
-      if (error?.response?.data) {
-        console.warn('[Chat] response body:', error.response.data);
-      }
       if (error?.request) {
         console.warn('[Chat] request config:', {
           url: error?.config?.url,

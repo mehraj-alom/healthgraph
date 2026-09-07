@@ -466,11 +466,8 @@ export default function TimelineScreen() {
       
       if (items.length > 0) {
         const first = items[0];
-        console.log('[GraphData] first record =', JSON.stringify(first, null, 2));
-        console.log('[GraphData] first record keys =', Object.keys(first));
-        console.log('[GraphData] first record.resource_type =', first.resource_type);
-        console.log('[GraphData] first record.event_type =', first.event_type);
-        console.log('[GraphData] first record.event_id =', first.event_id);
+        console.log('[GraphData] first record type =', first.resource_type ?? 'unknown');
+        console.log('[GraphData] first record event_type =', first.event_type ?? 'N/A');
       }
 
       // ── Classify ──

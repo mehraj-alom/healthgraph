@@ -27,8 +27,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useMedications, useMedicationSchedule, useMedicationTakenEvents } from '@/hooks/useMedications';
+import { useMedications, useMedicationSchedule, useMedicationTakenEvents, recordMedicationTaken } from '@/hooks/useMedications';
 import { useAuth } from '@/context/AuthContext';
+import { getCachedPatientId } from '@/services/patientIdentity';
 import { api } from '@/services/api';
 import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants';
 import type { Medication, MedicationFrequency, MedicationRoute, MedicationStatus, DailyMedicationSchedule, MedicationTakenEvent } from '@/types';
@@ -101,24 +102,32 @@ export default function MedicationsScreen() {
     [medications],
   );
 
-  // Handle medication taken
+  // Handle medication taken — local-first with server reconciliation
   const handleTakeDose = useCallback(async (medication: Medication, scheduledTime: string) => {
     try {
-      const scheduledFor = new Date();
-      const [hours, minutes] = scheduledTime.split(':').map(Number);
-      scheduledFor.setHours(hours, minutes, 0, 0);
+      const patientId = getCachedPatientId();
+      if (!patientId) {
+        Alert.alert('Error', 'Not authenticated');
+        return;
+      }
 
-      await api.post('/api/v1/medications/taken', {
-        medication_id: medication.medication_id,
-        taken_at: new Date().toISOString(),
-        scheduled_for: scheduledFor.toISOString(),
-        dose_taken: medication.dose_amount,
-        dose_unit: medication.dose_unit,
-        status: 'TAKEN',
-      });
+      // Local-first: write to SQLite immediately, then reconcile with server
+      const { serverEventId } = await recordMedicationTaken(
+        patientId,
+        medication.medication_id,
+        medication.dose_amount,
+        medication.dose_unit,
+        scheduledTime,
+      );
 
+      // Refresh schedule from local SQLite
       refetchSchedule();
-      Alert.alert('Success', 'Dose recorded successfully');
+
+      if (serverEventId) {
+        Alert.alert('Success', 'Dose recorded successfully');
+      } else {
+        Alert.alert('Saved Locally', 'Dose saved. Will sync when online.');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to record dose');
     }

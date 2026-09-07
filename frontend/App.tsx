@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  AppState,
   StyleSheet,
   Text,
   View,
@@ -44,6 +45,9 @@ function BodyScreenWrapper() {
 
 import { COLORS } from '@/constants';
 import type { RootStackParamList, MainTabParamList } from '@/types';
+import { syncPendingMutations } from '@/services/syncEngine';
+import { initNetworkMonitor, cleanupNetworkMonitor, subscribe as subscribeNetwork, isOnline } from '@/services/networkMonitor';
+import { initSyncState, clearSyncState } from '@/services/syncState';
 
 
 /* ============================================================================
@@ -167,6 +171,43 @@ function AppNavigator() {
     queryClient.removeQueries({
       predicate: (query) => ['bodyState', 'daily-metrics', 'timeline'].includes(String(query.queryKey[0])),
     });
+  }, [user]);
+
+  // Initialize network monitor and sync on lifecycle events
+  React.useEffect(() => {
+    if (!user) {
+      clearSyncState();
+      return;
+    }
+
+    // Initialize network monitor
+    initNetworkMonitor();
+
+    // Initialize sync state
+    initSyncState();
+
+    // Sync on startup (after authentication)
+    syncPendingMutations().catch(() => {});
+
+    // Sync on foreground transition
+    const appSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && isOnline()) {
+        syncPendingMutations().catch(() => {});
+      }
+    });
+
+    // Sync on network recovery
+    const networkUnsubscribe = subscribeNetwork(() => {
+      if (isOnline()) {
+        syncPendingMutations().catch(() => {});
+      }
+    });
+
+    return () => {
+      appSubscription.remove();
+      networkUnsubscribe();
+      cleanupNetworkMonitor();
+    };
   }, [user]);
 
   /* --------------------------------------------------------------------------
