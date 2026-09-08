@@ -43,7 +43,7 @@ def process_document_pipeline(self, document_id_str: str):
         db.commit()
 
         # Materialize the durable document bytes (stored in PostgreSQL) to a
-        # TEMPORARY file so OCR/extraction (pdf2image, PIL, LandingAI ADE) can
+        # TEMPORARY file so OCR/extraction (LandingAI ADE) can
         # read them. The container filesystem is ephemeral and not shared
         # between the web service and this worker, so the bytes must come from
         # the database, never from document.storage_url on disk.

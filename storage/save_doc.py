@@ -94,14 +94,14 @@ class StorageService:
     def materialize_document(db: Session, document_id: UUID) -> str:
         """Write a document's stored bytes to a TEMPORARY file for OCR.
 
-        OCR and extraction (pdf2image, PIL, LandingAI ADE) require a real file
+        OCR and extraction (LandingAI ADE) require a real file
         path. This returns a temp file path the caller MUST delete in a finally
         block. Nothing durable should ever be relied on at this path.
         """
         data = StorageService.get_document_bytes(db, document_id)
 
         blob_suffix = ".bin"
-        # Best-effort filename/suffix from the stored blob so pdf2image/PIL can
+        # Best-effort filename/suffix from the stored blob so LandingAI ADE can
         # decide how to decode it.
         blob_meta = db.get(DocumentBlob, document_id)
         if blob_meta is not None and blob_meta.filename:

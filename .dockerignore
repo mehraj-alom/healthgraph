@@ -42,6 +42,9 @@ celerybeat-schedule
 # Local/test files
 report1.pdf
 
+# Local GGUF classifier model (replaced by LandingAI ADE Classify; never bake)
+models/*.gguf
+
 # Runtime document storage
 storage/documents/
 storage/__pycache__/

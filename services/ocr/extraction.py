@@ -1,3 +1,4 @@
+import base64
 import os
 from pathlib import Path
 
@@ -13,6 +14,19 @@ except ModuleNotFoundError:  # pragma: no cover - optional OCR backend
 _client = None
 
 
+def _normalize_apikey(api_key: str) -> str:
+    """Return the key in the form the ADE SDK sends as ``Authorization: Bearer``.
+
+    ADE API keys are ``user:password`` pairs; the API authenticates the
+    base64-encoded pair (Bearer ``base64(user:password)``). A raw ``user:pass``
+    value is encoded here so either form works; token-style keys (no ``:``) are
+    passed through unchanged.
+    """
+    if api_key and ":" in api_key:
+        return base64.b64encode(api_key.encode()).decode()
+    return api_key
+
+
 def _get_client():
     global _client
     if _client is not None:
@@ -23,7 +37,7 @@ def _get_client():
     if not api_key:
         return None
     try:
-        _client = LandingAIADE(apikey=api_key)
+        _client = LandingAIADE(apikey=_normalize_apikey(api_key))
         return _client
     except Exception:
         return None
@@ -90,3 +104,13 @@ class Extraction:
             "structured_json": parse_result["structured_json"],
             "extraction": extract_result["extraction"]
         }
+
+
+def get_ade_client():
+    """Return the shared LandingAI ADE client, or None if not configured.
+
+    Classification (OCR gateway) and extraction both talk to LandingAI ADE,
+    so they share one client and one credential source
+    (VISION_AGENT_API_KEY or LANDINGAI_API_KEY).
+    """
+    return _get_client()

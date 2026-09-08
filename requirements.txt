@@ -33,9 +33,7 @@ httpx>=0.26.0             # Async HTTP client for LandingAI API
 thefuzz>=0.22.1           # For canonical alias fuzzy matching
 python-Levenshtein>=0.25.0 # Speeds up fuzzy matching
 python-dotenv>=1.0.1      # Load environment variables for local config
-pdf2image>=1.17.0         # Render PDF first pages for OCR/document classification
-llama-cpp-python>=0.3.0   # Optional OCR model backend for document classification
-landingai-ade>=1.17.0     # LandingAI ADE for document extraction
+landingai-ade>=1.17.0     # LandingAI ADE for document classification and extraction
 
 # Vector Database & Embeddings
 qdrant-client>=1.8.0      # For interacting with Qdrant vector database

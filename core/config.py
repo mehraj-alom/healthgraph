@@ -92,10 +92,6 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
 
-    # 450m vision language model for document classification and extraction
-    MODEL_PATH: str = "./models/lfm-2.5-vl-450m-q4_k_m.gguf"
-    MMPROJ_PATH: str = ""
-
     STORAGE_DIR: str = "./storage/documents"
 
     # CORS origins — comma-separated list of allowed origins.
