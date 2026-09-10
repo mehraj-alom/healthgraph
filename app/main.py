@@ -1,11 +1,13 @@
+import asyncio
 from contextlib import asynccontextmanager
 import os
+import time as _time
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from agents.agent_setup import close_agent, get_medical_agent, initialize_agent
 from app.api.auth import router as auth_router
@@ -40,32 +42,117 @@ from services.vectorization.qdrant_client import vector_db
 load_dotenv()
 
 
+def _marker(name: str):
+    now = _time.monotonic()
+    prev = getattr(_marker, "_t", None)
+    delta = f" +{now - prev:.1f}s" if prev is not None else ""
+    _marker._t = now
+    logger.info("START %s%s", name, delta)
+    return now
+
+
+def _done(name: str, t0) -> None:
+    logger.info("DONE %s (%.1fs)", name, _time.monotonic() - t0)
+
+
+def _db_init() -> None:
+    """Sync PostgreSQL schema/migration/seed steps (blocking psycopg2).
+
+    Moved out of create_app() so module import and socket binding never
+    depend on database reachability. Runs inside a worker thread from
+    the startup hooks task.
+    """
+    _marker("hooks.enum_migrate")
+    try:
+        ensure_enum_values()
+    except Exception:
+        logger.warning("Enum migration skipped (table may not exist yet).")
+    _done("hooks.enum_migrate", _marker("hooks.create_all"))
+
+    _marker("hooks.create_all")
+    Base.metadata.create_all(bind=engine)
+    _done("hooks.create_all", _marker("hooks.seed"))
+
+    _marker("hooks.seed")
+    db = SessionLocal()
+    try:
+        seed_medical_concepts(db)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+    _done("hooks.seed", _marker("hooks.seed.done"))
+
+
+async def _run_startup_hooks(app: FastAPI, secret_key) -> None:
+    """Run deferred startup initialization as a background task.
+
+    Every expensive external dependency is initialized here instead of
+    before socket binding, so uvicorn reports "Application startup
+    complete" immediately and /health responds inside the deployment
+    window even if a dependency is slow or unreachable.
+
+    app.state.ready becomes True only when ALL dependencies are ready;
+    on any failure it stays False and non-/health endpoints return 503
+    (clear failure, never silent partial initialization).
+    """
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, _db_init)
+
+        _marker("lifespan.qdrant.setup")
+        app.state.qdrant_client = await loop.run_in_executor(
+            None, vector_db.setup_collection
+        )
+        _done("lifespan.qdrant.setup", _marker("lifespan.firebase.init"))
+
+        await loop.run_in_executor(None, initialize_firebase)
+        _done("lifespan.firebase.init", _marker("lifespan.deidentifier.init"))
+
+        app.state.deidentifier = DeIdentificationService(
+            secret_key.encode() if isinstance(secret_key, str) else secret_key
+        )
+        _done("lifespan.deidentifier.init", _marker("lifespan.agent.init"))
+
+        await initialize_agent()
+        app.state.medical_agent = get_medical_agent()
+        _done("lifespan.agent.init", _marker("lifespan.ready"))
+
+        app.state.ready = True
+        logger.info(
+            "STARTUP HOOKS COMPLETE - all dependencies initialized; "
+            "app.state.ready=True"
+        )
+    except Exception:
+        app.state.ready = False
+        logger.exception(
+            "STARTUP HOOKS FAILED - serving /health only; all other "
+            "endpoints return 503 until the cause is fixed "
+            "(app.state.ready=False)"
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up the FastAPI application.")
+    t_lifespan = _time.monotonic()
 
+    _marker("lifespan.secret.settings")
     secret_key = settings.secret_key
 
     if not secret_key:
         logger.error("Secret key not found in environment variables.")
         raise RuntimeError("Secret key not found in environment variables.")
+    _done("lifespan.secret.settings", _marker("lifespan.background.start"))
 
-    app.state.deidentifier = DeIdentificationService(
-        secret_key.encode() if isinstance(secret_key, str) else secret_key
-    )
-
-    app.state.qdrant_client = vector_db.setup_collection()
-
-    initialize_firebase()
-
-    await initialize_agent()
-
-    app.state.medical_agent = get_medical_agent()
-
-    logger.info(
-        "DEBUG: app.state.medical_agent set = %s",
-        app.state.medical_agent,
-    )
+    # Do NOT block the event loop: run all expensive external
+    # initialization as a background task so uvicorn reports startup
+    # complete immediately and /health responds inside the deployment
+    # window even if a dependency stalls or is unreachable.
+    app.state.startup_task = asyncio.create_task(_run_startup_hooks(app, secret_key))
+    logger.info("START lifespan.background.start (deferred hooks task spawned)")
 
     yield
 
@@ -76,6 +163,9 @@ async def lifespan(app: FastAPI):
     # hitting a closed pool.
     app.state.medical_agent = None
 
+    if app.state.startup_task is not None and not app.state.startup_task.done():
+        app.state.startup_task.cancel()
+
     await close_agent()
 
     close_neo4j_driver()
@@ -83,27 +173,9 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     logger.info("Initializing FastAPI application.")
+    t_start = _marker("create_app")
 
-    # Ensure PostgreSQL enum types include all current OutboxEventType values.
-    # This must run BEFORE create_all() so the enum type is correct when
-    # the table is created or validated.
-    try:
-        ensure_enum_values()
-    except Exception:
-        logger.warning("Enum migration skipped (table may not exist yet).")
-
-    Base.metadata.create_all(bind=engine)
-
-    db = SessionLocal()
-
-    try:
-        seed_medical_concepts(db)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+    _t_build = _marker("create_app.build")
 
     app = FastAPI(
         title="MedGraph Core API",
@@ -130,6 +202,27 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Readiness gate: /health and the static dev console never depend on
+    # external services and respond immediately; every other endpoint
+    # returns 503 until the deferred startup hooks finish (or 503 forever
+    # if they failed) so failures are loud instead of partial.
+    app.state.ready = False
+    app.state.startup_task = None
+
+    @app.middleware("http")
+    async def readiness_gate(request, call_next):
+        if not app.state.ready and request.url.path not in ("/health", "/"):
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "detail": (
+                        "Service is initializing and not ready yet. "
+                        "Please retry shortly."
+                    )
+                },
+            )
+        return await call_next(request)
 
     app.include_router(auth_router)
     app.include_router(documents.router)
@@ -175,6 +268,8 @@ def create_app() -> FastAPI:
             )
         }
 
+    _done("create_app.build", _t_build)
+    _done("create_app", t_start)
     return app
 
 

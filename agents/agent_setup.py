@@ -116,6 +116,7 @@ def _build_pool() -> AsyncConnectionPool:
             "autocommit": True,
             "prepare_threshold": 0,
             "row_factory": None,
+            "connect_timeout": 15,  # TEMP DIAGNOSIS: bound first connect
         },
         max_lifetime=15 * 60.0,   # Recycle after 15 minutes
         max_idle=5 * 60.0,        # Close idle connections after 5 minutes
@@ -145,7 +146,9 @@ async def initialize_agent() -> None:
     try:
         # Create and open the connection pool.
         _pool = _build_pool()
+        logger.info("START agent.pool.open")
         await _pool.open(wait=True, timeout=30)
+        logger.info("DONE agent.pool.open")
         logger.info(
             "LangGraph checkpointer connection pool opened "
             "(min_size=%d, check=SELECT 1, max_idle=%ds).",
@@ -172,11 +175,14 @@ async def initialize_agent() -> None:
         _checkpointer = AsyncPostgresSaver(conn=_pool, serde=serde)
 
         # Initialize checkpoint tables / migrations.
+        logger.info("START agent.saver.setup")
         await _checkpointer.setup()
-        logger.info("LangGraph checkpoint database setup completed.")
+        logger.info("DONE agent.saver.setup")
 
         # Compile the graph with the live checkpointer.
+        logger.info("START agent.compile")
         _medical_agent = workflow.compile(checkpointer=_checkpointer)
+        logger.info("DONE agent.compile")
         logger.info("LangGraph medical_agent compiled with AsyncPostgresSaver.")
 
     except Exception:
