@@ -160,10 +160,14 @@ export async function upsertDocument(
     storage_url: string;
     status: string;
     created_at: string;
-    updated_at: string;
+    updated_at?: string;
   },
 ): Promise<void> {
   const db = await getDatabase();
+
+  // The server DocumentResponse does not include updated_at, so fall back to
+  // created_at for the NOT NULL column rather than inserting undefined/NULL.
+  const updatedAt = document.updated_at ?? document.created_at;
 
   await db.runAsync(
     `
@@ -187,7 +191,7 @@ export async function upsertDocument(
       document.storage_url,
       document.status,
       document.created_at,
-      document.updated_at,
+      updatedAt,
     ],
   );
 }
@@ -234,13 +238,17 @@ export async function hydrateDocuments(
     storage_url: string;
     status: string;
     created_at: string;
-    updated_at: string;
+    updated_at?: string;
   }>,
 ): Promise<void> {
   const db = await getDatabase();
 
   await db.withTransactionAsync(async () => {
     for (const doc of serverDocuments) {
+      // The server DocumentResponse does not include updated_at, so fall back
+      // to created_at for the NOT NULL column rather than inserting NULL.
+      const updatedAt = doc.updated_at ?? doc.created_at;
+
       await db.runAsync(
         `
         INSERT INTO documents (
@@ -263,7 +271,7 @@ export async function hydrateDocuments(
           doc.storage_url,
           doc.status,
           doc.created_at,
-          doc.updated_at,
+          updatedAt,
         ],
       );
     }

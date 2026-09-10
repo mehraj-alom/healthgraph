@@ -7,8 +7,8 @@ from pydantic import BaseModel
 class LatestVitalMetric(BaseModel):
     concept_id: UUID | None
     display_name: str
-    value: float
-    unit: str
+    value: float | None
+    unit: str | None
     event_time: datetime
 
 

@@ -3,7 +3,7 @@ import { useCachedQuery } from '@/hooks/useCachedQuery';
 import { api } from '@/services/api';
 
 export interface DailyMetrics {
-  latest_vitals: Array<{ concept_id: string | null; display_name: string; value: number; unit: string; event_time: string }>;
+  latest_vitals: Array<{ concept_id: string | null; display_name: string; value: number | null; unit: string | null; event_time: string }>;
   today_wellbeing: { overall_wellbeing: number | null; energy_level: number | null; stress_level: number | null; event_time: string } | null;
   latest_pain: { severity: number; pain_type: string | null; event_time: string } | null;
   latest_sleep: { duration_minutes: number; sleep_quality: number | null; awakenings: number | null; event_time: string } | null;
