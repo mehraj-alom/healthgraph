@@ -83,7 +83,7 @@ const DRACO_WASM_WRAPPER_ASSET =
 const DRACO_DECODER_WASM_ASSET =
   require('../../../assets/draco/draco_decoder.wasm');
 const DRACO_DECODER_JS_ASSET =
-  require('../../../assets/draco/draco_decoder.txt');
+  require('../../../assets/draco/draco_decoder_js.txt');
 
 /**
  * Cached decoded content so we only load from disk once.
