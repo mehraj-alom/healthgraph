@@ -245,14 +245,14 @@ export default function DashboardScreen() {
                 icon="❤️"
                 iconBg={COLORS.pinkBg}
                 label="Heart Rate"
-                value={heartRate?.value}
+                value={heartRate?.value ?? undefined}
                 unit="bpm"
               />
               <SummaryMetric
                 icon="📈"
                 iconBg={COLORS.greenBg}
                 label="HRV"
-                value={hrv?.value}
+                value={hrv?.value ?? undefined}
                 unit="ms"
               />
               <SummaryMetric
@@ -400,8 +400,8 @@ export default function DashboardScreen() {
                     </View>
                   </View>
                   <View style={styles.vitalRight}>
-                    <Text style={styles.vitalValue}>{vital.value}</Text>
-                    <Text style={styles.vitalUnit}>{vital.unit}</Text>
+                    <Text style={styles.vitalValue}>{vital.value ?? '—'}</Text>
+                    <Text style={styles.vitalUnit}>{vital.unit ?? ''}</Text>
                   </View>
                 </View>
               ))
