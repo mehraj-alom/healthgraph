@@ -89,8 +89,14 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: str = "firebase-adminsdk.json"
     secret_key: str = Field(default="dev-secret-key", alias="secret_key")
 
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+    # Required in every deployment. Voroa provides these as service
+    # environment variables (rediss://...); local dev provides them via
+    # .env / docker-compose. There is deliberately NO localhost fallback:
+    # silently falling back to a non-existent local Redis hides
+    # misconfiguration, so core/celery_app.py fails fast if either is
+    # empty.
+    CELERY_BROKER_URL: str = ""
+    CELERY_RESULT_BACKEND: str = ""
 
     # 450m vision language model for document classification and extraction
     MODEL_PATH: str = "./models/lfm-2.5-vl-450m-q4_k_m.gguf"

@@ -5,10 +5,32 @@ from kombu import Queue
 
 from core.config import settings
 
+
+def _require_celery_url(value: str, name: str) -> str:
+    """Return the broker/backend URL resolved from the runtime environment.
+
+    The URL must come from the provided env vars (CELERY_BROKER_URL /
+    CELERY_RESULT_BACKEND) — never from a hardcoded fallback. Voroa Worker
+    must be given these (e.g. rediss://user:token@host:6379/0). A missing
+    value is a hard error: silently starting against a nonexistent local
+    Redis hides the misconfiguration.
+    """
+    url = (value or "").strip()
+    if not url:
+        raise RuntimeError(
+            f"Cannot create the Celery app: {name} is not set in the "
+            "runtime environment. Set "
+            f"{name}=rediss://user:token@host:6379/0?ssl_cert_reqs=CERT_REQUIRED "
+            "and CELERY_RESULT_BACKEND=rediss://... on the Voroa Worker "
+            "service. Refusing to fall back to redis://localhost:6379."
+        )
+    return url
+
+
 celery_app = Celery(
     "core",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
+    broker=_require_celery_url(settings.CELERY_BROKER_URL, "CELERY_BROKER_URL"),
+    backend=_require_celery_url(settings.CELERY_RESULT_BACKEND, "CELERY_RESULT_BACKEND"),
     include=[
         "workers.ingestion_tasks",
         "workers.graph_sync",
