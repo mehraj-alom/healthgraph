@@ -18,6 +18,7 @@ import { Platform } from 'react-native';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
 import { getOrCreateDatabaseKey, buildPragmaKeyCommand } from './encryption';
+import { runMigrations } from './migrations';
 
 /**
  * Database filename.
@@ -75,6 +76,8 @@ async function verifyDatabaseKey(db: SQLiteDatabase): Promise<void> {
  * 6. Return the database instance.
  */
 async function initializeDatabase(): Promise<SQLiteDatabase> {
+  console.log('[DB] DB_INIT_START');
+
   // Platform guard: SQLCipher not available on web
   if (Platform.OS === 'web') {
     throw new Error(
@@ -108,6 +111,13 @@ async function initializeDatabase(): Promise<SQLiteDatabase> {
   // Note: WAL is encrypted by SQLCipher automatically
   await db.execAsync('PRAGMA journal_mode = WAL;');
 
+  // Run schema migrations BEFORE exposing the connection.
+  // This is the single choke point every repository query goes through
+  // (via getDatabase), so no query can run before migrations complete.
+  // Migrations are idempotent and preserve existing local data.
+  await runMigrations(db);
+
+  console.log('[DB] DB_INIT_SUCCESS');
   return db;
 }
 
@@ -136,6 +146,13 @@ export async function getDatabase(): Promise<SQLiteDatabase> {
     })
     .catch((error) => {
       initializationPromise = null;
+      const name = error instanceof Error ? error.name : 'unknown';
+      if (__DEV__) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error(`[DB] DB_INIT_FAILURE name=${name} detail=${detail}`);
+      } else {
+        console.error(`[DB] DB_INIT_FAILURE name=${name}`);
+      }
       throw error;
     });
 
