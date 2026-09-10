@@ -35,6 +35,7 @@ class QdrantManager:
             self.client = QdrantClient(
                 url=self.url,
                 api_key=self.api_key,
+                timeout=15,  # TEMP DIAGNOSIS: bound remote calls
             )
 
         # Local Docker Qdrant fallback
@@ -50,6 +51,7 @@ class QdrantManager:
             )
 
     def setup_collection(self):
+        logger.info("START qdrant.setup_collection")
         collections = self.client.get_collections().collections
 
         exists = any(
@@ -93,6 +95,7 @@ class QdrantManager:
                 "already exists."
             )
 
+        logger.info("DONE qdrant.setup_collection")
         return self.client
 
 
