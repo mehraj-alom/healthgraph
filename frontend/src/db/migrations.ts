@@ -51,11 +51,13 @@ const migrations: Record<number, MigrationFn> = {
       );
     `);
 
-    // Record this migration
+    // Record this migration (idempotent — safe to re-run on repair)
     await db.runAsync(
-      `INSERT INTO _migration_log (version, description) VALUES (?, ?)`,
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
       1,
-      'Initial schema: migration infrastructure'
+      'Initial schema: migration infrastructure',
+      1,
     );
   },
 
@@ -331,11 +333,13 @@ const migrations: Record<number, MigrationFn> = {
       CREATE INDEX IF NOT EXISTS ix_sync_mutation ON sync_queue (mutation_id);
     `);
 
-    // Record this migration
+    // Record this migration (idempotent — safe to re-run on repair)
     await db.runAsync(
-      `INSERT INTO _migration_log (version, description) VALUES (?, ?)`,
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
       2,
-      'Application schema: medications, daily_logs, observations, body_state, documents, sync_queue'
+      'Application schema: medications, daily_logs, observations, body_state, documents, sync_queue',
+      2,
     );
   },
 
@@ -377,11 +381,13 @@ const migrations: Record<number, MigrationFn> = {
       );
     `);
 
-    // Record this migration
+    // Record this migration (idempotent — safe to re-run on repair)
     await db.runAsync(
-      `INSERT INTO _migration_log (version, description) VALUES (?, ?)`,
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
       3,
-      'Cache tables: profile_cache, daily_metrics_cache, trends_cache'
+      'Cache tables: profile_cache, daily_metrics_cache, trends_cache',
+      3,
     );
   },
 };
@@ -408,23 +414,87 @@ export async function setSchemaVersion(
 }
 
 /**
+ * All tables that must exist once migrations are complete (versions 1-3).
+ * Used to verify an existing database is genuinely at the current schema,
+ * rather than trusting the PRAGMA user_version checkpoint alone.
+ */
+const REQUIRED_TABLES = [
+  // Infrastructure (migration 1)
+  '_migration_log',
+  // Application tables (migration 2)
+  'medications',
+  'medication_taken_events',
+  'daily_logs',
+  'daily_log_events',
+  'observations',
+  'body_state_snapshots',
+  'documents',
+  'sync_queue',
+  // Cache tables (migration 3)
+  'profile_cache',
+  'daily_metrics_cache',
+  'trends_cache',
+];
+
+/**
+ * Check which required tables are missing from the database.
+ * Returns the list of missing table names (empty when complete).
+ */
+export async function getMissingTables(db: SQLiteDatabase): Promise<string[]> {
+  const placeholders = REQUIRED_TABLES.map(() => '?').join(', ');
+  const rows = await db.getAllAsync<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${placeholders})`,
+    REQUIRED_TABLES,
+  );
+  const present = new Set(rows.map((r) => r.name));
+  return REQUIRED_TABLES.filter((t) => !present.has(t));
+}
+
+/**
  * Run all pending migrations.
  *
  * - Reads current schema version.
  * - Applies all migrations from (current + 1) to CURRENT_SCHEMA_VERSION.
- * - Each migration runs in a transaction and rolls back on failure.
- * - Migrations are idempotent (safe to re-run).
+ *   If the checkpoint is stale/higher than reality (incorrect version state),
+ *   it re-applies the idempotent migrations 1..CURRENT instead so the
+ *   database is upgraded to the real current schema rather than falsely
+ *   considered current.
+ * - Each migration's DDL runs in a transaction. The version checkpoint is
+ *   written AFTER the transaction, since PRAGMA user_version cannot reliably
+ *   be changed inside a transaction (a no-op on several WAL builds).
+ * - Migrations are idempotent (CREATE ... IF NOT EXISTS, guarded log rows),
+ *   so re-runs are safe and preserve existing data.
  *
  * Returns the final schema version.
  */
 export async function runMigrations(db: SQLiteDatabase): Promise<number> {
   const currentVersion = await getSchemaVersion(db);
+  console.log(`[DB] DB_MIGRATION_CURRENT_VERSION version=${currentVersion}`);
 
-  if (currentVersion >= CURRENT_SCHEMA_VERSION) {
+  const missing = await getMissingTables(db);
+  const needsApply =
+    currentVersion < CURRENT_SCHEMA_VERSION || missing.length > 0;
+
+  if (!needsApply) {
     return currentVersion;
   }
 
-  for (let targetVersion = currentVersion + 1; targetVersion <= CURRENT_SCHEMA_VERSION; targetVersion++) {
+  if (missing.length > 0) {
+    // Incorrect checkpoint: the recorded version claims current/higher but the
+    // schema is incomplete. Re-apply the full idempotent chain to repair it.
+    console.warn(
+      `[DB] DB_MIGRATION_REPAIR missing=${missing.join(',')} reportedVersion=${currentVersion}`,
+    );
+  }
+
+  const startVersion =
+    currentVersion >= CURRENT_SCHEMA_VERSION ? 1 : currentVersion + 1;
+
+  for (
+    let targetVersion = startVersion;
+    targetVersion <= CURRENT_SCHEMA_VERSION;
+    targetVersion++
+  ) {
     const migration = migrations[targetVersion];
     if (!migration) {
       throw new Error(
@@ -434,11 +504,23 @@ export async function runMigrations(db: SQLiteDatabase): Promise<number> {
       );
     }
 
-    // Run migration in a transaction
+    // DDL inside a transaction so a failed migration rolls back cleanly.
+    console.log(`[DB] DB_MIGRATION_APPLY version=${targetVersion}`);
     await db.withTransactionAsync(async () => {
       await migration(db);
-      await setSchemaVersion(db, targetVersion);
     });
+
+    // Version checkpoint written OUTSIDE the transaction (WAL-safe).
+    await setSchemaVersion(db, targetVersion);
+    console.log(`[DB] DB_MIGRATION_SUCCESS version=${targetVersion}`);
+  }
+
+  // Final verification: every required table must now exist.
+  const stillMissing = await getMissingTables(db);
+  if (stillMissing.length > 0) {
+    throw new Error(
+      `Database migration incomplete — missing tables: ${stillMissing.join(', ')}`,
+    );
   }
 
   return CURRENT_SCHEMA_VERSION;

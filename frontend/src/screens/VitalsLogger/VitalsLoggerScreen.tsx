@@ -107,9 +107,32 @@ const formatSleepDuration = (minutes: number): string => {
   return `${h}h ${m}m`;
 };
 
+// A local (device-side) failure with a safe, user-facing message.
+// Deliberately kept separate from axios errors so a SQLite/session problem
+// is never reported to the user as a connection problem.
+type LocalSaveError = { kind: 'auth' | 'local'; message: string };
+
+// Classify an API error into a coarse category for logging.
+// Logs method/path/status/category only — never request or response bodies.
+function classifyApiError(error: unknown): string {
+  if (!axios.isAxiosError(error)) return 'unknown';
+  if (
+    error.code === 'ECONNABORTED' ||
+    error.code === 'ERR_NETWORK' ||
+    error.response == null
+  ) {
+    return 'network';
+  }
+  const status = error.response.status;
+  if (status === 401) return 'auth';
+  if (status >= 500) return 'server';
+  if (status >= 400) return 'client';
+  return 'unknown';
+}
+
 function apiMessage(error: unknown): string {
   if (!axios.isAxiosError(error))
-    return 'Unable to reach MedGraph. Check your connection and try again.';
+    return 'Something went wrong on this device. Your data was not saved. Please try again.';
   if (error.code === 'ECONNABORTED')
     return 'The request timed out. Please try again.';
   if (error.response?.status === 401)
@@ -545,31 +568,64 @@ export default function VitalsLoggerScreen() {
   const mutation = useMutation({
     mutationFn: async (payload: DailyCheckInRequest) => {
       const patientId = getCachedPatientId();
-      if (!patientId) throw new Error('Not authenticated');
-
-      // Step 1: Write to SQLite immediately
-      const groupId = await dbUpsertDailyLog(patientId, payload);
-
-      // Step 2: Try server persistence (fire-and-forget)
-      let serverGroupId: string | null = null;
-      try {
-        if (editingGroupId) {
-          const response = await api.put<DailyCheckInResponse>(
-            `/api/v1/logs/daily-checkin/${editingGroupId}`,
-            payload,
-          );
-          serverGroupId = response.group_id;
-        } else {
-          const response = await api.post<DailyCheckInResponse>('/api/v1/logs/daily-checkin', payload);
-          serverGroupId = response.group_id;
-        }
-      } catch {
-        // API failed — local data is preserved, will sync later
+      if (!patientId) {
+        const authError: LocalSaveError = {
+          kind: 'auth',
+          message: 'Your session has expired. Please sign in again.',
+        };
+        throw authError;
       }
 
-      return { groupId, serverGroupId };
+      // Step 1: Write to SQLite immediately (offline-first)
+      console.log(`[DailyLog] LOCAL_WRITE_START date=${payload.log_date}`);
+      let groupId: string;
+      try {
+        groupId = await dbUpsertDailyLog(patientId, payload);
+        console.log('[DailyLog] LOCAL_WRITE_SUCCESS');
+      } catch (error) {
+        const name = error instanceof Error ? error.name : 'unknown';
+        if (__DEV__) {
+          const detail = error instanceof Error ? error.message : String(error);
+          console.error(`[DailyLog] LOCAL_WRITE_FAILURE name=${name} detail=${detail}`);
+        } else {
+          console.error(`[DailyLog] LOCAL_WRITE_FAILURE name=${name}`);
+        }
+        const localError: LocalSaveError = {
+          kind: 'local',
+          message: 'Could not save to this device\u2019s secure storage. Please try again.',
+        };
+        throw localError;
+      }
+
+      // Step 2: Try server persistence (fire-and-forget)
+      const method = editingGroupId ? 'PUT' : 'POST';
+      const path = editingGroupId
+        ? `/api/v1/logs/daily-checkin/${editingGroupId}`
+        : '/api/v1/logs/daily-checkin';
+      let serverSaved = false;
+      let serverGroupId: string | null = null;
+      try {
+        console.log(`[DailyLog] API_SYNC_START method=${method} path=${path}`);
+        if (editingGroupId) {
+          const response = await api.put<DailyCheckInResponse>(path, payload);
+          serverGroupId = response.group_id;
+        } else {
+          const response = await api.post<DailyCheckInResponse>(path, payload);
+          serverGroupId = response.group_id;
+        }
+        serverSaved = true;
+        console.log(`[DailyLog] API_SYNC_SUCCESS method=${method} path=${path}`);
+      } catch (error) {
+        // Log only method, path, HTTP status and category — never bodies/health data.
+        const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+        console.warn(
+          `[DailyLog] API_SYNC_FAILURE method=${method} path=${path} status=${status ?? 'none'} category=${classifyApiError(error)}`,
+        );
+      }
+
+      return { groupId, serverSaved, serverGroupId };
     },
-    onSuccess: async () => {
+    onSuccess: async ({ serverSaved }) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['timeline'] }),
         queryClient.invalidateQueries({ queryKey: ['bodyState'] }),
@@ -577,14 +633,32 @@ export default function VitalsLoggerScreen() {
         queryClient.invalidateQueries({ queryKey: ['daily-log'] }),
         queryClient.invalidateQueries({ queryKey: ['daily-checkin'] }),
       ]);
-      setFeedback({
-        type: 'success',
-        message: editingGroupId
-          ? 'Daily log updated. Your timeline and dashboard are updated.'
-          : 'Daily log saved. Your timeline and dashboard are updated.',
-      });
+      if (serverSaved) {
+        setFeedback({
+          type: 'success',
+          message: editingGroupId
+            ? 'Daily log updated. Your timeline and dashboard are updated.'
+            : 'Daily log saved. Your timeline and dashboard are updated.',
+        });
+      } else {
+        // Local save succeeded but the server is unreachable — offline-first.
+        setFeedback({
+          type: 'success',
+          message: 'Saved on this device. It will sync to your account when you are back online.',
+        });
+      }
     },
     onError: (error) => {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'kind' in error &&
+        ((error as { kind?: unknown }).kind === 'auth' ||
+          (error as { kind?: unknown }).kind === 'local')
+      ) {
+        setFeedback({ type: 'error', message: (error as LocalSaveError).message });
+        return;
+      }
       setFeedback({ type: 'error', message: apiMessage(error) });
     },
   });

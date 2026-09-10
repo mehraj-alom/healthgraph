@@ -975,22 +975,34 @@ async function addToSyncQueue(
   // For Daily Log UPDATE, multiple mutations can target the same group_id
   const mutationId = `mut_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  const existing = await db.getFirstAsync<{ id: number }>(
-    'SELECT id FROM sync_queue WHERE table_name = ? AND record_id = ? AND status = ?',
-    [tableName, recordId, 'pending'],
-  );
+  console.log(`[DailyLog] QUEUE_START table=${tableName} op=${operation}`);
+  try {
+    const existing = await db.getFirstAsync<{ id: number }>(
+      'SELECT id FROM sync_queue WHERE table_name = ? AND record_id = ? AND status = ?',
+      [tableName, recordId, 'pending'],
+    );
 
-  if (existing) {
-    await db.runAsync(
-      "UPDATE sync_queue SET operation = ?, payload_json = ?, created_at = datetime('now') WHERE id = ?",
-      [operation, payload ? JSON.stringify(payload) : null, existing.id],
-    );
-  } else {
-    await db.runAsync(
-      'INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, payload_json) VALUES (?, ?, ?, ?, ?)',
-      [tableName, recordId, mutationId, operation, payload ? JSON.stringify(payload) : null],
-    );
+    if (existing) {
+      await db.runAsync(
+        "UPDATE sync_queue SET operation = ?, payload_json = ?, created_at = datetime('now') WHERE id = ?",
+        [operation, payload ? JSON.stringify(payload) : null, existing.id],
+      );
+    } else {
+      await db.runAsync(
+        'INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, payload_json) VALUES (?, ?, ?, ?, ?)',
+        [tableName, recordId, mutationId, operation, payload ? JSON.stringify(payload) : null],
+      );
+    }
+  } catch (error) {
+    if (__DEV__) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error(`[DailyLog] QUEUE_FAILURE table=${tableName} op=${operation} detail=${detail}`);
+    } else {
+      console.error(`[DailyLog] QUEUE_FAILURE table=${tableName} op=${operation}`);
+    }
+    throw error;
   }
+  console.log(`[DailyLog] QUEUE_SUCCESS table=${tableName} op=${operation}`);
 
   // Mark mutation as queued for UI display
   import('@/services/syncState').then(({ markMutationQueued }) => {
