@@ -10,7 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCachedQuery } from '@/hooks/useCachedQuery';
 import { useMedications } from '@/hooks/useMedications';
 import { useSyncStatus, getSyncStatusMessage } from '@/hooks/useSyncStatus';
-import { Card, ProcessingBadge } from '@/components';
+import { Card, ProcessingBadge, EmptyState } from '@/components';
 import TrendsScreen from '@/screens/Trends/TrendsScreen';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, CATEGORY_COLORS } from '@/constants';
 import { statusLabel } from '@/services/documents';
@@ -412,22 +412,37 @@ export default function DashboardScreen() {
         </View>
 
         {/* ── RECENT RECORDS ── */}
-        {recentDocs.length > 0 && (
-          <View style={styles.section}>
-            <SectionHeader
-              title="Recent Records"
-              action="See all"
-              onPress={() => navigation.navigate('DocumentUpload')}
-            />
-            {recentDocs.map((doc) => (
+        {/* Always visible so the document-upload entry point exists for new
+            users too (the ProcessingBadge only renders with active/completed
+            processing, so it can't be the only affordance). */}
+        <View style={styles.section}>
+          <SectionHeader
+            title="Recent Records"
+            action={recentDocs.length > 0 ? 'See all' : undefined}
+            onPress={recentDocs.length > 0 ? () => navigation.navigate('DocumentUpload') : undefined}
+          />
+          {recentDocs.length > 0 ? (
+            recentDocs.map((doc) => (
               <DocumentCard
                 key={doc.document_id}
                 document={doc}
                 onPress={() => navigation.navigate('DocumentDetail', { documentId: doc.document_id })}
               />
-            ))}
-          </View>
-        )}
+            ))
+          ) : (
+            <Card
+              padding="none"
+              onPress={() => navigation.navigate('DocumentUpload')}
+              accessibilityLabel="Add your first medical record"
+            >
+              <EmptyState
+                icon="📄"
+                title="No records yet"
+                message="Add a prescription, lab report, or discharge summary to start building your medical timeline."
+              />
+            </Card>
+          )}
+        </View>
 
         {/* ── LATEST SLEEP ── */}
         {clinical?.latest_sleep && (

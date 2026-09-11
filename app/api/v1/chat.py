@@ -5,7 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from langchain_core.messages import HumanMessage
 
+from core.config import settings
 from core.db import get_db
+from core.rate_limiter import RateLimiter
 from agents.agent_setup import (
     get_medical_agent,
     begin_request,
@@ -18,6 +20,11 @@ from app.api.dependencies import get_authenticated_patient_id
 from logger import logger
 
 router = APIRouter(prefix="/api/v1/chat", tags=["Agent Chat"])
+
+# Chat is an expensive AI operation. 20 requests per 10 minutes per user.
+# fail_open in local so development works without Redis; fail_closed in
+# preview/production so "Redis down = unlimited AI" is impossible.
+_chat_limiter = RateLimiter()
 
 def _get_agent(request: Request):
     agent = request.app.state.medical_agent
@@ -33,6 +40,17 @@ async def process_chat(
     db: Session = Depends(get_db)
 ):
     medical_agent = _get_agent(http_request)
+
+    # Chat is the single most expensive operation. 20 requests / 10 min.
+    # Redis failure → 503 (fail-closed) in production/preview; fail-open in
+    # local so development works without Redis.
+    _chat_limiter.check(
+        str(patient_id),
+        "chat",
+        limit=20,
+        window_seconds=600,
+        fail_open=settings.APP_ENV == "local",
+    )
 
     validated_structure = None
     if request.focused_structure_id:

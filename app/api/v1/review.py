@@ -92,4 +92,5 @@ def resolve_pending_event(
         
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to resolve event: {str(e)}")
+        logger.error(f"Failed to resolve event for patient {patient_id}: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Internal server error resolving event.")

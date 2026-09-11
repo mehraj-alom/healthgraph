@@ -81,8 +81,24 @@ def initialize_firebase():
     return True
 
 
+def _production_validation_error(message: str) -> None:
+    """Raise a hard, secret-safe start-up failure for production config.
+
+    The message names environment variables only — never file paths,
+    credential contents, or the secret value itself.
+    """
+    from logger import logger as _logger
+    _logger.error(message)
+    raise RuntimeError(message)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # Runtime environment discriminator. LOCAL is the default so local
+    # development never accidentally behaves as production. PREVIEW and
+    # PRODUCTION must be set explicitly by the deployment environment.
+    APP_ENV: str = "local"
 
     DATABASE_URL: str = "postgresql://medgraph:password@localhost:5432/medgraph_db"
     ASYNC_DATABASE_URL: str = "postgresql+asyncpg://medgraph:password@localhost:5432/medgraph_db"
@@ -104,11 +120,77 @@ class Settings(BaseSettings):
 
     STORAGE_DIR: str = "./storage/documents"
 
+    # Optional explicit key for at-rest document encryption
+    # (core/at_rest_crypto.py). Must be base64 encoding of exactly 32 bytes
+    # (the standard Fernet-format key also works). When empty, the key is
+    # derived deterministically from secret_key (HKDF-SHA256), so the feature
+    # needs no extra deployment secret. Production SHOULD set a dedicated
+    # DOC_ENCRYPTION_KEY so document ciphertext survives a secret_key
+    # rotation.
+    DOC_ENCRYPTION_KEY: str = ""
+
+    # When True, rate limiting trusts the first entry of the
+    # X-Forwarded-For header as the real client IP. This MUST only be
+    # enabled behind a trusted reverse proxy that overwrites/strips
+    # client-supplied X-Forwarded-For; otherwise any client can spoof its
+    # apparent IP (and thus its rate-limit bucket). Default False: the
+    # peer connection address (request.client.host) is used, which cannot
+    # be spoofed over plain TCP.
+    RATE_LIMIT_TRUST_PROXY_HEADERS: bool = False
+
     # CORS origins — comma-separated list of allowed origins.
     # React Native/Expo does not enforce CORS, so this only affects
     # browser-based access (dev console, web admin).
     # Empty string = no cross-origin allowed (most restrictive).
     CORS_ORIGINS: str = ""
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Production start-up gates.
+    #
+    # The development fallbacks (secret_key="dev-secret-key", missing
+    # Firebase service-account credentials) remain acceptable for local and
+    # preview work, but PRODUCTION must never start with them. These checks
+    # are only reachable when APP_ENV=production; they fail loudly and never
+    # print the secret or credential contents.
+    # ─────────────────────────────────────────────────────────────────────
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.APP_ENV != "production":
+            return
+
+        if self.secret_key == "dev-secret-key":
+            _production_validation_error(
+                "Production startup refused: secret_key is set to the "
+                "well-known development default. Set a strong, unique "
+                "secret_key in the production environment "
+                "(see .env.example)."
+            )
+
+        if self.DOC_ENCRYPTION_KEY:
+            try:
+                from core.at_rest_crypto import decode_key
+
+                if decode_key(self.DOC_ENCRYPTION_KEY) is None:
+                    raise ValueError("empty")
+            except Exception:
+                _production_validation_error(
+                    "Production startup refused: DOC_ENCRYPTION_KEY is set "
+                    "but invalid. It must be the base64 encoding of exactly "
+                    "32 bytes (e.g. `python -c \"from cryptography.fernet "
+                    "import Fernet; print(Fernet.generate_key().decode())\"`)."
+                )
+
+        cred_json = os.getenv("FIREBASE_CREDENTIALS_JSON", "").strip()
+        cred_path = self.FIREBASE_CREDENTIALS_PATH.strip()
+        has_json_creds = cred_json.startswith("{")
+        has_path_creds = bool(cred_path) and os.path.isfile(cred_path)
+        if not (has_json_creds or has_path_creds):
+            _production_validation_error(
+                "Production startup refused: Firebase service-account "
+                "credentials are not configured. Set FIREBASE_CREDENTIALS_JSON "
+                "(inline service-account JSON) or FIREBASE_CREDENTIALS_PATH "
+                "(path to the mounted service-account file)."
+            )
 
 
 settings = Settings()

@@ -1,0 +1,14 @@
+# Development + test tooling.
+# Runtime dependencies remain in requirements.txt; this file adds the tools
+# used by local development and PR CI (pytest, ruff).
+#
+# Install (from repo root):
+#   pip install -r requirements-dev.txt
+#
+# Run:
+#   python -m pytest            # tests/ (see [tool.pytest.ini_options])
+#   ruff check .                # lint (see [tool.ruff] in pyproject.toml)
+#   python -m compileall -q ... # syntax check
+-r requirements.txt
+pytest>=7.4
+ruff>=0.9

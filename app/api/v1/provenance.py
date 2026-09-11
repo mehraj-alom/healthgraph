@@ -30,11 +30,14 @@ def get_event_provenance(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found or access denied.")
 
-    # Join EvidenceLink with Document to get the storage_url and bbox
+    # Join EvidenceLink with Document to get the storage_url and bbox.
+    # Defense in depth: re-verify that the linked document belongs to the
+    # authenticated patient, even though event ownership was already checked.
     result = db.query(EvidenceLink, Document).join(
         Document, EvidenceLink.document_id == Document.document_id
     ).filter(
-        EvidenceLink.event_id == event_id
+        EvidenceLink.event_id == event_id,
+        Document.patient_id == patient_id,
     ).first()
 
     if not result:

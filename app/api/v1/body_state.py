@@ -88,6 +88,7 @@ class AnatomicalStructureItem(BaseModel):
     response_model=List[AnatomicalStructureItem],
 )
 def list_anatomical_structures(
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
     db: Session = Depends(get_db),
 ):
     """

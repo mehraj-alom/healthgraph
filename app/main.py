@@ -2,10 +2,11 @@ import asyncio
 from contextlib import asynccontextmanager
 import os
 import time as _time
+from uuid import uuid4 as _uuid4
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -31,6 +32,7 @@ from app.api.v1 import (
 from core.config import initialize_firebase, settings
 from core.db import SessionLocal, engine
 from core.neo4j_client import close_neo4j_driver
+from core.security_events import log_security_event
 from logger import logger
 from models.base import Base
 import models.summaries  # noqa: F401 — ensure summary tables are registered with Base.metadata
@@ -145,6 +147,14 @@ async def lifespan(app: FastAPI):
     if not secret_key:
         logger.error("Secret key not found in environment variables.")
         raise RuntimeError("Secret key not found in environment variables.")
+
+    if secret_key == "dev-secret-key":
+        logger.warning(
+            "secret_key is set to the well-known development default "
+            "'dev-secret-key'. De-identification pseudonymization is "
+            "reversible with the default value. Set a strong, unique "
+            "secret_key in production (see .env.example)."
+        )
     _done("lifespan.secret.settings", _marker("lifespan.background.start"))
 
     # Do NOT block the event loop: run all expensive external
@@ -177,11 +187,19 @@ def create_app() -> FastAPI:
 
     _t_build = _marker("create_app.build")
 
+    # Interactive API docs / schema are a development and preview surface,
+    # not a production one: they expose the full endpoint model publicly.
+    # Disabled in PRODUCTION; /health is unaffected. (Per Increment 6.)
+    _docs_enabled = settings.APP_ENV != "production"
+
     app = FastAPI(
         title="MedGraph Core API",
         description="Longitudinal Health Timeline & Automated Extraction API",
         version="1.0.0",
         lifespan=lifespan,
+        docs_url="/docs" if _docs_enabled else None,
+        redoc_url="/redoc" if _docs_enabled else None,
+        openapi_url="/openapi.json" if _docs_enabled else None,
     )
 
     # CORS configuration: restrict to explicit origins.
@@ -224,6 +242,39 @@ def create_app() -> FastAPI:
             )
         return await call_next(request)
 
+    @app.middleware("http")
+    async def request_id_middleware(request: Request, call_next):
+        # Assign/extract a correlation id used in every security/ops log
+        # and returned to the client. Only the id itself is ever logged.
+        request_id = request.headers.get("x-request-id") or str(_uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception):
+        # Never leak exception internals to clients. Log the category and
+        # correlation id only (no bodies, no values, no paths).
+        request_id = getattr(request.state, "request_id", "-")
+        logger.exception(
+            "Unhandled exception: endpoint=%s request_id=%s type=%s",
+            request.url.path,
+            request_id,
+            type(exc).__name__,
+        )
+        log_security_event(
+            "unhandled_5xx",
+            request_id=request_id,
+            endpoint=request.url.path,
+            status=500,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error"},
+            headers={"X-Request-ID": request_id},
+        )
+
     app.include_router(auth_router)
     app.include_router(documents.router)
     app.include_router(review.router)
@@ -250,6 +301,11 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     def dev_console():
+        # The static dev console is a development-only tool. It is NOT
+        # served in production (404); /health stays available everywhere.
+        if settings.APP_ENV == "production":
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
         index_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "index.html",

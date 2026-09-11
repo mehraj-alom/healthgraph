@@ -45,7 +45,7 @@ function BodyScreenWrapper() {
 
 import { COLORS } from '@/constants';
 import type { RootStackParamList, MainTabParamList } from '@/types';
-import { syncPendingMutations } from '@/services/syncEngine';
+import { syncPendingMutations, retryFailedSyncs } from '@/services/syncEngine';
 import { initNetworkMonitor, cleanupNetworkMonitor, subscribe as subscribeNetwork, isOnline } from '@/services/networkMonitor';
 import { initSyncState, clearSyncState } from '@/services/syncState';
 
@@ -186,8 +186,16 @@ function AppNavigator() {
     // Initialize sync state
     initSyncState();
 
-    // Sync on startup (after authentication)
-    syncPendingMutations().catch(() => {});
+    // Self-heal + sync on startup (after authentication).
+    // retryFailedSyncs() resets any 'failed' rows (left from crashes, older
+    // builds that misclassified transient failures as failed, or a previous
+    // permanent failure) back to 'pending' so the sync pass re-attempts them.
+    // True permanent failures are re-classified as 'failed' right after.
+    const startupSync = async () => {
+      await retryFailedSyncs();
+      await syncPendingMutations();
+    };
+    startupSync().catch(() => {});
 
     // Sync on foreground transition
     const appSubscription = AppState.addEventListener('change', (nextState) => {

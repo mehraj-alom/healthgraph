@@ -25,7 +25,7 @@ def _log(level: str, msg: str, doc_id: str = None):
     getattr(logger, level.lower(), logger.info)(msg)
     pipeline_logs.append(level, msg, doc_id)
 
-@celery_app.task(name="ingestion_tasks.process_document", bind=True, max_retries=3, default_retry_delay=30)
+@celery_app.task(name="ingestion_tasks.process_document", bind=True, max_retries=0)
 def process_document_pipeline(self, document_id_str: str):
     db = SessionLocal()
     document_id = None
@@ -137,7 +137,7 @@ def process_document_pipeline(self, document_id_str: str):
                 )
             
         _log("error", f"Pipeline failed for Document {document_id_str}: {str(e)}", document_id_str)
-        raise self.retry(exc=e, countdown=2 ** self.request.retries)
+        raise
         
     finally:
         if temp_doc_path and os.path.exists(temp_doc_path):

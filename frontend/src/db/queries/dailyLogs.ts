@@ -250,6 +250,17 @@ export async function upsertDailyLog(
       group_id: groupId,
       patient_id: patientId,
       log_date: request.log_date,
+      overall_wellbeing: request.overall_wellbeing ?? null,
+      energy_level: request.energy_level ?? null,
+      stress_level: request.stress_level ?? null,
+      sleep: request.sleep ?? null,
+      nutrition: request.nutrition ?? null,
+      notes: request.notes ?? null,
+      symptoms: request.symptoms ?? null,
+      vitals: request.vitals ?? null,
+      pain: request.pain ?? null,
+      activities: request.activities ?? null,
+      medications: request.medications ?? null,
     });
 
     for (const event of events) {
