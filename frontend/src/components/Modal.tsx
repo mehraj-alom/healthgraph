@@ -8,7 +8,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY, ELEVATION } from '@/constants';
+import { useTheme } from '@/theme';
+import { spacing, radius } from '@/theme/tokens';
 
 interface ModalProps {
   visible: boolean;
@@ -26,13 +27,10 @@ interface ModalProps {
 }
 
 /**
- * MedGraph modal — dark elevated glass panel over a scrim.
+ * HealthGraph modal — elevated glass panel over a scrim.
  *
- * Notes:
- *  - Built on React Native's Modal, so nothing stays mounted or blocking after
- *    `visible` becomes false.
- *  - Android Back is wired through onRequestClose.
- *  - Content is scrollable and the keyboard stays usable (taps persist).
+ * Built on RN Modal, so nothing stays mounted or blocking after `visible`
+ * becomes false. Android Back is wired through onRequestClose.
  */
 export const Modal = ({
   visible,
@@ -46,6 +44,7 @@ export const Modal = ({
   contentStyle,
 }: ModalProps) => {
   const insets = useSafeAreaInsets();
+  const { colors, typography, elevation } = useTheme();
   const requestClose = onRequestClose ?? onClose;
 
   return (
@@ -59,7 +58,7 @@ export const Modal = ({
     >
       <View style={styles.root}>
         <Pressable
-          style={styles.scrim}
+          style={[styles.scrim, { backgroundColor: colors.overlayScrim }]}
           onPress={allowTouchOutsideToClose ? requestClose : undefined}
           accessibilityLabel="Close"
         />
@@ -67,14 +66,23 @@ export const Modal = ({
         <View
           style={[
             styles.card,
+            {
+              backgroundColor: colors.glassStrong,
+              borderColor: colors.glassBorder,
+            },
+            elevation.deep,
             { paddingTop: Math.max(insets.top, 24), paddingBottom: Math.max(insets.bottom, 16) },
             contentStyle,
           ]}
         >
           <View style={styles.header}>
             <View style={styles.headerText}>
-              {title ? <Text style={styles.title}>{title}</Text> : null}
-              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+              {title ? (
+                <Text style={[styles.title, typography.heading, { color: colors.textPrimary }]}>{title}</Text>
+              ) : null}
+              {subtitle ? (
+                <Text style={[styles.subtitle, typography.bodySecondary, { color: colors.textMuted }]}>{subtitle}</Text>
+              ) : null}
             </View>
             <Pressable
               onPress={onClose}
@@ -83,10 +91,11 @@ export const Modal = ({
               accessibilityLabel="Close dialog"
               style={({ pressed }) => [
                 styles.closeButton,
-                pressed && styles.closeButtonPressed,
+                { backgroundColor: colors.glassHighlight, borderColor: colors.glassBorder },
+                pressed && [{ backgroundColor: colors.surfacePressed, transform: [{ scale: 0.94 }] }],
               ]}
             >
-              <Text style={styles.closeText}>✕</Text>
+              <Text style={[styles.closeText, { color: colors.textSecondary }]}>✕</Text>
             </Pressable>
           </View>
 
@@ -99,7 +108,9 @@ export const Modal = ({
             {children}
           </ScrollView>
 
-          {actions ? <View style={styles.actions}>{actions}</View> : null}
+          {actions ? (
+            <View style={[styles.actions, { borderTopColor: colors.glassBorder }]}>{actions}</View>
+          ) : null}
         </View>
       </View>
     </RNModal>
@@ -111,7 +122,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: spacing.lg,
   },
   scrim: {
     position: 'absolute',
@@ -119,55 +130,42 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: COLORS.overlayScrim,
   },
   card: {
     width: '100%',
     maxWidth: 480,
     maxHeight: '82%',
-    backgroundColor: COLORS.glassStrong,
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
-    borderRadius: BORDER_RADIUS.xl,
-    paddingHorizontal: SPACING.lg,
-    ...ELEVATION.deep,
+    borderRadius: radius.xxl,
+    paddingHorizontal: spacing.lg,
     overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: SPACING.md,
-    paddingBottom: SPACING.sm,
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
   },
   headerText: {
     flex: 1,
     gap: 2,
   },
   title: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
+    fontSize: 20,
   },
   subtitle: {
-    ...TYPOGRAPHY.subtitle,
-    color: COLORS.textMuted,
+    fontSize: 13,
   },
   closeButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeButtonPressed: {
-    backgroundColor: COLORS.surfacePressed,
-    transform: [{ scale: 0.94 }],
-  },
   closeText: {
-    color: COLORS.textSecondary,
     fontSize: 14,
     lineHeight: 16,
   },
@@ -175,13 +173,12 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   scrollContent: {
-    paddingBottom: SPACING.md,
+    paddingBottom: spacing.md,
   },
   actions: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    paddingTop: SPACING.md,
+    gap: spacing.sm,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderFaint,
   },
 });

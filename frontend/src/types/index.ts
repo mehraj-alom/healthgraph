@@ -344,6 +344,7 @@ export interface PendingReviewItem {
 export type RootStackParamList = {
   Onboarding: undefined;
   Main: { screen?: string } | undefined;
+  DailyLog: undefined;
   Settings: undefined;
   DocumentUpload: undefined;
   DocumentDetail: { documentId: string };
@@ -443,7 +444,6 @@ export interface TrendsResponse {
 
 export type MainTabParamList = {
   Dashboard: undefined;
-  DailyLog: undefined;
   Body: { focusStructureId?: string } | undefined;
   Timeline: undefined;
   Chat: undefined;

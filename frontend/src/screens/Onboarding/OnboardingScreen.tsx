@@ -135,7 +135,8 @@ export default function OnboardingScreen() {
           contentContainerStyle={
             styles.scrollContent
           }
-          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="none"
+          keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
           {/* ---------------------------------------------------------------- */}

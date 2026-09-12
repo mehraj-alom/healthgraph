@@ -47,6 +47,29 @@ import type {
 const MAX_RETRY_ATTEMPTS = 5;
 const BASE_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 30000;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function buildDailyLogBody(payload: any) {
+  return {
+    log_date: payload.log_date,
+    overall_wellbeing: payload.overall_wellbeing,
+    energy_level: payload.energy_level,
+    stress_level: payload.stress_level,
+    sleep: payload.sleep,
+    nutrition: payload.nutrition,
+    notes: payload.notes,
+    symptoms: payload.symptoms,
+    vitals: payload.vitals,
+    pain: (payload.pain ?? []).map((item: any) => ({
+      ...item,
+      ...(item.body_location_id && !UUID_PATTERN.test(item.body_location_id)
+        ? { body_location_id: undefined }
+        : {}),
+    })),
+    activities: payload.activities,
+    medications: payload.medications,
+  };
+}
 const STALE_PROCESSING_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 // ============================================================================
@@ -319,40 +342,14 @@ function getEndpointConfig(
       return {
         method: 'POST',
         url: '/api/v1/logs/daily-checkin',
-        buildBody: (p) => ({
-          log_date: p.log_date,
-          overall_wellbeing: p.overall_wellbeing,
-          energy_level: p.energy_level,
-          stress_level: p.stress_level,
-          sleep: p.sleep,
-          nutrition: p.nutrition,
-          notes: p.notes,
-          symptoms: p.symptoms,
-          vitals: p.vitals,
-          pain: p.pain,
-          activities: p.activities,
-          medications: p.medications,
-        }),
+        buildBody: buildDailyLogBody,
       };
     }
     if (operation === 'update') {
       return {
         method: 'PUT',
         url: `/api/v1/logs/daily-checkin/${payload.group_id}`,
-        buildBody: (p) => ({
-          log_date: p.log_date,
-          overall_wellbeing: p.overall_wellbeing,
-          energy_level: p.energy_level,
-          stress_level: p.stress_level,
-          sleep: p.sleep,
-          nutrition: p.nutrition,
-          notes: p.notes,
-          symptoms: p.symptoms,
-          vitals: p.vitals,
-          pain: p.pain,
-          activities: p.activities,
-          medications: p.medications,
-        }),
+        buildBody: buildDailyLogBody,
       };
     }
   }

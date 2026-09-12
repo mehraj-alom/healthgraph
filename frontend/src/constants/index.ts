@@ -314,7 +314,7 @@ export const ELEVATION = {
 } as const;
 
 
-export const MEDICAL_DISCLAIMER = `MedGraph is for general wellness, fitness tracking, and record organization. It is not a medical device. MedGraph does not provide medical advice, diagnosis, or treatment. Always consult a physician.`;
+export const MEDICAL_DISCLAIMER = `healthgraph is for general wellness, fitness tracking, and record organization. It is not a medical device. healthgraph does not provide medical advice, diagnosis, or treatment. Always consult a physician.`;
 
 export const STRUCTURE_CATEGORIES = {
   BODY_REGION: 'BODY_REGION',

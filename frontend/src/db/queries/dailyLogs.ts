@@ -246,7 +246,8 @@ export async function upsertDailyLog(
     }
 
     // Add sync_queue entries
-    await addToSyncQueue(db, 'daily_logs', groupId, existing ? 'update' : 'create', {
+    const hasServerGroupId = existing?.sync_status === 'synced';
+    await addToSyncQueue(db, 'daily_logs', groupId, hasServerGroupId ? 'update' : 'create', {
       group_id: groupId,
       patient_id: patientId,
       log_date: request.log_date,

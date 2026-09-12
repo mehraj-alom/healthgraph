@@ -1,24 +1,18 @@
-import {
-  StyleSheet,
-  Text,
-  Pressable,
-  View,
-  type ViewStyle,
-} from 'react-native';
-import {
-  COLORS,
-  SPACING,
-  BORDER_RADIUS,
-  TYPOGRAPHY,
-  CONTROL_HEIGHTS,
-  type ControlSize,
-} from '@/constants';
+import { StyleSheet, Text, Pressable, View, type ViewStyle } from 'react-native';
+import { useTheme } from '@/theme';
+import { spacing, radius, type ControlSize } from '@/theme/tokens';
+
+const HEIGHT: Record<ControlSize, number> = {
+  small: 32,
+  medium: 40,
+  large: 48,
+};
 
 interface ChipProps {
   label: string;
   selected?: boolean;
   onPress: () => void;
-  /** Accent color applied when selected (defaults to accentBlue) */
+  /** Accent color applied when selected (defaults to accentBlue). */
   color?: string;
   icon?: React.ReactNode;
   disabled?: boolean;
@@ -28,22 +22,24 @@ interface ChipProps {
 }
 
 /**
- * MedGraph filter/tag chip — hairline border, sunken surface; the selected chip
- * gets a restrained accent fill + glow so it reads as active without neon.
+ * HealthGraph filter/tag chip — hairline border, calm surface. The selected
+ * chip gets a restrained accent fill + soft border so it reads active
+ * without neon. Pressed state scales slightly for tactile feedback.
  */
 export const Chip = ({
   label,
   selected = false,
   onPress,
-  color = COLORS.accentBlue,
+  color = '#4D8DFF',
   icon,
   disabled = false,
   size = 'small',
   style,
   accessibilityLabel,
 }: ChipProps) => {
-  const height = CONTROL_HEIGHTS[size];
-  const accent = selected ? color : COLORS.textSecondary;
+  const { colors, typography } = useTheme();
+  const height = HEIGHT[size];
+  const accent = selected ? color : colors.textSecondary;
 
   return (
     <Pressable
@@ -54,9 +50,9 @@ export const Chip = ({
       accessibilityState={{ selected, disabled }}
       style={({ pressed }) => [
         styles.container,
-        { minHeight: height },
+        { minHeight: height, backgroundColor: colors.surfaceSunken, borderColor: colors.border },
         selected && { backgroundColor: `${color}1F`, borderColor: color },
-        pressed && styles.pressed,
+        pressed && { transform: [{ scale: 0.97 }], backgroundColor: colors.surfacePressed },
         disabled && styles.disabled,
         style,
       ]}
@@ -69,9 +65,10 @@ export const Chip = ({
       <Text
         style={[
           styles.label,
+          typography.captionStrong,
           { color: accent },
-          selected && styles.labelSelected,
-          disabled && styles.labelDisabled,
+          selected && styles.selected,
+          disabled && { color: colors.textDisabled },
         ]}
         numberOfLines={1}
       >
@@ -86,16 +83,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.pill,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surfaceSunken,
-    gap: SPACING.xs,
-  },
-  pressed: {
-    transform: [{ scale: 0.97 }],
-    backgroundColor: COLORS.surfacePressed,
+    gap: spacing.xs,
   },
   disabled: {
     opacity: 0.45,
@@ -104,13 +95,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   label: {
-    ...TYPOGRAPHY.captionStrong,
     fontSize: 13,
   },
-  labelSelected: {
+  selected: {
     fontWeight: '700',
-  },
-  labelDisabled: {
-    color: COLORS.textDisabled,
   },
 });

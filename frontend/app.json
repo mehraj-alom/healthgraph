@@ -16,7 +16,7 @@
         "backgroundColor": "#0f172a"
       },
       "package": "com.medgraph.app",
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "favicon": "./assets/favicon.png"

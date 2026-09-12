@@ -12,7 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Button, Input } from '@/components';
+import { Button, Input, Slider } from '@/components';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, SHADOWS } from '@/constants';
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
@@ -75,6 +75,36 @@ const SLEEP_QUALITY_LABELS: Record<number, string> = {
   4: 'Good',
   5: 'Excellent',
 };
+
+// ---------------------------------------------------------------------------
+// Quick-pick presets — one tap instead of typing (convenience over complexity)
+// ---------------------------------------------------------------------------
+const MEAL_LABELS: Record<number, string> = {
+  1: 'One meal',
+  2: 'Two meals',
+  3: 'Three meals',
+  4: 'Four meals',
+  5: 'Five or more',
+};
+
+const PAIN_TYPE_OPTIONS = ['Sharp', 'Dull', 'Throbbing', 'Aching', 'Burning', 'Stabbing'] as const;
+
+const ACTIVITY_OPTIONS = [
+  'Walking',
+  'Running',
+  'Yoga',
+  'Cycling',
+  'Swimming',
+  'Strength',
+  'Dancing',
+  'Sports',
+] as const;
+
+const DURATION_QUICK = ['15', '30', '45', '60', '90'] as const;
+const WATER_QUICK = ['250', '500', '750', '1000', '2000'] as const;
+
+/** Card tint from a 6-digit hex category color (alpha-suffixed wash). */
+const tint = (c: string) => ({ backgroundColor: `${c}14`, borderColor: `${c}38` });
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -379,6 +409,50 @@ function QualitySelector({
   );
 }
 
+/**
+ * OptionChips — single-select wrap chips tinted per section. Tapping the
+ * selected chip clears it when allowClear (optional fields). Writes straight
+ * into the same string state the free-text Inputs use, so chips and custom
+ * typing stay consistent with zero new state.
+ */
+function OptionChips({
+  options,
+  value,
+  onChange,
+  color,
+  allowClear = false,
+  label,
+}: {
+  options: readonly string[];
+  value: string;
+  onChange: (v: string) => void;
+  color: string;
+  allowClear?: boolean;
+  label: string;
+}) {
+  return (
+    <View style={styles.optRow}>
+      {options.map((opt) => {
+        const selected = value === opt;
+        return (
+          <Pressable
+            key={opt}
+            onPress={() => onChange(selected && allowClear ? '' : opt)}
+            style={[styles.optChip, selected && { backgroundColor: color, borderColor: color }]}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`${opt}${selected ? ', selected' : ''}`}
+          >
+            <Text style={[styles.optChipText, selected && styles.optChipTextSelected]}>
+              {opt}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
@@ -396,6 +470,8 @@ type MedicationDraft = { id: number; name: string; dosage: string; unit: string 
 type VitalDraft = { id: number; conceptId: string; value: string; unit: string };
 type PainDraft = { id: number; structureId: string; bodyLocationId: string; severity: string; painType: string };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export default function VitalsLoggerScreen() {
   const navigation = useNavigation<Nav>();
   const queryClient = useQueryClient();
@@ -406,6 +482,7 @@ export default function VitalsLoggerScreen() {
   const [stress, setStress] = useState<number | null>(null);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const [sleepQuality, setSleepQuality] = useState<number | null>(null);
+  const [awakenings, setAwakenings] = useState<number | null>(null);
   const [waterMl, setWaterMl] = useState('');
   const [mealsCount, setMealsCount] = useState('');
   const [appetiteLevel, setAppetiteLevel] = useState<number | null>(null);
@@ -500,6 +577,7 @@ export default function VitalsLoggerScreen() {
     if (existing.stress_level != null) setStress(existing.stress_level);
     if (existing.sleep_duration_minutes != null) setSleepMinutes(existing.sleep_duration_minutes);
     if (existing.sleep_quality != null) setSleepQuality(existing.sleep_quality);
+    if (existing.sleep_awakenings != null) setAwakenings(existing.sleep_awakenings);
     if (existing.water_ml != null) setWaterMl(String(existing.water_ml));
     if (existing.meals_count != null) setMealsCount(String(existing.meals_count));
     if (existing.appetite_level != null) setAppetiteLevel(existing.appetite_level);
@@ -524,7 +602,7 @@ export default function VitalsLoggerScreen() {
   useEffect(() => {
     setFormInitialized(false);
     setEditingGroupId(null);
-    setMood(null); setEnergy(null); setStress(null); setSleepMinutes(0); setSleepQuality(null);
+    setMood(null); setEnergy(null); setStress(null); setSleepMinutes(0); setSleepQuality(null); setAwakenings(null);
     setWaterMl(''); setMealsCount(''); setAppetiteLevel(null); setSymptoms([]); setPain([]);
     setActivities([]); setMedications([]); setVitals([]); setNotes(''); setErrors({});
   }, [selectedDate]);
@@ -598,15 +676,17 @@ export default function VitalsLoggerScreen() {
       }
 
       // Step 2: Try server persistence (fire-and-forget)
-      const method = editingGroupId ? 'PUT' : 'POST';
-      const path = editingGroupId
+      const hasServerGroupId = editingGroupId != null &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(editingGroupId);
+      const method = hasServerGroupId ? 'PUT' : 'POST';
+      const path = hasServerGroupId
         ? `/api/v1/logs/daily-checkin/${editingGroupId}`
         : '/api/v1/logs/daily-checkin';
       let serverSaved = false;
       let serverGroupId: string | null = null;
       try {
         console.log(`[DailyLog] API_SYNC_START method=${method} path=${path}`);
-        if (editingGroupId) {
+        if (hasServerGroupId) {
           const response = await api.put<DailyCheckInResponse>(path, payload);
           serverGroupId = response.group_id;
         } else {
@@ -693,6 +773,7 @@ export default function VitalsLoggerScreen() {
       energy != null ||
       stress != null ||
       sleepMinutes > 0 ||
+      awakenings != null ||
       symptoms.length > 0 ||
       pain.length > 0 ||
       activities.length > 0 ||
@@ -723,9 +804,11 @@ export default function VitalsLoggerScreen() {
     }
 
     if (waterMl && (!Number.isInteger(Number(waterMl)) || Number(waterMl) < 0)) e.water = 'Use whole millilitres.';
+    if (awakenings != null && sleepMinutes === 0) e.sleepAwakenings = 'Log sleep duration to record wake-ups.';
     if (mealsCount && (!Number.isInteger(Number(mealsCount)) || Number(mealsCount) < 0)) e.meals = 'Use a whole meal count.';
     pain.forEach((item) => {
       if (!item.severity || Number(item.severity) < 1 || Number(item.severity) > 10) e[`pain-${item.id}`] = 'Choose a severity from 1 to 10.';
+      if (item.bodyLocationId.trim() && !UUID_PATTERN.test(item.bodyLocationId.trim())) e[`pain-location-${item.id}`] = 'Use a valid body location UUID or leave this blank.';
     });
     activities.forEach((item) => { if (!item.activityType.trim()) e[`activity-${item.id}`] = 'Enter an activity type.'; });
     medications.forEach((item) => { if (!item.name.trim()) e[`medication-${item.id}`] = 'Enter a medication name.'; });
@@ -752,6 +835,7 @@ export default function VitalsLoggerScreen() {
             sleep: {
               duration_minutes: sleepMinutes,
               ...(sleepQuality != null ? { sleep_quality: sleepQuality } : {}),
+              ...(awakenings != null ? { awakenings } : {}),
             },
           }
         : {}),
@@ -787,12 +871,30 @@ export default function VitalsLoggerScreen() {
       >
         {/* ── Header ── */}
         <View style={styles.header}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={8}
+          >
+            <Text style={styles.backBtnText}>‹ Back</Text>
+          </Pressable>
           <View style={styles.headerRow}>
             <View style={styles.headerText}>
               <Text style={styles.title}>Daily Log</Text>
               <Text style={styles.subtitle}>
-                How are you feeling today?
+                {!todayCheckinQuery.isLoading && editingGroupId != null
+                  ? 'This day is logged — change anything below to update it.'
+                  : 'How are you feeling today?'}
               </Text>
+              {!todayCheckinQuery.isLoading && editingGroupId != null ? (
+                <View style={styles.editingPill}>
+                  <Text style={styles.editingPillText}>
+                    {selectedDate === dateToday() ? "●  VIEWING · EDIT TODAY'S LOG" : '●  VIEWING · EDIT THIS LOG'}
+                  </Text>
+                </View>
+              ) : null}
             </View>
             <View style={styles.dateBadge}>
               <Text style={styles.dateBadgeDay}>
@@ -874,7 +976,7 @@ export default function VitalsLoggerScreen() {
         {/* SLEEP                                                             */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <Section category="sleep" title="Sleep" subtitle="How much did you sleep last night?">
-          <View style={styles.card}>
+          <View style={[styles.card, tint(COLORS.catSleep)]}>
             <Text style={styles.fieldLabel}>Duration</Text>
             <SleepDurationPicker
               totalMinutes={sleepMinutes}
@@ -893,20 +995,71 @@ export default function VitalsLoggerScreen() {
                 {SLEEP_QUALITY_LABELS[sleepQuality]}
               </Text>
             )}
+
+            <View style={styles.fieldSpacer} />
+            <Text style={styles.fieldLabel}>Wake-ups during the night</Text>
+            <View style={styles.stepperRow}>
+              <Pressable
+                onPress={() => setAwakenings((v) => (v == null || v <= 0 ? null : v - 1))}
+                style={styles.stepperBtn}
+                accessibilityLabel="Fewer wake-ups"
+              >
+                <Text style={styles.stepperBtnText}>−</Text>
+              </Pressable>
+              <View style={styles.stepperDisplay}>
+                <Text style={styles.stepperValue}>
+                  {awakenings == null ? 'Not set' : awakenings === 0 ? 'None' : `${awakenings}×`}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setAwakenings((v) => Math.min(6, (v ?? -1) + 1))}
+                style={styles.stepperBtn}
+                accessibilityLabel="More wake-ups"
+              >
+                <Text style={styles.stepperBtnText}>+</Text>
+              </Pressable>
+            </View>
+            {errors.sleepAwakenings ? <Text style={styles.fieldError}>{errors.sleepAwakenings}</Text> : null}
           </View>
         </Section>
 
         <Divider />
 
         <Section category="symptomsPain" title="Symptoms & pain" subtitle="Record symptoms and pain only when present.">
-          <View style={styles.card}>
+          <View style={[styles.card, tint(COLORS.catPain)]}>
             <Text style={styles.fieldLabel}>Pain entries</Text>
             {pain.map((item) => (
               <View key={item.id} style={styles.entryBlock}>
                 <Input label="Structure ID (optional)" value={item.structureId} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, structureId: value } : painItem))} placeholder="e.g. RIGHT_KNEE" />
-                <Input label="Body location ID (optional)" value={item.bodyLocationId} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, bodyLocationId: value } : painItem))} />
-                <Input label="Pain severity (1–10)" value={item.severity} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, severity: value } : painItem))} keyboardType="number-pad" error={errors[`pain-${item.id}`]} />
-                <Input label="Pain type (optional)" value={item.painType} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, painType: value } : painItem))} placeholder="Sharp, dull, throbbing" />
+                <Input label="Body location ID (optional)" value={item.bodyLocationId} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, bodyLocationId: value } : painItem))} error={errors[`pain-location-${item.id}`]} />
+                <Text style={styles.fieldLabel}>Pain severity (1-10)</Text>
+                <View style={styles.severityRow}>
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                    <Pressable
+                      key={n}
+                      onPress={() => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, severity: String(n) } : painItem))}
+                      style={[styles.severityDot, item.severity === String(n) && styles.severityDotSelected]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: item.severity === String(n) }}
+                      accessibilityLabel={`Pain severity ${n} out of 10`}
+                    >
+                      <Text style={[styles.severityDotText, item.severity === String(n) && styles.severityDotTextSelected]}>
+                        {n}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {errors[`pain-${item.id}`] ? <Text style={styles.fieldError}>{errors[`pain-${item.id}`]}</Text> : null}
+                <Text style={styles.fieldLabel}>Pain type</Text>
+                <OptionChips
+                  options={PAIN_TYPE_OPTIONS}
+                  value={item.painType}
+                  onChange={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, painType: value } : painItem))}
+                  color={COLORS.catPain}
+                  allowClear
+                  label="Pain type"
+                />
+                <Input label="Or describe your own" value={item.painType} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, painType: value } : painItem))} placeholder="Sharp, dull, throbbing" />
                 <Pressable onPress={() => setPain((items) => items.filter((painItem) => painItem.id !== item.id))}><Text style={styles.removeBtn}>Remove pain</Text></Pressable>
               </View>
             ))}
@@ -917,11 +1070,28 @@ export default function VitalsLoggerScreen() {
         <Divider />
 
         <Section category="activity" title="Activity" subtitle="Exercise type, duration, and calories.">
-          <View style={styles.card}>
+          <View style={[styles.card, tint(COLORS.catActivity)]}>
             {activities.map((item) => (
               <View key={item.id} style={styles.entryBlock}>
-                <Input label="Activity type" value={item.activityType} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, activityType: value } : activity))} placeholder="Walking, yoga, running" error={errors[`activity-${item.id}`]} />
-                <Input label="Duration (minutes)" value={item.duration} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, duration: value } : activity))} keyboardType="number-pad" />
+                <Text style={styles.fieldLabel}>Activity type</Text>
+                <OptionChips
+                  options={ACTIVITY_OPTIONS}
+                  value={item.activityType}
+                  onChange={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, activityType: value } : activity))}
+                  color={COLORS.catActivity}
+                  label="Activity type"
+                />
+                <Input label="Or type your own" value={item.activityType} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, activityType: value } : activity))} placeholder="Walking, yoga, running" error={errors[`activity-${item.id}`]} />
+                <Text style={styles.fieldLabel}>Duration (minutes)</Text>
+                <OptionChips
+                  options={DURATION_QUICK}
+                  value={item.duration}
+                  onChange={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, duration: value } : activity))}
+                  color={COLORS.catActivity}
+                  allowClear
+                  label="Duration minutes"
+                />
+                <Input label="Or enter exact minutes" value={item.duration} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, duration: value } : activity))} keyboardType="number-pad" />
                 <Input label="Calories (optional)" value={item.calories} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, calories: value } : activity))} keyboardType="decimal-pad" />
                 <Pressable onPress={() => setActivities((items) => items.filter((activity) => activity.id !== item.id))}><Text style={styles.removeBtn}>Remove activity</Text></Pressable>
               </View>
@@ -933,9 +1103,39 @@ export default function VitalsLoggerScreen() {
         <Divider />
 
         <Section category="nutrition" title="Hydration & nutrition" subtitle="Use the fields recorded by HealthGraph.">
-          <View style={styles.card}>
-            <Input label="Water (ml)" value={waterMl} onChangeText={setWaterMl} keyboardType="number-pad" error={errors.water} />
-            <Input label="Meals count" value={mealsCount} onChangeText={setMealsCount} keyboardType="number-pad" error={errors.meals} />
+          <View style={[styles.card, tint(COLORS.catNutrition)]}>
+            <Text style={styles.fieldLabel}>Water</Text>
+            <Slider
+              value={waterMl ? Number(waterMl) : 0}
+              onValueChange={(v) => setWaterMl(String(v))}
+              min={0}
+              max={3000}
+              step={50}
+              color={COLORS.catNutrition}
+              showValue
+              displayValue={waterMl ? `${Number(waterMl).toLocaleString('en-US')} ml` : 'Not set'}
+            />
+            <OptionChips
+              options={WATER_QUICK}
+              value={waterMl}
+              onChange={setWaterMl}
+              color={COLORS.catNutrition}
+              allowClear
+              label="Quick water amounts"
+            />
+            {errors.water ? <Text style={styles.fieldError}>{errors.water}</Text> : null}
+            <View style={styles.fieldSpacer} />
+            <Text style={styles.fieldLabel}>Meals</Text>
+            <QualitySelector
+              value={mealsCount ? Number(mealsCount) : null}
+              onChange={(v) => setMealsCount(String(v))}
+              labels={MEAL_LABELS}
+            />
+            {mealsCount ? (
+              <Text style={styles.qualityHint}>{MEAL_LABELS[Number(mealsCount)]}</Text>
+            ) : null}
+            {errors.meals ? <Text style={styles.fieldError}>{errors.meals}</Text> : null}
+            <View style={styles.fieldSpacer} />
             <Text style={styles.fieldLabel}>Appetite</Text>
             <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={ENERGY_LABELS} />
           </View>
@@ -946,7 +1146,7 @@ export default function VitalsLoggerScreen() {
         {/* ── Today's Scheduled Medications ── */}
         {medicationSchedule && medicationSchedule.length > 0 && (
           <Section category="medication" title="Today's Medications" subtitle="Mark doses as taken.">
-            <View style={styles.card}>
+            <View style={[styles.card, tint(COLORS.catMedication)]}>
               {medicationSchedule.map((item) => {
                 const med = item.medication;
                 const timeStr = item.scheduled_time;
@@ -1006,7 +1206,7 @@ export default function VitalsLoggerScreen() {
         <Divider />
 
         <Section category="medication" title="Additional Medications" subtitle="Record any other medicine taken today.">
-          <View style={styles.card}>
+          <View style={[styles.card, tint(COLORS.catMedication)]}>
             {medications.map((item) => (
               <View key={item.id} style={styles.entryBlock}>
                 <Input label="Medication name" value={item.name} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, name: value } : medication))} error={errors[`medication-${item.id}`]} />
@@ -1024,7 +1224,7 @@ export default function VitalsLoggerScreen() {
         <Divider />
 
         <Section category="vitals" title="Vitals" subtitle="Select a vital sign, enter a value and unit.">
-          <View style={styles.card}>
+          <View style={[styles.card, tint(COLORS.catVitals)]}>
             {vitals.map((item) => {
               const selectedConcept = concepts.find((c) => c.id === item.conceptId);
               return (
@@ -1085,7 +1285,7 @@ export default function VitalsLoggerScreen() {
           title="How you feel"
           subtitle="Rate your mood, energy, and stress today."
         >
-          <View style={styles.card}>
+          <View style={[styles.card, tint(COLORS.catMood)]}>
             <Text style={styles.fieldLabel}>Mood</Text>
             <MoodSelector value={mood} onChange={setMood} />
 
@@ -1110,7 +1310,7 @@ export default function VitalsLoggerScreen() {
           subtitle="Select symptoms and rate their severity."
         >
           {symptoms.map((item) => (
-            <View key={item.id} style={styles.symptomCard}>
+            <View key={item.id} style={[styles.symptomCard, tint(COLORS.catSymptom)]}>
               <View style={styles.symptomHeader}>
                 <Text style={styles.symptomIndex}>Symptom</Text>
                 <Pressable
@@ -1195,8 +1395,17 @@ export default function VitalsLoggerScreen() {
               ) : null}
 
               <View style={styles.fieldSpacer} />
+              <Text style={styles.fieldLabel}>Duration (minutes, optional)</Text>
+              <OptionChips
+                options={DURATION_QUICK}
+                value={item.duration}
+                onChange={(duration) => updateSymptom(item.id, { duration })}
+                color={COLORS.catSymptom}
+                allowClear
+                label="Symptom duration minutes"
+              />
               <Input
-                label="Duration (minutes, optional)"
+                label="Or enter exact minutes"
                 value={item.duration}
                 onChangeText={(duration) =>
                   updateSymptom(item.id, { duration })
@@ -1321,6 +1530,17 @@ const styles = StyleSheet.create({
   },
 
   // ── Header ──
+  backBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.sm,
+  },
+  backBtnText: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary },
   header: {
     paddingVertical: SPACING.lg,
   },
@@ -1340,6 +1560,20 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
+  },
+  editingPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.primaryBg,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    marginTop: SPACING.sm,
+  },
+  editingPillText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.primary,
+    fontSize: 11,
+    letterSpacing: 1.1,
   },
   dateBadge: {
     width: 52,
@@ -1694,6 +1928,29 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: SPACING.xs,
     marginTop: SPACING.xs,
+  },
+  // ── Quick-pick option chips (one tap instead of typing) ──
+  optRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  optChip: {
+    paddingVertical: SPACING.xs + 2,
+    paddingHorizontal: SPACING.sm + 2,
+    borderRadius: BORDER_RADIUS.full,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  optChipText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textSecondary,
+  },
+  optChipTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   chip: {
     paddingHorizontal: SPACING.sm,

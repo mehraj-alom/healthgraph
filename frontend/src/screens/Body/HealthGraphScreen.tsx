@@ -291,10 +291,18 @@ class GraphSceneManager {
   private selectedId: string | null = null;
   private viewport = { width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 120 };
 
-  constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT - 120) {
+  // Edge visibility per backdrop — light paper needs stronger lines.
+  private edgeBaseOp = 0.42;
+  private derivedOp = 0.18;
+
+  constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT - 120, theme: 'dark' | 'light' = 'dark') {
     this.viewport = { width, height };
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1B222C);
+    this.scene.background = new THREE.Color(theme === 'light' ? 0xFAFAF8 : 0x1B222C);
+    if (theme === 'light') {
+      this.edgeBaseOp = 0.62;
+      this.derivedOp = 0.34;
+    }
 
     this.camera = new THREE.PerspectiveCamera(50, width / Math.max(height, 1), 0.1, 100);
     this.camera.position.set(0, 1.5, 8);
@@ -331,7 +339,7 @@ class GraphSceneManager {
     this.highlightMaterial = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       emissive: 0x4d8dff,
-      emissiveIntensity: 0.5,
+      emissiveIntensity: theme === 'light' ? 0.9 : 0.5,
       roughness: 0.3,
       metalness: 0.2,
     });
@@ -432,7 +440,7 @@ class GraphSceneManager {
       } else {
         edgeVerts.push(from.x, from.y, from.z, to.x, to.y, to.z);
         const color = edgeColorsByType[edge.relationship] || new THREE.Color(0x3a6a9b);
-        const op = selectedNodeId != null ? 0.06 : edge.derived ? 0.18 : 0.42;
+        const op = selectedNodeId != null ? 0.06 : edge.derived ? this.derivedOp : this.edgeBaseOp;
         edgeColors.push(color.r * op, color.g * op, color.b * op, color.r * op, color.g * op, color.b * op);
       }
     }
@@ -721,6 +729,7 @@ function NativeCanvas({
   onNodeTap,
   onLayout,
   sceneOut,
+  theme = 'dark',
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -729,6 +738,7 @@ function NativeCanvas({
   onNodeTap: (id: string) => void;
   onLayout?: (w: number, h: number) => void;
   sceneOut?: React.MutableRefObject<GraphSceneManager | null>;
+  theme?: 'dark' | 'light';
 }) {
   const sceneRef = useRef<GraphSceneManager | null>(null);
   const animFrameRef = useRef<number>(0);
@@ -787,7 +797,7 @@ function NativeCanvas({
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.sortObjects = true;
 
-      const scene = new GraphSceneManager(w, h);
+      const scene = new GraphSceneManager(w, h, theme);
       scene.setRenderer(renderer);
       scene.setExpoGLContext(gl);
       scene.buildGraph(nodes, edges, layout, selectedNodeId);
@@ -917,11 +927,19 @@ function NativeCanvas({
 // Main Screen
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export default function HealthGraphScreen() {
+export default function HealthGraphScreen({
+  embedded = false,
+  focusStructureId: focusStructureIdProp,
+  focusSource: focusSourceProp,
+}: {
+  embedded?: boolean;
+  focusStructureId?: string;
+  focusSource?: 'body' | 'graph';
+}) {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const focusStructureId = route.params?.focusStructureId;
-  const focusSource = route.params?.source;
+  const focusStructureId = focusStructureIdProp ?? route.params?.focusStructureId;
+  const focusSource = focusSourceProp ?? route.params?.source;
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
@@ -929,6 +947,7 @@ export default function HealthGraphScreen() {
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const hasAppliedFocus = useRef(false);
   const [graphHeight, setGraphHeight] = useState(SCREEN_HEIGHT - 120);
+  const [embedSize, setEmbedSize] = useState({ w: SCREEN_WIDTH, h: SCREEN_HEIGHT - 120 });
 
   const { data: graphData, isLoading, error, refetch } = useHealthGraph({ depth: 2, limit: 100, category: activeFilter ?? undefined });
   const { data: nodeDetail } = useGraphNodeDetail(selectedNodeId);
@@ -999,8 +1018,14 @@ export default function HealthGraphScreen() {
   }, []);
 
   const handleViewBody = useCallback((sid?: string) => {
+    if (embedded) {
+      // Mounted inside a tab screen — navigate straight to the Body tab.
+      const nav = navigation as unknown as { navigate: (screen: string, params?: object) => void };
+      nav.navigate('Body', sid ? { focusStructureId: sid } : undefined);
+      return;
+    }
     navigation.navigate('Main', { screen: 'Body', params: sid ? { focusStructureId: sid } : undefined } as any);
-  }, [navigation]);
+  }, [navigation, embedded]);
 
   // Dynamic popup position tracking — MUST be before any early returns
   const sceneOutRef = useRef<GraphSceneManager | null>(null);
@@ -1027,22 +1052,34 @@ export default function HealthGraphScreen() {
   const popupPlacement = useMemo(() => {
     if (!popupPos) return null;
     const pw = 240, ph = 300;
+    const clampW = embedded ? embedSize.w : SCREEN_WIDTH;
+    const clampH = embedded ? embedSize.h : SCREEN_HEIGHT;
     let x = popupPos.x + 20;
     let y = popupPos.y - ph / 2;
-    if (x + pw > SCREEN_WIDTH - 16) x = popupPos.x - pw - 20;
-    if (x < 16) x = 16;
-    if (y < 80) y = 80;
-    if (y + ph > SCREEN_HEIGHT - 80) y = SCREEN_HEIGHT - ph - 80;
+    if (x + pw > clampW - 8) x = popupPos.x - pw - 20;
+    if (x < 8) x = 8;
+    if (y < (embedded ? 8 : 80)) y = embedded ? 8 : 80;
+    if (y + ph > clampH - 24) y = clampH - ph - 24;
     return { x, y };
-  }, [popupPos]);
+  }, [popupPos, embedded, embedSize]);
 
-  if (isLoading) return (
+  if (isLoading) return embedded ? (
+    <View style={[styles.embeddedState, styles.embeddedStateLight]}>
+      <ActivityIndicator size="small" color="#0B6852" />
+      <Text style={styles.embeddedHintDark}>Building graph…</Text>
+    </View>
+  ) : (
     <SafeAreaView style={styles.container}>
       <View style={styles.loading}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingTxt}>Building your Health Graph…</Text></View>
     </SafeAreaView>
   );
 
-  if (error) return (
+  if (error) return embedded ? (
+    <View style={[styles.embeddedState, styles.embeddedStateLight]}>
+      <Text style={styles.embeddedErrTitleDark}>Unable to load your Health Graph</Text>
+      <Pressable style={styles.embeddedRetry} onPress={() => refetch()}><Text style={styles.embeddedRetryTxtDark}>Try again</Text></Pressable>
+    </View>
+  ) : (
     <SafeAreaView style={styles.container}>
       <View style={styles.loading}>
         <Text style={styles.errTitle}>Unable to load your Health Graph</Text>
@@ -1055,15 +1092,26 @@ export default function HealthGraphScreen() {
   const isEmpty = !graphData || graphData.nodes.length <= 1;
 
   return (
-    <View style={styles.fullScreen}>
+    <View
+      style={[styles.fullScreen, embedded && styles.fullScreenEmbedded]}
+      onLayout={embedded ? (e) => setEmbedSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }) : undefined}
+    >
       {/* Full-screen graph canvas */}
       {isEmpty ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>🔗</Text>
-          <Text style={styles.emptyTitle}>Your Health Graph</Text>
-          <Text style={styles.emptyTxt}>As you add health information, your connections will appear here.</Text>
-          <Pressable style={styles.emptyBtn} onPress={() => handleViewBody()}><Text style={styles.emptyBtnTxt}>Explore 3D Body</Text></Pressable>
-        </View>
+        embedded ? (
+          <View style={[styles.embeddedState, styles.embeddedStateLight]}>
+            <Text style={styles.emptyIcon}>🔗</Text>
+            <Text style={styles.embeddedErrTitleDark}>Your Health Graph</Text>
+            <Text style={styles.embeddedHintDark}>Your connections will appear here as you log health info.</Text>
+          </View>
+        ) : (
+          <View style={styles.empty}>
+            <Text style={styles.emptyIcon}>🔗</Text>
+            <Text style={styles.emptyTitle}>Your Health Graph</Text>
+            <Text style={styles.emptyTxt}>As you add health information, your connections will appear here.</Text>
+            <Pressable style={styles.emptyBtn} onPress={() => handleViewBody()}><Text style={styles.emptyBtnTxt}>Explore 3D Body</Text></Pressable>
+          </View>
+        )
       ) : (
         <NativeCanvas
           nodes={graphData!.nodes}
@@ -1072,20 +1120,23 @@ export default function HealthGraphScreen() {
           selectedNodeId={selectedNodeId}
           onNodeTap={handleNodeTap}
           sceneOut={sceneOutRef}
+          theme={embedded ? 'light' : 'dark'}
         />
       )}
 
-      {/* Overlay: Header */}
-      <View style={styles.overlayHeader}>
-        <View style={styles.headerL}>
-          <Text style={styles.headerTitle}>Health Graph</Text>
-          <Text style={styles.headerSub}>{focusSource === 'body' && focusStructureId ? `Focused on ${focusStructureId.replace(/_/g, ' ').toLowerCase()}` : 'Your health, connected.'}</Text>
+      {/* Overlay: Header (full-screen mode only) */}
+      {!embedded && (
+        <View style={styles.overlayHeader}>
+          <View style={styles.headerL}>
+            <Text style={styles.headerTitle}>Health Graph</Text>
+            <Text style={styles.headerSub}>{focusSource === 'body' && focusStructureId ? `Focused on ${focusStructureId.replace(/_/g, ' ').toLowerCase()}` : 'Your health, connected.'}</Text>
+          </View>
+          <Pressable style={styles.resetBtn} onPress={handleReset}><Text style={styles.resetTxt}>Reset</Text></Pressable>
         </View>
-        <Pressable style={styles.resetBtn} onPress={handleReset}><Text style={styles.resetTxt}>Reset</Text></Pressable>
-      </View>
+      )}
 
-      {/* Overlay: Filters */}
-      {availableCategories.length > 0 && (
+      {/* Overlay: Filters (full-screen mode only) */}
+      {!embedded && availableCategories.length > 0 && (
         <View style={styles.overlayFilters}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
             <Chip
@@ -1109,7 +1160,7 @@ export default function HealthGraphScreen() {
 
       {/* Overlay: Dynamic node-attached popup */}
       {showDetail && nodeDetail && popupPlacement && (
-        <View style={[styles.popup, { left: popupPlacement.x, top: popupPlacement.y }]}>
+        <View style={[styles.popup, embedded && styles.popupEmbedded, { left: popupPlacement.x, top: popupPlacement.y }]}>
           <ScrollView
             style={styles.popupScroll}
             contentContainerStyle={styles.popupScrollContent}
@@ -1120,8 +1171,8 @@ export default function HealthGraphScreen() {
         </View>
       )}
 
-      {/* Overlay: Stats bar */}
-      {graphData && (
+      {/* Overlay: Stats bar (full-screen mode only) */}
+      {!embedded && graphData && (
         <View style={styles.overlayStats}>
           <Text style={styles.statsTxt}>{graphData.total_nodes} nodes · {graphData.total_edges} connections</Text>
         </View>
@@ -1136,6 +1187,7 @@ export default function HealthGraphScreen() {
 
 const styles = StyleSheet.create({
   fullScreen: { flex: 1, backgroundColor: '#1B222C' },
+  fullScreenEmbedded: { backgroundColor: '#FAFAF8' },
   container: { flex: 1, backgroundColor: COLORS.background },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md },
   loadingTxt: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
@@ -1169,6 +1221,19 @@ const styles = StyleSheet.create({
   emptyTxt: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center', lineHeight: 22 },
   emptyBtn: { backgroundColor: COLORS.primary, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, marginTop: SPACING.md },
   emptyBtnTxt: { ...TYPOGRAPHY.bodyStrong, color: '#07111F' },
+
+  embeddedState: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1B222C', padding: SPACING.md, gap: SPACING.sm },
+  // Paper variants — embedded states sit on the off-white canvas in insights.
+  embeddedStateLight: { backgroundColor: '#FAFAF8' },
+  embeddedHintDark: { ...TYPOGRAPHY.caption, color: '#6E5F52', textAlign: 'center' },
+  embeddedErrTitleDark: { ...TYPOGRAPHY.bodyStrong, color: '#3F1D0B', textAlign: 'center' },
+  embeddedRetryTxtDark: { ...TYPOGRAPHY.captionStrong, color: '#0B6852' },
+  embeddedHint: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, textAlign: 'center' },
+  embeddedErrTitle: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textPrimary, textAlign: 'center' },
+  embeddedRetry: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: 'rgba(255,255,255,0.04)', marginTop: SPACING.xs },
+  embeddedRetryTxt: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary },
+
+  popupEmbedded: { maxHeight: 245 },
 
   detailPanel: { backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border, padding: SPACING.md, maxHeight: SCREEN_HEIGHT * 0.38 },
   detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.sm },

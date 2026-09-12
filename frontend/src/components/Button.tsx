@@ -1,19 +1,14 @@
 import {
   StyleSheet,
   Text,
+  View,
   Pressable,
   ActivityIndicator,
   type ViewStyle,
   type TextStyle,
 } from 'react-native';
-import {
-  COLORS,
-  SPACING,
-  BORDER_RADIUS,
-  TYPOGRAPHY,
-  CONTROL_HEIGHTS,
-  type ControlSize,
-} from '@/constants';
+import { useTheme } from '@/theme';
+import { spacing, radius, type ControlSize } from '@/theme/tokens';
 
 type ButtonVariant =
   | 'primary'
@@ -32,17 +27,22 @@ interface ButtonProps {
   fullWidth?: boolean;
   size?: ControlSize;
   pill?: boolean;
+  leftElement?: React.ReactNode;
   style?: ViewStyle;
   textStyle?: TextStyle;
   accessibilityLabel?: string;
 }
 
+const HEIGHT: Record<ControlSize, number> = {
+  small: 36,
+  medium: 44,
+  large: 52,
+};
+
 /**
- * MedGraph button — shared variants with pressed / disabled / loading states.
- *
- * Pressed: slightly darker fill + ~2% compression (100–150 ms feel).
- * Loading: spinner while preserving button dimensions.
- * Glow is reserved for the focused/active accent, never constant everywhere.
+ * HealthGraph button — shared variants with pressed / disabled / loading /
+ * focus states. Pressed fill steps one tone toward the surface for tactile
+ * feedback; a single shared scale handles the press gesture.
  */
 export const Button = ({
   title,
@@ -53,12 +53,73 @@ export const Button = ({
   fullWidth = false,
   size = 'medium',
   pill = false,
+  leftElement,
   style,
   textStyle,
   accessibilityLabel,
 }: ButtonProps) => {
-  const height = CONTROL_HEIGHTS[size];
+  const { colors, isDark } = useTheme();
+  const height = HEIGHT[size];
   const isDisabled = disabled || loading;
+
+  const surfaceMap: Record<ButtonVariant, ViewStyle> = {
+    primary: {
+      backgroundColor: colors.brand,
+      shadowColor: colors.brand,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.25 : 0.4,
+      shadowRadius: 8,
+      elevation: isDark ? 5 : 3,
+    },
+    secondary: {
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    outline: {
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: colors.borderStrong,
+    },
+    ghost: {
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+    },
+    danger: {
+      backgroundColor: colors.error,
+      shadowColor: colors.error,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    success: {
+      backgroundColor: colors.success,
+      shadowColor: colors.success,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+  };
+
+  const pressedMap: Record<ButtonVariant, ViewStyle> = {
+    primary: { backgroundColor: colors.brandDark },
+    secondary: { backgroundColor: colors.surfacePressed },
+    outline: { backgroundColor: colors.accentBlueSoft },
+    ghost: { backgroundColor: colors.glassHighlight },
+    danger: { backgroundColor: colors.error, opacity: 0.85 },
+    success: { backgroundColor: colors.success, opacity: 0.85 },
+  };
+
+  const textMap: Record<ButtonVariant, TextStyle> = {
+    primary: { color: colors.textOnBrand },
+    secondary: { color: colors.textPrimary },
+    outline: { color: colors.textPrimary },
+    ghost: { color: colors.textSecondary },
+    danger: { color: '#FFFFFF' },
+    success: { color: isDark ? '#07111F' : '#FFFFFF' },
+  };
 
   return (
     <Pressable
@@ -69,29 +130,27 @@ export const Button = ({
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={({ pressed }) => [
         styles.container,
-        { minHeight: height },
-        pill && styles.pill,
-        variantStyles[variant],
+        { minHeight: height, borderRadius: pill ? radius.pill : radius.md },
+        surfaceMap[variant],
         isDisabled && styles.disabled,
-        pressed && !isDisabled && styles.pressed,
-        pressed && !isDisabled && variantPressedStyles[variant],
+        pressed && !isDisabled && { ...pressedMap[variant], transform: [{ scale: 0.975 }] },
         fullWidth && styles.fullWidth,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={textColors[variant].color} />
+        <ActivityIndicator size="small" color={textMap[variant].color} />
       ) : (
-        <Text
-          style={[
-            styles.text,
-            textColors[variant],
-            isDisabled && styles.textDisabled,
-            textStyle,
-          ]}
-        >
-          {title}
-        </Text>
+        <>
+          {leftElement ? (
+            <View style={styles.icon} pointerEvents="none">
+              {leftElement}
+            </View>
+          ) : null}
+          <Text style={[styles.text, textMap[variant], isDisabled && styles.textDisabled, textStyle]}>
+            {title}
+          </Text>
+        </>
       )}
     </Pressable>
   );
@@ -99,22 +158,14 @@ export const Button = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: SPACING.lg,
-    borderRadius: BORDER_RADIUS.medium,
+    paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  pill: {
-    borderRadius: BORDER_RADIUS.pill,
-    paddingHorizontal: SPACING.xl,
+    gap: spacing.sm,
   },
   fullWidth: {
     width: '100%',
-  },
-  pressed: {
-    transform: [{ scale: 0.975 }],
   },
   disabled: {
     opacity: 0.45,
@@ -122,78 +173,15 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   text: {
-    ...TYPOGRAPHY.button,
     fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 20,
+    letterSpacing: 0.2,
   },
   textDisabled: {
     opacity: 0.7,
   },
-
-  // ── Variant surfaces ──
-  primary: {
-    backgroundColor: COLORS.accentGold,
-    shadowColor: COLORS.accentGold,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  secondary: {
-    backgroundColor: COLORS.surfaceElevated,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: COLORS.borderStrong,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-  },
-  danger: {
-    backgroundColor: COLORS.error,
-    shadowColor: COLORS.error,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  success: {
-    backgroundColor: COLORS.success,
-    shadowColor: COLORS.success,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 4,
+  icon: {
+    justifyContent: 'center',
   },
 });
-
-const variantStyles: Record<ButtonVariant, ViewStyle> = {
-  primary: styles.primary,
-  secondary: styles.secondary,
-  outline: styles.outline,
-  ghost: styles.ghost,
-  danger: styles.danger,
-  success: styles.success,
-};
-
-// Pressed fills: one step darker for tactile feedback.
-const variantPressedStyles: Record<ButtonVariant, ViewStyle> = {
-  primary: { backgroundColor: '#D9B016' },
-  secondary: { backgroundColor: COLORS.surfacePressed },
-  outline: { backgroundColor: 'rgba(77, 141, 255, 0.08)' },
-  ghost: { backgroundColor: 'rgba(255, 255, 255, 0.06)' },
-  danger: { backgroundColor: '#C94A55' },
-  success: { backgroundColor: '#4FA95F' },
-};
-
-const textColors: Record<ButtonVariant, TextStyle> = {
-  primary: { color: COLORS.textOnAccent },
-  secondary: { color: COLORS.textPrimary },
-  outline: { color: COLORS.textPrimary },
-  ghost: { color: COLORS.textSecondary },
-  danger: { color: '#FFFFFF' },
-  success: { color: COLORS.textOnAccent },
-};

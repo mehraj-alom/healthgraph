@@ -11,6 +11,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
 import {
   QueryClient,
   QueryClientProvider,
@@ -20,8 +22,11 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AnatomyProvider } from '@/context/AnatomyContext';
 import { DocumentsProvider } from '@/context/DocumentsContext';
 
+import { ThemeProvider } from '@/theme';
+import { ToastProvider } from '@/components';
+
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
-import DashboardScreen from '@/screens/Dashboard/DashboardScreen';
+import HealthDashboardScreen from '@/screens/Dashboard/HealthDashboardScreen';
 import VitalsLoggerScreen from '@/screens/VitalsLogger/VitalsLoggerScreen';
 import TimelineScreen from '@/screens/Timeline/TimelineScreen';
 import ChatScreen from '@/screens/Chat/ChatScreen';
@@ -115,17 +120,9 @@ function MainTabs() {
     >
       <Tab.Screen
         name="Dashboard"
-        component={DashboardScreen}
+        component={HealthDashboardScreen}
         options={{
           tabBarLabel: 'Home',
-        }}
-      />
-
-      <Tab.Screen
-        name="DailyLog"
-        component={VitalsLoggerScreen}
-        options={{
-          tabBarLabel: 'Daily Log',
         }}
       />
 
@@ -239,7 +236,7 @@ function AppNavigator() {
             styles.loadingText
           }
         >
-          Loading MedGraph...
+          Loading healthgraph...
         </Text>
       </View>
     );
@@ -268,6 +265,13 @@ function AppNavigator() {
             <RootStack.Screen
               name="Main"
               component={MainTabs}
+            />
+            <RootStack.Screen
+              name="DailyLog"
+              component={VitalsLoggerScreen}
+              options={{
+                headerShown: false,
+              }}
             />
             <RootStack.Screen
               name="Settings"
@@ -326,17 +330,23 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <QueryClientProvider
-      client={queryClient}
-    >
-      <AuthProvider>
-        <AnatomyProvider>
-          <DocumentsProvider>
-            <AppNavigator />
-          </DocumentsProvider>
-        </AnatomyProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <QueryClientProvider
+        client={queryClient}
+      >
+        <ThemeProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <AnatomyProvider>
+                <DocumentsProvider>
+                  <AppNavigator />
+                </DocumentsProvider>
+              </AnatomyProvider>
+            </ToastProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }
 

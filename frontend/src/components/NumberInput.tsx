@@ -2,7 +2,8 @@ import { StyleSheet, Text } from 'react-native';
 import { useState } from 'react';
 
 import { Input } from './Input';
-import { COLORS, SPACING, TYPOGRAPHY, type ControlSize } from '@/constants';
+import { spacing } from '@/theme/tokens';
+import type { ControlSize } from '@/theme/tokens';
 
 interface NumberInputProps {
   label?: string;
@@ -100,8 +101,9 @@ export const NumberInput = ({
 
 const styles = StyleSheet.create({
   unit: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-    marginLeft: SPACING.sm,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#6F7D8C',
+    marginLeft: spacing.sm,
   },
 });
