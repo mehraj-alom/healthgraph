@@ -1,0 +1,44 @@
+diff --git a/node_modules/expo-gl/build/GLView.js b/node_modules/expo-gl/build/GLView.js
+index 3bd33ef..8550616 100644
+--- a/node_modules/expo-gl/build/GLView.js
++++ b/node_modules/expo-gl/build/GLView.js
+@@ -81,6 +81,22 @@ export class GLView extends React.Component {
+     };
+     _onSurfaceCreate = ({ nativeEvent: { exglCtxId } }) => {
+         const gl = getGl(exglCtxId);
++        if (!gl) {
++            // Registration race (see getGl): retry once shortly — the context
++            // is usually registered by then. If it is still missing, skip this
++            // stale surface event instead of crashing downstream on a null gl.
++            setTimeout(() => {
++                const retryGl = getGl(exglCtxId);
++                if (!retryGl) {
++                    return;
++                }
++                this.exglCtxId = exglCtxId;
++                if (this.props.onContextCreate) {
++                    this.props.onContextCreate(retryGl);
++                }
++            }, 500);
++            return;
++        }
+         this.exglCtxId = exglCtxId;
+         if (this.props.onContextCreate) {
+             this.props.onContextCreate(gl);
+@@ -142,6 +158,16 @@ const getGl = (exglCtxId) => {
+         throw new CodedError('ERR_GL_NOT_AVAILABLE', 'GL is currently not available. (Have you enabled remote debugging? GL is not available while debugging remotely.)');
+     }
+     const gl = global.__EXGLContexts[String(exglCtxId)];
++    if (!gl) {
++        // The native surface fired for a context id that is not (or no longer)
++        // registered — e.g. a surface-create racing context registration, or a
++        // stale event for a destroyed context. Calling configureLogging(gl)
++        // here used to throw `TypeError: Cannot set property
++        // '__expoSetLogging' of undefined`. Return null so the caller can
++        // retry/skip instead of redboxing.
++        console.warn(`ExpoGL: context ${String(exglCtxId)} is not registered (yet); skipping surface setup.`);
++        return null;
++    }
+     configureLogging(gl);
+     return gl;
+ };
