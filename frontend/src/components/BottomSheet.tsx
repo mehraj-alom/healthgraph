@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY, ELEVATION } from '@/constants';
+import { useTheme } from '@/theme';
+import { spacing, radius } from '@/theme/tokens';
 
 interface BottomSheetProps {
   visible: boolean;
@@ -30,9 +31,9 @@ interface BottomSheetProps {
 }
 
 /**
- * MedGraph bottom sheet — dark elevated surface, rounded top corners, drag
- * handle, scrollable + keyboard-aware content. Built on RN Modal so no
- * invisible overlay remains after closing; Android Back dismisses it.
+ * HealthGraph bottom sheet — elevated surface, rounded top, drag handle,
+ * scrollable + keyboard-aware content. Built on RN Modal (nothing stays
+ * mounted after close); Android Back dismisses it.
  */
 export const BottomSheet = ({
   visible,
@@ -45,6 +46,7 @@ export const BottomSheet = ({
   contentStyle,
 }: BottomSheetProps) => {
   const insets = useSafeAreaInsets();
+  const { colors, typography, elevation } = useTheme();
   const panY = useRef(new Animated.Value(0)).current;
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -89,25 +91,36 @@ export const BottomSheet = ({
     >
       <View style={styles.root}>
         <Pressable
-          style={styles.scrim}
+          style={[styles.scrim, { backgroundColor: colors.overlayScrim }]}
           onPress={allowTouchOutsideToClose ? onClose : undefined}
           accessibilityLabel="Close sheet"
         />
 
         <Animated.View
-          style={[styles.sheet, { transform: [{ translateY: panY }] }]}
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.glassStrong,
+              borderColor: colors.glassBorder,
+            },
+            elevation.deep,
+            { transform: [{ translateY: panY }] },
+          ]}
         >
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={styles.kav}
           >
-            {/* Drag region: handle + header */}            <View
+            {/* Drag region: handle + header */}
+            <View
               style={styles.grabArea}
               {...(swipeToClose ? drag.panHandlers : {})}
             >
-              <View style={styles.handle} />
+              <View style={[styles.handle, { backgroundColor: colors.borderStrong }]} />
               <View style={styles.header}>
-                <Text style={styles.title}>{title ?? ''}</Text>
+                <Text style={[styles.title, typography.heading, { color: colors.textPrimary }]}>
+                  {title ?? ''}
+                </Text>
                 <Pressable
                   onPress={onClose}
                   hitSlop={10}
@@ -115,10 +128,11 @@ export const BottomSheet = ({
                   accessibilityLabel="Close sheet"
                   style={({ pressed }) => [
                     styles.closeButton,
-                    pressed && styles.closeButtonPressed,
+                    { backgroundColor: colors.glassHighlight, borderColor: colors.glassBorder },
+                    pressed && [{ backgroundColor: colors.surfacePressed, transform: [{ scale: 0.94 }] }],
                   ]}
                 >
-                  <Text style={styles.closeText}>✕</Text>
+                  <Text style={[styles.closeText, { color: colors.textSecondary }]}>✕</Text>
                 </Pressable>
               </View>
             </View>
@@ -133,11 +147,11 @@ export const BottomSheet = ({
             </ScrollView>
 
             {actions ? (
-              <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom, SPACING.md) }]}>
+              <View style={[styles.actions, { borderTopColor: colors.glassBorder, paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
                 {actions}
               </View>
             ) : (
-              <View style={{ height: Math.max(insets.bottom, SPACING.sm) }} />
+              <View style={{ height: Math.max(insets.bottom, spacing.sm) }} />
             )}
           </KeyboardAvoidingView>
         </Animated.View>
@@ -157,62 +171,49 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: COLORS.overlayScrim,
   },
   sheet: {
-    backgroundColor: COLORS.glassStrong,
-    borderTopLeftRadius: BORDER_RADIUS.xl + 4,
-    borderTopRightRadius: BORDER_RADIUS.xl + 4,
+    borderTopLeftRadius: radius.xxl + 4,
+    borderTopRightRadius: radius.xxl + 4,
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
     borderBottomWidth: 0,
     maxHeight: '88%',
-    ...ELEVATION.deep,
   },
   kav: {
     maxHeight: '100%',
   },
   grabArea: {
-    paddingTop: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
   handle: {
     alignSelf: 'center',
     width: 44,
     height: 4,
     borderRadius: 2,
-    backgroundColor: COLORS.borderStrong,
     opacity: 0.7,
-    marginBottom: SPACING.sm,
+    marginBottom: spacing.sm,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: SPACING.md,
-    paddingBottom: SPACING.sm,
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
   },
   title: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
     flex: 1,
+    fontSize: 20,
   },
   closeButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeButtonPressed: {
-    backgroundColor: COLORS.surfacePressed,
-    transform: [{ scale: 0.94 }],
-  },
   closeText: {
-    color: COLORS.textSecondary,
     fontSize: 14,
     lineHeight: 16,
   },
@@ -220,15 +221,14 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   scrollContent: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
   actions: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderFaint,
   },
 });

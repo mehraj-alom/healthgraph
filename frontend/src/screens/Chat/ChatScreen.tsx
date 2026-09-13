@@ -7,13 +7,25 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+  withSpring,
+  withDelay,
+  Easing,
+  type SharedValue,
+} from 'react-native-reanimated';
+import axios from 'axios';
+import Svg, { Rect, Circle, Defs, Pattern } from 'react-native-svg';
 
 import { api } from '@/services/api';
-import { Button } from '@/components';
+import { BrandLogo } from '@/components/BrandLogo';
 import {
   COLORS,
   SPACING,
@@ -21,6 +33,8 @@ import {
   TYPOGRAPHY,
   MEDICAL_DISCLAIMER,
 } from '@/constants';
+import { useReducedMotion } from '@/theme/useReducedMotion';
+import { bezier, curves } from '@/theme/motion';
 import { useAuth } from '@/context/AuthContext';
 import { useDocuments } from '@/context/DocumentsContext';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
@@ -67,6 +81,16 @@ const ALL_SUGGESTIONS: SuggestionDef[] = [
   { icon: '😴', text: 'How was my sleep last night?', category: 'sleep' },
   { icon: '🩺', text: 'Summarize my recent medical records.', category: 'record' },
 ];
+
+// Suggestion tint per category — same accent family as the rest of Home.
+const SUGGESTION_TINT: Record<SuggestionDef['category'], string> = {
+  sleep: '#6C7AE0',
+  symptom: '#E67E22',
+  energy: '#F4C51B',
+  stress: '#31B7A5',
+  record: '#9B6CFF',
+  general: '#4D8DFF',
+};
 
 function getGreetingTime(): string {
   const hour = new Date().getHours();
@@ -118,63 +142,292 @@ function useSmartSuggestions(): SuggestionDef[] {
   return selected;
 }
 
-function SuggestionCard({ suggestion, index, onPress }: { suggestion: SuggestionDef; index: number; onPress: () => void }) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const entranceAnim = useRef(new Animated.Value(0)).current;
+// ─── Motion primitives (Reanimated, UI thread; static under reduced motion) ──
 
+function Enter({
+  children,
+  index = 0,
+  style,
+}: {
+  children: React.ReactNode;
+  index?: number;
+  style?: object;
+}) {
+  const reduced = useReducedMotion();
+  const o = useSharedValue(reduced ? 1 : 0);
+  const y = useSharedValue(reduced ? 0 : 14);
   useEffect(() => {
-    Animated.timing(entranceAnim, {
-      toValue: 1,
-      duration: 200,
-      delay: index * 40,
-      useNativeDriver: true,
-    }).start();
-  }, [entranceAnim, index]);
+    if (reduced) return;
+    const d = Math.min(index * 45, 320);
+    o.value = withDelay(d, withTiming(1, { duration: 260, easing: bezier(curves.standard) }));
+    y.value = withDelay(d, withSpring(0, { duration: 420, dampingRatio: 0.85 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduced]);
+  const s = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateY: y.value }] }));
+  return <Animated.View style={[style, s]}>{children}</Animated.View>;
+}
 
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 3 }).start();
-  };
+/** Three bouncing dots — the time-to-first-token bridge. */
+function BounceDot({ offset, driver }: { offset: number; driver: SharedValue<number> }) {
+  const reduced = useReducedMotion();
+  const s = useAnimatedStyle(() => {
+    if (reduced) return { opacity: 0.9, transform: [{ translateY: 0 }] };
+    const p = (driver.value + offset) % 1;
+    const lift = p < 0.5 ? Math.sin((p / 0.5) * Math.PI) : 0;
+    return { opacity: 0.45 + lift * 0.55, transform: [{ translateY: -lift * 4 }] };
+  });
+  return <Animated.View style={[styles.typingDot, s]} />;
+}
 
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 3 }).start();
-  };
-
+function TypingDots() {
+  const reduced = useReducedMotion();
+  const t = useSharedValue(reduced ? 1 : 0);
+  useEffect(() => {
+    if (reduced) {
+      t.value = 1;
+      return;
+    }
+    t.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduced]);
   return (
-    <Animated.View style={{ opacity: entranceAnim, transform: [{ scale: scaleAnim }, { translateY: entranceAnim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }}>
-      <Pressable style={styles.suggestionCard} onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
-        <Text style={styles.suggestionIcon}>{suggestion.icon}</Text>
-        <Text style={styles.suggestionText}>{suggestion.text}</Text>
-        <Text style={styles.suggestionArrow}>→</Text>
-      </Pressable>
-    </Animated.View>
+    <View
+      style={styles.typingDots}
+      accessibilityLiveRegion="polite"
+      accessibilityLabel="Assistant is thinking"
+    >
+      <BounceDot offset={0} driver={t} />
+      <BounceDot offset={0.33} driver={t} />
+      <BounceDot offset={0.66} driver={t} />
+    </View>
   );
 }
 
-function AnimatedMessage({ children }: { children: React.ReactNode }) {
-  const entranceAnim = useRef(new Animated.Value(0)).current;
+// ─── Streaming reveal (client-side progressive render over one blocking call) ─
+
+const REVEAL_TICK_MS = 32;
+const WORDS_PER_TICK = 4;
+
+/**
+ * StreamText reveals a complete reply word-by-word, then holds it. While
+ * `live`, a caret rides at the edge; a tick callback lets the list keep the
+ * newest words in view. Pure presentational — the request flow is untouched.
+ */
+function StreamText({
+  text,
+  live,
+  onTick,
+  onDone,
+}: {
+  text: string;
+  live: boolean;
+  onTick?: () => void;
+  onDone?: () => void;
+}) {
+  const words = (text.match(/\S+\s*/g) ?? [text]);
+  const [count, setCount] = useState(live ? 0 : words.length);
+  const tickRef = useRef(0);
 
   useEffect(() => {
-    Animated.timing(entranceAnim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
-  }, [entranceAnim]);
+    setCount(live ? 0 : words.length);
+    tickRef.current = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  useEffect(() => {
+    if (!live) {
+      setCount(words.length);
+      return;
+    }
+    if (count >= words.length) {
+      onDone?.();
+      return;
+    }
+    const id = setTimeout(() => {
+      setCount((c) => Math.min(words.length, c + WORDS_PER_TICK));
+      tickRef.current += 1;
+      if (tickRef.current % 8 === 0) onTick?.();
+    }, REVEAL_TICK_MS);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, count, text]);
 
   return (
-    <Animated.View style={{ opacity: entranceAnim, transform: [{ translateY: entranceAnim.interpolate({ inputRange: [0, 1], outputRange: [4, 0] }) }] }}>
-      {children}
-    </Animated.View>
+    <Text
+      style={styles.messageText}
+      selectable
+      accessibilityLiveRegion="polite"
+    >
+      {words.slice(0, count).join('')}
+      {live && count < words.length ? <Text style={styles.caret}>▍</Text> : null}
+    </Text>
+  );
+}
+
+function SuggestionRow({
+  suggestion,
+  index,
+  onPress,
+}: {
+  suggestion: SuggestionDef;
+  index: number;
+  onPress: () => void;
+}) {
+  const tint = SUGGESTION_TINT[suggestion.category];
+  return (
+    <Enter index={index}>
+      <Pressable
+        style={({ pressed }) => [styles.suggestionPlain, pressed && { opacity: 0.55 }]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Ask: ${suggestion.text}`}
+      >
+        <View style={[styles.suggestionDot, { backgroundColor: tint }]} />
+        <Text style={styles.suggestionPlainText}>{suggestion.text}</Text>
+        <Text style={styles.suggestionPlainArrow}>›</Text>
+      </Pressable>
+    </Enter>
+  );
+}
+
+function FollowChip({ text, onPress }: { text: string; onPress: () => void }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.followChip, pressed && { opacity: 0.7 }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Ask follow-up: ${text}`}
+    >
+      <Text style={styles.followChipText} numberOfLines={1}>{text}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * SendSparkles — light-green bubbles and "+" motes drifting up from the send
+ * button. One shared UI-thread loop; each mote reads a phase-shifted window
+ * of it, so eight particles cost one animation. Static when reduced motion.
+ */
+const SPARK_SEEDS = [
+  { dx: -15, size: 7, delay: 0, plus: false },
+  { dx: -8, size: 5, delay: 0.22, plus: true },
+  { dx: -2, size: 8, delay: 0.4, plus: false },
+  { dx: 5, size: 5, delay: 0.58, plus: false },
+  { dx: 12, size: 6, delay: 0.72, plus: true },
+  { dx: 16, size: 4, delay: 0.86, plus: false },
+];
+
+function Spark({
+  driver,
+  dx,
+  size,
+  delay,
+  plus,
+}: {
+  driver: SharedValue<number>;
+  dx: number;
+  size: number;
+  delay: number;
+  plus: boolean;
+}) {
+  const s = useAnimatedStyle(() => {
+    const p = (((driver.value + delay) % 1) + 1) % 1;
+    const fade = Math.sin(p * Math.PI);
+    return {
+      opacity: fade * 0.95,
+      transform: [{ translateY: -(4 + p * (plus ? 74 : 60)) }, { scale: 1 - p * 0.45 }],
+    };
+  });
+  if (plus) {
+    return (
+      <Animated.Text style={[styles.sparkPlus, { left: 22 + dx - 7 }, s]}>
+        +
+      </Animated.Text>
+    );
+  }
+  return (
+    <Animated.View
+      style={[styles.sparkDot, { width: size, height: size, borderRadius: size / 2, left: 22 + dx - size / 2 }, s]}
+    />
+  );
+}
+
+function SendSparkles() {
+  const reduced = useReducedMotion();
+  const t = useSharedValue(0);
+  useEffect(() => {
+    if (reduced) return;
+    t.value = withRepeat(withTiming(2, { duration: 5200, easing: Easing.linear }), -1, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduced]);
+  if (reduced) return null;
+  return (
+    <View pointerEvents="none" style={styles.sparkField}>
+      {SPARK_SEEDS.map((c, i) => (
+        <Spark key={i} driver={t} dx={c.dx} size={c.size} delay={c.delay} plus={c.plus} />
+      ))}
+    </View>
+  );
+}
+
+/** Midnight-garden wash behind the conversation — lime aura, teal depth,
+ * faint dot grid. Pure decoration, never intercepts touches. */
+function ChatBackdrop() {
+  return (
+    <View pointerEvents="none" style={styles.chatBg}>
+      <View style={styles.chatAuraPeach} />
+      <View style={styles.chatAuraCream} />
+      <Svg width="100%" height="100%" style={styles.chatTexture}>
+        <Defs>
+          <Pattern id="chatDots" width={22} height={22} patternUnits="userSpaceOnUse">
+            <Circle cx={1.5} cy={1.5} r={1.2} fill="rgba(154,52,18,0.07)" />
+          </Pattern>
+        </Defs>
+        <Rect x={0} y={0} width="100%" height="100%" fill="url(#chatDots)" />
+      </Svg>
+    </View>
+  );
+}
+
+/**
+ * Quiet disclaimer — a one-line footnote that expands to the full medical
+ * text on tap. Legally present, visually out of the way.
+ */
+function DisclaimerNote({ style }: { style?: object }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={[styles.dnWrap, style]}>
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={open ? 'Hide medical disclaimer' : 'Show medical disclaimer'}
+        style={styles.dnHead}
+      >
+        <Text style={styles.dnHeadText}>ⓘ Wellness info only — not medical advice</Text>
+        <Text style={styles.dnChevron}>{open ? '▾' : '▸'}</Text>
+      </Pressable>
+      {open ? (
+        <Text style={styles.disclaimerText}>{MEDICAL_DISCLAIMER}</Text>
+      ) : null}
+    </View>
   );
 }
 
 export default function ChatScreen() {
-  const { user, userProfile } = useAuth();
+  const { userProfile } = useAuth();
+  const navigation = useNavigation<any>();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
+  const [revealingId, setRevealingId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [composerFocused, setComposerFocused] = useState(false);
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
   const inputRef = useRef<TextInput>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const suggestions = useSmartSuggestions();
 
@@ -212,6 +465,9 @@ export default function ChatScreen() {
     if (!text) setInputText('');
     setSending(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     let t0: number | undefined;
     try {
       const chatUrl = '/api/v1/chat';
@@ -231,7 +487,7 @@ export default function ChatScreen() {
       const http = await api.getClient().post<ChatResponse>(
         chatUrl,
         chatPayload,
-        { timeout: 180000 },
+        { timeout: 180000, signal: controller.signal },
       );
       const elapsed = Date.now() - t0;
       console.log(`[Chat] httpStatus=${http.status} duration=${elapsed}ms`);
@@ -268,9 +524,16 @@ export default function ChatScreen() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      setRevealingId(assistantMessage.id);
       if (nextConversationId) setConversationId(nextConversationId);
       console.log('[Chat] messageInserted=true');
     } catch (error: any) {
+      // Client-side stop (Stop button) is not a failure — keep the prompt,
+      // show no error bubble.
+      if (axios.isAxiosError(error) && error.code === 'ERR_CANCELED') {
+        console.log('[Chat] requestStoppedByUser=true');
+        return;
+      }
       // Reaching this block means the request genuinely failed at the
       // transport/HTTP level (timeout, network loss, non-2xx). A backend that
       // returned 200 with an answer never lands here.
@@ -296,17 +559,77 @@ export default function ChatScreen() {
         },
       ]);
     } finally {
+      abortRef.current = null;
       setSending(false);
     }
   };
 
+  const stopAll = useCallback(() => {
+    // In-flight request: abort the HTTP call (backend sees a disconnect).
+    // Revealing reply: finish instantly. Same slot as send, no hunt.
+    if (abortRef.current) abortRef.current.abort();
+    setRevealingId(null);
+  }, []);
+
+  const regenerate = useCallback(() => {
+    if (sending) return;
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (!lastAssistant || !lastUser) return;
+    setMessages((prev) => prev.filter((m) => m.id !== lastAssistant.id));
+    // Defer the resend until the removal has committed.
+    setTimeout(() => {
+      void sendMessage(lastUser.content);
+    }, 60);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sending, messages]);
+
+  const busy = sending || revealingId != null;
   const isEmpty = messages.length === 0;
   const displayName = userProfile?.displayName ?? null;
+  const firstName = (displayName ?? '').trim().split(' ')[0] || null;
   const greeting = getGreetingTime();
-  const greetingText = displayName ? `${greeting}, ${displayName}` : greeting;
+
+  const lastAssistantId =
+    messages.length > 0 && messages[messages.length - 1].role === 'assistant'
+      ? messages[messages.length - 1].id
+      : null;
+
+  const renderMessageActions = (item: ChatMessage, isLast: boolean) => {
+    if (item.role !== 'assistant' || sending) return null;
+    const actions = item.ui_actions ?? [];
+    const structures = actions.filter((a) => a.structure_id);
+    return (
+      <View style={styles.msgActions}>
+        {structures.slice(0, 2).map((a, i) => (
+          <Pressable
+            key={`${a.structure_id}-${i}`}
+            onPress={() => navigation.navigate('Body', { focusStructureId: a.structure_id ?? undefined })}
+            style={({ pressed }) => [styles.actionChip, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${a.mesh_node_name ?? 'area'} in 3D body`}
+          >
+            <Text style={styles.actionChipText}>
+              🦴 View {prettyStructure(a.structure_id)} in 3D
+            </Text>
+          </Pressable>
+        ))}
+        {isLast ? (
+          <Pressable
+            style={({ pressed }) => [styles.regenBtn, pressed && { opacity: 0.7 }]}
+            onPress={regenerate}
+            accessibilityRole="button"
+            accessibilityLabel="Regenerate response"
+          >
+            <Text style={styles.regenText}>↻ Regenerate</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoiding}
@@ -316,11 +639,18 @@ export default function ChatScreen() {
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>MedGraph AI</Text>
-            <View style={styles.headerDot} />
+            <BrandLogo height={22} />
+            <View style={styles.headerText}>
+              <View style={styles.headerTitleRow}>
+                <Text style={styles.headerTitle}>healthgraph AI</Text>
+                <View style={styles.headerDot} />
+              </View>
+              <Text style={styles.headerSub}>Online · reads your logs & records</Text>
+            </View>
           </View>
 
           <View style={styles.messagesContainer}>
+            <ChatBackdrop />
             {isEmpty ? (
               <FlatList
                 data={[]}
@@ -328,24 +658,25 @@ export default function ChatScreen() {
                 renderItem={null}
                 ListHeaderComponent={
                   <View style={styles.emptyContainer}>
-                    <View style={styles.companionHeader}>
-                      <View style={styles.companionIconCircle}>
-                        <Text style={styles.companionIcon}>🩺</Text>
-                      </View>
-                      <Text style={styles.emptyGreeting}>Hi {displayName || 'there'}! 👋</Text>
-                      <Text style={styles.emptyQuestion}>How can I help you today?</Text>
-                    </View>
-
-                    <View style={styles.disclaimerBanner}>
-                      <Text style={styles.disclaimerText}>{MEDICAL_DISCLAIMER}</Text>
-                    </View>
+                    <Enter index={0}>
+                      <Text style={styles.emptyGreeting}>
+                        {greeting}{firstName ? `, ${firstName}` : ''}.
+                      </Text>
+                    </Enter>
+                    <Enter index={1}>
+                      <Text style={styles.emptyPersona}>
+                        I read your <Text style={styles.emptyPersonaAccent}>sleep, symptoms and records</Text> — ask me anything about your health.
+                      </Text>
+                    </Enter>
 
                     <View style={styles.suggestionsContainer}>
-                      <Text style={styles.suggestionsLabel}>You might want to ask</Text>
+                      <Text style={styles.suggestionsLabel}>Try asking</Text>
                       {suggestions.map((s, i) => (
-                        <SuggestionCard key={i} suggestion={s} index={i} onPress={() => sendMessage(s.text)} />
+                        <SuggestionRow key={s.text} suggestion={s} index={2 + i} onPress={() => sendMessage(s.text)} />
                       ))}
                     </View>
+
+                    <DisclaimerNote />
                   </View>
                 }
                 contentContainerStyle={styles.messagesContent}
@@ -354,9 +685,6 @@ export default function ChatScreen() {
               />
             ) : (
               <>
-                <View style={styles.disclaimerBannerSmall}>
-                  <Text style={styles.disclaimerTextSmall}>{MEDICAL_DISCLAIMER}</Text>
-                </View>
                 <FlatList
                   ref={flatListRef}
                   data={messages}
@@ -364,90 +692,119 @@ export default function ChatScreen() {
                   contentContainerStyle={styles.messagesContent}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
-                  renderItem={({ item }) => (
-                    <AnimatedMessage>
-                      <View
-                        style={[
-                          styles.messageBubble,
-                          item.role === 'user' ? styles.userBubble : styles.assistantBubble,
-                        ]}
-                      >
-                        {item.role === 'assistant' && (
-                          <View style={styles.assistantAvatar}>
-                            <Text style={styles.assistantAvatarText}>🩺</Text>
+                  ListFooterComponent={<DisclaimerNote style={styles.dnFoot} />}
+                  renderItem={({ item, index }) => {
+                    const isLast = index === messages.length - 1;
+                    const live = revealingId === item.id;
+                    return (
+                      <Enter index={0} style={item.role === 'user' ? styles.userRow : styles.aiRow}>
+                        <View
+                          style={[
+                            styles.messageBubble,
+                            item.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                          ]}
+                        >
+                          {item.role === 'assistant' && (
+                            <View style={styles.assistantAvatar}>
+                              <View style={styles.aiDot} />
+                            </View>
+                          )}
+                          <View style={styles.messageContent}>
+                            {item.role === 'user' ? (
+                              <Text style={[styles.messageText, styles.userText]} selectable>
+                                {item.content}
+                              </Text>
+                            ) : (
+                              <StreamText
+                                text={item.content}
+                                live={live}
+                                onTick={scrollToBottom}
+                                onDone={() => setRevealingId((cur) => (cur === item.id ? null : cur))}
+                              />
+                            )}
+                            <Text
+                              style={[
+                                styles.messageTime,
+                                item.role === 'user' ? styles.userTime : styles.assistantTime,
+                              ]}
+                            >
+                              {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
                           </View>
-                        )}
-                        <View style={styles.messageContent}>
-                          <Text
-                            style={[
-                              styles.messageText,
-                              item.role === 'user' ? styles.userText : styles.assistantText,
-                            ]}
-                          >
-                            {item.content}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.messageTime,
-                              item.role === 'user' ? styles.userTime : styles.assistantTime,
-                            ]}
-                          >
-                            {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </Text>
                         </View>
-                      </View>
-                    </AnimatedMessage>
-                  )}
+                        {renderMessageActions(item, isLast && !live)}
+                      </Enter>
+                    );
+                  }}
                 />
+                {/* Follow-ups ride under the finished reply — two taps, no typing. */}
+                {!busy && lastAssistantId && suggestions.length > 0 ? (
+                  <View style={styles.followRow}>
+                    {suggestions.slice(0, 2).map((s) => (
+                      <FollowChip key={s.text} text={s.text} onPress={() => sendMessage(s.text)} />
+                    ))}
+                  </View>
+                ) : null}
               </>
             )}
 
             {sending && (
               <View style={styles.typingContainer}>
-                <View style={styles.typingDots}>
-                  <View style={[styles.typingDot, styles.typingDot1]} />
-                  <View style={[styles.typingDot, styles.typingDot2]} />
-                  <View style={[styles.typingDot, styles.typingDot3]} />
-                </View>
-                <Text style={styles.typingText}>Thinking…</Text>
+                <TypingDots />
+                <Text style={styles.typingText}>Thinking… reading your health data</Text>
               </View>
             )}
           </View>
 
-          {/* Input */}
+          {/* Composer — Gemini-style pill with the send tucked inside */}
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-               <TextInput
+            <View style={[styles.composerShell, composerFocused && styles.composerShellFocused]}>
+              <TextInput
                 ref={inputRef}
-                style={[styles.input, composerFocused && styles.inputFocused]}
+                style={styles.inputInner}
                 value={inputText}
                 onChangeText={setInputText}
                 onFocus={() => setComposerFocused(true)}
                 onBlur={() => setComposerFocused(false)}
-                placeholder="Type your message…"
-                placeholderTextColor={COLORS.textDisabled}
+                placeholder={sending ? 'Waiting for reply…' : 'Ask about your health…'}
+                placeholderTextColor="#C9BBA9"
                 multiline
                 maxLength={2000}
                 editable={!sending}
                 returnKeyType="send"
                 blurOnSubmit={false}
                 onSubmitEditing={() => { void sendMessage(); }}
-                keyboardAppearance="dark"
+                keyboardAppearance="light"
                 underlineColorAndroid="transparent"
+                accessibilityLabel="Message input"
               />
-              <Pressable
-                onPress={() => { void sendMessage(); }}
-                disabled={sending || !inputText.trim()}
-                accessibilityRole="button"
-                accessibilityLabel="Send message"
-                style={({ pressed }) => [
-                  styles.sendButton,
-                  (!inputText.trim() || sending) && styles.sendButtonDisabled,
-                  pressed && !sending && styles.sendButtonPressed,
-                ]}
-              >
-                <Text style={styles.sendButtonText}>↑</Text>
-              </Pressable>
+              <View style={styles.composerAction}>
+                <SendSparkles />
+                {busy ? (
+                  <Pressable
+                    onPress={stopAll}
+                    accessibilityRole="button"
+                    accessibilityLabel="Stop generating"
+                    style={({ pressed }) => [styles.stopButton, pressed && { opacity: 0.7, transform: [{ scale: 0.94 }] }]}
+                  >
+                    <Text style={styles.stopButtonText}>■</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={() => { void sendMessage(); }}
+                    disabled={!inputText.trim()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send message"
+                    style={({ pressed }) => [
+                      styles.sendButton,
+                      !inputText.trim() && styles.sendButtonDisabled,
+                      pressed && inputText.trim() && styles.sendButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.sendButtonText}>↑</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           </View>
         </View>
@@ -456,8 +813,23 @@ export default function ChatScreen() {
   );
 }
 
+function prettyStructure(structureId: string | null): string {
+  if (!structureId) return 'area';
+  return structureId.replace(/_/g, ' ').toLowerCase();
+}
+
+// Sunset paper palette — identical to the correlation cards.
+const PAPER = '#FFF8F0';
+const CARD = '#FFFFFF';
+const INK = '#3F1D0B';
+const EMBER = '#E8590C';
+const TITLE_RED = '#C1121F';
+const WARM = '#8A6D5B';
+const WARM_LINE = 'rgba(154,52,18,0.14)';
+const TEAL_DEEP = '#0B6852';
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: PAPER },
   keyboardAvoiding: { flex: 1 },
 
   header: {
@@ -466,168 +838,353 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    borderBottomColor: WARM_LINE,
+    backgroundColor: PAPER,
     gap: SPACING.sm,
   },
-  headerTitle: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textPrimary },
-  headerDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.success },
-  headerSub: { ...TYPOGRAPHY.caption, color: COLORS.textMuted },
+  aiDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: EMBER },
+  headerText: { flex: 1, gap: 1 },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  headerTitle: { ...TYPOGRAPHY.bodyStrong, color: INK, fontSize: 16 },
+  headerDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#2F9E44' },
+  headerSub: { ...TYPOGRAPHY.caption, color: WARM, fontSize: 12 },
+
+  // Warm wash behind the conversation.
+  chatBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  chatAuraPeach: {
+    position: 'absolute',
+    top: -80,
+    right: -70,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(232,89,12,0.07)',
+  },
+  chatAuraCream: {
+    position: 'absolute',
+    top: '45%',
+    left: -90,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: 'rgba(214,178,132,0.18)',
+  },
+  chatTexture: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
 
   messagesContainer: { flex: 1 },
   messagesContent: {
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
-    gap: SPACING.md,
+    gap: 14,
     flexGrow: 1,
   },
 
-  emptyContainer: { paddingTop: SPACING.lg, gap: SPACING.lg },
-  companionHeader: { alignItems: 'center', paddingVertical: SPACING.lg, gap: SPACING.sm },
-  companionIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.primaryBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.sm,
+  // ── Teaching empty state ──
+  emptyContainer: { paddingTop: SPACING.sm, gap: SPACING.md },
+  emptyGreeting: {
+    ...TYPOGRAPHY.h2,
+    color: TITLE_RED,
+    textAlign: 'center',
+    fontSize: 25,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
-  companionIcon: { fontSize: 28 },
-  emptyGreeting: { ...TYPOGRAPHY.h2, color: COLORS.textPrimary },
-  emptyQuestion: { ...TYPOGRAPHY.body, color: COLORS.primary, marginTop: SPACING.xs },
+  emptyPersona: {
+    ...TYPOGRAPHY.body,
+    color: WARM,
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: SPACING.lg,
+  },
+  emptyPersonaAccent: { color: EMBER, fontWeight: '700' },
 
-  disclaimerBanner: { backgroundColor: COLORS.surfaceSecondary, borderRadius: BORDER_RADIUS.sm, padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
-  disclaimerText: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, lineHeight: 18, textAlign: 'center' },
-  disclaimerBannerSmall: { backgroundColor: COLORS.surfaceSecondary, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderColor: COLORS.border },
-  disclaimerTextSmall: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, fontSize: 11, textAlign: 'center', lineHeight: 16 },
+  // Quiet disclaimer footnote — present, never in the way.
+  dnWrap: { gap: 6 },
+  dnFoot: { paddingHorizontal: SPACING.md, paddingTop: 4, paddingBottom: 12 },
+  dnHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 },
+  dnHeadText: { ...TYPOGRAPHY.caption, color: WARM, fontSize: 11 },
+  dnChevron: { color: WARM, fontSize: 11, fontWeight: '700' },
+  disclaimerText: { ...TYPOGRAPHY.caption, color: WARM, lineHeight: 18, textAlign: 'center' },
 
-  suggestionsContainer: { gap: SPACING.sm },
-  suggestionsLabel: { ...TYPOGRAPHY.label, color: COLORS.textMuted, marginBottom: SPACING.xs },
+  // Clean list — no cards, just breathable type. Feels like Gemini/ChatGPT starters.
+  suggestionsContainer: { paddingBottom: SPACING.md, gap: 0 },
+  suggestionsLabel: {
+    ...TYPOGRAPHY.label,
+    color: WARM,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontSize: 11,
+    marginBottom: 6,
+    opacity: 0.9,
+  },
+  suggestionPlain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(154,52,18,0.10)',
+  },
+  suggestionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.95,
+    marginTop: 1,
+  },
+  suggestionPlainText: {
+    ...TYPOGRAPHY.body,
+    color: INK,
+    flex: 1,
+    lineHeight: 20,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  suggestionPlainArrow: {
+    color: WARM,
+    fontSize: 20,
+    fontWeight: '400',
+    opacity: 0.45,
+    marginLeft: 4,
+    marginTop: -1,
+  },
+  // kept for backward compat if anything still references old names
   suggestionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surfaceElevated,
+    backgroundColor: CARD,
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
-    borderRadius: BORDER_RADIUS.md,
+    borderColor: WARM_LINE,
+    borderRadius: BORDER_RADIUS.lg,
+    borderCurve: 'continuous',
     padding: SPACING.md,
     gap: SPACING.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 5,
-    elevation: 2,
   },
-  suggestionIcon: { fontSize: 18, width: 24, textAlign: 'center' },
-  suggestionText: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, flex: 1, lineHeight: 20 },
-  suggestionArrow: { fontSize: 16, color: COLORS.primary, opacity: 0.6 },
+  suggestionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestionIcon: { fontSize: 17 },
+  suggestionText: { ...TYPOGRAPHY.body, color: INK, flex: 1, lineHeight: 20, fontSize: 14.5 },
+  suggestionArrow: { fontSize: 17, fontWeight: '700' },
 
+  // ── Messages ──
+  userRow: { alignItems: 'flex-end' },
+  aiRow: { alignItems: 'flex-start' },
   messageBubble: {
-    maxWidth: '85%',
-    padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
+    maxWidth: '86%',
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.md,
+    borderRadius: 20,
+    borderCurve: 'continuous',
     flexDirection: 'row',
     gap: SPACING.sm,
   },
   userBubble: {
-    backgroundColor: COLORS.accentBlue,
+    backgroundColor: '#431407',
     alignSelf: 'flex-end',
-    borderBottomRightRadius: BORDER_RADIUS.sm,
-    maxWidth: '82%',
-    shadowColor: COLORS.accentBlue,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 3,
+    borderBottomRightRadius: 6,
+    boxShadow: '0 4px 14px rgba(67,20,7,0.30)',
   },
   assistantBubble: {
-    backgroundColor: COLORS.surfaceElevated,
+    backgroundColor: CARD,
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
+    borderColor: WARM_LINE,
     alignSelf: 'flex-start',
-    borderBottomLeftRadius: BORDER_RADIUS.sm,
-    maxWidth: '85%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 2,
+    borderBottomLeftRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: EMBER,
+    boxShadow: '0 4px 14px rgba(124,45,18,0.10)',
   },
   assistantAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.accentBlueSoft,
+    width: 26,
+    height: 26,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
   },
-  assistantAvatarText: { fontSize: 14 },
-  messageContent: { flex: 1 },
-  messageText: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, lineHeight: 22 },
-  userText: { color: '#FFFFFF' },
-  assistantText: { color: COLORS.textPrimary },
-  messageTime: { ...TYPOGRAPHY.caption, marginTop: SPACING.xs, opacity: 0.65, alignSelf: 'flex-end' },
-  userTime: { color: 'rgba(255, 255, 255, 0.65)' },
-  assistantTime: { color: COLORS.textMuted },
+  messageContent: { flex: 1, flexShrink: 1 },
+  messageText: { ...TYPOGRAPHY.body, color: INK, lineHeight: 22, fontSize: 15 },
+  userText: { color: '#FFF7ED' },
+  caret: { color: EMBER, fontWeight: '800' },
+  messageTime: { ...TYPOGRAPHY.caption, marginTop: 6, opacity: 0.6, alignSelf: 'flex-end', fontSize: 11 },
+  userTime: { color: 'rgba(255,247,237,0.7)' },
+  assistantTime: { color: WARM },
 
-  typingContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm, gap: SPACING.sm },
-  typingDots: { flexDirection: 'row', gap: 4 },
-  typingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.accentBlue },
-  typingDot1: { opacity: 0.35 },
-  typingDot2: { opacity: 0.65 },
-  typingDot3: { opacity: 1 },
-  typingText: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, fontStyle: 'italic' },
-
-  inputContainer: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    backgroundColor: '#0C1522',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderFaint,
+  msgActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, maxWidth: '86%' },
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(11,104,82,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(11,104,82,0.4)',
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
+  actionChipText: { ...TYPOGRAPHY.captionStrong, color: TEAL_DEEP, fontSize: 12.5 },
+  regenBtn: {
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: WARM_LINE,
+    backgroundColor: CARD,
+  },
+  regenText: { ...TYPOGRAPHY.captionStrong, color: WARM, fontSize: 12.5 },
+
+  followRow: { flexDirection: 'row', gap: 8, paddingHorizontal: SPACING.md, paddingBottom: 10 },
+  followChip: {
+    flex: 1,
+    borderRadius: BORDER_RADIUS.full,
+    borderWidth: 1,
+    borderColor: 'rgba(232,89,12,0.45)',
+    backgroundColor: '#FFF1E2',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  followChipText: { ...TYPOGRAPHY.captionStrong, color: '#9A3412', fontSize: 12 },
+
+  typingContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm, paddingTop: 2, gap: SPACING.sm },
+  typingDots: { flexDirection: 'row', gap: 5 },
+  typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: EMBER },
+  typingText: { ...TYPOGRAPHY.caption, color: WARM, fontStyle: 'italic', fontSize: 12.5 },
+
+  // ── Composer — Gemini-style: one pill, send lives inside ────────────────
+  inputContainer: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
+    paddingBottom: Platform.OS === 'ios' ? SPACING.sm : SPACING.md,
+    backgroundColor: PAPER,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(154,52,18,0.10)',
+  },
+  composerShell: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: CARD,
+    borderWidth: 1.5,
+    borderColor: WARM_LINE,
+    borderRadius: 28,
+    borderCurve: 'continuous',
+    paddingLeft: 6,
+    paddingRight: 6,
+    paddingVertical: 6,
+    gap: 8,
+    minHeight: 56,
+    boxShadow: '0 2px 14px rgba(124,45,18,0.08)',
+  },
+  composerShellFocused: {
+    borderColor: 'rgba(232,89,12,0.45)',
+    backgroundColor: CARD,
+    boxShadow: '0 4px 20px rgba(232,89,12,0.16)',
+  },
+  inputInner: {
+    flex: 1,
+    ...TYPOGRAPHY.body,
+    fontSize: 15.5,
+    lineHeight: 21,
+    color: INK,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxHeight: 120,
+    minHeight: 36,
+    backgroundColor: 'transparent',
+  },
+  composerAction: {
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    alignSelf: 'flex-end',
+    paddingBottom: 2,
+  },
+  // legacy aliases (no longer used by JSX but keep to avoid dead-style confusion)
   inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.sm },
   input: {
     flex: 1,
     ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    backgroundColor: COLORS.surfaceSunken,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.xl,
+    fontSize: 15,
+    color: INK,
+    backgroundColor: CARD,
+    borderWidth: 1.5,
+    borderColor: WARM_LINE,
+    borderRadius: 24,
+    borderCurve: 'continuous',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingVertical: 12,
     maxHeight: 120,
-    minHeight: 48,
+    minHeight: 50,
   },
   inputFocused: {
-    borderColor: COLORS.accentBlue,
-    backgroundColor: '#0E1A2C',
-    shadowColor: COLORS.accentBlue,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
+    borderColor: EMBER,
+    backgroundColor: CARD,
   },
+  sendWrap: { width: 52, alignItems: 'center', justifyContent: 'flex-end' },
+  sparkField: {
+    position: 'absolute',
+    bottom: 42,
+    left: -6,
+    width: 56,
+    height: 88,
+  },
+  sparkDot: {
+    position: 'absolute',
+    bottom: 0,
+    backgroundColor: '#84CC16',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    shadowColor: '#65A30D',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+  },
+  sparkPlus: {
+    position: 'absolute',
+    bottom: 0,
+    color: '#65A30D',
+    fontSize: 14,
+    fontWeight: '900',
+    backgroundColor: 'transparent',
+  },
+  // Gemini send — compact ink pill tucked inside the composer, not floating outside.
   sendButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: COLORS.accentBlue,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1A0F0A',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.accentBlue,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    boxShadow: '0 4px 14px rgba(26,15,10,0.28)',
   },
   sendButtonPressed: {
-    transform: [{ scale: 0.94 }],
-    backgroundColor: '#3A7AE0',
-    shadowOpacity: 0.1,
+    transform: [{ scale: 0.92 }],
+    opacity: 0.92,
   },
-  sendButtonDisabled: { opacity: 0.35, shadowOpacity: 0, elevation: 0 },
-  sendButtonText: { color: '#FFFFFF', fontSize: 20, fontWeight: '600' },
+  sendButtonDisabled: {
+    opacity: 0.32,
+    backgroundColor: '#B9A99A',
+    boxShadow: '0 0 0 rgba(0,0,0,0)',
+  },
+  sendButtonText: {
+    color: '#FFF7ED',
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: -1,
+    letterSpacing: 0.2,
+  },
+  stopButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E03131',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 4px 14px rgba(224,49,49,0.35)',
+  },
+  stopButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
 });

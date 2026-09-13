@@ -29,7 +29,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_authenticated_patient_id
+from core.config import settings
 from core.db import get_db
+from core.rate_limiter import RateLimiter
 from logger import logger
 from models.summaries import PatientDailySummary, PatientHealthSummary
 from services.summaries.daily_summary_service import (
@@ -48,6 +50,48 @@ router = APIRouter(
     prefix="/api/v1/summaries",
     tags=["Patient Summaries"],
 )
+
+# Expensive synchronous rebuild operations are abuse-protected per
+# authenticated user: a shared 5-rebuilds/hour budget across all three
+# rebuild endpoints. Redis-outage policy is fail-closed outside LOCAL so a
+# limiter outage never degrades into unbounded compute. (An existing
+# reprocessing surface — document_reprocess is not yet exposed as an
+# endpoint — would reuse this same pattern: 5/hour/user.)
+_SUMMARY_REBUILD_LIMIT = 5
+_SUMMARY_REBUILD_WINDOW_SECONDS = 3600
+_summary_rebuild_limiter = RateLimiter()
+
+
+def _guard_summary_rebuild(patient_id: uuid.UUID) -> None:
+    _summary_rebuild_limiter.check(
+        str(patient_id),
+        "summary_rebuild",
+        _SUMMARY_REBUILD_LIMIT,
+        _SUMMARY_REBUILD_WINDOW_SECONDS,
+        fail_open=settings.APP_ENV == "local",
+    )
+
+
+def _rebuild_all_daily(db: Session, patient_id: uuid.UUID) -> int:
+    """Rebuild every dated daily summary for a patient; returns the count."""
+    from sqlalchemy import func, select
+    from models.events import ClinicalEvent
+
+    date_rows = db.execute(
+        select(
+            func.date_trunc("day", ClinicalEvent.event_time).label("day")
+        )
+        .where(ClinicalEvent.patient_id == patient_id)
+        .group_by(func.date_trunc("day", ClinicalEvent.event_time))
+        .order_by(func.date_trunc("day", ClinicalEvent.event_time))
+    ).all()
+
+    daily_count = 0
+    for row in date_rows:
+        if row.day:
+            rebuild_daily_summary(db, patient_id, row.day.date())
+            daily_count += 1
+    return daily_count
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +163,7 @@ def rebuild_daily(
     db: Session = Depends(get_db),
 ):
     """Rebuild (force-refresh) the daily summary for a specific date."""
+    _guard_summary_rebuild(patient_id)
     result = rebuild_daily_summary(db, patient_id, summary_date)
 
     return DailySummaryResponse(
@@ -167,6 +212,7 @@ def rebuild_health(
     db: Session = Depends(get_db),
 ):
     """Rebuild (force-refresh) the longitudinal patient health summary."""
+    _guard_summary_rebuild(patient_id)
     result = rebuild_health_summary(db, patient_id)
 
     return HealthSummaryResponse(
@@ -196,29 +242,8 @@ def rebuild_all(
     rebuilds the daily summary for each date and finally rebuilds
     the health summary.
     """
-    from sqlalchemy import func, select, distinct
-    from models.events import ClinicalEvent
-
-    # Find all unique event dates for this patient.
-    date_rows = db.execute(
-        select(
-            func.date_trunc("day", ClinicalEvent.event_time).label("day")
-        )
-        .where(ClinicalEvent.patient_id == patient_id)
-        .group_by(func.date_trunc("day", ClinicalEvent.event_time))
-        .order_by(func.date_trunc("day", ClinicalEvent.event_time))
-    ).all()
-
-    daily_count = 0
-    for row in date_rows:
-        if row.day:
-            rebuild_daily_summary(
-                db,
-                patient_id,
-                row.day.date(),
-            )
-            daily_count += 1
-
+    _guard_summary_rebuild(patient_id)
+    daily_count = _rebuild_all_daily(db, patient_id)
     # Rebuild the health summary
     rebuild_health_summary(db, patient_id)
 

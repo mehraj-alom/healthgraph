@@ -9,15 +9,8 @@ import {
 } from 'react-native';
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  COLORS,
-  SPACING,
-  BORDER_RADIUS,
-  TYPOGRAPHY,
-  CONTROL_HEIGHTS,
-  ELEVATION,
-  type ControlSize,
-} from '@/constants';
+import { useTheme } from '@/theme';
+import { spacing, radius, type ControlSize } from '@/theme/tokens';
 
 export interface SelectOption {
   label: string;
@@ -25,6 +18,12 @@ export interface SelectOption {
   description?: string;
   disabled?: boolean;
 }
+
+const HEIGHT: Record<ControlSize, number> = {
+  small: 36,
+  medium: 44,
+  large: 52,
+};
 
 interface SelectProps {
   label?: string;
@@ -43,12 +42,8 @@ interface SelectProps {
 }
 
 /**
- * MedGraph select — a real pressable control backed by a native Modal picker.
- *
- * Notes:
- *  - No TextInput is faked; the trigger simply opens a modal option list.
- *  - The Modal is fully unmounted on close, so it never blocks other inputs.
- *  - Android Back closes the picker through onRequestClose.
+ * HealthGraph select — a real pressable control backed by a native Modal
+ * picker. The Modal is unmounted on close; Android Back closes it.
  */
 export const Select = ({
   label,
@@ -60,20 +55,23 @@ export const Select = ({
   hint,
   disabled = false,
   size = 'medium',
-  color = COLORS.accentBlue,
+  color = '#4D8DFF',
   menuTitle,
   style,
 }: SelectProps) => {
   const [open, setOpen] = useState(false);
   const insets = useSafeAreaInsets();
-  const height = CONTROL_HEIGHTS[size];
+  const { colors, typography, elevation } = useTheme();
+  const height = HEIGHT[size];
   const hasError = Boolean(error);
   const selected = options.find((opt) => opt.value === value) ?? null;
 
   return (
     <View style={[styles.container, style]}>
       {label ? (
-        <Text style={[styles.label, hasError && styles.labelError]}>{label}</Text>
+        <Text style={[styles.label, { color: hasError ? colors.error : colors.textSecondary }]}>
+          {label}
+        </Text>
       ) : null}
 
       <Pressable
@@ -84,8 +82,12 @@ export const Select = ({
         accessibilityState={{ disabled, expanded: open }}
         style={({ pressed }) => [
           styles.trigger,
-          { minHeight: height },
-          pressed && !disabled && styles.triggerPressed,
+          {
+            minHeight: height,
+            backgroundColor: colors.surfaceSunken,
+            borderColor: hasError ? colors.error : colors.border,
+          },
+          pressed && !disabled && { backgroundColor: colors.surfacePressed, transform: [{ scale: 0.985 }] },
           hasError && styles.triggerError,
           disabled && styles.triggerDisabled,
         ]}
@@ -93,8 +95,8 @@ export const Select = ({
         <Text
           style={[
             styles.triggerText,
-            !selected && styles.triggerPlaceholder,
-            disabled && styles.triggerDisabledText,
+            typography.body,
+            { color: selected ? colors.textPrimary : colors.textDisabled },
           ]}
           numberOfLines={1}
         >
@@ -103,7 +105,7 @@ export const Select = ({
         <Text
           style={[
             styles.chevron,
-            { color: disabled ? COLORS.textDisabled : selected ? color : COLORS.textMuted },
+            { color: disabled ? colors.textDisabled : selected ? color : colors.textMuted },
           ]}
         >
           ▾
@@ -111,9 +113,9 @@ export const Select = ({
       </Pressable>
 
       {error ? (
-        <Text style={styles.errorText}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
       ) : hint && !hasError ? (
-        <Text style={styles.hintText}>{hint}</Text>
+        <Text style={[styles.hintText, { color: colors.textMuted }]}>{hint}</Text>
       ) : null}
 
       <RNModal
@@ -126,18 +128,23 @@ export const Select = ({
       >
         <View style={styles.modalRoot}>
           <Pressable
-            style={styles.scrim}
+            style={[styles.scrim, { backgroundColor: colors.overlayScrim }]}
             onPress={() => setOpen(false)}
             accessibilityLabel="Close options"
           />
-
           <View
             style={[
               styles.menu,
-              { paddingTop: Math.max(insets.top, 20), paddingBottom: Math.max(insets.bottom, 16) },
+              elevation.deep,
+              {
+                backgroundColor: colors.glassStrong,
+                borderColor: colors.glassBorder,
+                paddingTop: Math.max(insets.top, 20),
+                paddingBottom: Math.max(insets.bottom, 16),
+              },
             ]}
           >
-            <Text style={styles.menuTitle}>
+            <Text style={[styles.menuTitle, typography.heading, { color: colors.textPrimary }]}>
               {menuTitle ?? label ?? placeholder}
             </Text>
             <ScrollView
@@ -169,14 +176,17 @@ export const Select = ({
                       <Text
                         style={[
                           styles.optionLabel,
-                          isSelected && { color },
-                          opt.disabled && styles.optionDisabledText,
+                          typography.body,
+                          { color: isSelected ? color : colors.textPrimary },
+                          opt.disabled && { color: colors.textDisabled },
                         ]}
                       >
                         {opt.label}
                       </Text>
                       {opt.description ? (
-                        <Text style={styles.optionDesc}>{opt.description}</Text>
+                        <Text style={[styles.optionDesc, typography.caption, { color: colors.textMuted }]}>
+                          {opt.description}
+                        </Text>
                       ) : null}
                     </View>
                     {isSelected ? (
@@ -195,61 +205,42 @@ export const Select = ({
 
 const styles = StyleSheet.create({
   container: {
-    gap: SPACING.xs + 2,
+    gap: 6,
   },
   label: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.textSecondary,
     fontSize: 11,
-  },
-  labelError: {
-    color: COLORS.error,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   trigger: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.surfaceSunken,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.medium,
-    paddingHorizontal: SPACING.md,
-    gap: SPACING.sm,
-  },
-  triggerPressed: {
-    backgroundColor: COLORS.surfacePressed,
-    transform: [{ scale: 0.985 }],
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
   },
   triggerError: {
-    borderColor: COLORS.error,
     borderWidth: 1.5,
   },
   triggerDisabled: {
-    backgroundColor: COLORS.surfaceDisabled,
     opacity: 0.7,
   },
   triggerText: {
     flex: 1,
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-  },
-  triggerPlaceholder: {
-    color: COLORS.textDisabled,
-  },
-  triggerDisabledText: {
-    color: COLORS.textDisabled,
   },
   chevron: {
     fontSize: 14,
   },
   errorText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.error,
+    fontSize: 13,
+    lineHeight: 18,
   },
   hintText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
     fontSize: 12,
+    lineHeight: 18,
   },
 
   // Option picker (Modal)
@@ -257,7 +248,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: spacing.lg,
   },
   scrim: {
     position: 'absolute',
@@ -265,23 +256,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: COLORS.overlayScrim,
   },
   menu: {
     width: '100%',
     maxWidth: 460,
     maxHeight: '70%',
-    backgroundColor: COLORS.glassStrong,
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
-    borderRadius: BORDER_RADIUS.xl,
-    paddingHorizontal: SPACING.lg,
-    ...ELEVATION.deep,
+    borderRadius: radius.xxl,
+    paddingHorizontal: spacing.lg,
   },
   menuTitle: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-    paddingBottom: SPACING.sm,
+    fontSize: 20,
+    paddingBottom: spacing.sm,
   },
   menuScroll: {
     flexGrow: 0,
@@ -290,13 +276,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: SPACING.md,
-    paddingVertical: SPACING.sm + 4,
-    paddingHorizontal: SPACING.sm + 2,
-    borderRadius: BORDER_RADIUS.medium,
+    gap: spacing.md,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'transparent',
-    marginBottom: SPACING.xs,
+    marginBottom: spacing.xs,
   },
   optionPressed: {
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -309,16 +295,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   optionLabel: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
     fontWeight: '600',
   },
   optionDesc: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-  },
-  optionDisabledText: {
-    color: COLORS.textDisabled,
+    fontSize: 12,
   },
   check: {
     fontSize: 16,

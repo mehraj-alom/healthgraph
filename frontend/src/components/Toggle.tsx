@@ -1,5 +1,6 @@
 import { StyleSheet, View, Text, Switch, type ViewStyle } from 'react-native';
-import { COLORS, SPACING, TYPOGRAPHY } from '@/constants';
+import { useTheme } from '@/theme';
+import { spacing } from '@/theme/tokens';
 
 interface ToggleProps {
   label: string;
@@ -10,7 +11,7 @@ interface ToggleProps {
   style?: ViewStyle;
 }
 
-/** MedGraph toggle row — label + description with a calm, accessible switch. */
+/** HealthGraph toggle row — label + description with a calm, accessible switch. */
 export const Toggle = ({
   label,
   description,
@@ -19,12 +20,15 @@ export const Toggle = ({
   disabled = false,
   style,
 }: ToggleProps) => {
+  const { colors, typography } = useTheme();
   return (
     <View style={[styles.row, style]}>
       <View style={styles.text}>
-        <Text style={[styles.label, disabled && styles.muted]}>{label}</Text>
+        <Text style={[styles.label, typography.bodyStrong, { color: colors.textPrimary }]}>
+          {label}
+        </Text>
         {description ? (
-          <Text style={[styles.description, disabled && styles.muted]}>
+          <Text style={[styles.description, typography.caption, { color: colors.textMuted }]}>
             {description}
           </Text>
         ) : null}
@@ -34,11 +38,11 @@ export const Toggle = ({
         onValueChange={onChange}
         disabled={disabled}
         trackColor={{
-          false: COLORS.border,
-          true: COLORS.accentBlue,
+          false: colors.border,
+          true: colors.accentBlue,
         }}
-        thumbColor={value ? '#FFFFFF' : COLORS.textMuted}
-        ios_backgroundColor={COLORS.border}
+        thumbColor={value ? '#FFFFFF' : colors.textMuted}
+        ios_backgroundColor={colors.border}
         accessibilityRole="switch"
         accessibilityState={{ checked: value, disabled }}
       />
@@ -50,24 +54,17 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.md,
-    paddingVertical: SPACING.sm + 2,
+    gap: spacing.md,
+    paddingVertical: spacing.sm + 2,
   },
   text: {
     flex: 1,
     gap: 2,
   },
   label: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
     fontSize: 15,
   },
   description: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
     lineHeight: 17,
-  },
-  muted: {
-    color: COLORS.textDisabled,
   },
 });

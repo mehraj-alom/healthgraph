@@ -7,7 +7,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useMemo, useRef, useState } from 'react';
-import { COLORS, SPACING, BORDER_RADIUS } from '@/constants';
+import { useTheme } from '@/theme';
+import { spacing, radius } from '@/theme/tokens';
 
 interface SliderProps {
   /** Controlled value (number, clamped to [min, max] snapped to step). */
@@ -50,10 +51,11 @@ export const Slider = ({
   label,
   displayValue,
   unit,
-  color = COLORS.accentBlue,
+  color = '#4D8DFF',
   showValue = false,
   style,
 }: SliderProps) => {
+  const { colors } = useTheme();
   const [trackWidth, setTrackWidth] = useState(0);
   const stateRef = useRef({ min, max, step, disabled, onValueChange, trackWidth, value });
   stateRef.current = { min, max, step, disabled, onValueChange, trackWidth, value };
@@ -104,12 +106,18 @@ export const Slider = ({
 
   return (
     <View style={[styles.container, style]}>
-      {(label || showValue) && (
-        <View style={styles.labelRow}>
-          {label ? <Text style={styles.label}>{label}</Text> : <View />}
-          {showValue ? <Text style={[styles.value, { color }]}>{readout}</Text> : null}
-        </View>
-      )}
+{(label || showValue) && (
+          <View style={styles.labelRow}>
+            {label ? (
+              <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
+            ) : (
+              <View />
+            )}
+            {showValue ? (
+              <Text style={[styles.value, { color }]}>{readout}</Text>
+            ) : null}
+          </View>
+        )}
 
       <View
         style={[
@@ -137,13 +145,13 @@ export const Slider = ({
       >
         {/* Track */}
         <View style={styles.trackOuter}>
-          <View style={[styles.track, disabled && styles.trackDisabled]} />
+          <View style={[styles.track, { backgroundColor: colors.surfaceSunken, borderColor: colors.border }]} />
           <View
             style={[
               styles.trackFill,
               {
                 width: fillWidth,
-                backgroundColor: disabled ? COLORS.textDisabled : color,
+                backgroundColor: disabled ? colors.textDisabled : color,
               },
             ]}
           />
@@ -156,8 +164,8 @@ export const Slider = ({
             styles.thumb,
             {
               left: thumbLeft,
-              borderColor: disabled ? COLORS.textDisabled : color,
-              backgroundColor: disabled ? COLORS.surfaceDisabled : '#FFFFFF',
+              borderColor: disabled ? colors.textDisabled : color,
+              backgroundColor: disabled ? colors.surfaceDisabled : '#FFFFFF',
             },
             disabled && styles.thumbDisabled,
           ]}
@@ -169,7 +177,7 @@ export const Slider = ({
 
 const styles = StyleSheet.create({
   container: {
-    gap: SPACING.xs + 2,
+    gap: 6,
   },
   labelRow: {
     flexDirection: 'row',
@@ -179,7 +187,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: COLORS.textSecondary,
   },
   value: {
     fontSize: 14,
@@ -195,7 +202,7 @@ const styles = StyleSheet.create({
   },
   trackOuter: {
     height: 6,
-    borderRadius: BORDER_RADIUS.pill,
+    borderRadius: radius.pill,
     backgroundColor: 'transparent',
     overflow: 'hidden',
   },
@@ -205,20 +212,15 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: COLORS.surfaceSunken,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.pill,
-  },
-  trackDisabled: {
-    backgroundColor: COLORS.surfaceDisabled,
+    borderRadius: radius.pill,
   },
   trackFill: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    borderRadius: BORDER_RADIUS.pill,
+    borderRadius: radius.pill,
     opacity: 0.9,
   },
   thumb: {

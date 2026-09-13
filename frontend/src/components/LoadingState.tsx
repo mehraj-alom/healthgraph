@@ -1,17 +1,21 @@
 import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
-import { COLORS, SPACING, TYPOGRAPHY } from '@/constants';
+import { useTheme } from '@/theme';
+import { spacing } from '@/theme/tokens';
 
 interface LoadingStateProps {
   label?: string;
   fullScreen?: boolean;
 }
 
-/** MedGraph loading state — calm spinner + optional label. */
+/** HealthGraph loading state — calm spinner + optional label. */
 export const LoadingState = ({ label, fullScreen = false }: LoadingStateProps) => {
+  const { colors, typography } = useTheme();
   return (
-    <View style={[styles.container, fullScreen && styles.fullScreen]}>
-      <ActivityIndicator size="small" color={COLORS.accentBlue} />
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+    <View style={[styles.container, fullScreen && { flex: 1, backgroundColor: colors.background }]}>
+      <ActivityIndicator size="small" color={colors.accentBlue} />
+      {label ? (
+        <Text style={[styles.label, { color: colors.textMuted }, typography.body]}>{label}</Text>
+      ) : null}
     </View>
   );
 };
@@ -20,15 +24,10 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: SPACING.xl,
-    gap: SPACING.md,
-  },
-  fullScreen: {
-    flex: 1,
-    backgroundColor: COLORS.background,
+    padding: spacing.xl,
+    gap: spacing.md,
   },
   label: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
+    fontSize: 14,
   },
 });

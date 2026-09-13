@@ -1,0 +1,165 @@
+name: pr-checks
+
+# Phase 0 — PR validation (Increments 1 + 2).
+# Read-only: never deploys, never pushes, never touches production
+# credentials, branch protection, or release config.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (npm ci · tsc · expo-doctor · sqlite tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type-check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Expo doctor
+        working-directory: frontend
+        run: npx expo-doctor
+
+      - name: Frontend unit tests (sqlite migrations + sync classification)
+        run: node --experimental-sqlite --experimental-strip-types --test frontend/tests/migrations.test.mts frontend/tests/syncClassification.test.mts
+
+  backend:
+    name: Backend (dev env · compile · pytest · ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dev environment
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Compile all packages
+        run: python -m compileall -q app agents alembic core models schemas scripts services workers
+
+      - name: Run backend tests
+        # Dummy, non-secret Celery broker/backend env so app modules importing
+        # core/celery_app (route modules, app.main) import cleanly. Nothing in
+        # tests_ sends Celery tasks; the client is never connected.
+        env:
+          CELERY_BROKER_URL: redis://localhost:6379/0
+          CELERY_RESULT_BACKEND: redis://localhost:6379/1
+        run: python -m pytest
+
+      - name: Ruff lint
+        run: ruff check .
+
+  dependency-audit:
+    name: Dependency vulnerability audit (npm + pip)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm audit (fail on high/critical only)
+        working-directory: frontend
+        run: npm ci --silent && npm audit --audit-level=high
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: pip-audit (documented allowlist, fail on anything new)
+        run: |
+          pip install --quiet pip-audit
+          # Advisory allowlist — see docs/security-baseline.md.
+          # None of these are reachable in this application:
+          #   PYSEC-2026-3552/3553/3554 (cryptography): PKCS#7 EnvelopedData
+          #     oracle, cert-chain DoS, wildcard permittedSubtrees — no
+          #     affected code path; presidio-anonymizer caps cryptography <49.
+          #   PYSEC-2026-2447 (diskcache): unsafe pickle requires local write
+          #     access to a cache dir the application never creates/uses.
+          pip-audit -r requirements.txt \
+            --ignore-vuln PYSEC-2026-3552 \
+            --ignore-vuln PYSEC-2026-3553 \
+            --ignore-vuln PYSEC-2026-3554 \
+            --ignore-vuln PYSEC-2026-2447
+
+  docker-build:
+    name: Docker API image build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build api image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: healthgraph-api:ci
+          cache-from: type=gha,scope=pr-checks
+          cache-to: type=gha,mode=max,scope=pr-checks
+
+  secret-scan:
+    name: Tracked-file secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan tracked files for credential shapes
+        run: |
+          set -e
+          fail=0
+
+          # Genuine secret shapes — scanned EVERYWHERE (incl. index.html).
+          GENUINE='(ghp_[0-9A-Za-z]{30,}|sk-[0-9A-Za-z]{20,}|-----BEGIN (RSA |OPENSSH |EC |DSA |)PRIVATE KEY-----|firebase.?admin.?private_key)'
+          if git grep -nE "$GENUINE" -- . ; then
+            echo "::error::Genuine credential shape found in tracked files."
+            fail=1
+          fi
+
+          # Firebase WEB apiKey (AIza...) is intentionally PUBLIC client
+          # config. The one allowed place is an `apiKey:` line of the dev
+          # harness (index.html). Everything else is flagged.
+          if git grep -nE 'AIza[0-9A-Za-z_-]{30,}' -- . ':(exclude)index.html' ; then
+            echo "::error::Firebase web apiKey found outside the allowed public-config location (index.html)."
+            fail=1
+          fi
+          if git grep -nE 'AIza[0-9A-Za-z_-]{30,}' -- index.html | grep -vE 'apiKey[[:space:]]*:' ; then
+            echo "::error::Non-apiKey Firebase key line in index.html."
+            fail=1
+          fi
+
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "No secret-like content found in tracked files."

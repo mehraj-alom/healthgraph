@@ -31,7 +31,7 @@ import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants';
 
 const DRACO_WASM_WRAPPER_ASSET = require('../../assets/draco/draco_wasm_wrapper.txt');
 const DRACO_DECODER_WASM_ASSET = require('../../assets/draco/draco_decoder.wasm');
-const DRACO_DECODER_JS_ASSET = require('../../assets/draco/draco_decoder.txt');
+const DRACO_DECODER_JS_ASSET = require('../../assets/draco/draco_decoder_js.txt');
 
 let _dracoWasmWrapperText: string | null = null;
 let _dracoDecoderWasm: ArrayBuffer | null = null;

@@ -1,16 +1,30 @@
 import uuid
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.db import get_db
+from core.rate_limiter import RateLimiter
 from models.identity import Patient  # Ensure your Patient model has a `firebase_uid` column
 from logger import logger
 security = HTTPBearer()
 
+# General abuse-protection limits for cheap, authenticated API operations.
+# These are abuse-protection budgets, not product quotas; the headroom is
+# high so normal HealthGraph usage is never affected. They are checked
+# inside the canonical auth dependency so every authenticated request is
+# covered without editing every router, and the identity is ALWAYS the
+# verified canonical patient UUID (never client input).
+_READ_LIMIT = 120   # requests / minute / authenticated user
+_WRITE_LIMIT = 60   # requests / minute / authenticated user
+_RATE_WINDOW_SECONDS = 60
+_general_limiter = RateLimiter()
+
+
 def get_authenticated_patient_id(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> uuid.UUID:
@@ -45,5 +59,19 @@ def get_authenticated_patient_id(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User identity established, but no corresponding patient record exists in the clinical database. Please complete registration."
         )
+
+    # General per-patient read/write abuse protection (cheap operations →
+    # fail open so a Redis blip never takes down normal API usage).
+    operation = (
+        "writes" if request.method in ("POST", "PUT", "PATCH", "DELETE") else "reads"
+    )
+    limit = _WRITE_LIMIT if operation == "writes" else _READ_LIMIT
+    _general_limiter.check(
+        str(patient_id),
+        operation,
+        limit,
+        _RATE_WINDOW_SECONDS,
+        fail_open=True,
+    )
 
     return patient_id

@@ -7,15 +7,14 @@ import {
   type ViewStyle,
   type TextStyle,
 } from 'react-native';
+import { useTheme } from '@/theme';
+import { spacing, radius, type ControlSize } from '@/theme/tokens';
 
-import {
-  COLORS,
-  SPACING,
-  BORDER_RADIUS,
-  TYPOGRAPHY,
-  CONTROL_HEIGHTS,
-  type ControlSize,
-} from '@/constants';
+const HEIGHT: Record<ControlSize, number> = {
+  small: 36,
+  medium: 44,
+  large: 52,
+};
 
 interface InputProps {
   label?: string;
@@ -49,14 +48,9 @@ interface InputProps {
 }
 
 /**
- * MedGraph text input — dark recessed glass well with subtle inner depth.
- *
- * Functional contract:
- *  - TextInput is never wrapped in a Pressable or covered by an overlay.
- *  - The value passed in MUST be a string while editing (convert to a number
- *    only when saving).
- *  - Focus callbacks are forwarded without changing the native input hierarchy.
- *  - Disabled inputs reduce contrast and remain non-editable.
+ * HealthGraph text input — recessed well with hairline border.
+ * Normal → focused (accent glow) → error (tone border) → disabled.
+ * The TextInput is never wrapped in a Pressable or covered by an overlay.
  */
 export const Input = ({
   label,
@@ -88,13 +82,14 @@ export const Input = ({
   testID,
   accessibilityLabel,
 }: InputProps) => {
+  const { colors, typography } = useTheme();
   const hasError = Boolean(error);
-  const height = CONTROL_HEIGHTS[size];
+  const height = HEIGHT[size];
 
   return (
     <View style={styles.container}>
       {label ? (
-        <Text style={[styles.label, hasError && styles.labelError]}>
+        <Text style={[styles.label, hasError && { color: colors.error }]}>
           {label}
         </Text>
       ) : null}
@@ -102,7 +97,12 @@ export const Input = ({
       <View
         style={[
           styles.inputContainer,
-          { minHeight: height },
+          {
+            minHeight: height,
+            backgroundColor: colors.surfaceSunken,
+            borderColor: hasError ? colors.error : colors.border,
+            borderRadius: radius.md,
+          },
           hasError && styles.inputContainerError,
           disabled && styles.inputContainerDisabled,
           multiline && styles.inputContainerMultiline,
@@ -119,7 +119,7 @@ export const Input = ({
           testID={testID}
           accessibilityLabel={accessibilityLabel ?? label ?? placeholder}
           placeholder={placeholder}
-          placeholderTextColor={COLORS.textDisabled}
+          placeholderTextColor={colors.textDisabled}
           value={value}
           onChangeText={onChangeText}
           secureTextEntry={secureTextEntry}
@@ -141,12 +141,12 @@ export const Input = ({
           onBlur={() => {
             onBlurExternal?.();
           }}
-          selectionColor={COLORS.accentBlue}
+          selectionColor={colors.accentBlue}
           style={[
             styles.input,
-            { minHeight: height },
+            { minHeight: height, color: colors.textPrimary, ...typography.body },
             multiline && styles.inputMultiline,
-            disabled && styles.inputDisabled,
+            disabled && { color: colors.textDisabled },
             inputStyle,
           ]}
         />
@@ -159,9 +159,9 @@ export const Input = ({
       </View>
 
       {error ? (
-        <Text style={styles.errorText}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
       ) : hint && !hasError ? (
-        <Text style={styles.hintText}>{hint}</Text>
+        <Text style={[styles.hintText, { color: colors.textMuted }]}>{hint}</Text>
       ) : null}
     </View>
   );
@@ -170,85 +170,56 @@ export const Input = ({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'column',
-    gap: SPACING.xs + 2,
+    gap: spacing.xs + 2,
   },
-
   label: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.textSecondary,
     fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
-
-  labelError: {
-    color: COLORS.error,
-  },
-
-  // Recessed dark well: sunken surface, hairline border, no external glow
-  // unless focused (accent) or in error.
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surfaceSunken,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.medium,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: spacing.md,
   },
-
   inputContainerError: {
-    borderColor: COLORS.error,
     borderWidth: 1.5,
   },
-
   inputContainerDisabled: {
-    backgroundColor: COLORS.surfaceDisabled,
-    borderColor: COLORS.borderFaint,
     opacity: 0.7,
     shadowOpacity: 0,
     elevation: 0,
   },
-
   inputContainerMultiline: {
     alignItems: 'flex-start',
   },
-
   input: {
     flex: 1,
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
     paddingVertical: 0,
     paddingHorizontal: 0,
   },
-
   inputMultiline: {
     minHeight: 100,
-    paddingTop: SPACING.sm + 4,
-    paddingBottom: SPACING.sm + 4,
+    paddingTop: spacing.sm + 4,
+    paddingBottom: spacing.sm + 4,
     textAlignVertical: 'top',
   },
-
-  inputDisabled: {
-    color: COLORS.textDisabled,
-  },
-
   leftElement: {
-    marginRight: SPACING.sm,
+    marginRight: spacing.sm,
     justifyContent: 'center',
   },
-
   rightElement: {
-    marginLeft: SPACING.sm,
+    marginLeft: spacing.sm,
     justifyContent: 'center',
   },
-
   errorText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.error,
+    fontSize: 13,
+    lineHeight: 18,
   },
-
   hintText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
     fontSize: 12,
+    lineHeight: 18,
   },
 });

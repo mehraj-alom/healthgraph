@@ -1,0 +1,53 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
+
+[tool.ruff]
+# Match the project's production image (Dockerfile: python:3.11-slim).
+target-version = "py311"
+line-length = 100
+
+# Ruff respects .gitignore (venv/, __pycache__, etc.) by default.
+# Exclude non-Python and generated areas explicitly.
+exclude = [
+    "frontend",
+    "alembic/versions",
+    "docs",
+]
+
+[tool.ruff.lint]
+# Conservative baseline (Phase 0, Increment 2).
+#
+# The codebase predates any lint config, so we configure OUT the rules that
+# would produce mass cosmetic churn and keep the high-signal ones. New code
+# must satisfy everything that is NOT ignored below; changing these rules is
+# a deliberate, documented decision.
+#
+# Select:
+#   E,W  pycodestyle (without E501 etc., see ignore)
+#   B    flake8-bugbear (real bug patterns)
+# Note: the full `F` (pyflakes) rule set is intentionally NOT selected yet —
+# unused-import/variable debt exists and is out of scope for this increment.
+select = ["E", "W", "B"]
+ignore = [
+    # E — style / non-correctness
+    "E501",  # long lines: existing code uses up to ~120 chars
+    "E402",  # module-level import not at top: scripts/config set up sys.path first
+    "E701",  # multiple statements on one line: existing one-liners
+    # W — file-formatting whitespace-only cosmetics
+    "W291",  # trailing whitespace (existing files)
+    "W292",  # missing newline at end of file (existing files)
+    "W293",  # blank line contains whitespace (existing files)
+    # B — contextual/legacy patterns, safe to defer
+    "B007",  # unused loop control variable (e.g. health_graph.py:406 `etype`)
+    "B008",  # callable default arg: FastAPI uses `Depends(...)`/`Query(...)` by design
+    "B009",  # getattr() with constant attribute (extraction_mapper.py)
+    "B033",  # duplicate set literal (extraction_mapper.py:22 `'xray'`; sets dedupe)
+    "B904",  # raise ... from e (existing style; not mass-changing)
+    "B905",  # zip() without strict= (explicit strict= not yet required)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic env scaffolding, not application code.
+"alembic/env.py" = ["E", "W", "B"]

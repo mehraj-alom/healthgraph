@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /**
  * Migration function type.
@@ -390,6 +390,46 @@ const migrations: Record<number, MigrationFn> = {
       3,
     );
   },
+
+  // ========================================================================
+  // Migration 4: On-device camera-PPG derived measurements (offline-first)
+  // ========================================================================
+  // Stores ONLY compact derived scalars produced on-device (HR, HRV, quality).
+  // Raw frames, video, and raw PPG streams NEVER touch this table or the
+  // server. Raw stays on-device unless the user explicitly opts into export.
+  4: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS ppg_measurements (
+        measurement_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        measured_at TEXT NOT NULL,
+        heart_rate_bpm REAL,
+        signal_quality REAL NOT NULL,
+        duration_seconds INTEGER NOT NULL,
+        rmssd_ms REAL,
+        sdnn_ms REAL,
+        rr_intervals_json TEXT,
+        algorithm_version TEXT NOT NULL,
+        reliable INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        sync_status TEXT NOT NULL DEFAULT 'pending'
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_ppg_patient_time ON ppg_measurements (patient_id, measured_at);
+      CREATE INDEX IF NOT EXISTS ix_ppg_sync ON ppg_measurements (sync_status);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      4,
+      'PPG derived measurements (on-device only, offline-first)',
+      4,
+    );
+  },
 };
 
 /**
@@ -434,6 +474,8 @@ const REQUIRED_TABLES = [
   'profile_cache',
   'daily_metrics_cache',
   'trends_cache',
+  // On-device PPG derived measurements (migration 4)
+  'ppg_measurements',
 ];
 
 /**

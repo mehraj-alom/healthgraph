@@ -24,15 +24,19 @@ import { api } from './api';
 import { getCachedPatientId } from './patientIdentity';
 import {
   markSyncing,
-  markSynced,
-  markSyncFailed,
   refreshSyncState,
 } from './syncState';
+import {
+  classifySyncError,
+  computeBackoffDelayMs,
+  isRetryableCategory,
+  shouldExhaustRetries,
+} from './syncClassification';
+import { markOnline, markOffline } from './networkMonitor';
 import type {
   SyncQueueItem,
   SyncResult,
   SyncState,
-  SyncErrorCategory,
   SyncTableName,
 } from './syncTypes';
 
@@ -43,7 +47,65 @@ import type {
 const MAX_RETRY_ATTEMPTS = 5;
 const BASE_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 30000;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function buildDailyLogBody(payload: any) {
+  return {
+    log_date: payload.log_date,
+    overall_wellbeing: payload.overall_wellbeing,
+    energy_level: payload.energy_level,
+    stress_level: payload.stress_level,
+    sleep: payload.sleep,
+    nutrition: payload.nutrition,
+    notes: payload.notes,
+    symptoms: payload.symptoms,
+    vitals: payload.vitals,
+    pain: (payload.pain ?? []).map((item: any) => ({
+      ...item,
+      ...(item.body_location_id && !UUID_PATTERN.test(item.body_location_id)
+        ? { body_location_id: undefined }
+        : {}),
+    })),
+    activities: payload.activities,
+    medications: payload.medications,
+  };
+}
 const STALE_PROCESSING_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+// ============================================================================
+// In-memory retry backoff
+// ============================================================================
+// Sync triggers are frequent (startup, every foreground resume, network-
+// recovery events, every local mutation). Without backoff, a queued mutation
+// on a flaky connection is re-attempted on every trigger, generating noise
+// and churning attempt_count. We remember when each item may next be
+// retried (in-memory only; attempt_count persists across restarts so the
+// exponent survives relaunches).
+
+const _retryBackoff = new Map<number, number>(); // item id -> epoch ms
+
+function scheduleRetry(id: number, attemptCount: number): void {
+  const delay = computeBackoffDelayMs(
+    attemptCount,
+    BASE_RETRY_DELAY_MS,
+    MAX_RETRY_DELAY_MS,
+  );
+  _retryBackoff.set(id, Date.now() + delay);
+}
+
+function clearRetryBackoff(id: number): void {
+  _retryBackoff.delete(id);
+}
+
+function isRetryDue(id: number): boolean {
+  const next = _retryBackoff.get(id);
+  if (next === undefined) return true;
+  if (Date.now() >= next) {
+    _retryBackoff.delete(id);
+    return true;
+  }
+  return false;
+}
 
 // ============================================================================
 // Mutex
@@ -77,7 +139,7 @@ async function getPendingMutations(): Promise<SyncQueueItem[]> {
       id, table_name, record_id, operation, payload_json,
       created_at, attempt_count, last_error, status
     FROM sync_queue
-    WHERE status IN ('pending', 'failed')
+    WHERE status = 'pending'
       AND table_name != '_hydration'
     ORDER BY created_at ASC
     `,
@@ -107,7 +169,7 @@ async function getQueueItem(id: number): Promise<SyncQueueItem | null> {
  */
 async function updateQueueItem(
   id: number,
-  status: 'processing' | 'completed' | 'failed',
+  status: 'processing' | 'completed' | 'failed' | 'pending',
   error?: string,
 ): Promise<void> {
   const db = await getDatabase();
@@ -135,6 +197,18 @@ async function updateQueueItem(
       `
       UPDATE sync_queue
       SET status = 'failed', last_error = ?
+      WHERE id = ?
+      `,
+      [error ?? null, id],
+    );
+  } else if (status === 'pending') {
+    // Transient failure: the mutation remains queued for automatic retry.
+    // It stays visible as "Saved locally" (data is safe on device), NOT as
+    // "needs attention". last_error preserves the safe diagnostic message.
+    await db.runAsync(
+      `
+      UPDATE sync_queue
+      SET status = 'pending', last_error = ?
       WHERE id = ?
       `,
       [error ?? null, id],
@@ -169,7 +243,7 @@ async function recoverStaleProcessing(): Promise<number> {
     UPDATE sync_queue
     SET status = 'pending'
     WHERE status = 'processing'
-      AND created_at < datetime('now', '-', ? || ' seconds')
+      AND created_at < datetime('now', '-' || ? || ' seconds')
     `,
     [String(STALE_PROCESSING_THRESHOLD_MS / 1000)],
   );
@@ -268,40 +342,14 @@ function getEndpointConfig(
       return {
         method: 'POST',
         url: '/api/v1/logs/daily-checkin',
-        buildBody: (p) => ({
-          log_date: p.log_date,
-          overall_wellbeing: p.overall_wellbeing,
-          energy_level: p.energy_level,
-          stress_level: p.stress_level,
-          sleep: p.sleep,
-          nutrition: p.nutrition,
-          notes: p.notes,
-          symptoms: p.symptoms,
-          vitals: p.vitals,
-          pain: p.pain,
-          activities: p.activities,
-          medications: p.medications,
-        }),
+        buildBody: buildDailyLogBody,
       };
     }
     if (operation === 'update') {
       return {
         method: 'PUT',
         url: `/api/v1/logs/daily-checkin/${payload.group_id}`,
-        buildBody: (p) => ({
-          log_date: p.log_date,
-          overall_wellbeing: p.overall_wellbeing,
-          energy_level: p.energy_level,
-          stress_level: p.stress_level,
-          sleep: p.sleep,
-          nutrition: p.nutrition,
-          notes: p.notes,
-          symptoms: p.symptoms,
-          vitals: p.vitals,
-          pain: p.pain,
-          activities: p.activities,
-          medications: p.medications,
-        }),
+        buildBody: buildDailyLogBody,
       };
     }
   }
@@ -318,43 +366,6 @@ function getEndpointConfig(
   }
 
   return null;
-}
-
-// ============================================================================
-// Error Classification
-// ============================================================================
-
-function classifyError(error: any): SyncErrorCategory {
-  // Network errors
-  if (error?.code === 'ECONNABORTED' || error?.code === 'ERR_NETWORK') {
-    return 'retryable';
-  }
-  if (error?.message?.includes('timeout')) {
-    return 'retryable';
-  }
-  if (error?.message?.includes('Network Error')) {
-    return 'retryable';
-  }
-
-  // HTTP status codes
-  const status = error?.response?.status;
-  if (status === undefined || status === null) {
-    return 'unknown';
-  }
-
-  // 4xx client errors (except 401, 409)
-  if (status >= 400 && status < 500) {
-    if (status === 401) return 'auth';
-    if (status === 409) return 'conflict';
-    return 'permanent';
-  }
-
-  // 5xx server errors
-  if (status >= 500) {
-    return 'retryable';
-  }
-
-  return 'unknown';
 }
 
 // ============================================================================
@@ -434,7 +445,7 @@ async function syncRecord(item: SyncQueueItem): Promise<SyncResult> {
       serverId,
     };
   } catch (error: any) {
-    const errorCategory = classifyError(error);
+    const errorCategory = classifySyncError(error);
 
     // Do not store sensitive error details
     const safeError = errorCategory === 'permanent'
@@ -490,22 +501,19 @@ async function reconcileServerId(
 
 /**
  * Process a single queue item with retry logic.
+ *
+ * Failure classification:
+ *   - permanent / auth  -> status 'failed' (needs attention, no auto-retry;
+ *                          the user can Retry, which resets to pending)
+ *   - retryable, or conflict/unknown below max attempts -> status 'pending'
+ *     (data stays safe on device; automatic retry continues with backoff)
+ *   - conflict/unknown that exhausted MAX_RETRY_ATTEMPTS -> status 'failed'
+ *
+ * Transient (network-class) failures deliberately never exhaust: an offline
+ * device must be able to hold mutations as "Saved locally" indefinitely.
  */
 async function processQueueItem(item: SyncQueueItem): Promise<SyncResult> {
-  // Check attempt count
-  if (item.attempt_count >= MAX_RETRY_ATTEMPTS) {
-    return {
-      success: false,
-      queueItemId: item.id,
-      tableName: item.table_name,
-      operation: item.operation,
-      recordId: item.record_id,
-      error: 'Max retry attempts exceeded',
-      errorCategory: 'permanent',
-    };
-  }
-
-  // Mark as processing
+  // Mark as processing (attempt_count += 1) and sync to server
   await updateQueueItem(item.id, 'processing');
 
   // Sync to server
@@ -523,15 +531,32 @@ async function processQueueItem(item: SyncQueueItem): Promise<SyncResult> {
 
     // Mark as completed
     await updateQueueItem(item.id, 'completed');
+    clearRetryBackoff(item.id);
 
     // Update the main record's sync_status
     await markRecordSynced(item.table_name, item.record_id);
   } else if (result.errorCategory === 'permanent' || result.errorCategory === 'auth') {
-    // Permanent failure — mark as failed, no retry
+    // Permanent failure — mark as failed, no automatic retry
     await updateQueueItem(item.id, 'failed', result.error);
+    clearRetryBackoff(item.id);
   } else {
-    // Retryable or conflict — mark as failed for retry
-    await updateQueueItem(item.id, 'failed', result.error);
+    // Retryable failure — keep the item queued (status 'pending') and
+    // schedule the next automatic attempt with exponential backoff.
+    const errorCategory = result.errorCategory ?? 'unknown';
+    const attemptNumber = item.attempt_count + 1;
+    const retryable = isRetryableCategory(errorCategory);
+    const exhausted =
+      retryable &&
+      shouldExhaustRetries(attemptNumber, errorCategory, MAX_RETRY_ATTEMPTS);
+
+    if (exhausted) {
+      // conflict/unknown kept failing past the cap — surface for attention
+      await updateQueueItem(item.id, 'failed', result.error);
+      clearRetryBackoff(item.id);
+    } else {
+      await updateQueueItem(item.id, 'pending', result.error);
+      scheduleRetry(item.id, attemptNumber);
+    }
   }
 
   return result;
@@ -589,6 +614,8 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
     return [];
   }
 
+  const results: SyncResult[] = [];
+
   try {
     // Verify authentication
     const patientId = getCachedPatientId();
@@ -602,19 +629,15 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
     // Recover stale processing items
     await recoverStaleProcessing();
 
-    // Get pending mutations
+    // Get pending mutations (only 'pending' — 'failed' rows need explicit
+    // attention and are recovered via retryFailedSyncs / the Retry button)
     const pending = await getPendingMutations();
 
-    if (pending.length === 0) {
-      markSynced();
-      return [];
-    }
+    // Respect backoff: skip items whose next automatic attempt isn't due yet
+    const due = pending.filter((item) => isRetryDue(item.id));
 
     // Process items in order
-    const results: SyncResult[] = [];
-    let hasPermanentFailure = false;
-
-    for (const item of pending) {
+    for (const item of due) {
       // Re-check authentication before each item
       if (!getCachedPatientId()) {
         break;
@@ -622,11 +645,6 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
 
       const result = await processQueueItem(item);
       results.push(result);
-
-      // Track permanent failures
-      if (result.errorCategory === 'permanent') {
-        hasPermanentFailure = true;
-      }
 
       // Stop on auth failure
       if (result.errorCategory === 'auth') {
@@ -636,18 +654,29 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
 
     // Cleanup old completed items
     await cleanupCompletedItems();
-
-    // Update sync state based on results
-    if (hasPermanentFailure) {
-      markSyncFailed('permanent');
-    } else {
-      await refreshSyncState();
-    }
-
-    return results;
   } finally {
     releaseLock();
   }
+
+  // Reconcile the network monitor with this run's outcome.
+  // A network-class failure means connectivity is suspect (stop hammering an
+  // unreachable server with every sync trigger); otherwise we're online.
+  const hadNetworkFailure = results.some(
+    (r) => r.errorCategory === 'retryable',
+  );
+  if (hadNetworkFailure) {
+    markOffline();
+  } else if (results.length > 0) {
+    markOnline();
+  }
+
+  // Commit sync state AFTER releasing the lock so isSyncing resolves to the
+  // real outcome (SYNCED / SAVED_LOCALLY / SYNC_FAILED) instead of sticking
+  // on "Syncing…" because the mutex was still held. failedCount>0 reflects
+  // only genuine attention cases (permanent/auth/exhausted rows).
+  await refreshSyncState();
+
+  return results;
 }
 
 /**

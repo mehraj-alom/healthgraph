@@ -45,6 +45,9 @@ export const TABLES = {
   // Cache data (derived from server, read-only locally)
   BODY_STATE_SNAPSHOTS: 'body_state_snapshots',
   DOCUMENTS: 'documents',
+
+  // On-device PPG derived measurements (offline-first, syncs derived only)
+  PPG_MEASUREMENTS: 'ppg_measurements',
 } as const;
 
 /**

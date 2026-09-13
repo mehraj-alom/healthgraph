@@ -12,6 +12,7 @@
  */
 
 import { getSyncState } from './syncEngine';
+import { deriveSyncStatus } from './syncClassification';
 
 // ============================================================================
 // Types
@@ -82,15 +83,14 @@ export async function refreshSyncState(): Promise<void> {
   try {
     const dbState = await getSyncState();
 
-    let status: SyncStatus = 'SYNCED';
-
-    if (dbState.isSyncing) {
-      status = 'SYNCING';
-    } else if (dbState.failedCount > 0) {
-      status = 'SYNC_FAILED';
-    } else if (dbState.pendingCount > 0) {
-      status = 'SAVED_LOCALLY';
-    }
+    // Derived purely from queue counts: 'failed' rows are the only source of
+    // SYNC_FAILED ("Sync needs attention") — transient retryable failures
+    // never leave 'pending', so they show as SAVED_LOCALLY ("Saved locally").
+    const status = deriveSyncStatus({
+      pendingCount: dbState.pendingCount,
+      failedCount: dbState.failedCount,
+      isSyncing: dbState.isSyncing,
+    });
 
     _state = {
       status,
@@ -116,19 +116,6 @@ export function markSyncing(): void {
 }
 
 /**
- * Mark sync as completed successfully.
- */
-export function markSynced(): void {
-  _state = {
-    status: 'SYNCED',
-    pendingCount: 0,
-    lastSyncSuccess: Date.now(),
-    lastErrorCategory: null,
-  };
-  _notifyListeners();
-}
-
-/**
  * Mark a mutation as queued.
  */
 export function markMutationQueued(): void {
@@ -139,18 +126,6 @@ export function markMutationQueued(): void {
     _state = { ..._state, pendingCount: _state.pendingCount + 1 };
     _notifyListeners();
   }
-}
-
-/**
- * Mark sync as failed with error category.
- */
-export function markSyncFailed(errorCategory: string): void {
-  _state = {
-    ..._state,
-    status: 'SYNC_FAILED',
-    lastErrorCategory: errorCategory,
-  };
-  _notifyListeners();
 }
 
 /**
@@ -169,12 +144,13 @@ export function clearSyncState(): void {
 
 /**
  * Retry sync after failure.
- * Verifies authentication and network before retrying.
+ * Verifies authentication and network, then resets failed items back to
+ * pending (fresh attempts) and runs a sync pass.
  */
 export async function retrySync(): Promise<void> {
   const { getCachedPatientId } = await import('./patientIdentity');
   const { isOnline } = await import('./networkMonitor');
-  const { syncPendingMutations } = await import('./syncEngine');
+  const { syncPendingMutations, retryFailedSyncs } = await import('./syncEngine');
 
   // Verify authentication
   if (!getCachedPatientId()) {
@@ -185,6 +161,11 @@ export async function retrySync(): Promise<void> {
   if (!isOnline()) {
     return;
   }
+
+  // Reset permanent/auth 'failed' rows so the sync pass actually attempts
+  // them again (without this, failed rows were stuck with no way to recover
+  // from the UI).
+  await retryFailedSyncs();
 
   // Retry sync
   await syncPendingMutations();

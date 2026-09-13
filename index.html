@@ -677,7 +677,7 @@ function switchTab(name) {
 }
 
 // ── Pipeline Logs ──
-let logEventSource = null;
+let logStreamController = null;
 let liveLogMode = false;
 
 function appendLog(entry) {
@@ -698,8 +698,12 @@ function clearLogs() {
 }
 
 async function fetchLogs() {
+  if (!authToken) {
+    document.getElementById('logContainer').innerHTML = '<div class="empty-state" id="logEmpty">Login first to view pipeline logs.</div>';
+    return;
+  }
   try {
-    const res = await fetch(API + '/v1/logs/recent?n=200');
+    const res = await fetch(API + '/v1/logs/recent?n=200', { headers: authHeaders() });
     const data = await res.json();
     const container = document.getElementById('logContainer');
     container.innerHTML = '';
@@ -716,26 +720,46 @@ async function fetchLogs() {
 function toggleLiveLogs() {
   const btn = document.getElementById('liveLogsBtn');
   if (liveLogMode) {
-    if (logEventSource) { logEventSource.close(); logEventSource = null; }
+    if (logStreamController) { logStreamController.abort(); logStreamController = null; }
     liveLogMode = false;
     btn.innerHTML = '&#9654; Live';
     btn.style.background = 'var(--surface)';
     btn.style.color = 'var(--text)';
   } else {
+    if (!authToken) return alert('Login first');
     liveLogMode = true;
     btn.innerHTML = '&#9632; Live';
     btn.style.background = 'var(--green)';
     btn.style.color = '#000';
-    logEventSource = new EventSource(API + '/v1/logs/stream');
-    logEventSource.onmessage = (e) => {
+    // EventSource cannot set Authorization headers, so stream SSE via
+    // fetch with a ReadableStream reader to carry the Firebase token.
+    const controller = new AbortController();
+    logStreamController = controller;
+    (async () => {
       try {
-        const entry = JSON.parse(e.data);
-        appendLog(entry);
-      } catch (_) {}
-    };
-    logEventSource.onerror = () => {
-      if (liveLogMode) { toggleLiveLogs(); }
-    };
+        const res = await fetch(API + '/v1/logs/stream', { headers: authHeaders(), signal: controller.signal });
+        if (!res.ok || !res.body) throw new Error('Stream failed: ' + res.status);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (liveLogMode) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let sep;
+          while ((sep = buffer.indexOf('\n\n')) !== -1) {
+            const raw = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            for (const line of raw.split('\n')) {
+              if (!line.startsWith('data: ')) continue;
+              try { appendLog(JSON.parse(line.slice(6))); } catch (_) {}
+            }
+          }
+        }
+      } catch (e) {
+        if (liveLogMode) { toggleLiveLogs(); }
+      }
+    })();
   }
 }
 
