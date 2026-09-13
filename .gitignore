@@ -229,6 +229,8 @@ __marimo__/
 !/*/package-lock.json
 !/*/app.json
 !/*/tsconfig.json
+!/*/modules/healthgraph-ppg/package.json
+!/*/modules/healthgraph-ppg/expo-module.config.json
 *pdf
 *jpg
 *jpeg
@@ -242,4 +244,5 @@ storage/documents/
 .opencode
 .agents/skills
 *.md
-tests/
+# Bytecode caches stay out even where parent dirs are force-included above
+tests/__pycache__/
