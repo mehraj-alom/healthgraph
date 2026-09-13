@@ -23,6 +23,7 @@
     },
     "plugins": [
       "expo-secure-store",
+      "./modules/healthgraph-ppg/app.plugin.js",
       [
         "expo-sqlite",
         {

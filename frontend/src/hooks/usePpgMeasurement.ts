@@ -1,0 +1,156 @@
+/**
+ * usePpgMeasurement — explicit-state PPG measurement hook.
+ *
+ * Consumes the PPG provider boundary (`@/services/ppg`), never the native
+ * module directly. In custom dev/production builds this drives the real
+ * on-device camera module; in Expo Go / web it drives the clearly-marked
+ * simulation (results are NOT persisted or synced).
+ *
+ * States: IDLE → STARTING → MEASURING → (QUALITY_WARNING) → COMPLETING →
+ * COMPLETE | FAILED | CANCELLED. The UI must surface QUALITY_WARNING with
+ * "Signal quality is too low" guidance and never present unreliable results
+ * as reliable (heartRateBpm is null when quality gates fail).
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  getPpgProvider,
+  PPG_COPY,
+  type PpgMeasurementResult,
+  type PpgState,
+} from '@/services/ppg';
+import { saveAndSyncPpgResult, syncPendingPpg } from '@/services/ppgService';
+import { ensureCameraPermission } from '@/services/ppg/cameraPermission';
+
+export interface UsePpgMeasurement {
+  state: PpgState;
+  hint: string;
+  result: PpgMeasurementResult | null;
+  liveQuality: number | null;
+  /** True when running the Expo Go / web simulation (not a real measurement). */
+  simulated: boolean;
+  synced: boolean | null;
+  error: string | null;
+  /** True when the OS will no longer prompt (enable in Settings instead). */
+  permissionBlocked: boolean;
+  start: (durationSeconds?: number) => Promise<void>;
+  cancel: () => Promise<void>;
+  reset: () => void;
+}
+
+export function usePpgMeasurement(): UsePpgMeasurement {
+  const provider = useMemo(() => getPpgProvider(), []);
+  const [state, setState] = useState<PpgState>('IDLE');
+  const [result, setResult] = useState<PpgMeasurementResult | null>(null);
+  const [liveQuality, setLiveQuality] = useState<number | null>(null);
+  const [synced, setSynced] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [permissionBlocked, setPermissionBlocked] = useState(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    const off = provider.addStateListener((e) => {
+      if (!mounted.current) return;
+      setState(e.state);
+      if (typeof e.signalQuality === 'number') setLiveQuality(e.signalQuality);
+      if (e.state === 'FAILED') setError(e.message ?? 'Measurement could not be completed. Try again.');
+    });
+    // Flush any backlog left by an earlier offline session (real only;
+    // the service refuses simulated input, so this is a no-op for sim).
+    syncPendingPpg().catch(() => {});
+    return () => {
+      mounted.current = false;
+      off();
+    };
+  }, [provider]);
+
+  const start = useCallback(async (durationSeconds = 60) => {
+    setError(null);
+    setResult(null);
+    setSynced(null);
+    setPermissionBlocked(false);
+    // Camera is only needed for the real on-device provider; the simulation
+    // must never trigger a permission prompt.
+    if (provider.kind === 'native') {
+      const permission = await ensureCameraPermission();
+      if (!mounted.current) return;
+      if (permission !== 'granted') {
+        setPermissionBlocked(permission === 'blocked');
+        setError(
+          permission === 'blocked'
+            ? 'Camera access is turned off for HealthGraph. Enable it in Settings to measure your heart rate.'
+            : 'Camera access is needed to measure your heart rate. Your camera images never leave your phone.',
+        );
+        return;
+      }
+    }
+    try {
+      const r = await provider.measure({ durationSeconds });
+      if (!mounted.current) return;
+      setResult(r);
+      if (r.simulated === true) {
+        // Simulation: ephemeral by design — never persisted, never synced.
+        return;
+      }
+      // Offline-first persist (derived only). Works without connectivity.
+      try {
+        const out = await saveAndSyncPpgResult({
+          heartRateBpm: r.heartRateBpm,
+          signalQuality: r.signalQuality,
+          durationSeconds: r.durationSeconds,
+          rmssdMs: r.rmssdMs ?? null,
+          sdnnMs: r.sdnnMs ?? null,
+          rrIntervalsMs: r.rrIntervalsMs,
+          algorithmVersion: r.algorithmVersion,
+          measuredAt: new Date().toISOString(),
+        });
+        if (mounted.current) setSynced(out.syncedToServer);
+      } catch (e: any) {
+        if (mounted.current) setError(e?.message ?? null);
+      }
+    } catch (e: any) {
+      if (!mounted.current) return;
+      const cancelled =
+        e?.code === 'CANCELLED' || /cancel/i.test(String(e?.message ?? ''));
+      if (!cancelled) {
+        // Native backstop (permission revoked between the JS check and the
+        // CameraX bind). Same safe copy as the JS-side denied path.
+        if (e?.code === 'CAMERA_PERMISSION') {
+          setError(
+            'Camera access is needed to measure your heart rate. Your camera images never leave your phone.',
+          );
+        } else {
+          setError(e?.message ?? 'Measurement could not be completed. Try again.');
+        }
+      }
+    }
+  }, [provider]);
+
+  const cancel = useCallback(async () => {
+    await provider.cancel();
+  }, [provider]);
+
+  const reset = useCallback(() => {
+    setState('IDLE');
+    setResult(null);
+    setLiveQuality(null);
+    setSynced(null);
+    setError(null);
+    setPermissionBlocked(false);
+  }, []);
+
+  return {
+    state,
+    hint: PPG_COPY[state],
+    result,
+    liveQuality,
+    simulated: provider.kind === 'simulated',
+    synced,
+    error,
+    permissionBlocked,
+    start,
+    cancel,
+    reset,
+  };
+}

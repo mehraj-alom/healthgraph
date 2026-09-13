@@ -35,6 +35,7 @@ import DocumentDetailScreen from '@/screens/Documents/DocumentDetailScreen';
 import SettingsScreen from '@/screens/Settings/SettingsScreen';
 import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
+import PpgMeasureScreen from '@/screens/PpgMeasure/PpgMeasureScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
 // and prevent the WebGL renderer from blocking app startup on Android.
@@ -313,6 +314,13 @@ function AppNavigator() {
             <RootStack.Screen
               name="Medications"
               component={MedicationsScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            <RootStack.Screen
+              name="PpgMeasure"
+              component={PpgMeasureScreen}
               options={{
                 headerShown: false,
               }}

@@ -350,6 +350,7 @@ export type RootStackParamList = {
   DocumentDetail: { documentId: string };
   HealthGraph: { focusStructureId?: string; source?: 'body' | 'graph' } | undefined;
   Medications: undefined;
+  PpgMeasure: undefined;
 };
 
 // ============================================================================

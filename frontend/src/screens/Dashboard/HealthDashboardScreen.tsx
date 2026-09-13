@@ -58,6 +58,7 @@ import SegmentedSwitch from '@/components/home/SegmentedSwitch';
 import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
 import LiveSignals, { type GlanceSignal } from '@/components/home/LiveSignals';
 import LiftCard from '@/components/home/LiftCard';
+import PpgHeartRateCard from '@/screens/PpgMeasure/PpgHeartRateCard';
 import { BrandLogo } from '@/components/BrandLogo';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { useMedications } from '@/hooks/useMedications';
@@ -892,6 +893,7 @@ export default function HealthDashboardScreen() {
         onMedications={goToMedications}
       />
       <InsightPanelBlock hMetrics={hMetrics} mapHint={mapHint} signals={signals} onOpenFullGraph={goToFullGraph} onGraphTouch={onGraphTouch} />
+      <PpgHeartRateCard />
       {signals.length > 0 ? (
         <Entrance index={2} style={styles.section}>
           <LiveSignals signals={signals} />

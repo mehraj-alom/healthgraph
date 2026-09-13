@@ -22,6 +22,7 @@ from app.api.v1 import (
     logs,
     medications,
     ontology,
+    ppg,
     profile,
     provenance,
     review,
@@ -287,6 +288,7 @@ def create_app() -> FastAPI:
     app.include_router(summaries.router)
     app.include_router(logs.router)
     app.include_router(ontology.router)
+    app.include_router(ppg.router)
     app.include_router(profile.router)
     app.include_router(trends.router)
     app.include_router(health_graph.router)

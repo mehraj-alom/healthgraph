@@ -277,16 +277,14 @@ function SuggestionRow({
   return (
     <Enter index={index}>
       <Pressable
-        style={({ pressed }) => [styles.suggestionCard, pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] }]}
+        style={({ pressed }) => [styles.suggestionPlain, pressed && { opacity: 0.55 }]}
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`Ask: ${suggestion.text}`}
       >
-        <View style={[styles.suggestionIconWrap, { backgroundColor: `${tint}22`, borderColor: `${tint}55` }]}>
-          <Text style={styles.suggestionIcon}>{suggestion.icon}</Text>
-        </View>
-        <Text style={styles.suggestionText}>{suggestion.text}</Text>
-        <Text style={[styles.suggestionArrow, { color: tint }]}>→</Text>
+        <View style={[styles.suggestionDot, { backgroundColor: tint }]} />
+        <Text style={styles.suggestionPlainText}>{suggestion.text}</Text>
+        <Text style={styles.suggestionPlainArrow}>›</Text>
       </Pressable>
     </Enter>
   );
@@ -342,14 +340,14 @@ function Spark({
   });
   if (plus) {
     return (
-      <Animated.Text style={[styles.sparkPlus, { left: 26 + dx - 7 }, s]}>
+      <Animated.Text style={[styles.sparkPlus, { left: 22 + dx - 7 }, s]}>
         +
       </Animated.Text>
     );
   }
   return (
     <Animated.View
-      style={[styles.sparkDot, { width: size, height: size, borderRadius: size / 2, left: 26 + dx - size / 2 }, s]}
+      style={[styles.sparkDot, { width: size, height: size, borderRadius: size / 2, left: 22 + dx - size / 2 }, s]}
     />
   );
 }
@@ -758,12 +756,12 @@ export default function ChatScreen() {
             )}
           </View>
 
-          {/* Composer — send morphs into stop while busy, same slot */}
+          {/* Composer — Gemini-style pill with the send tucked inside */}
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
+            <View style={[styles.composerShell, composerFocused && styles.composerShellFocused]}>
               <TextInput
                 ref={inputRef}
-                style={[styles.input, composerFocused && styles.inputFocused]}
+                style={styles.inputInner}
                 value={inputText}
                 onChangeText={setInputText}
                 onFocus={() => setComposerFocused(true)}
@@ -780,7 +778,7 @@ export default function ChatScreen() {
                 underlineColorAndroid="transparent"
                 accessibilityLabel="Message input"
               />
-              <View style={styles.sendWrap}>
+              <View style={styles.composerAction}>
                 <SendSparkles />
                 {busy ? (
                   <Pressable
@@ -908,8 +906,50 @@ const styles = StyleSheet.create({
   dnChevron: { color: WARM, fontSize: 11, fontWeight: '700' },
   disclaimerText: { ...TYPOGRAPHY.caption, color: WARM, lineHeight: 18, textAlign: 'center' },
 
-  suggestionsContainer: { gap: SPACING.sm, paddingBottom: SPACING.md },
-  suggestionsLabel: { ...TYPOGRAPHY.label, color: WARM, marginBottom: 2 },
+  // Clean list — no cards, just breathable type. Feels like Gemini/ChatGPT starters.
+  suggestionsContainer: { paddingBottom: SPACING.md, gap: 0 },
+  suggestionsLabel: {
+    ...TYPOGRAPHY.label,
+    color: WARM,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontSize: 11,
+    marginBottom: 6,
+    opacity: 0.9,
+  },
+  suggestionPlain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(154,52,18,0.10)',
+  },
+  suggestionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.95,
+    marginTop: 1,
+  },
+  suggestionPlainText: {
+    ...TYPOGRAPHY.body,
+    color: INK,
+    flex: 1,
+    lineHeight: 20,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  suggestionPlainArrow: {
+    color: WARM,
+    fontSize: 20,
+    fontWeight: '400',
+    opacity: 0.45,
+    marginLeft: 4,
+    marginTop: -1,
+  },
+  // kept for backward compat if anything still references old names
   suggestionCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -920,7 +960,6 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
     padding: SPACING.md,
     gap: SPACING.sm,
-    boxShadow: '0 4px 14px rgba(124,45,18,0.10)',
   },
   suggestionIconWrap: {
     width: 36,
@@ -1016,14 +1055,55 @@ const styles = StyleSheet.create({
   typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: EMBER },
   typingText: { ...TYPOGRAPHY.caption, color: WARM, fontStyle: 'italic', fontSize: 12.5 },
 
-  // ── Composer ──
+  // ── Composer — Gemini-style: one pill, send lives inside ────────────────
   inputContainer: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingTop: SPACING.sm,
+    paddingBottom: Platform.OS === 'ios' ? SPACING.sm : SPACING.md,
     backgroundColor: PAPER,
-    borderTopWidth: 1,
-    borderTopColor: WARM_LINE,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(154,52,18,0.10)',
   },
+  composerShell: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: CARD,
+    borderWidth: 1.5,
+    borderColor: WARM_LINE,
+    borderRadius: 28,
+    borderCurve: 'continuous',
+    paddingLeft: 6,
+    paddingRight: 6,
+    paddingVertical: 6,
+    gap: 8,
+    minHeight: 56,
+    boxShadow: '0 2px 14px rgba(124,45,18,0.08)',
+  },
+  composerShellFocused: {
+    borderColor: 'rgba(232,89,12,0.45)',
+    backgroundColor: CARD,
+    boxShadow: '0 4px 20px rgba(232,89,12,0.16)',
+  },
+  inputInner: {
+    flex: 1,
+    ...TYPOGRAPHY.body,
+    fontSize: 15.5,
+    lineHeight: 21,
+    color: INK,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxHeight: 120,
+    minHeight: 36,
+    backgroundColor: 'transparent',
+  },
+  composerAction: {
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    alignSelf: 'flex-end',
+    paddingBottom: 2,
+  },
+  // legacy aliases (no longer used by JSX but keep to avoid dead-style confusion)
   inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.sm },
   input: {
     flex: 1,
@@ -1043,21 +1123,14 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderColor: EMBER,
     backgroundColor: CARD,
-    shadowColor: EMBER,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 4,
   },
-  // ── Modern send: lime puck, dark arrow, halo ring ──
-  // ── ChatGPT-style ink send puck + rising light-green sparkles ──
   sendWrap: { width: 52, alignItems: 'center', justifyContent: 'flex-end' },
   sparkField: {
     position: 'absolute',
-    bottom: 50,
-    left: 0,
-    width: 52,
-    height: 92,
+    bottom: 42,
+    left: -6,
+    width: 56,
+    height: 88,
   },
   sparkDot: {
     position: 'absolute',
@@ -1078,30 +1151,40 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     backgroundColor: 'transparent',
   },
+  // Gemini send — compact ink pill tucked inside the composer, not floating outside.
   sendButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#431407',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.25)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1A0F0A',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 6px 18px rgba(67,20,7,0.35)',
+    boxShadow: '0 4px 14px rgba(26,15,10,0.28)',
   },
   sendButtonPressed: {
     transform: [{ scale: 0.92 }],
+    opacity: 0.92,
   },
-  sendButtonDisabled: { opacity: 0.35, boxShadow: '0 0 0 rgba(0,0,0,0)' },
-  sendButtonText: { color: '#FFF7ED', fontSize: 24, fontWeight: '900', marginTop: -3 },
+  sendButtonDisabled: {
+    opacity: 0.32,
+    backgroundColor: '#B9A99A',
+    boxShadow: '0 0 0 rgba(0,0,0,0)',
+  },
+  sendButtonText: {
+    color: '#FFF7ED',
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: -1,
+    letterSpacing: 0.2,
+  },
   stopButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#E03131',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 4px 16px rgba(224,49,49,0.4)',
+    boxShadow: '0 4px 14px rgba(224,49,49,0.35)',
   },
-  stopButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  stopButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
 });
