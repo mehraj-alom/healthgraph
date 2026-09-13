@@ -17,6 +17,9 @@
     "paths": {
       "@/*": [
         "src/*"
+      ],
+      "healthgraph-ppg": [
+        "modules/healthgraph-ppg/src/index.ts"
       ]
     }
   },
