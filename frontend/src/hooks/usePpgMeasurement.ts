@@ -6,10 +6,11 @@
  * on-device camera module; in Expo Go / web it drives the clearly-marked
  * simulation (results are NOT persisted or synced).
  *
- * States: IDLE → STARTING → MEASURING → (QUALITY_WARNING) → COMPLETING →
- * COMPLETE | FAILED | CANCELLED. The UI must surface QUALITY_WARNING with
- * "Signal quality is too low" guidance and never present unreliable results
- * as reliable (heartRateBpm is null when quality gates fail).
+ * States: IDLE → STARTING → WAITING_FOR_FINGER → ACQUIRING → MEASURING →
+ * (SIGNAL_WEAK | FINGER_REMOVED, with automatic reacquisition) → COMPLETING →
+ * COMPLETE | FAILED | CANCELLED. The UI must surface weak-signal guidance
+ * and never present unreliable results as reliable (heartRateBpm is null
+ * when quality gates fail).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +28,12 @@ export interface UsePpgMeasurement {
   hint: string;
   result: PpgMeasurementResult | null;
   liveQuality: number | null;
+  /**
+   * Confident live BPM during a native session, updated ~1Hz. Null means NO
+   * trustworthy live value (waiting/acquiring/weak/removed) — the UI must
+   * render no BPM rather than a stale number.
+   */
+  liveBpm: number | null;
   /** True when running the Expo Go / web simulation (not a real measurement). */
   simulated: boolean;
   synced: boolean | null;
@@ -43,6 +50,7 @@ export function usePpgMeasurement(): UsePpgMeasurement {
   const [state, setState] = useState<PpgState>('IDLE');
   const [result, setResult] = useState<PpgMeasurementResult | null>(null);
   const [liveQuality, setLiveQuality] = useState<number | null>(null);
+  const [liveBpm, setLiveBpm] = useState<number | null>(null);
   const [synced, setSynced] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
@@ -54,6 +62,16 @@ export function usePpgMeasurement(): UsePpgMeasurement {
       if (!mounted.current) return;
       setState(e.state);
       if (typeof e.signalQuality === 'number') setLiveQuality(e.signalQuality);
+      // No signal means no quality either: finger waiting/removed clears any
+      // stale band so the UI never shows a leftover "good signal".
+      if (e.state === 'WAITING_FOR_FINGER' || e.state === 'FINGER_REMOVED') {
+        setLiveQuality(null);
+      }
+      // Live BPM is only ever set from a numeric event value; every other
+      // session event clears it so a stale number can never linger on screen
+      // (finger removed, weak signal, completion, failure, cancel).
+      if (typeof e.liveBpm === 'number') setLiveBpm(e.liveBpm);
+      else setLiveBpm(null);
       if (e.state === 'FAILED') setError(e.message ?? 'Measurement could not be completed. Try again.');
     });
     // Flush any backlog left by an earlier offline session (real only;
@@ -68,6 +86,7 @@ export function usePpgMeasurement(): UsePpgMeasurement {
   const start = useCallback(async (durationSeconds = 60) => {
     setError(null);
     setResult(null);
+    setLiveBpm(null);
     setSynced(null);
     setPermissionBlocked(false);
     // A release build without the bundled native module must fail fast with
@@ -124,6 +143,10 @@ export function usePpgMeasurement(): UsePpgMeasurement {
           setError(
             'Not enough reliable beats were detected. Hold still with your fingertip fully covering the camera and flash, then try again.',
           );
+        } else if (reason === 'UNSTABLE') {
+          setError(
+            'Your pulse reading was too unstable to trust. Stay still with your fingertip fully covering the camera and flash, then try again.',
+          );
         } else if (r.torchEnabled === false) {
           setError(
             'The flash did not turn on, so no pulse signal could be read. Check that another app is not using the camera, then try again.',
@@ -137,6 +160,9 @@ export function usePpgMeasurement(): UsePpgMeasurement {
         return;
       }
       // Offline-first persist (derived only). Works without connectivity.
+      // The simulated flag is passed explicitly so the service-layer guard
+      // can never be bypassed by flag-stripping, even though sim returns
+      // early above and should never reach this call.
       try {
         const out = await saveAndSyncPpgResult({
           heartRateBpm: r.heartRateBpm,
@@ -147,6 +173,7 @@ export function usePpgMeasurement(): UsePpgMeasurement {
           rrIntervalsMs: r.rrIntervalsMs,
           algorithmVersion: r.algorithmVersion,
           measuredAt: new Date().toISOString(),
+          simulated: r.simulated ?? false,
         });
         if (mounted.current) setSynced(out.syncedToServer);
       } catch (e: any) {
@@ -191,6 +218,7 @@ export function usePpgMeasurement(): UsePpgMeasurement {
     setState('IDLE');
     setResult(null);
     setLiveQuality(null);
+    setLiveBpm(null);
     setSynced(null);
     setError(null);
     setPermissionBlocked(false);
@@ -201,6 +229,7 @@ export function usePpgMeasurement(): UsePpgMeasurement {
     hint: PPG_COPY[state],
     result,
     liveQuality,
+    liveBpm,
     simulated: provider.kind === 'simulated',
     synced,
     error,

@@ -9,7 +9,11 @@
 export type PpgState =
   | 'IDLE'
   | 'STARTING'
+  | 'WAITING_FOR_FINGER'
+  | 'ACQUIRING'
   | 'MEASURING'
+  | 'SIGNAL_WEAK'
+  | 'FINGER_REMOVED'
   | 'QUALITY_WARNING'
   | 'COMPLETING'
   | 'COMPLETE'
@@ -47,8 +51,8 @@ export interface PpgMeasurementResult {
   /** Frames accepted into the signal buffer (passed the exposure gate). */
   samplesCollected?: number;
   /**
-   * Machine-readable null-HR reason: NO_SAMPLES | LOW_QUALITY | NO_BEATS.
-   * Absent when a heart rate was produced. Thresholds are unchanged.
+   * Machine-readable null-HR reason: NO_SAMPLES | LOW_QUALITY | NO_BEATS |
+   * UNSTABLE. Absent when a heart rate was produced. Thresholds are unchanged.
    */
   failureReason?: string;
   /**
@@ -63,6 +67,12 @@ export interface PpgStateEvent {
   state: PpgState;
   /** 0..1 live quality estimate while measuring. */
   signalQuality?: number;
+  /**
+   * Confident live BPM during MEASURING, updated ~1Hz from rolling windows.
+   * Absent (or non-numeric) means NO trustworthy live value — the UI must
+   * show no BPM rather than a stale number.
+   */
+  liveBpm?: number | null;
   message?: string;
 }
 
@@ -75,8 +85,9 @@ export const PPG_STATE_EVENT_NAME = 'HealthGraphPPGState';
 /**
  * Resolve-path null-HR reasons (result.failureReason). Thresholds unchanged:
  * these only NAME the gate. Must match HealthGraphPPGModule.kt.
+ * UNSTABLE: adequate signal but recent live estimates too scattered to trust.
  */
-export const PPG_FAILURE_REASONS = ['NO_SAMPLES', 'LOW_QUALITY', 'NO_BEATS'] as const;
+export const PPG_FAILURE_REASONS = ['NO_SAMPLES', 'LOW_QUALITY', 'NO_BEATS', 'UNSTABLE'] as const;
 export type PpgFailureReason = (typeof PPG_FAILURE_REASONS)[number];
 
 /**
@@ -100,7 +111,11 @@ export const PPG_STARTUP_REJECT_CODES = [
 export const PPG_COPY: Record<PpgState, string> = {
   IDLE: 'Place your finger over the camera to begin.',
   STARTING: 'Starting the camera…',
+  WAITING_FOR_FINGER: 'Place your finger over the camera.',
+  ACQUIRING: 'Detecting pulse…',
   MEASURING: 'Keep your finger still over the camera and flash.',
+  SIGNAL_WEAK: 'Keep your finger still.',
+  FINGER_REMOVED: 'Finger removed. Place your finger over the camera to continue.',
   QUALITY_WARNING: 'Signal quality is too low. Adjust your finger and hold still.',
   COMPLETING: 'Finishing measurement…',
   COMPLETE: 'Measurement complete.',

@@ -18,6 +18,114 @@ export const PPG_MIN_HR_BPM = 25;
 export const PPG_MAX_HR_BPM = 250;
 export const MIN_RELIABLE_QUALITY = 0.5;
 
+/**
+ * Continuous live-BPM + finger-presence tuning. Mirrors PpgSignalProcessor.kt
+ * exactly (same names, same values) so the heuristics are unit-testable in
+ * JS and reviewable without an Android build. See the Kotlin comments for
+ * the rationale behind each threshold.
+ */
+export const Y_MEAN_MIN = 15;
+export const Y_MEAN_MAX = 245;
+export const RED_DOMINANCE_MIN = 10;
+export const UNIFORMITY_MAX_STD = 20;
+export const FINGER_PRESENT_FRAMES = 5;
+export const FINGER_ABSENT_FRAMES = 5;
+export const LIVE_WINDOW_SECONDS = 10;
+export const LIVE_MIN_SECONDS = 8;
+export const STABLE_COUNT = 5;
+export const STABLE_MAX_RANGE_BPM = 10;
+export const MIN_VALID_SPAN_MS = 30_000;
+
+/** Per-frame statistics for the fingertip-presence vote (8-bit YUV levels). */
+export interface FingerFrameStats {
+  yMean: number;
+  yStd: number;
+  uMean: number;
+  vMean: number;
+}
+
+/**
+ * First-pass fingertip presence vote. All three cues must agree; a single
+ * brightness threshold is NOT enough (a bright room would false-trigger).
+ */
+export function isFingerPresent(stats: FingerFrameStats): boolean {
+  if (
+    !Number.isFinite(stats.yMean) ||
+    !Number.isFinite(stats.yStd) ||
+    !Number.isFinite(stats.uMean) ||
+    !Number.isFinite(stats.vMean)
+  ) {
+    return false;
+  }
+  if (stats.yMean < Y_MEAN_MIN || stats.yMean > Y_MEAN_MAX) return false;
+  if (stats.vMean - stats.uMean < RED_DOMINANCE_MIN) return false;
+  if (stats.yStd > UNIFORMITY_MAX_STD) return false;
+  return true;
+}
+
+/**
+ * Stability vote over recent consecutive live estimates. Requires at least
+ * STABLE_COUNT estimates with max-min spread within STABLE_MAX_RANGE_BPM.
+ * A wild sequence (119, 83, 61, 108, 57) fails and must never be displayed
+ * or saved — it is NOT smoothed into a believable number.
+ */
+export function isStableHrSeries(estimates: number[]): boolean {
+  if (estimates.length < STABLE_COUNT) return false;
+  const recent = estimates.slice(-STABLE_COUNT);
+  if (recent.some((e) => !Number.isFinite(e))) return false;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const e of recent) {
+    if (e < lo) lo = e;
+    if (e > hi) hi = e;
+  }
+  return hi - lo <= STABLE_MAX_RANGE_BPM;
+}
+
+export interface FingerTracker {
+  presentStreak: number;
+  absentStreak: number;
+  fingerEverSeen: boolean;
+  fingerLost: boolean;
+}
+
+export function initialFingerTracker(): FingerTracker {
+  return { presentStreak: 0, absentStreak: 0, fingerEverSeen: false, fingerLost: false };
+}
+
+/**
+ * Pure presence-transition step mirroring the native analyzer (temporal
+ * consistency both ways). Returns the session event to emit, if any:
+ * 'ACQUIRING' on (re)acquisition, 'FINGER_REMOVED' on loss, else null.
+ */
+export function updateFingerTracker(
+  tracker: FingerTracker,
+  fingerNow: boolean,
+): 'ACQUIRING' | 'FINGER_REMOVED' | null {
+  if (fingerNow) {
+    tracker.presentStreak += 1;
+    tracker.absentStreak = 0;
+  } else {
+    tracker.absentStreak += 1;
+    tracker.presentStreak = 0;
+  }
+  if (!tracker.fingerEverSeen) {
+    if (tracker.presentStreak >= FINGER_PRESENT_FRAMES) {
+      tracker.fingerEverSeen = true;
+      return 'ACQUIRING';
+    }
+  } else if (!tracker.fingerLost) {
+    if (tracker.absentStreak >= FINGER_ABSENT_FRAMES) {
+      tracker.fingerLost = true;
+      return 'FINGER_REMOVED';
+    }
+  } else if (tracker.presentStreak >= FINGER_PRESENT_FRAMES) {
+    tracker.fingerLost = false;
+    return 'ACQUIRING';
+  }
+  return null;
+}
+
 export interface PpgPipelineOutput {
   heartRateBpm: number | null;
   rrIntervalsMs: number[];
@@ -120,6 +228,7 @@ export function processPpgSignal(
   samples: number[],
   timestampsMs: number[],
   durationSeconds: number,
+  segmentBreaks: number[] = [],
 ): PpgPipelineOutput {
   if (samples.length !== timestampsMs.length || samples.length < 8) {
     return {
@@ -135,9 +244,17 @@ export function processPpgSignal(
     spanMs > 0 ? (samples.length - 1) / (spanMs / 1000) : samples.length / durationSeconds;
   const filtered = lowPass(samples);
   const peaks = detectPeaks(filtered, Math.max(1, sampleRateHz));
+  // Segment breaks (finger-removal boundaries as sample indexes): an RR
+  // interval spanning a break bridges two separate placements and must not
+  // contaminate HR/HRV. Mirrors PpgSignalProcessor.kt.
   const rawRR: number[] = [];
   for (let i = 1; i < peaks.length; i++) {
-    rawRR.push(timestampsMs[peaks[i]] - timestampsMs[peaks[i - 1]]);
+    const spansBreak = segmentBreaks.some(
+      (b) => b > peaks[i - 1]! && b <= peaks[i]!,
+    );
+    if (!spansBreak) {
+      rawRR.push(timestampsMs[peaks[i]]! - timestampsMs[peaks[i - 1]]!);
+    }
   }
   const rr = cleanRR(rawRR);
   let hr: number | null = null;

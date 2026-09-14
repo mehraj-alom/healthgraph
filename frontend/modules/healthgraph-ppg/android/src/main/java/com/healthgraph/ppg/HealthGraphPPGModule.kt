@@ -178,15 +178,93 @@ class HealthGraphPPGModule : Module() {
     val framesReceived = AtomicInteger(0)
     val samplesAccepted = AtomicInteger(0)
     val framesRejected = AtomicInteger(0)
+    val fingerAbsentFrames = AtomicInteger(0)
+    // ---- Continuous-session state (single measurement session).
+    // WAITING_FOR_FINGER (initial) -> ACQUIRING (finger seen) -> MEASURING
+    // (stable live BPM) / SIGNAL_WEAK (finger, no confident BPM) ->
+    // FINGER_REMOVED (loss; auto-reacquire on return) -> COMPLETE / FAILED.
+    // Guarded by sessionLock: analyzer thread mutates, watchdog reads.
+    val sessionLock = Any()
+    val sessionState = AtomicReference("WAITING_FOR_FINGER")
+    var presentStreak = 0
+    var absentStreak = 0
+    var fingerEverSeen = false
+    var fingerLost = false
+    val recentLiveHr = ArrayList<Double>(32)
+    var lastLiveTickCount = 0
+    // Finger-removal boundaries as buffer indexes. An RR interval spanning a
+    // boundary bridges two separate placements and is excluded at finish, so
+    // stale pre-loss beats can never contaminate the new acquisition.
+    val segmentBreaks = ArrayList<Int>(8)
 
-    fun emitQualityWarning(q: Float) {
-      sendEvent("HealthGraphPPGState", mapOf("state" to "QUALITY_WARNING", "signalQuality" to q.toDouble()))
+    /**
+     * Emit a session state event (live BPM only when confidently estimated).
+     * No-op for superseded runs. Caller decides change-vs-tick cadence.
+     */
+    fun emitSession(state: String, quality: Double? = null, liveBpm: Double? = null) {
+      if (myRun != runId.get()) return
+      val payload = mutableMapOf<String, Any?>("state" to state)
+      if (quality != null) payload["signalQuality"] = quality
+      if (liveBpm != null) payload["liveBpm"] = liveBpm
+      sessionState.set(state)
+      sendEvent("HealthGraphPPGState", payload)
     }
 
     val analysis = ImageAnalysis.Builder()
       .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
       .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
       .build()
+
+    /**
+     * One rolling-window live estimate (~1Hz). Uses the standard pipeline +
+     * quality gate on the trailing window, then the stability vote. Emits
+     * MEASURING only with a confident BPM, else SIGNAL_WEAK. Never emits a
+     * stale number: no confident estimate means no liveBpm key at all.
+     */
+    fun liveTick() {
+      if (myRun != runId.get() || cancelRequested.get()) return
+      val snapSamples: List<Float>
+      val snapTs: List<Long>
+      synchronized(samples) {
+        snapSamples = samples.toList()
+        snapTs = timestamps.toList()
+      }
+      if (snapSamples.size < 8) return
+      val endMs = snapTs.last()
+      val cutMs = endMs - PpgSignalProcessor.LIVE_WINDOW_SECONDS * 1000L
+      var from = 0
+      while (from < snapTs.size && snapTs[from] < cutMs) from++
+      val wSamples = snapSamples.subList(from, snapSamples.size)
+      val wTs = snapTs.subList(from, snapTs.size)
+      if (wSamples.size < 8) return
+      val spanSec = ((wTs.last() - wTs.first()) / 1000).toInt()
+      if (spanSec < PpgSignalProcessor.LIVE_MIN_SECONDS) return
+      // Window-relative segment breaks (same exclusion as the final pass).
+      val windowBreaks: List<Int>
+      synchronized(sessionLock) {
+        windowBreaks = segmentBreaks.mapNotNull { b ->
+          val wb = b - from
+          if (wb > 0 && wb < wSamples.size) wb else null
+        }
+      }
+      val out = PpgSignalProcessor.process(wSamples, wTs, spanSec.coerceAtLeast(1), windowBreaks)
+      val candidate = out.heartRateBpm
+      val stable: Boolean
+      val liveBpm: Double?
+      synchronized(sessionLock) {
+        if (candidate != null) {
+          recentLiveHr.add(candidate)
+          while (recentLiveHr.size > 32) recentLiveHr.removeAt(0)
+        }
+        stable = PpgSignalProcessor.isStableHrSeries(recentLiveHr)
+        liveBpm = if (stable) recentLiveHr.last() else null
+      }
+      if (liveBpm != null) {
+        emitSession("MEASURING", out.signalQuality.toDouble(), liveBpm)
+      } else {
+        emitSession("SIGNAL_WEAK", out.signalQuality.toDouble(), null)
+      }
+    }
 
     analysis.setAnalyzer(cameraExecutor) { image: ImageProxy ->
       try {
@@ -202,26 +280,73 @@ class HealthGraphPPGModule : Module() {
         if (t0 == 0L) { return@setAnalyzer }
         val elapsed = System.currentTimeMillis() - t0
         if (elapsed >= durationSeconds * 1000L) { return@setAnalyzer }
+        // framesReceived counts every post-torch frame the camera delivers
+        // (finger or not), so "camera dead" stays distinguishable from
+        // "no finger" in diagnostics.
         framesReceived.incrementAndGet()
-        val yPlane = image.planes.getOrNull(0)?.buffer
-        if (yPlane != null) {
-          val s = PpgSignalProcessor.scalarFromLumaPlane(
-            yPlane,
-            image.planes[0].rowStride,
-            image.planes[0].pixelStride,
-            image.width, image.height,
-          )
-          if (s != null && samples.size < cap) {
-            synchronized(samples) {
-              samples.add(s)
-              timestamps.add(System.currentTimeMillis())
+        // Finger presence vote over full-frame stats (Y + chroma). A null
+        // (malformed frame) counts as absent — conservative, never throws.
+        val planes = image.planes
+        val stats = PpgSignalProcessor.frameStatsFromYuv(
+          planes[0].buffer,
+          planes[0].rowStride,
+          planes[0].pixelStride,
+          planes.getOrNull(1)?.buffer,
+          planes.getOrNull(1)?.rowStride ?: -1,
+          planes.getOrNull(1)?.pixelStride ?: -1,
+          planes.getOrNull(2)?.buffer,
+          planes.getOrNull(2)?.rowStride ?: -1,
+          planes.getOrNull(2)?.pixelStride ?: -1,
+          image.width, image.height,
+        )
+        val fingerNow = stats != null && PpgSignalProcessor.isFingerPresent(stats)
+        // Presence transitions (temporal consistency both ways). Emissions
+        // happen outside sessionLock below.
+        var emitNow: Triple<String, Double?, Double?>? = null
+        synchronized(sessionLock) {
+          if (fingerNow) { presentStreak++; absentStreak = 0 } else { absentStreak++; presentStreak = 0 }
+          if (!fingerEverSeen) {
+            if (presentStreak >= PpgSignalProcessor.FINGER_PRESENT_FRAMES) {
+              fingerEverSeen = true
+              emitNow = Triple("ACQUIRING", null, null)
             }
-            samplesAccepted.incrementAndGet()
+          } else if (!fingerLost) {
+            if (absentStreak >= PpgSignalProcessor.FINGER_ABSENT_FRAMES) {
+              // Finger lost: invalidate live BPM immediately, drop the
+              // unstable history so reacquisition starts clean, and mark a
+              // segment boundary so the bridging RR interval is excluded
+              // at finish. Nothing is saved from a finger-removed session.
+              fingerLost = true
+              recentLiveHr.clear()
+              segmentBreaks.add(samples.size)
+              emitNow = Triple("FINGER_REMOVED", null, null)
+            }
           } else {
-            // Gate-null (too dark/bright) or buffer full: counted, never logged.
-            framesRejected.incrementAndGet()
+            if (presentStreak >= PpgSignalProcessor.FINGER_PRESENT_FRAMES) {
+              fingerLost = false
+              emitNow = Triple("ACQUIRING", null, null)
+            }
           }
+        }
+        if (emitNow != null && sessionState.get() != emitNow!!.first) {
+          emitSession(emitNow!!.first, emitNow!!.second, emitNow!!.third)
+        }
+        val accepting = fingerNow && synchronized(sessionLock) { fingerEverSeen && !fingerLost }
+        if (!accepting) {
+          fingerAbsentFrames.incrementAndGet()
+          return@setAnalyzer
+        }
+        // stats.yMean reuses the exposure gate bounds via isFingerPresent;
+        // the explicit gate below stays as a second backstop.
+        val s = stats!!.yMean
+        if (s in PpgSignalProcessor.Y_MEAN_MIN..PpgSignalProcessor.Y_MEAN_MAX && samples.size < cap) {
+          synchronized(samples) {
+            samples.add(s)
+            timestamps.add(System.currentTimeMillis())
+          }
+          samplesAccepted.incrementAndGet()
         } else {
+          // Gate-null (too dark/bright) or buffer full: counted, never logged.
           framesRejected.incrementAndGet()
         }
         // Periodic live quality hint (~1Hz) without bridge spam.
@@ -229,23 +354,11 @@ class HealthGraphPPGModule : Module() {
         // DEBUG-only frame/sample tally (~every 5s) for real-device diagnosis.
         val n = samples.size
         if (myRun == runId.get() && n > 30 && n % 150 == 0) {
-          dlog("run=$myRun frames=${framesReceived.get()} accepted=${samplesAccepted.get()} rejected=${framesRejected.get()}")
+          dlog("run=$myRun frames=${framesReceived.get()} accepted=${samplesAccepted.get()} rejected=${framesRejected.get()} state=${sessionState.get()}")
         }
-        if (myRun == runId.get() && n > 30 && n % 30 == 0) {
-          val q: Float
-          synchronized(samples) {
-            // Real peak count on the snapshot (never the old n/30 estimate).
-            val snapshot = samples.toList()
-            val elapsedSec = (elapsed / 1000).toInt().coerceAtLeast(1)
-            val sampleRateHz = (snapshot.size / (elapsed.coerceAtLeast(1L) / 1000f)).coerceAtLeast(1f)
-            val peaks = PpgSignalProcessor.detectPeaks(
-              PpgSignalProcessor.lowPass(snapshot),
-              sampleRateHz,
-            )
-            q = PpgSignalProcessor.signalQuality(snapshot, peaks.size, elapsedSec)
-          }
-          sendEvent("HealthGraphPPGState", mapOf("state" to "MEASURING", "signalQuality" to q.toDouble()))
-          if (q < 0.25f) emitQualityWarning(q)
+        if (myRun == runId.get() && samplesAccepted.get() - lastLiveTickCount >= 30) {
+          synchronized(sessionLock) { lastLiveTickCount = samplesAccepted.get() }
+          liveTick()
         }
       } finally {
         image.close() // Discard frame immediately after scalar extraction.
@@ -315,13 +428,21 @@ class HealthGraphPPGModule : Module() {
             torchTimeout = null
             startMs.set(System.currentTimeMillis())
             dlog("run=$myRun torch confirmed ON, measurement clock started")
-            sendEvent("HealthGraphPPGState", mapOf("state" to "MEASURING"))
+            // Session starts waiting for the finger: no acquisition, no BPM
+            // until fingertip presence is confirmed by frame statistics.
+            emitSession("WAITING_FOR_FINGER")
             // Completion watchdog on a plain thread (no frame retention).
             Thread {
               try {
                 Thread.sleep(durationSeconds * 1000L)
               } catch (_: InterruptedException) { }
-              finishMeasurement(samples, timestamps, durationSeconds, exportRaw, promise, myRun, framesReceived, samplesAccepted, framesRejected)
+              val stableHistory: List<Double>
+              val breaksSnapshot: List<Int>
+              synchronized(sessionLock) {
+                stableHistory = recentLiveHr.toList()
+                breaksSnapshot = segmentBreaks.toList()
+              }
+              finishMeasurement(samples, timestamps, durationSeconds, exportRaw, promise, myRun, framesReceived, samplesAccepted, framesRejected, fingerAbsentFrames, stableHistory, breaksSnapshot)
             }.start()
           }
           val observer = Observer<Int> { state ->
@@ -395,6 +516,7 @@ class HealthGraphPPGModule : Module() {
     } catch (e: Exception) {
       if (myRun == runId.get()) {
         isMeasuring.set(false)
+        stopCamera()
         val msg = "Camera provider unavailable (CAMERA_START): ${e.message ?: "unknown"}"
         dlog("run=$myRun $msg")
         sendEvent("HealthGraphPPGState", mapOf("state" to "FAILED", "message" to msg))
@@ -415,6 +537,9 @@ class HealthGraphPPGModule : Module() {
     framesReceived: AtomicInteger,
     samplesAccepted: AtomicInteger,
     framesRejected: AtomicInteger,
+    fingerAbsentFrames: AtomicInteger,
+    liveHistory: List<Double>,
+    segmentBreaks: List<Int>,
   ) {
     // A superseded run must not touch the current run's camera, flag, or
     // events — but its still-pending promise is settled as cancelled so no
@@ -437,29 +562,40 @@ class HealthGraphPPGModule : Module() {
         snapSamples = samples.toList()
         snapTs = timestamps.toList()
       }
-      val out = PpgSignalProcessor.process(snapSamples, snapTs, durationSeconds)
+      val out = PpgSignalProcessor.process(snapSamples, snapTs, durationSeconds, segmentBreaks)
       // Read back the actual torch state: a dark run must be distinguishable
       // from a weak-signal run instead of ending in the same generic failure.
       val torchOn = try {
         boundCamera?.cameraInfo?.torchState?.value == TorchState.ON
       } catch (_: Exception) { false }
+      // A final result is accepted only from a sufficiently stable session:
+      // adequate finger-present span, standard quality/beats gates, AND a
+      // stable run of recent live estimates. A wild sequence (e.g.
+      // 119,83,61,108,57) fails the stability vote and is nulled as
+      // UNSTABLE — never smoothed into a believable number, never saved.
+      val validSpanMs = if (snapTs.size >= 2) snapTs.last() - snapTs.first() else 0L
+      val stableSession = validSpanMs >= PpgSignalProcessor.MIN_VALID_SPAN_MS &&
+        PpgSignalProcessor.isStableHrSeries(liveHistory)
       // Machine-readable failure reason for the JS layer. Thresholds are
       // unchanged: this only names the gate that nulled the result.
       val failureReason: String? = when {
         snapSamples.size < 8 -> "NO_SAMPLES"
         out.heartRateBpm == null && out.signalQuality < PpgSignalProcessor.MIN_RELIABLE_QUALITY -> "LOW_QUALITY"
         out.heartRateBpm == null -> "NO_BEATS"
+        !stableSession -> "UNSTABLE"
         else -> null
       }
+      val finalHr = if (failureReason == null) out.heartRateBpm else null
       dlog(
         "run=$myRun finish torch=$torchOn frames=${framesReceived.get()} " +
           "accepted=${samplesAccepted.get()} rejected=${framesRejected.get()} " +
-          "samples=${snapSamples.size} quality=${out.signalQuality} " +
-          "hr=${out.heartRateBpm} reason=$failureReason effectiveFps=" +
-          effectiveFps(snapTs),
+          "absent=${fingerAbsentFrames.get()} samples=${snapSamples.size} " +
+          "quality=${out.signalQuality} hr=${out.heartRateBpm} " +
+          "stable=$stableSession spanMs=$validSpanMs reason=$failureReason " +
+          "effectiveFps=" + effectiveFps(snapTs),
       )
       val result = mutableMapOf<String, Any?>(
-        "heartRateBpm" to out.heartRateBpm,
+        "heartRateBpm" to finalHr,
         "signalQuality" to out.signalQuality.toDouble(),
         "durationSeconds" to durationSeconds,
         "algorithmVersion" to PpgSignalProcessor.ALGORITHM_VERSION,

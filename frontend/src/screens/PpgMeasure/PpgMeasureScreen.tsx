@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   Linking,
   Pressable,
   ScrollView,
@@ -47,8 +48,9 @@ const MEASURE_DURATION_SECONDS = 60;
 
 /**
  * Display bands derived from the SAME gates the pipeline uses:
- * below 0.5 the native result is unreliable (HR nulled); below 0.25 the
- * native layer raises QUALITY_WARNING. The screen adds no new algorithm.
+ * below 0.5 the native result is unreliable (HR nulled). The 0.25 cut is a
+ * display-only band boundary (native weak-signal state is SIGNAL_WEAK).
+ * The screen adds no new algorithm.
  */
 type QualityBand = 'good' | 'weak' | 'poor';
 
@@ -147,6 +149,7 @@ export default function PpgMeasureScreen() {
     state,
     result,
     liveQuality,
+    liveBpm,
     simulated,
     synced,
     error,
@@ -158,7 +161,11 @@ export default function PpgMeasureScreen() {
 
   const busy =
     state === 'STARTING' ||
+    state === 'WAITING_FOR_FINGER' ||
+    state === 'ACQUIRING' ||
     state === 'MEASURING' ||
+    state === 'SIGNAL_WEAK' ||
+    state === 'FINGER_REMOVED' ||
     state === 'QUALITY_WARNING' ||
     state === 'COMPLETING';
 
@@ -212,6 +219,17 @@ export default function PpgMeasureScreen() {
     });
     return sub;
   }, [navigation, cancel]);
+
+  // Backgrounding mid-session must end the session explicitly: otherwise the
+  // camera/torch lifecycle is left to the OS and the watchdog could later
+  // resolve partial data. Cancel turns torch off, unbinds, and settles
+  // the promise as CANCELLED (never saved).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background' && busyRef.current) void cancel();
+    });
+    return () => sub.remove();
+  }, [cancel]);
 
   const entering = reducedMotion
     ? undefined
@@ -329,29 +347,182 @@ export default function PpgMeasureScreen() {
           </Animated.View>
         ) : null}
 
-        {/* ── MEASURING ─────────────────────────────────────── */}
+        {/* ── LIVE SESSION ────────────────────────────────────
+            WAITING_FOR_FINGER: no finger yet — never show a BPM.
+            ACQUIRING: finger seen, first window still filling — no BPM yet.
+            MEASURING + liveBpm: confident live BPM, updates ~1Hz.
+            MEASURING without liveBpm (transient): detecting copy, no number.
+            SIGNAL_WEAK: finger present, no confident BPM — guidance only.
+            FINGER_REMOVED: live BPM invalidated — resume automatically. */}
         {busy ? (
           <Animated.View entering={entering} style={styles.phase}>
-            <View
-              accessible
-              accessibilityLiveRegion="polite"
-              accessibilityLabel={`Measuring heart rate. ${elapsed} seconds elapsed of about ${MEASURE_DURATION_SECONDS}. ${
-                band ? QUALITY_COPY[band].label : 'Starting'
-              }.`}
-            >
-              <SensingPulse band={band} />
-            </View>
+            {state === 'WAITING_FOR_FINGER' ? (
+              <View
+                accessible
+                accessibilityLiveRegion="polite"
+                accessibilityLabel="Waiting for finger. Place your finger over the camera."
+                style={[
+                  styles.instruction,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: radius.xxl,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.instructionIcon,
+                    {
+                      backgroundColor: colors.surfaceSunken,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={styles.instructionGlyph}>
+                    {healthIcon.heartRate}
+                  </Text>
+                </View>
+                <Text
+                  style={[typography.sectionHeading, { color: colors.textPrimary }]}
+                >
+                  Place your finger over the camera
+                </Text>
+                <Text
+                  style={[typography.caption, { color: colors.textMuted }]}
+                >
+                  Cover the camera and flash fully. Measurement starts automatically.
+                </Text>
+              </View>
+            ) : null}
 
-            <Text
-              style={[typography.sectionHeading, { color: colors.textPrimary }]}
-            >
-              Measuring…
-            </Text>
-            <Text
-              style={[typography.bodySecondary, { color: colors.textSecondary }]}
-            >
-              Keep your fingertip over the camera and flash.
-            </Text>
+            {state === 'ACQUIRING' ||
+            (state === 'MEASURING' && liveBpm == null) ? (
+              <View
+                accessible
+                accessibilityLiveRegion="polite"
+                accessibilityLabel="Detecting pulse."
+              >
+                <SensingPulse band={band} />
+              </View>
+            ) : null}
+            {state === 'ACQUIRING' ||
+            (state === 'MEASURING' && liveBpm == null) ? (
+              <Text
+                style={[typography.sectionHeading, { color: colors.textPrimary }]}
+              >
+                Detecting pulse…
+              </Text>
+            ) : null}
+            {state === 'ACQUIRING' ||
+            (state === 'MEASURING' && liveBpm == null) ? (
+              <Text
+                style={[typography.bodySecondary, { color: colors.textSecondary }]}
+              >
+                Keep your fingertip over the camera and flash.
+              </Text>
+            ) : null}
+
+            {state === 'MEASURING' && liveBpm != null ? (
+              <View
+                accessible
+                accessibilityLiveRegion="polite"
+                accessibilityLabel={`Live heart rate ${Math.round(liveBpm)} beats per minute.`}
+                style={styles.resultHero}
+              >
+                <Text
+                  style={[typography.metricValue, { color: colors.textPrimary }]}
+                >
+                  {Math.round(liveBpm)}
+                </Text>
+                <Text
+                  style={[typography.metricUnit, { color: colors.textSecondary }]}
+                >
+                  BPM · Live
+                </Text>
+              </View>
+            ) : null}
+
+            {state === 'SIGNAL_WEAK' ? (
+              <View
+                accessible
+                accessibilityLiveRegion="polite"
+                accessibilityLabel="Signal weak. Keep your finger still."
+              >
+                <SensingPulse band={band} />
+              </View>
+            ) : null}
+            {state === 'SIGNAL_WEAK' ? (
+              <Text
+                style={[typography.sectionHeading, { color: colors.textPrimary }]}
+              >
+                Keep your finger still
+              </Text>
+            ) : null}
+            {state === 'SIGNAL_WEAK' ? (
+              <Text
+                style={[typography.bodySecondary, { color: colors.textSecondary }]}
+              >
+                The pulse signal is unclear. Hold still with the camera and
+                flash fully covered.
+              </Text>
+            ) : null}
+
+            {state === 'FINGER_REMOVED' ? (
+              <View
+                accessible
+                accessibilityLiveRegion="polite"
+                accessibilityLabel="Finger removed. Place your finger over the camera to continue."
+                style={[
+                  styles.instruction,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: radius.xxl,
+                  },
+                ]}
+              >
+                <Text
+                  style={[typography.sectionHeading, { color: colors.textPrimary }]}
+                >
+                  Finger removed
+                </Text>
+                <Text
+                  style={[typography.body, { color: colors.textPrimary }]}
+                >
+                  Place your finger over the camera to continue.
+                </Text>
+                <Text
+                  style={[typography.caption, { color: colors.textMuted }]}
+                >
+                  The live reading was cleared and will resume automatically.
+                </Text>
+              </View>
+            ) : null}
+
+            {state === 'STARTING' ||
+            state === 'QUALITY_WARNING' ||
+            state === 'COMPLETING' ? (
+              <View
+                accessible
+                accessibilityLiveRegion="polite"
+                accessibilityLabel={`Measuring heart rate. ${elapsed} seconds elapsed of about ${MEASURE_DURATION_SECONDS}. ${
+                  band ? QUALITY_COPY[band].label : 'Starting'
+                }.`}
+              >
+                <SensingPulse band={band} />
+              </View>
+            ) : null}
+
+            {state === 'STARTING' ||
+            state === 'QUALITY_WARNING' ||
+            state === 'COMPLETING' ? (
+              <Text
+                style={[typography.sectionHeading, { color: colors.textPrimary }]}
+              >
+                Measuring…
+              </Text>
+            ) : null}
 
             <ProgressBar
               segments={progress}

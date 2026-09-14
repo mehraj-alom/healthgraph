@@ -115,11 +115,14 @@ export const simulatedPpgProvider: PpgProvider = {
       emit({ state: 'STARTING' });
       run.timers.push(
         setTimeout(() => {
-          emit({ state: 'MEASURING', signalQuality: 0.62 });
-        }, 400),
+          emit({ state: 'ACQUIRING', signalQuality: 0.4 });
+        }, 300),
         setTimeout(() => {
-          emit({ state: 'MEASURING', signalQuality: 0.88 });
-        }, 1200),
+          emit({ state: 'MEASURING', signalQuality: 0.62, liveBpm: 71 });
+        }, 700),
+        setTimeout(() => {
+          emit({ state: 'MEASURING', signalQuality: 0.88, liveBpm: 73 });
+        }, 1400),
         setTimeout(() => {
           emit({ state: 'COMPLETING' });
           const { samples, timestampsMs } = syntheticPulseSeries(

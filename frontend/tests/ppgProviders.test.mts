@@ -58,8 +58,24 @@ test('simulated measurement resolves flagged result with full state sequence', a
       `sim hr=${result.heartRateBpm}`,
     );
     assert.ok(result.signalQuality >= 0.5, `sim q=${result.signalQuality}`);
-    for (const s of ['STARTING', 'MEASURING', 'COMPLETING', 'COMPLETE'] as const) {
+    for (const s of ['STARTING', 'ACQUIRING', 'MEASURING', 'COMPLETING', 'COMPLETE'] as const) {
       assert.ok(seen.includes(s), `missing state ${s} in [${seen.join(',')}]`);
+    }
+  } finally {
+    off();
+  }
+});
+
+test('simulated live BPM is numeric on measuring events', async () => {
+  const live: Array<number | null | undefined> = [];
+  const off = simulatedPpgProvider.addStateListener((e) => {
+    if (e.state === 'MEASURING') live.push(e.liveBpm);
+  });
+  try {
+    await simulatedPpgProvider.measure({ durationSeconds: 10 });
+    assert.ok(live.length > 0, 'expected MEASURING events');
+    for (const bpm of live) {
+      assert.ok(typeof bpm === 'number', `liveBpm must be numeric, got ${bpm}`);
     }
   } finally {
     off();

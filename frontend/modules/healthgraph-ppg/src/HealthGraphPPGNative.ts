@@ -66,7 +66,11 @@ function coerceStateEvent(raw: Record<string, unknown>): PpgStateEvent {
   const states = [
     'IDLE',
     'STARTING',
+    'WAITING_FOR_FINGER',
+    'ACQUIRING',
     'MEASURING',
+    'SIGNAL_WEAK',
+    'FINGER_REMOVED',
     'QUALITY_WARNING',
     'COMPLETING',
     'COMPLETE',
@@ -78,6 +82,9 @@ function coerceStateEvent(raw: Record<string, unknown>): PpgStateEvent {
     : 'FAILED';
   const event: PpgStateEvent = { state };
   if (typeof raw['signalQuality'] === 'number') event.signalQuality = raw['signalQuality'];
+  // Live BPM only crosses as a real number; anything else means "no
+  // trustworthy live value" and the UI must clear any displayed BPM.
+  if (typeof raw['liveBpm'] === 'number') event.liveBpm = raw['liveBpm'];
   if (typeof raw['message'] === 'string') event.message = raw['message'];
   return event;
 }

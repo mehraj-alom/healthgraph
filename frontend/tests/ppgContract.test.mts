@@ -9,6 +9,8 @@
  * - result payload field names (incl. torchEnabled/framesReceived/
  *   samplesCollected/failureReason)
  * - failureReason values and reject codes
+ * - live session states (WAITING_FOR_FINGER/ACQUIRING/SIGNAL_WEAK/
+ *   FINGER_REMOVED) and liveBpm event propagation
  * - heartRateBpm propagation + never-fabricated rule (q>=0.5 retained)
  * - simulated flagging + non-persistence guard
  * - cleanup behavior (torch off, observer/timeout removal, unbind)
@@ -117,7 +119,7 @@ test('result payload fields exist natively and cross the bridge', () => {
 });
 
 test('failureReason values and reject codes match the native module', () => {
-  assert.deepEqual([...PPG_FAILURE_REASONS], ['NO_SAMPLES', 'LOW_QUALITY', 'NO_BEATS']);
+  assert.deepEqual([...PPG_FAILURE_REASONS], ['NO_SAMPLES', 'LOW_QUALITY', 'NO_BEATS', 'UNSTABLE']);
   const kt = src(KOTLIN_MODULE);
   for (const r of PPG_FAILURE_REASONS) {
     assert.ok(kt.includes(`"${r}"`), `native never emits failureReason ${r}`);
@@ -144,6 +146,15 @@ test('cleanup releases torch, observer, timeout, and camera', () => {
   assert.ok(kt.includes('unbindAll()'), 'camera unbind missing');
 });
 
+test('backgrounding ends the session (no orphan camera/torch)', () => {
+  const screen = src('src/screens/PpgMeasure/PpgMeasureScreen.tsx');
+  assert.ok(screen.includes('AppState'), 'AppState background handling missing');
+  assert.ok(
+    screen.includes("'background'"),
+    'background cancel missing',
+  );
+});
+
 test('quality threshold 0.5 is retained and never-fabricated rule holds', () => {
   const kt = src(KOTLIN_PROCESSOR);
   assert.ok(kt.includes('MIN_RELIABLE_QUALITY = 0.5f'), 'native threshold changed!');
@@ -154,6 +165,27 @@ test('quality threshold 0.5 is retained and never-fabricated rule holds', () => 
   const out = processPpgSignal(flat, t, 60);
   assert.equal(out.heartRateBpm, null);
   assert.equal(out.signalQuality, 0);
+});
+
+test('live session states and liveBpm cross the bridge', () => {
+  const kt = src(KOTLIN_MODULE);
+  for (const s of ['WAITING_FOR_FINGER', 'ACQUIRING', 'SIGNAL_WEAK', 'FINGER_REMOVED'] as const) {
+    assert.ok(kt.includes(`"${s}"`), `native never emits ${s}`);
+  }
+  assert.ok(kt.includes('"liveBpm"'), 'native never emits liveBpm');
+  const bridge = src(BRIDGE);
+  assert.ok(bridge.includes('liveBpm'), 'bridge does not forward liveBpm');
+  for (const s of ['WAITING_FOR_FINGER', 'ACQUIRING', 'SIGNAL_WEAK', 'FINGER_REMOVED'] as const) {
+    assert.ok(typeof PPG_COPY[s] === 'string' && PPG_COPY[s].length > 0, `copy for ${s}`);
+  }
+  // Stability gate: wild sequences must be rejected, never smoothed.
+  assert.ok(kt.includes('UNSTABLE'), 'UNSTABLE final gate missing');
+  assert.ok(kt.includes('isStableHrSeries'), 'stability vote missing');
+  assert.ok(kt.includes('isFingerPresent'), 'finger-presence vote missing');
+  // Removal boundaries must not let stale beats contaminate reacquisition.
+  assert.ok(kt.includes('segmentBreaks'), 'segment-break exclusion missing');
+  const tsMirror = src('modules/healthgraph-ppg/src/ppgSignal.ts');
+  assert.ok(tsMirror.includes('segmentBreaks'), 'TS mirror missing segment breaks');
 });
 
 test('simulated results are flagged and refused by persistence', () => {
@@ -181,7 +213,11 @@ test('state copy covers every lifecycle state', () => {
   for (const s of [
     'IDLE',
     'STARTING',
+    'WAITING_FOR_FINGER',
+    'ACQUIRING',
     'MEASURING',
+    'SIGNAL_WEAK',
+    'FINGER_REMOVED',
     'QUALITY_WARNING',
     'COMPLETING',
     'COMPLETE',

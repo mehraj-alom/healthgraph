@@ -21,6 +21,34 @@ object PpgSignalProcessor {
   const val MIN_HR_BPM = 25.0
   const val MAX_HR_BPM = 250.0
 
+  // ---- Continuous live-BPM + finger-presence tuning (documented heuristics).
+  //
+  // Finger presence is a multi-cue vote over frame statistics already sampled
+  // for the PPG scalar — never "camera opened". Cues:
+  //  1. Brightness: torch-illuminated fingertip is bright but not clipped.
+  //     Reuses the existing exposure gate (Y_MEAN_MIN/MAX).
+  //  2. Red dominance: blood under white LED raises V (Cr) over U (Cb).
+  //     RED_DOMINANCE_MIN is deliberately modest; temporal consistency
+  //     (FINGER_PRESENT_FRAMES consecutive) carries the decision.
+  //  3. Uniformity: a lens fully covered by a fingertip is spatially flat;
+  //     open scenes vary. yStd above UNIFORMITY_MAX_STD vetoes presence.
+  // Live estimation uses overlapping rolling windows through the SAME
+  // process() pipeline and quality gate (0.5 unchanged). Stability is judged
+  // on recent consecutive estimates: STABLE_COUNT estimates within
+  // STABLE_MAX_RANGE_BPM. A wild sequence (e.g. 119,83,61,108,57) fails the
+  // range check and is never displayed or saved — it is NOT smoothed.
+  const val Y_MEAN_MIN = 15f
+  const val Y_MEAN_MAX = 245f
+  const val RED_DOMINANCE_MIN = 10f
+  const val UNIFORMITY_MAX_STD = 20f
+  const val FINGER_PRESENT_FRAMES = 5
+  const val FINGER_ABSENT_FRAMES = 5
+  const val LIVE_WINDOW_SECONDS = 10
+  const val LIVE_MIN_SECONDS = 8
+  const val STABLE_COUNT = 5
+  const val STABLE_MAX_RANGE_BPM = 10.0
+  const val MIN_VALID_SPAN_MS = 30_000L
+
   data class Output(
     val heartRateBpm: Double?,
     val rrIntervalsMs: List<Double>,
@@ -100,6 +128,7 @@ object PpgSignalProcessor {
     samples: List<Float>,
     timestampsMs: List<Long>,
     durationSeconds: Int,
+    segmentBreaks: List<Int> = emptyList(),
   ): Output {
     if (samples.size != timestampsMs.size || samples.size < 8) {
       return Output(null, emptyList(), null, null, 0f)
@@ -125,8 +154,14 @@ object PpgSignalProcessor {
     val sampleRateHz = if (spanMs > 0) (samples.size - 1) / (spanMs / 1000.0) else samples.size / durationSeconds.toDouble()
     val filtered = lowPass(samples)
     val peaks = detectPeaks(filtered, sampleRateHz.toFloat())
+    // Segment breaks (finger-removal boundaries as sample indexes): an RR
+    // interval spanning a break bridges two separate placements and must not
+    // contaminate HR/HRV. Out-of-range breaks are ignored.
     val rawRR = ArrayList<Double>()
-    for (i in 1 until peaks.size) rawRR.add((timestampsMs[peaks[i]] - timestampsMs[peaks[i - 1]]).toDouble())
+    for (i in 1 until peaks.size) {
+      val spansBreak = segmentBreaks.any { b -> b > peaks[i - 1] && b <= peaks[i] }
+      if (!spansBreak) rawRR.add((timestampsMs[peaks[i]] - timestampsMs[peaks[i - 1]]).toDouble())
+    }
     val rr = cleanRR(rawRR)
     var hr: Double? = null
     if (rr.size >= 2) {
@@ -143,6 +178,155 @@ object PpgSignalProcessor {
       sdnnMs = if (hrvOk && reliable) sdnn(rr) else null,
       signalQuality = q,
     )
+  }
+
+  /**
+   * Per-frame statistics for finger-presence voting. Computed with the same
+   * center-crop + stride sampling as the PPG scalar; the frame is discarded
+   * immediately afterwards. Units are 8-bit YUV levels (U/V centered at 128).
+   */
+  data class FrameStats(
+    val yMean: Float,
+    val yStd: Float,
+    val uMean: Float,
+    val vMean: Float,
+  )
+
+  /**
+   * Extract Y-mean/std + U/V-means from a YUV_420_888 frame WITHOUT retaining
+   * it. Returns null for malformed frames (caller treats null as absent —
+   * never throws, so the analyzer thread survives).
+   */
+  fun frameStatsFromYuv(
+    yPlane: java.nio.ByteBuffer,
+    yRowStride: Int,
+    yPixelStride: Int,
+    uPlane: java.nio.ByteBuffer?,
+    uRowStride: Int,
+    uPixelStride: Int,
+    vPlane: java.nio.ByteBuffer?,
+    vRowStride: Int,
+    vPixelStride: Int,
+    width: Int,
+    height: Int,
+  ): FrameStats? {
+    if (yRowStride <= 0 || yPixelStride <= 0 || width <= 0 || height <= 0) return null
+    try {
+      // Luma: middle-50% crop, every 4th row / 8th pixel.
+      val x0 = width / 4; val x1 = width * 3 / 4
+      val y0 = height / 4; val y1 = height * 3 / 4
+      var sum = 0L; var sumSq = 0L; var count = 0L
+      val row = ByteArray(yRowStride)
+      val dup = yPlane.duplicate()
+      for (y in y0 until y1 step 4) {
+        val pos = y * yRowStride
+        if (pos < 0 || pos + yRowStride > dup.capacity()) return null
+        dup.position(pos)
+        dup.get(row, 0, minOf(yRowStride, dup.remaining()))
+        var x = x0
+        while (x < x1) {
+          val idx = x * yPixelStride
+          if (idx < 0 || idx >= row.size) return null
+          val v = (row[idx].toInt() and 0xFF).toLong()
+          sum += v; sumSq += v * v; count++
+          x += 8
+        }
+      }
+      if (count == 0L) return null
+      val yMean = sum.toFloat() / count
+      val variance = (sumSq.toDouble() / count - yMean * yMean).coerceAtLeast(0.0)
+      val yStd = sqrt(variance).toFloat()
+      // Chroma planes are half-resolution; sample the matching center crop.
+      fun chromaMean(
+        plane: java.nio.ByteBuffer?,
+        rowStride: Int,
+        pixelStride: Int,
+      ): Float? {
+        if (plane == null || rowStride <= 0 || pixelStride <= 0) return null
+        val cx0 = x0 / 2; val cx1 = (x1 + 1) / 2
+        val cy0 = y0 / 2; val cy1 = (y1 + 1) / 2
+        var cSum = 0L; var cCount = 0L
+        val cRow = ByteArray(rowStride)
+        val cDup = plane.duplicate()
+        var cy = cy0
+        while (cy < cy1) {
+          val pos = cy * rowStride
+          if (pos < 0 || pos + rowStride > cDup.capacity()) return null
+          cDup.position(pos)
+          cDup.get(cRow, 0, minOf(rowStride, cDup.remaining()))
+          var cx = cx0
+          while (cx < cx1) {
+            val idx = cx * pixelStride
+            if (idx < 0 || idx >= cRow.size) return null
+            cSum += (cRow[idx].toInt() and 0xFF); cCount++
+            cx += 4
+          }
+          cy += 2
+        }
+        if (cCount == 0L) return null
+        return cSum.toFloat() / cCount
+      }
+      val uMean = chromaMean(uPlane, uRowStride, uPixelStride) ?: return null
+      val vMean = chromaMean(vPlane, vRowStride, vPixelStride) ?: return null
+      return FrameStats(yMean, yStd, uMean, vMean)
+    } catch (_: Exception) {
+      return null
+    }
+  }
+
+  /**
+   * First-pass fingertip presence vote. All three cues must agree; a single
+   * brightness threshold is NOT enough (a bright room would false-trigger).
+   */
+  fun isFingerPresent(stats: FrameStats): Boolean {
+    if (stats.yMean.isNaN() || stats.yStd.isNaN() ||
+      stats.uMean.isNaN() || stats.vMean.isNaN()
+    ) return false
+    if (stats.yMean < Y_MEAN_MIN || stats.yMean > Y_MEAN_MAX) return false
+    if (stats.vMean - stats.uMean < RED_DOMINANCE_MIN) return false
+    if (stats.yStd > UNIFORMITY_MAX_STD) return false
+    return true
+  }
+
+  /**
+   * Stability vote over recent consecutive live estimates. Requires at least
+   * STABLE_COUNT estimates with max-min spread within STABLE_MAX_RANGE_BPM.
+   * Non-finite entries fail closed (return false).
+   */
+  fun isStableHrSeries(estimates: List<Double>): Boolean {
+    if (estimates.size < STABLE_COUNT) return false
+    val recent = estimates.takeLast(STABLE_COUNT)
+    if (recent.any { it.isNaN() || it.isInfinite() }) return false
+    var lo = Double.MAX_VALUE; var hi = -Double.MAX_VALUE
+    for (e in recent) {
+      if (e < lo) lo = e
+      if (e > hi) hi = e
+    }
+    return hi - lo <= STABLE_MAX_RANGE_BPM
+  }
+
+  /**
+   * One rolling-window HR estimate through the standard pipeline (same
+   * quality gate). Returns null when the window is too short or unreliable —
+   * callers display nothing rather than a stale number.
+   */
+  fun liveHrFromWindow(
+    samples: List<Float>,
+    timestampsMs: List<Long>,
+    windowSeconds: Int = LIVE_WINDOW_SECONDS,
+  ): Double? {
+    if (samples.size != timestampsMs.size || samples.size < 8) return null
+    val endMs = timestampsMs.last()
+    val cutMs = endMs - windowSeconds * 1000L
+    var from = 0
+    while (from < timestampsMs.size && timestampsMs[from] < cutMs) from++
+    val wSamples = samples.subList(from, samples.size)
+    val wTs = timestampsMs.subList(from, timestampsMs.size)
+    if (wSamples.size < 8) return null
+    val spanMs = (wTs.last() - wTs.first()).toDouble()
+    if (spanMs < LIVE_MIN_SECONDS * 1000.0) return null
+    val out = process(wSamples, wTs, windowSeconds)
+    return out.heartRateBpm
   }
 
   /**
@@ -191,7 +375,7 @@ object PpgSignalProcessor {
     if (count == 0L) return null
     val mean = sum.toFloat() / count
     // Exposure gate: finger missing (dark) or saturated (no contact).
-    if (mean < 15f || mean > 245f) return null
+    if (mean < Y_MEAN_MIN || mean > Y_MEAN_MAX) return null
     return mean
   }
 }

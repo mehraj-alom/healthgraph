@@ -2,13 +2,16 @@
  * PPG provider boundary.
  *
  * Screens and hooks depend ONLY on this interface — never on the native
- * module directly. Two implementations exist behind it:
+ * module directly. Three implementations exist behind it:
  *
- * - native:    the HealthGraphPPG Expo module (custom dev/production build)
- * - simulated: deterministic synthetic signal through the REAL on-device
- *              pipeline (`processPpgSignal`), for Expo Go / web development.
- *              Simulated results are NOT real measurements: they are never
- *              persisted, never synced, and must be badged as SIMULATION.
+ * - native:      the HealthGraphPPG Expo module (custom dev/production build)
+ * - simulated:   deterministic synthetic signal through the REAL on-device
+ *                pipeline (`processPpgSignal`), for Expo Go / web development.
+ *                Simulated results are NOT real measurements: they are never
+ *                persisted, never synced, and must be badged as SIMULATION.
+ * - unavailable: release builds without the native module — refuses loudly.
+ *                Reports kind 'native' with isAvailable false so callers must
+ *                check isAvailable before requesting camera permission.
  */
 
 import type {
