@@ -155,6 +155,11 @@ export async function measure(
     if (typeof raw['rmssdMs'] === 'number') result.rmssdMs = raw['rmssdMs'] as number;
     if (typeof raw['sdnnMs'] === 'number') result.sdnnMs = raw['sdnnMs'] as number;
     if (Array.isArray(raw['rawSignal'])) result.rawSignal = raw['rawSignal'] as number[];
+    // Native diagnostics (optional, Android only): pass through untouched.
+    if (typeof raw['torchEnabled'] === 'boolean') result.torchEnabled = raw['torchEnabled'] as boolean;
+    if (typeof raw['framesReceived'] === 'number') result.framesReceived = raw['framesReceived'] as number;
+    if (typeof raw['samplesCollected'] === 'number') result.samplesCollected = raw['samplesCollected'] as number;
+    if (typeof raw['failureReason'] === 'string') result.failureReason = raw['failureReason'] as string;
     emit({ state: 'COMPLETE', signalQuality: result.signalQuality });
     return result;
   } catch (e: any) {

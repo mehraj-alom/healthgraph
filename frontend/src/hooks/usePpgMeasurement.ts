@@ -70,6 +70,16 @@ export function usePpgMeasurement(): UsePpgMeasurement {
     setResult(null);
     setSynced(null);
     setPermissionBlocked(false);
+    // A release build without the bundled native module must fail fast with
+    // the true reason — never ask for camera permission and then fail with
+    // generic finger guidance while the camera never opens.
+    if (provider.kind === 'native' && !provider.isAvailable) {
+      if (!mounted.current) return;
+      setError(
+        'Heart-rate measurement is not available in this build. Please install the latest version of HealthGraph.',
+      );
+      return;
+    }
     // Camera is only needed for the real on-device provider; the simulation
     // must never trigger a permission prompt.
     if (provider.kind === 'native') {
@@ -91,6 +101,39 @@ export function usePpgMeasurement(): UsePpgMeasurement {
       setResult(r);
       if (r.simulated === true) {
         // Simulation: ephemeral by design — never persisted, never synced.
+        return;
+      }
+      // No heart rate produced: surface the native layer's actual reason.
+      // A genuinely weak signal keeps finger guidance; startup/hardware
+      // failures get their true message (never finger-blame for those).
+      if (r.heartRateBpm == null && mounted.current) {
+        const reason = r.failureReason;
+        if (reason === 'NO_SAMPLES' && (r.framesReceived ?? 0) <= 0) {
+          setError(
+            'No camera frames were received. Restart the app and try again; if it persists, this device may not support camera measurement.',
+          );
+        } else if (reason === 'NO_SAMPLES') {
+          setError(
+            'No usable signal reached the sensor — make sure the flash is on and your fingertip fully covers the camera and flash.',
+          );
+        } else if (reason === 'LOW_QUALITY') {
+          setError(
+            'Signal quality too low for a reliable reading. Hold still with your fingertip fully covering the camera and flash, then try again.',
+          );
+        } else if (reason === 'NO_BEATS') {
+          setError(
+            'Not enough reliable beats were detected. Hold still with your fingertip fully covering the camera and flash, then try again.',
+          );
+        } else if (r.torchEnabled === false) {
+          setError(
+            'The flash did not turn on, so no pulse signal could be read. Check that another app is not using the camera, then try again.',
+          );
+        }
+      }
+      // Offline-first persist (derived only). ONLY successful real runs with
+      // an actual heart rate are stored — failed/unreliable runs (null HR)
+      // are shown in the UI but never persisted or synced.
+      if (r.heartRateBpm == null) {
         return;
       }
       // Offline-first persist (derived only). Works without connectivity.
@@ -119,6 +162,19 @@ export function usePpgMeasurement(): UsePpgMeasurement {
         if (e?.code === 'CAMERA_PERMISSION') {
           setError(
             'Camera access is needed to measure your heart rate. Your camera images never leave your phone.',
+          );
+        } else if (e?.code === 'TORCH_UNAVAILABLE' || e?.code === 'NO_FLASH') {
+          setError(
+            'The flash could not be enabled, so a pulse reading cannot be taken on this device.',
+          );
+        } else if (
+          e?.code === 'NO_CAMERA' ||
+          e?.code === 'NO_LIFECYCLE' ||
+          e?.code === 'NO_CONTEXT' ||
+          e?.code === 'CAMERA_START'
+        ) {
+          setError(
+            'The camera could not be started. Restart the app and try again.',
           );
         } else {
           setError(e?.message ?? 'Measurement could not be completed. Try again.');

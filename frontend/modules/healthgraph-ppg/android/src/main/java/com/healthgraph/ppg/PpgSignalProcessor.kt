@@ -104,6 +104,23 @@ object PpgSignalProcessor {
     if (samples.size != timestampsMs.size || samples.size < 8) {
       return Output(null, emptyList(), null, null, 0f)
     }
+    // Numerical safety: drop non-finite pairs instead of letting one NaN or
+    // infinity poison the mean/std/quality math. Never invent replacements.
+    val finiteSamples = ArrayList<Float>(samples.size)
+    val finiteTs = ArrayList<Long>(timestampsMs.size)
+    for (i in samples.indices) {
+      val s = samples[i]
+      val t = timestampsMs[i]
+      if (s.isFinite()) {
+        finiteSamples.add(s)
+        finiteTs.add(t)
+      }
+    }
+    if (finiteSamples.size < 8) {
+      return Output(null, emptyList(), null, null, 0f)
+    }
+    val samples = finiteSamples
+    val timestampsMs = finiteTs
     val spanMs = (timestampsMs.last() - timestampsMs.first()).toDouble()
     val sampleRateHz = if (spanMs > 0) (samples.size - 1) / (spanMs / 1000.0) else samples.size / durationSeconds.toDouble()
     val filtered = lowPass(samples)
@@ -143,22 +160,33 @@ object PpgSignalProcessor {
     width: Int,
     height: Int,
   ): Float? {
+    // Defensive: an out-of-spec frame must be skipped (null), never throw —
+    // a throw here would kill the single analyzer thread and end all frames.
+    if (rowStride <= 0 || pixelStride <= 0 || width <= 0 || height <= 0) return null
     // Center crop (middle 50%) avoids lens edges; stride sampling (every 8th
     // pixel) bounds CPU on high-resolution sensors.
     val x0 = width / 4; val x1 = width * 3 / 4
     val y0 = height / 4; val y1 = height * 3 / 4
     var sum = 0L; var count = 0L
-    val row = ByteArray(rowStride)
-    val dup = yPlane.duplicate()
-    for (y in y0 until y1 step 4) {
-      dup.position(y * rowStride)
-      dup.get(row, 0, minOf(rowStride, dup.remaining()))
-      var x = x0
-      while (x < x1) {
-        val v = row[x * pixelStride].toInt() and 0xFF
-        sum += v; count++
-        x += 8
+    try {
+      val row = ByteArray(rowStride)
+      val dup = yPlane.duplicate()
+      for (y in y0 until y1 step 4) {
+        val pos = y * rowStride
+        if (pos < 0 || pos + rowStride > dup.capacity()) return null
+        dup.position(pos)
+        dup.get(row, 0, minOf(rowStride, dup.remaining()))
+        var x = x0
+        while (x < x1) {
+          val idx = x * pixelStride
+          if (idx < 0 || idx >= row.size) return null
+          val v = row[idx].toInt() and 0xFF
+          sum += v; count++
+          x += 8
+        }
       }
+    } catch (_: Exception) {
+      return null
     }
     if (count == 0L) return null
     val mean = sum.toFloat() / count

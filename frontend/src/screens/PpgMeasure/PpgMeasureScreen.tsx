@@ -478,7 +478,13 @@ export default function PpgMeasureScreen() {
                     : null}
                 </Text>
               </View>
-            ) : null}
+            ) : (
+              <Text
+                style={[typography.caption, { color: colors.textMuted }]}
+              >
+                HRV not available for this measurement.
+              </Text>
+            )}
 
             <View style={styles.metaRow}>
               <Badge
@@ -502,7 +508,10 @@ export default function PpgMeasureScreen() {
                     timeStyle: 'short',
                   })
                 : null}
-              {'  ·  '}PPG measurement
+              {'  ·  '}
+              {result.simulated === true
+                ? 'Development simulation'
+                : 'Real device measurement'}
             </Text>
             {result.simulated === true ? (
               <Text
@@ -557,7 +566,8 @@ export default function PpgMeasureScreen() {
               message={
                 permissionBlocked
                   ? 'Camera access is turned off for HealthGraph. Enable it in Settings, then try again.'
-                  : 'Keep your finger still and make sure the camera and flash are fully covered.'
+                  : (error ??
+                    'Keep your finger still and make sure the camera and flash are fully covered.')
               }
               onRetry={() => {
                 reset();

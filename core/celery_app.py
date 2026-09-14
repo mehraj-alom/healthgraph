@@ -44,6 +44,12 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
     timezone="UTC",
     enable_utc=True,
+    # Nobody reads task results (verified: no AsyncResult/result polling
+    # anywhere in app/workers/services/core/agents), so never write them to
+    # the Upstash result backend — each stored result costs multiple Redis
+    # commands against a tight request quota. Short TTL as a second guard.
+    task_ignore_result=True,
+    result_expires=3600,
     task_queues=(
         Queue("celery", routing_key="celery"),
         Queue("ingestion", routing_key="ingestion"),
@@ -57,8 +63,14 @@ celery_app.conf.update(
 )
 
 celery_app.conf.beat_schedule = {
-    "drain-graph-outbox-every-5-seconds": {
+    # Outbox drain cadence is a Redis-budget decision, not just a freshness
+    # one: every dispatch costs broker + (previously) result-backend commands
+    # against the Upstash request quota (~17k dispatches/day at 5s exhausted
+    # a 500k quota in days). 60s matches the system's own timescales
+    # (5-minute stale-lease recovery, 10s+ retry backoff) and is plenty for
+    # a health timeline. Do NOT lower this without raising the quota.
+    "drain-graph-outbox-every-60-seconds": {
         "task": "workers.graph_sync.drain_graph_outbox",
-        "schedule": 5.0,
+        "schedule": 60.0,
     }
 }
