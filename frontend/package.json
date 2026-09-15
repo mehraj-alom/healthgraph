@@ -26,6 +26,7 @@
     "expo-status-bar": "~57.0.1",
     "firebase": "^12.18.0",
     "healthgraph-ppg": "file:modules/healthgraph-ppg",
+    "healthgraph-rppg": "file:modules/healthgraph-rppg",
     "onnxruntime-react-native": "1.24.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",

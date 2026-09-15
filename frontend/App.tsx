@@ -47,6 +47,8 @@ import SettingsScreen from '@/screens/Settings/SettingsScreen';
 import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
 import PpgMeasureScreen from '@/screens/PpgMeasure/PpgMeasureScreen';
+import PulseMethodScreen from '@/screens/PpgMeasure/PulseMethodScreen';
+import RppgMeasureScreen from '@/screens/PpgMeasure/RppgMeasureScreen';
 import ImproveScreen from '@/screens/Dashboard/ImproveScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
@@ -106,7 +108,9 @@ function MainTabs() {
       }}
     >
       <Tab.Screen name="Dashboard" component={HealthDashboardScreen} />
-      <Tab.Screen name="PpgMeasure" component={PpgMeasureScreen} />
+      {/* Pulse entry: method selector (fingertip PPG vs face rPPG). The
+          red tab button lands here; each method pushes its own flow. */}
+      <Tab.Screen name="PpgMeasure" component={PulseMethodScreen} />
       <Tab.Screen name="Chat" component={ChatScreen} />
     </Tab.Navigator>
   );
@@ -224,6 +228,22 @@ function AppNavigator() {
             <RootStack.Screen
               name="Main"
               component={MainTabs}
+            />
+            {/* Fingertip PPG flow (existing validated screen, unchanged). */}
+            <RootStack.Screen
+              name="PpgMeasureFlow"
+              component={PpgMeasureScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Face rPPG flow (on-device PhysFormer capture + inference). */}
+            <RootStack.Screen
+              name="RppgMeasure"
+              component={RppgMeasureScreen}
+              options={{
+                headerShown: false,
+              }}
             />
             <RootStack.Screen
               name="DailyLog"

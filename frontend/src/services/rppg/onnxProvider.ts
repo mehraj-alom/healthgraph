@@ -57,16 +57,33 @@ export interface OnnxRppgProviderOptions {
   resolveModelPath?: () => Promise<string>;
 }
 
-function loadModule(id: string): unknown {
+/**
+ * Metro requires statically-analyzable require calls: every runtime
+ * dependency below uses a LITERAL specifier inside try/catch. Bundling
+ * always includes them; on runtimes without the native side (Expo Go,
+ * web, node tests) the require throws and the provider degrades to
+ * unavailable — the app never crashes.
+ */
+function loadOnnxRuntime(): unknown {
   try {
-    return require(id);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('onnxruntime-react-native');
+  } catch {
+    return null;
+  }
+}
+
+function loadExpoAsset(): unknown {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-asset');
   } catch {
     return null;
   }
 }
 
 function defaultBindings(): OnnxRuntimeBindings | null {
-  const mod = loadModule('onnxruntime-react-native') as {
+  const mod = loadOnnxRuntime() as {
     InferenceSession?: {
       create(modelPath: string): Promise<RppgOrtSession>;
     };
@@ -100,7 +117,7 @@ export function isOnnxRuntimeSupported(): boolean {
  * Uses expo-asset (same pattern as the existing .glb/.wasm asset loading).
  */
 async function defaultResolveModelPath(): Promise<string> {
-  const expoAsset = loadModule('expo-asset') as {
+  const expoAsset = loadExpoAsset() as {
     Asset?: {
       loadAsync(
         moduleId: number,

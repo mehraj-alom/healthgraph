@@ -33,4 +33,8 @@ class PpgMeasurement(Base, TimestampMixin):
     sdnn_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     rr_intervals_ms: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     algorithm_version: Mapped[str] = mapped_column(String(32))
+    # Face-rPPG provenance (nullable: fingertip rows predate these columns).
+    # HRV stays null for face_rppg: the 160-frame window cannot support it.
+    model_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sampling_rate_hz: Mapped[float | None] = mapped_column(Float, nullable=True)
     reliable: Mapped[bool] = mapped_column(default=False)

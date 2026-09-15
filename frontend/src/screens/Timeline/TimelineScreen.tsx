@@ -33,8 +33,11 @@ import {
   getDailyLogEvents as dbGetDailyLogEvents,
 } from '@/db/queries/dailyLogs';
 import { getMedications as dbGetMedications } from '@/db/queries/medications';
+import { getRecentPpgMeasurements } from '@/db/queries/ppg';
+import { getRecentRppgMeasurements } from '@/db/queries/rppg';
 import {
   storyItemFromLogEvent,
+  localDateString,
   type HomeStoryItem,
 } from '../Dashboard/homeData';
 import type { RootStackParamList } from '@/types';
@@ -264,8 +267,14 @@ function sourceLabel(source: string): string {
   }
 }
 
-function trendLabel(trend: string): string {
-  switch (trend) {
+/** Quality word for on-device pulse rows (matches the measure screens). */
+function pulseQualityLabel(quality: number): string {
+  if (quality >= 0.75) return 'Good';
+  if (quality >= 0.5) return 'Fair';
+  return 'Poor';
+}
+
+function trendLabel(trend: string): string {  switch (trend) {
     case 'improving': return '↓ Improving';
     case 'worsening': return '↑ Worsening';
     case 'stable': return '→ Stable';
@@ -742,6 +751,43 @@ export default function TimelineScreen() {
           if (!item) continue;
           out.push(enrichLocalItem(item, ev.payload_json, ev.concept_id, names));
         }
+      }
+      out.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+      // On-device pulse measurements (both modalities, newest first).
+      // Source provenance rides in the title — "Pulse — Fingertip" vs
+      // "Pulse — Face scan" — so the two methods are never confused.
+      // Only real readings (non-null HR); unreliable runs were never stored.
+      try {
+        const [ppgRows, rppgRows] = await Promise.all([
+          getRecentPpgMeasurements(patientId, 20).catch(() => []),
+          getRecentRppgMeasurements(patientId, 20).catch(() => []),
+        ]);
+        for (const row of ppgRows) {
+          if (row.heart_rate_bpm == null) continue;
+          out.push({
+            id: `ppg-${row.measurement_id}`,
+            time: row.measured_at,
+            dayKey: localDateString(new Date(row.measured_at)),
+            category: 'vital',
+            title: 'Pulse — Fingertip',
+            detail: `${Math.round(row.heart_rate_bpm)} BPM · ${pulseQualityLabel(row.signal_quality)}`,
+            icon: '❤️',
+          });
+        }
+        for (const row of rppgRows) {
+          if (row.heart_rate_bpm == null) continue;
+          out.push({
+            id: `rppg-${row.measurement_id}`,
+            time: row.measured_at,
+            dayKey: localDateString(new Date(row.measured_at)),
+            category: 'vital',
+            title: 'Pulse — Face scan',
+            detail: `${Math.round(row.heart_rate_bpm)} BPM · ${pulseQualityLabel(row.signal_quality)}`,
+            icon: '❤️',
+          });
+        }
+      } catch {
+        // Pulse history is additive; daily logs still render without it.
       }
       out.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
       setLocalItems(out);

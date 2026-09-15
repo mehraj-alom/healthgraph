@@ -179,6 +179,7 @@ test('fresh database migrates 0 -> CURRENT and matches CURRENT_SCHEMA_VERSION', 
   assert.ok(names.includes('trends_cache'));
   assert.ok(names.includes('profile_cache'));
   assert.ok(names.includes('ppg_measurements'));
+  assert.ok(names.includes('rppg_measurements'));
 
   assert.deepEqual(await getMissingTables(db), []);
   await verifySchemaVersion(db);
@@ -196,7 +197,7 @@ test('migrations are idempotent on re-run', async () => {
   );
   assert.deepEqual(
     log.map((r) => r.version),
-    [1, 2, 3, 4],
+    [1, 2, 3, 4, 5],
     'guarded migration log must not insert duplicates',
   );
 });
@@ -220,7 +221,7 @@ test('stale checkpoint is repaired back to a complete schema', async () => {
   );
   assert.deepEqual(
     log.map((r) => r.version),
-    [1, 2, 3, 4],
+    [1, 2, 3, 4, 5],
   );
 });
 
@@ -229,6 +230,73 @@ test('verifySchemaVersion throws on genuine mismatch', async () => {
   await runMigrations(db);
   await setSchemaVersion(db, 2);
   await assert.rejects(verifySchemaVersion(db), /Database schema version mismatch/);
+});
+
+test('migration 5: rppg_measurements schema contract (face modality isolated)', async () => {
+  const db = makeDb();
+  await runMigrations(db);
+  assert.equal(await getSchemaVersion(db), CURRENT_SCHEMA_VERSION);
+
+  const cols = await db.getAllAsync<{ name: string; notnull: number; dflt_value: unknown }>(
+    `PRAGMA table_info(rppg_measurements)`,
+  );
+  const byName = new Map(cols.map((c) => [c.name, c]));
+  for (const col of [
+    'measurement_id',
+    'patient_id',
+    'measured_at',
+    'heart_rate_bpm',
+    'signal_quality',
+    'duration_seconds',
+    'algorithm_version',
+    'model_version',
+    'measurement_type',
+    'sampling_rate_hz',
+    'face_stability',
+    'reliable',
+    'sync_status',
+  ]) {
+    assert.ok(byName.has(col), `rppg_measurements missing column ${col}`);
+  }
+  // Raw frames/video/face data must have nowhere to land.
+  for (const banned of ['frames', 'video', 'raw_signal', 'face_data', 'tensor']) {
+    assert.ok(!byName.has(banned), `rppg_measurements must not store ${banned}`);
+  }
+  // Face rows insert + read back with provenance intact.
+  await db.runAsync(
+    `INSERT INTO rppg_measurements
+      (measurement_id, patient_id, measured_at, heart_rate_bpm, signal_quality,
+       duration_seconds, algorithm_version, model_version, measurement_type,
+       sampling_rate_hz, face_stability, reliable, sync_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    'r1',
+    'p1',
+    '2026-09-15T10:00:00.000Z',
+    71,
+    0.82,
+    6,
+    'rppg-1.0.0',
+    'physformer-rppg-1.0.0',
+    'face_rppg',
+    30.0,
+    0.9,
+    1,
+    'pending',
+  );
+  const row = await db.getFirstAsync<{ heart_rate_bpm: number; model_version: string }>(
+    `SELECT heart_rate_bpm, model_version FROM rppg_measurements WHERE measurement_id = ?`,
+    'r1',
+  );
+  assert.equal(row?.heart_rate_bpm, 71);
+  assert.equal(row?.model_version, 'physformer-rppg-1.0.0');
+
+  // Fingertip table is untouched by migration 5 (no new columns).
+  const ppgCols = await db.getAllAsync<{ name: string }>(
+    `PRAGMA table_info(ppg_measurements)`,
+  );
+  const ppgNames = new Set(ppgCols.map((c) => c.name));
+  assert.ok(!ppgNames.has('model_version'), 'ppg table must not gain rPPG columns');
+  assert.ok(!ppgNames.has('face_stability'), 'ppg table must not gain rPPG columns');
 });
 
 test('documents table: updated_at is NOT NULL (updated_at fallback area)', async () => {

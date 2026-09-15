@@ -59,6 +59,19 @@ export const RPPG_NORMALIZE_MAX = 0.99609375;
  */
 export const RPPG_GRA_SHARP = 2.0;
 
+/**
+ * Sealed capture-window contract. Mirrors the healthgraph-rppg native module
+ * constants (duplicated here so this boundary stays import-safe in node
+ * tests; equality between both sources is asserted by rppgContract tests).
+ */
+export const RPPG_WINDOW_MAGIC = 'RPPG';
+export const RPPG_WINDOW_VERSION = 1;
+export const RPPG_WINDOW_FRAMES = 160;
+export const RPPG_WINDOW_ROI = 128;
+/** Accepted effective capture rate (Hz). Outside this, inference is refused. */
+export const RPPG_FPS_MIN = 27;
+export const RPPG_FPS_MAX = 33;
+
 export const RPPG_PREPROCESSING_DOC =
   'BGR channel order, shape [1,3,160,128,128], float32, ' +
   'normalized = (pixel - 127.5) / 128 ' +
