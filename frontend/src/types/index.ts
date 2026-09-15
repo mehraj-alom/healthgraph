@@ -366,6 +366,10 @@ export type RootStackParamList = {
   HealthGraph: { focusStructureId?: string; source?: 'body' | 'graph' } | undefined;
   Medications: undefined;
   Improve: { focus: 'improve' | 'keep'; metrics: ImproveMetric[] };
+  /** Existing validated fingertip PPG flow (relocated from the Pulse tab). */
+  PpgMeasureFlow: undefined;
+  /** Face rPPG flow (on-device capture + PhysFormer inference). */
+  RppgMeasure: undefined;
 };
 
 // ============================================================================

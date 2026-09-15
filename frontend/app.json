@@ -6,6 +6,9 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "assets/models/rppg/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.medgraph.app"

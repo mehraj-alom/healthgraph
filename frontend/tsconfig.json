@@ -20,6 +20,9 @@
       ],
       "healthgraph-ppg": [
         "modules/healthgraph-ppg/src/index.ts"
+      ],
+      "healthgraph-rppg": [
+        "modules/healthgraph-rppg/src/index.ts"
       ]
     }
   },

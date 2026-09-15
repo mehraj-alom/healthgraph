@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 /**
  * Migration function type.
@@ -430,6 +430,48 @@ const migrations: Record<number, MigrationFn> = {
       4,
     );
   },
+
+  // Migration 5: On-device face-rPPG derived measurements (offline-first)
+  // ========================================================================
+  // Separate table from ppg_measurements by design: fingertip PPG and face
+  // rPPG are distinct modalities and must never merge implementations.
+  // Stores ONLY compact derived scalars produced on-device (HR, quality,
+  // model/version provenance). Raw frames, video, and face data NEVER touch
+  // this table or the server.
+  5: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS rppg_measurements (
+        measurement_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        measured_at TEXT NOT NULL,
+        heart_rate_bpm REAL,
+        signal_quality REAL NOT NULL,
+        duration_seconds INTEGER NOT NULL,
+        algorithm_version TEXT NOT NULL,
+        model_version TEXT NOT NULL,
+        measurement_type TEXT NOT NULL DEFAULT 'face_rppg',
+        sampling_rate_hz REAL,
+        face_stability REAL,
+        reliable INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        sync_status TEXT NOT NULL DEFAULT 'pending'
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_rppg_patient_time ON rppg_measurements (patient_id, measured_at);
+      CREATE INDEX IF NOT EXISTS ix_rppg_sync ON rppg_measurements (sync_status);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      5,
+      'Face rPPG derived measurements (on-device only, offline-first)',
+      5,
+    );
+  },
 };
 
 /**
@@ -476,6 +518,8 @@ const REQUIRED_TABLES = [
   'trends_cache',
   // On-device PPG derived measurements (migration 4)
   'ppg_measurements',
+  // On-device face-rPPG derived measurements (migration 5)
+  'rppg_measurements',
 ];
 
 /**

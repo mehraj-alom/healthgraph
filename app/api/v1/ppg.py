@@ -32,7 +32,10 @@ def submit_ppg_measurement(
     patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
 ):
     reliable = is_reliable(
-        payload.heartRateBpm, payload.signalQuality, payload.durationSeconds
+        payload.heartRateBpm,
+        payload.signalQuality,
+        payload.durationSeconds,
+        payload.measurementType,
     )
     row = PpgMeasurement(
         patient_id=patient_id,
@@ -45,6 +48,8 @@ def submit_ppg_measurement(
         sdnn_ms=payload.sdnnMs,
         rr_intervals_ms=payload.rrIntervalsMs,
         algorithm_version=payload.algorithmVersion,
+        model_version=payload.modelVersion,
+        sampling_rate_hz=payload.samplingRateHz,
         reliable=reliable,
     )
     db.add(row)
@@ -58,6 +63,7 @@ def submit_ppg_measurement(
     )
     return PpgMeasurementResponse(
         measurementId=str(row.measurement_id),
+        measurementType=row.measurement_type,
         measuredAt=row.measured_at,
         heartRateBpm=row.heart_rate_bpm,
         signalQuality=row.signal_quality,
@@ -66,6 +72,8 @@ def submit_ppg_measurement(
         sdnnMs=row.sdnn_ms,
         rrIntervalsMs=row.rr_intervals_ms,
         algorithmVersion=row.algorithm_version,
+        modelVersion=row.model_version,
+        samplingRateHz=row.sampling_rate_hz,
         reliable=row.reliable,
     )
 
@@ -86,6 +94,7 @@ def list_ppg_measurements(
     return [
         PpgMeasurementResponse(
             measurementId=str(r.measurement_id),
+            measurementType=r.measurement_type,
             measuredAt=r.measured_at,
             heartRateBpm=r.heart_rate_bpm,
             signalQuality=r.signal_quality,
@@ -94,6 +103,8 @@ def list_ppg_measurements(
             sdnnMs=r.sdnn_ms,
             rrIntervalsMs=r.rr_intervals_ms,
             algorithmVersion=r.algorithm_version,
+            modelVersion=r.model_version,
+            samplingRateHz=r.sampling_rate_hz,
             reliable=r.reliable,
         )
         for r in rows

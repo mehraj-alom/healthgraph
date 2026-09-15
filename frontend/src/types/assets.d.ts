@@ -21,3 +21,8 @@ declare module '*.jpg' {
   const value: number;
   export default value;
 }
+
+declare module '*.onnx' {
+  const value: number;
+  export default value;
+}
