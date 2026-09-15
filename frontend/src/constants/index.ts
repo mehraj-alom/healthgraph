@@ -1,145 +1,145 @@
 export const COLORS = {
-  // ── Deep dark backgrounds ──
-  background: '#07111F',
-  surface: '#111C2C',
-  surfaceSecondary: '#172235',
-  surfaceElevated: '#1B2738',
+  // ── Warm clinical cream (Dribbble reference) ──
+  background: '#EAE4D6',
+  surface: '#FFFBF3',
+  surfaceSecondary: '#F4EDDF',
+  surfaceElevated: '#FFFFFF',
 
-  // ── Typography ──
-  textPrimary: '#F7FAFC',
-  textSecondary: '#9AA8B8',
-  textMuted: '#6F7D8C',
+  // ── Typography (warm ink) ──
+  textPrimary: '#1D1B17',
+  textSecondary: '#797166',
+  textMuted: '#A8A094',
 
-  // ── Border ──
-  border: '#263447',
-  borderLight: '#1E2D40',
+  // ── Border (sandy hairlines) ──
+  border: '#E6DBC6',
+  borderLight: '#EFE6D3',
 
-  // ── Brand / Primary ──
-  primary: '#F4C51B',
-  primaryLight: '#F9D84E',
-  primaryDark: '#D4A714',
-  primaryBg: 'rgba(244, 197, 27, 0.12)',
-  primaryMuted: 'rgba(244, 197, 27, 0.25)',
+  // ── Brand / Primary — ink pill + peach tint ──
+  primary: '#1D1B17',
+  primaryLight: '#3A372F',
+  primaryDark: '#111009',
+  primaryBg: 'rgba(232, 134, 46, 0.12)',
+  primaryMuted: '#FBEEDC',
 
-  // ── Medical Teal ──
-  teal: '#31B7A5',
-  tealLight: '#3FD4B8',
-  tealDark: '#289A8C',
-  tealBg: 'rgba(49, 183, 165, 0.12)',
+  // ── Apricot accent (was Medical Teal) ──
+  teal: '#E8862E',
+  tealLight: '#F0A35E',
+  tealDark: '#C96A1E',
+  tealBg: '#FBE3C8',
 
   // ── Accent colors (category-specific) ──
-  accent: '#4D8DFF',
-  accentLight: '#6BA1FF',
-  accentBg: 'rgba(77, 141, 255, 0.12)',
+  accent: '#4A90C2',
+  accentLight: '#8FC1E8',
+  accentBg: '#D9EAF7',
 
-  purple: '#9B6CFF',
-  purpleLight: '#B591FF',
-  purpleBg: 'rgba(155, 108, 255, 0.12)',
+  purple: '#8A7BC8',
+  purpleLight: '#B9A8E8',
+  purpleBg: 'rgba(138, 123, 200, 0.12)',
 
-  pink: '#F05F79',
-  pinkLight: '#F4849A',
-  pinkBg: 'rgba(240, 95, 121, 0.12)',
+  pink: '#E8A07C',
+  pinkLight: '#F0BC9E',
+  pinkBg: 'rgba(232, 160, 124, 0.14)',
 
-  green: '#63C174',
-  greenLight: '#7FD88E',
-  greenBg: 'rgba(99, 193, 116, 0.12)',
+  green: '#4E9B5F',
+  greenLight: '#7FC48D',
+  greenBg: '#DDF0DF',
 
-  orange: '#F0A030',
-  orangeLight: '#F4B858',
-  orangeBg: 'rgba(240, 160, 48, 0.12)',
+  orange: '#E8862E',
+  orangeLight: '#F0A35E',
+  orangeBg: '#FBE3C8',
 
-  coral: '#F05F79',
-  coralBg: 'rgba(240, 95, 121, 0.12)',
+  coral: '#C2503E',
+  coralBg: 'rgba(194, 80, 62, 0.10)',
 
   // ── Semantic ──
-  success: '#63C174',
-  successBg: 'rgba(99, 193, 116, 0.12)',
-  warning: '#F4B740',
-  warningBg: 'rgba(244, 183, 64, 0.12)',
-  error: '#E85D68',
-  errorBg: 'rgba(232, 93, 104, 0.12)',
-  info: '#4D8DFF',
-  infoBg: 'rgba(77, 141, 255, 0.12)',
+  success: '#4E9B5F',
+  successBg: '#DDF0DF',
+  warning: '#C9761E',
+  warningBg: '#FBE3C8',
+  error: '#C2503E',
+  errorBg: 'rgba(194, 80, 62, 0.10)',
+  info: '#4A90C2',
+  infoBg: '#D9EAF7',
 
   // ── Visual Status Colors ──
-  statusNormal: '#63C174',
-  statusWarning: '#F4B740',
-  statusCritical: '#E85D68',
-  statusAttention: '#F4B740',
+  statusNormal: '#4E9B5F',
+  statusWarning: '#C9761E',
+  statusCritical: '#C2503E',
+  statusAttention: '#E8862E',
 
   // ── Graph / Category colors ──
-  graphPatient: '#F4C51B',
-  graphBody: '#31B7A5',
-  graphSymptom: '#F05F79',
-  graphCondition: '#E85D68',
-  graphVital: '#4D8DFF',
-  graphMedication: '#F05F79',
-  graphRecord: '#9B6CFF',
-  graphLifestyle: '#63C174',
-  graphEvent: '#F4B740',
+  graphPatient: '#E8862E',
+  graphBody: '#4A90C2',
+  graphSymptom: '#C2503E',
+  graphCondition: '#C2503E',
+  graphVital: '#4A90C2',
+  graphMedication: '#8A7BC8',
+  graphRecord: '#8A7BC8',
+  graphLifestyle: '#4E9B5F',
+  graphEvent: '#E8862E',
 
   // ── Legacy aliases for backward compatibility ──
-  surfaceBorder: '#263447',
-  accentBgLegacy: 'rgba(77, 141, 255, 0.12)',
+  surfaceBorder: '#E6DBC6',
+  accentBgLegacy: '#D9EAF7',
 
   // ── Gradients ──
-  gradientPrimary: ['#F4C51B', '#D4A714'] as const,
-  gradientSurface: ['#111C2C', '#07111F'] as const,
+  gradientPrimary: ['#1D1B17', '#3A372F'] as const,
+  gradientSurface: ['#FFFBF3', '#EAE4D6'] as const,
 
   // ── Legacy aliases ──
-  primaryLightCompat: '#F9D84E',
-  primaryBgLegacy: 'rgba(244, 197, 27, 0.12)',
-  accentBgFallback: 'rgba(77, 141, 255, 0.12)',
+  primaryLightCompat: '#3A372F',
+  primaryBgLegacy: 'rgba(232, 134, 46, 0.12)',
+  accentBgFallback: '#D9EAF7',
 
   // ───────────────────────────────────────────────────────────────────────────
-  // MedGraph Design System — dark glass / soft-neumorphic tokens
+  // Warm clinical system — cream cards / sandy hairlines
   // ───────────────────────────────────────────────────────────────────────────
 
-  // Layered surfaces (dark charcoal/navy)
-  surfacePressed: '#0B1420',
-  surfaceDisabled: 'rgba(23, 34, 53, 0.45)',
-  surfaceSunken: '#0A121E', // recessed wells (inputs, search, code)
+  // Layered surfaces (warm cream)
+  surfacePressed: '#E9E0CE',
+  surfaceDisabled: 'rgba(29, 27, 23, 0.06)',
+  surfaceSunken: '#E2D8C3', // recessed wells (inputs, search, code)
 
-  // Thin low-contrast borders
-  borderStrong: '#33465C',
-  borderFaint: 'rgba(255, 255, 255, 0.06)',
+  // Sandy hairline borders
+  borderStrong: '#D3C3A6',
+  borderFaint: 'rgba(29, 27, 23, 0.06)',
 
-  // Glass overlays
-  glass: 'rgba(17, 28, 44, 0.78)',
-  glassStrong: 'rgba(13, 22, 35, 0.92)',
-  glassBorder: 'rgba(255, 255, 255, 0.08)',
-  glassHighlight: 'rgba(255, 255, 255, 0.06)',
+  // Cream overlays
+  glass: 'rgba(255, 251, 243, 0.92)',
+  glassStrong: 'rgba(255, 251, 243, 1)',
+  glassBorder: 'rgba(29, 27, 23, 0.08)',
+  glassHighlight: 'rgba(255, 255, 255, 0.6)',
 
-  // Restrained blue/purple/gold accent triad
-  accentBlue: '#4D8DFF',
-  accentBlueSoft: 'rgba(77, 141, 255, 0.14)',
-  accentPurple: '#9B6CFF',
-  accentPurpleSoft: 'rgba(155, 108, 255, 0.14)',
-  accentGold: '#F4C51B',
-  accentGoldSoft: 'rgba(244, 197, 27, 0.12)',
+  // Ink / sky / peach accent triad
+  accentBlue: '#4A90C2',
+  accentBlueSoft: '#D9EAF7',
+  accentPurple: '#8A7BC8',
+  accentPurpleSoft: 'rgba(138, 123, 200, 0.12)',
+  accentGold: '#E8862E',
+  accentGoldSoft: '#FBE3C8',
 
-  // Focus / active glow (subtle, never neon)
-  glowBlue: 'rgba(77, 141, 255, 0.28)',
-  glowGold: 'rgba(244, 197, 27, 0.22)',
-  glowPurple: 'rgba(155, 108, 255, 0.22)',
+  // Focus / active glow (warm, never neon)
+  glowBlue: 'rgba(74, 144, 194, 0.20)',
+  glowGold: 'rgba(232, 134, 46, 0.22)',
+  glowPurple: 'rgba(138, 123, 200, 0.20)',
 
-  textDisabled: '#4E5B6A',
-  textOnAccent: '#07111F', // dark text on gold/light accent fills
+  textDisabled: '#C6BDA9',
+  textOnAccent: '#FFFFFF', // white text on ink fills
   textOnPrimaryDark: '#FFFFFF',
 
-  overlayScrim: 'rgba(3, 7, 13, 0.72)',
+  overlayScrim: 'rgba(29, 27, 23, 0.38)',
 
   // Per-category accents — kept in sync with the Health Graph visualization
   // (see EVENT_TYPE_COLORS in HealthGraphScreen).
-  catSleep: '#6C7AE0',
-  catVitals: '#E74C6F',
-  catNutrition: '#2FBF71',
-  catActivity: '#00B4D8',
-  catPain: '#E84393',
-  catMedication: '#9B59B6',
-  catWellbeing: '#F1C40F',
-  catSymptom: '#E67E22',
-  catMood: '#FD79A8',
+  catSleep: '#8A7BC8',
+  catVitals: '#C2503E',
+  catNutrition: '#4E9B5F',
+  catActivity: '#4A90C2',
+  catPain: '#C2503E',
+  catMedication: '#8A7BC8',
+  catWellbeing: '#E8862E',
+  catSymptom: '#E8862E',
+  catMood: '#E8A07C',
 } as const;
 
 export const SPACING = {
@@ -152,45 +152,45 @@ export const SPACING = {
 } as const;
 
 export const BORDER_RADIUS = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
+  sm: 10,
+  md: 14,
+  lg: 20,
+  xl: 22,
   full: 9999,
   // Design-system alias
   pill: 9999,
-  small: 8,
-  medium: 12,
-  large: 16,
+  small: 10,
+  medium: 14,
+  large: 20,
 } as const;
 
 export const SHADOWS = {
   sm: {
-    shadowColor: '#000',
+    shadowColor: '#7C5A2E',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.08,
     shadowRadius: 3,
     elevation: 2,
   },
   md: {
-    shadowColor: '#000',
+    shadowColor: '#7C5A2E',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
     elevation: 4,
   },
   lg: {
-    shadowColor: '#000',
+    shadowColor: '#7C5A2E',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
     elevation: 8,
   },
   xl: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
+    shadowColor: '#7C5A2E',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
     elevation: 12,
   },
 } as const;
@@ -332,14 +332,14 @@ export type VisualStatus = typeof VISUAL_STATUS[keyof typeof VISUAL_STATUS];
 
 // ── Category color mapping for consistent accent usage ──
 export const CATEGORY_COLORS = {
-  activity: '#63C174',
-  sleep: '#9B6CFF',
-  vitals: '#F05F79',
-  hydration: '#4D8DFF',
-  nutrition: '#F0A030',
-  medication: '#F05F79',
-  wellbeing: '#31B7A5',
-  symptoms: '#F05F79',
-  records: '#4D8DFF',
-  mental: '#9B6CFF',
+  activity: '#4A90C2',
+  sleep: '#8A7BC8',
+  vitals: '#C2503E',
+  hydration: '#4A90C2',
+  nutrition: '#4E9B5F',
+  medication: '#8A7BC8',
+  wellbeing: '#E8862E',
+  symptoms: '#C2503E',
+  records: '#4A90C2',
+  mental: '#8A7BC8',
 } as const;

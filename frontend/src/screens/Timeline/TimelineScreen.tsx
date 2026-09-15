@@ -1,20 +1,42 @@
-import { useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+  Easing,
+  FadeInDown,
+  FadeInLeft,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '@/services/api';
-import { Button, Card, Chip } from '@/components';
+import { AmbientBackground, Button, Card, Chip } from '@/components';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants';
+import { useReducedMotion } from '@/theme';
+import { getCachedPatientId } from '@/services/patientIdentity';
+import {
+  getDailyLogs as dbGetDailyLogs,
+  getDailyLogEvents as dbGetDailyLogEvents,
+} from '@/db/queries/dailyLogs';
+import { getMedications as dbGetMedications } from '@/db/queries/medications';
+import {
+  storyItemFromLogEvent,
+  type HomeStoryItem,
+} from '../Dashboard/homeData';
 import type { RootStackParamList } from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -70,21 +92,45 @@ interface TimelineObservation {
 type TimelineItem = TimelineEvent | TimelineObservation;
 
 // ---------------------------------------------------------------------------
+// Warm clinical theme — scoped to this screen (cream canvas, ink + peach
+// accents, warm ink typography). Matches the app-wide Dribbble reference.
+// ---------------------------------------------------------------------------
+const CLIN = {
+  bg: '#EAE4D6',
+  card: '#FFFBF3',
+  ink: '#1D1B17',
+  muted: '#797166',
+  faint: '#E6DBC6',
+  red: '#1D1B17',
+  redSoft: '#FBEEDC',
+};
+
+// ---------------------------------------------------------------------------
 // Event type classification
 // ---------------------------------------------------------------------------
 
-type EventCategory = 'daily_log' | 'medical_record' | 'symptom' | 'vital' | 'observation' | 'other';
+type EventCategory =
+  | 'daily_log'
+  | 'medical_record'
+  | 'symptom'
+  | 'pain'
+  | 'vital'
+  | 'medication'
+  | 'observation'
+  | 'other';
 
 function classifyItem(item: TimelineItem): EventCategory {
   if (item.resource_type === 'observation') return 'observation';
-  
-  const t = item.event_type;
+
+  // The server mixes cases: check-in logs arrive lowercase (sleep_log,
+  // wellbeing_log, …) while clinical types arrive uppercase. Normalize once.
+  const t = (item.event_type ?? '').toUpperCase();
   if (
     t === 'WELLBEING_LOG' ||
     t === 'SLEEP_LOG' ||
     t === 'NUTRITION_LOG' ||
     t === 'ACTIVITY_LOG' ||
-    t === 'pain_log'
+    t === 'PATIENT_NOTE'
   ) {
     return 'daily_log';
   }
@@ -99,25 +145,48 @@ function classifyItem(item: TimelineItem): EventCategory {
     return 'medical_record';
   }
   if (t === 'SYMPTOM') return 'symptom';
+  if (t === 'PAIN_LOG') return 'pain';
   if (t === 'VITAL_SIGN') return 'vital';
+  if (t === 'MEDICATION_TAKEN') return 'medication';
   return 'other';
 }
 
-// Marker colors per category — restrained, clinical
+// Server event types that the on-device daily log already describes with
+// full values (payload_json). Compared UPPERCASE — the server mixes cases
+// (sleep_log vs MEDICATION_TAKEN). When a local entry covers the same
+// calendar day, the server duplicate is hidden so each logged moment
+// appears once — with its values, not just its label.
+const SERVER_DAILY_TYPES = new Set([
+  'WELLBEING_LOG',
+  'SLEEP_LOG',
+  'NUTRITION_LOG',
+  'ACTIVITY_LOG',
+  'PAIN_LOG',
+  'SYMPTOM',
+  'VITAL_SIGN',
+  'MEDICATION_TAKEN',
+  'PATIENT_NOTE',
+]);
+
+// Marker colors per category — warm clinical set on the cream chart.
 const CATEGORY_MARKER: Record<EventCategory, { color: string; bg: string }> = {
-  daily_log:     { color: '#31B7A5', bg: 'rgba(49, 183, 165, 0.12)' },
-  medical_record:{ color: '#4D8DFF', bg: 'rgba(77, 141, 255, 0.12)' },
-  symptom:       { color: '#F05F79', bg: 'rgba(240, 95, 121, 0.12)' },
-  vital:         { color: '#4D8DFF', bg: 'rgba(77, 141, 255, 0.12)' },
-  observation:   { color: '#9B6CFF', bg: 'rgba(155, 108, 255, 0.12)' },
-  other:         { color: '#9AA8B8', bg: 'rgba(154, 168, 184, 0.12)' },
+  daily_log:     { color: '#4E9B5F', bg: '#DDF0DF' },
+  medical_record:{ color: '#4A90C2', bg: '#D9EAF7' },
+  symptom:       { color: '#C2503E', bg: 'rgba(194, 80, 62, 0.10)' },
+  pain:          { color: '#C2503E', bg: 'rgba(194, 80, 62, 0.10)' },
+  vital:         { color: '#C96A1E', bg: '#FBE3C8' },
+  medication:    { color: '#8A7BC8', bg: 'rgba(138, 123, 200, 0.12)' },
+  observation:   { color: '#4A90C2', bg: '#D9EAF7' },
+  other:         { color: '#797166', bg: '#F4EDDF' },
 };
 
 const CATEGORY_LABEL: Record<EventCategory, string> = {
   daily_log: 'Daily Log',
   medical_record: 'Medical Record',
   symptom: 'Symptom',
+  pain: 'Pain',
   vital: 'Vital Sign',
+  medication: 'Medication',
   observation: 'Observation',
   other: 'Clinical Event',
 };
@@ -133,7 +202,9 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'daily_log', label: 'Daily Logs' },
   { key: 'medical_record', label: 'Records' },
   { key: 'symptom', label: 'Symptoms' },
+  { key: 'pain', label: 'Pain' },
   { key: 'vital', label: 'Vitals' },
+  { key: 'medication', label: 'Meds' },
   { key: 'observation', label: 'Observations' },
 ];
 
@@ -205,11 +276,11 @@ function trendLabel(trend: string): string {
 
 function statusColor(status: string): string {
   switch (status) {
-    case 'normal': return COLORS.success ?? '#34C759';
-    case 'mild_attention': return COLORS.warning ?? '#FF9500';
-    case 'warning': return COLORS.orange ?? '#FF9500';
-    case 'critical': return COLORS.error ?? '#FF3B30';
-    default: return '#9AA8B8';
+    case 'normal': return '#2B8A3E';
+    case 'mild_attention': return '#E67700';
+    case 'warning': return '#D9480F';
+    case 'critical': return CLIN.red;
+    default: return '#5C6B7A';
   }
 }
 
@@ -217,16 +288,112 @@ function statusColor(status: string): string {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Local (on-device) daily-log entries — the value-rich timeline rows
+// ---------------------------------------------------------------------------
+
+/** Local story category → timeline category. */
+function localCategory(item: HomeStoryItem): EventCategory {
+  switch (item.category) {
+    case 'wellbeing':
+    case 'sleep':
+    case 'activity':
+    case 'nutrition':
+    case 'note':
+      return 'daily_log';
+    case 'symptom':
+      return 'symptom';
+    case 'pain':
+      return 'pain';
+    case 'vital':
+      return 'vital';
+    case 'medication':
+      return 'medication';
+    default:
+      return 'other';
+  }
+}
+
+/** Preferred accent per local category (deepened for the white chart). */
+function localAccent(item: HomeStoryItem): { color: string; bg: string } {
+  const base = CATEGORY_MARKER[localCategory(item)];
+  switch (item.category) {
+    case 'sleep':
+      return { color: '#4263EB', bg: 'rgba(66, 99, 235, 0.08)' };
+    case 'activity':
+      return { color: '#0C8599', bg: 'rgba(12, 133, 153, 0.08)' };
+    case 'nutrition':
+      return { color: '#2B8A3E', bg: 'rgba(43, 138, 62, 0.08)' };
+    case 'wellbeing':
+    case 'note':
+      return { color: '#E67700', bg: 'rgba(230, 119, 0, 0.10)' };
+    default:
+      return base;
+  }
+}
+
+/**
+ * Split a "value · spec · spec" detail line into a chart hero (first value)
+ * and a muted spec line, without repeating the card title:
+ * "Headache · 6/10 · 45 min" → hero "6/10", sub "45 min".
+ */
+function splitHero(title: string, detail: string): { hero: string; sub: string | null } {
+  let d = detail.trim();
+  if (d.toLowerCase().startsWith(title.toLowerCase())) {
+    d = d.slice(title.length).replace(/^[\s·:|-]+/, '');
+  }
+  const parts = d.split('·').map((s) => s.trim()).filter(Boolean);
+  if (parts.length === 0) return { hero: title, sub: null };
+  return { hero: parts[0]!, sub: parts.length > 1 ? parts.slice(1).join(' · ') : null };
+}
+
+/**
+ * A logged moment with its actual values — e.g. "Sleep / 7h 30m · quality
+ * 4/5", "Resting pulse / 72 bpm", "Paracetamol · 500 mg". Built from the
+ * on-device daily log (full payload values), never just "reported by patient".
+ */
+function LoggedCard({ item, when }: { item: HomeStoryItem; when: string }) {
+  const category = localCategory(item);
+  const { color, bg } = localAccent(item);
+  const { hero, sub } = splitHero(item.title, item.detail);
+  return (
+    <View style={styles.eventRow}>
+      <View style={styles.timelineTrack}>
+        <View style={[styles.marker, { backgroundColor: bg, borderColor: color }]}>
+          <Text style={styles.markerIcon}>{item.icon}</Text>
+        </View>
+        <View style={styles.timelineLine} />
+      </View>
+      <View style={[styles.eventContent, { borderLeftColor: color }]}>
+        <View style={styles.eventHeader}>
+          <Text style={[styles.eventCategory, { color }]}>
+            {CATEGORY_LABEL[category]}
+          </Text>
+          <Text style={styles.eventTime}>{when}</Text>
+        </View>
+        <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
+        {/* The logged value — chart hero: big ink reading, specs beneath */}
+        <Text style={styles.loggedValue} numberOfLines={1} selectable>
+          {hero}
+        </Text>
+        {sub ? (
+          <Text style={styles.loggedSub} numberOfLines={1}>{sub}</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function EventMarker({ category }: { category: EventCategory }) {
   const { color, bg } = CATEGORY_MARKER[category];
   return (
-    <View style={[styles.marker, { backgroundColor: bg }]}>
+    <View style={[styles.marker, { backgroundColor: bg, borderColor: color }]}>
       <View style={[styles.markerDot, { backgroundColor: color }]} />
     </View>
   );
 }
 
-function ObservationCard({ observation }: { observation: TimelineObservation }) {
+function ObservationCard({ observation, when }: { observation: TimelineObservation; when: string }) {
   const category = classifyItem(observation);
   const { color } = CATEGORY_MARKER[category];
   const severityPct = Math.round(observation.visual_severity_score * 100);
@@ -240,12 +407,12 @@ function ObservationCard({ observation }: { observation: TimelineObservation }) 
       </View>
 
       {/* Content */}
-      <View style={styles.eventContent}>
+      <View style={[styles.eventContent, { borderLeftColor: color }]}>
         <View style={styles.eventHeader}>
           <Text style={[styles.eventCategory, { color }]}>
             {CATEGORY_LABEL[category]}
           </Text>
-          <Text style={styles.eventTime}>{timeDisplay(observation.event_time)}</Text>
+          <Text style={styles.eventTime}>{when}</Text>
         </View>
 
         <Text style={styles.eventTitle}>{observation.finding_display_name}</Text>
@@ -314,9 +481,11 @@ function ObservationCard({ observation }: { observation: TimelineObservation }) 
 
 function EventCard({
   event,
+  when,
   onDocumentPress,
 }: {
   event: TimelineEvent;
+  when: string;
   onDocumentPress: (docId: string) => void;
 }) {
   const category = classifyItem(event);
@@ -331,21 +500,42 @@ function EventCard({
       </View>
 
       {/* Content */}
-      <View style={styles.eventContent}>
+      <View style={[styles.eventContent, { borderLeftColor: color }]}>
         <View style={styles.eventHeader}>
           <Text style={[styles.eventCategory, { color }]}>
             {CATEGORY_LABEL[category]}
           </Text>
-          <Text style={styles.eventTime}>{timeDisplay(event.event_time)}</Text>
+          <Text style={styles.eventTime}>{when}</Text>
         </View>
 
         <Text style={styles.eventTitle}>{titleFor(event)}</Text>
+
+        {/* Hero value — big ink reading + red unit */}
+        {event.vital_sign && event.vital_sign.value != null ? (
+          <Text style={styles.loggedValue} selectable>
+            {event.vital_sign.value}
+            {event.vital_sign.unit ? <Text style={styles.heroUnit}> {event.vital_sign.unit}</Text> : null}
+          </Text>
+        ) : null}
+        {event.lab_result ? (
+          <Text style={styles.loggedValue} selectable>
+            {event.lab_result.value}
+            {event.lab_result.unit ? <Text style={styles.heroUnit}> {event.lab_result.unit}</Text> : null}
+          </Text>
+        ) : null}
 
         {/* Source badge */}
         <View style={styles.badgeRow}>
           <View style={styles.sourceBadge}>
             <Text style={styles.sourceBadgeText}>{sourceLabel(event.source_type)}</Text>
           </View>
+          {event.verification_status ? (
+            <View style={styles.sourceBadge}>
+              <Text style={styles.sourceBadgeText}>
+                {event.verification_status.replaceAll('_', ' ').toLowerCase()}
+              </Text>
+            </View>
+          ) : null}
           {event.evidence && (
             <Pressable
               onPress={() => onDocumentPress(event.evidence!.document_id)}
@@ -356,17 +546,7 @@ function EventCard({
           )}
         </View>
 
-        {/* Data rows */}
-        {event.vital_sign && (
-          <View style={styles.dataRow}>
-            <Text style={styles.dataLabel}>Value</Text>
-            <Text style={styles.dataValue}>
-              {event.vital_sign.value}{' '}
-              <Text style={styles.dataUnit}>{event.vital_sign.unit}</Text>
-            </Text>
-          </View>
-        )}
-
+        {/* Data rows (vital value already shown as hero above) */}
         {event.lab_result && (
           <View style={styles.dataRow}>
             <Text style={styles.dataLabel}>Result</Text>
@@ -381,7 +561,7 @@ function EventCard({
                 </Text>
               )}
               {event.lab_result.abnormal_flag && (
-                <Text style={[styles.dataFlag, { color: COLORS.warning }]}>
+                <Text style={[styles.dataFlag, { color: CLIN.red }]}>
                   Flag: {event.lab_result.abnormal_flag}
                 </Text>
               )}
@@ -411,6 +591,78 @@ function EventCard({
   );
 }
 
+/** Append duration + fever temperature tokens to a symptom detail line. */
+function withSymptomExtras(detail: string, payload: Record<string, unknown>): string {
+  const extras: string[] = [];
+  const dur = payload['duration_minutes'];
+  if (typeof dur === 'number' && Number.isFinite(dur) && dur > 0) {
+    extras.push(dur >= 60 ? `${Math.floor(dur / 60)}h ${dur % 60}m` : `${dur} min`);
+  }
+  const notes = payload['notes'];
+  if (typeof notes === 'string') {
+    const m = notes.match(/Temp\s+[\d.]+\s*°[CF]/);
+    if (m) extras.push(m[0]);
+  }
+  return extras.length ? `${detail} · ${extras.join(' · ')}` : detail;
+}
+
+/**
+ * Enrich a local story item with concept names + dose values from the raw
+ * payload (all on-device, no new endpoints):
+ * - symptom/vital UUIDs become real names ("Headache", "Resting pulse")
+ * - medication doses become "Paracetamol · 500 mg"
+ */
+function enrichLocalItem(
+  item: HomeStoryItem,
+  payloadJson: string,
+  conceptId: string | null,
+  names: Map<string, string>,
+): HomeStoryItem {
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = JSON.parse(payloadJson ?? '{}') as Record<string, unknown>;
+  } catch {
+    payload = {};
+  }
+  if ((item.category === 'symptom' || item.category === 'vital') && conceptId) {
+    const name = names.get(conceptId);
+    if (name) {
+      // detail already carries the value ("· 6/10", "72 bpm"); swap title.
+      const detail = item.category === 'symptom' && item.detail.startsWith('Symptom')
+        ? item.detail.replace(/^Symptom/, name)
+        : item.detail;
+      return { ...item, title: name, detail: withSymptomExtras(detail, payload) };
+    }
+  }
+  if (item.category === 'symptom') {
+    return { ...item, detail: withSymptomExtras(item.detail, payload) };
+  }
+  if (item.category === 'medication') {
+    const dose = payload['dosage_value'];
+    const unit = payload['dosage_unit'];
+    if (typeof dose === 'number' && Number.isFinite(dose)) {
+      const doseText = `${dose}${typeof unit === 'string' && unit ? ` ${unit}` : ''}`;
+      return { ...item, detail: `${item.detail} · ${doseText}` };
+    }
+  }
+  if (item.category === 'pain') {
+    const sev = payload['severity'];
+    const ptype = payload['pain_type'];
+    const bits = [
+      typeof ptype === 'string' && ptype ? ptype : 'Pain',
+      typeof sev === 'number' ? `${sev}/10` : null,
+    ].filter(Boolean);
+    return { ...item, detail: bits.join(' · ') };
+  }
+  return item;
+}
+
+// Memoized rows — props come from memoized arrays, so refresh toggles and
+// unrelated parent renders skip every card.
+const MemoLoggedCard = memo(LoggedCard);
+const MemoObservationCard = memo(ObservationCard);
+const MemoEventCard = memo(EventCard);
+
 // ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
@@ -418,124 +670,329 @@ function EventCard({
 export default function TimelineScreen() {
   const navigation = useNavigation<Nav>();
   const [filter, setFilter] = useState<FilterKey>('all');
+  const reducedMotion = useReducedMotion();
+
+  // Resting heartbeat on the hero title: lub… dub… pause. Small amplitude,
+  // slow cycle, UI-thread loop. Static text under reduced motion.
+  const beat = useSharedValue(1);
+  useEffect(() => {
+    if (reducedMotion) return;
+    beat.value = withRepeat(
+      withSequence(
+        withTiming(1.035, { duration: 150, easing: Easing.out(Easing.quad) }),
+        withTiming(1, { duration: 170 }),
+        withTiming(1.055, { duration: 130, easing: Easing.out(Easing.quad) }),
+        withTiming(1, { duration: 230 }),
+        withTiming(1, { duration: 1000 }),
+      ),
+      -1,
+    );
+  }, [beat, reducedMotion]);
+  const beatStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: beat.value }],
+  }));
+
+  // ── On-device daily logs (full values) + concept names ──
+  const [localItems, setLocalItems] = useState<HomeStoryItem[]>([]);
+  const [localDays, setLocalDays] = useState<Set<string>>(new Set());
+  const [localRefresh, setLocalRefresh] = useState(0);
+
+  const loadLocal = useCallback(async () => {
+    try {
+      const patientId = getCachedPatientId();
+      if (!patientId) return;
+      // Concept names (best-effort): turn symptom/vital UUIDs into labels.
+      let names = new Map<string, string>();
+      try {
+        const concepts = await api.get<{ id: string; short_name: string | null; display_name: string }[]>(
+          '/api/v1/ontology/manual-log-concepts',
+        );
+        names = new Map(
+          (Array.isArray(concepts) ? concepts : []).map((c) => [
+            c.id,
+            c.short_name || c.display_name,
+          ]),
+        );
+      } catch {
+        // Offline — titles fall back to generic labels, values still show.
+      }
+      const meds = await dbGetMedications(patientId).catch(() => []);
+      const medName = new Map(meds.map((m) => [m.medication_id, m.name]));
+      const logs = await dbGetDailyLogs(patientId, 90).catch(() => []);
+      // Concurrent event fetch — sequential awaits stall first paint.
+      const perLog = await Promise.all(
+        logs.map((log) => dbGetDailyLogEvents(patientId, log.group_id).catch(() => [])),
+      );
+      const out: HomeStoryItem[] = [];
+      for (let li = 0; li < logs.length; li++) {
+        const events = perLog[li] ?? [];
+        for (const ev of events) {
+          const item = storyItemFromLogEvent(
+            {
+              event_id: ev.event_id,
+              group_id: ev.group_id,
+              event_type: ev.event_type,
+              concept_id: ev.concept_id,
+              event_time: ev.event_time,
+              payload_json: ev.payload_json,
+              created_at: ev.created_at,
+            },
+            medName,
+          );
+          if (!item) continue;
+          out.push(enrichLocalItem(item, ev.payload_json, ev.concept_id, names));
+        }
+      }
+      out.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+      setLocalItems(out);
+      setLocalDays(new Set(out.map((i) => i.dayKey)));
+    } catch {
+      // Local-first is best-effort; the server timeline still renders.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadLocal();
+  }, [loadLocal, localRefresh]);
 
   const query = useQuery({
     queryKey: ['timeline'],
     queryFn: async () => {
       const raw = await api.get<any>('/api/v1/timeline');
-      
-      // ── BUG 1 DIAGNOSTICS: Log exact raw response shape ──
-      console.log('[GraphData] raw response type =', typeof raw);
-      console.log('[GraphData] raw response keys =', raw !== null ? Object.keys(raw) : 'null');
-      console.log('[GraphData] raw response isArray =', Array.isArray(raw));
-      
-      // Determine the actual items array
+
+      // Unwrap common envelope shapes; fall back to a single item.
       let items: any[];
       if (Array.isArray(raw)) {
         items = raw;
       } else if (raw && typeof raw === 'object') {
-        // Check common wrapper patterns
-        const keys = Object.keys(raw);
-        if ('items' in raw && Array.isArray(raw.items)) {
-          console.log('[GraphData] response wrapped in { items: [...] }');
+        if (Array.isArray(raw.items)) {
           items = raw.items;
-        } else if ('data' in raw && Array.isArray(raw.data)) {
-          console.log('[GraphData] response wrapped in { data: [...] }');
+        } else if (Array.isArray(raw.data)) {
           items = raw.data;
-        } else if ('results' in raw && Array.isArray(raw.results)) {
-          console.log('[GraphData] response wrapped in { results: [...] }');
+        } else if (Array.isArray(raw.results)) {
           items = raw.results;
         } else {
-          console.log('[GraphData] response is object but not an array wrapper. Keys:', keys);
-          // Try to find the first array-valued key
-          const arrayKey = keys.find((k) => Array.isArray(raw[k]));
-          if (arrayKey) {
-            console.log(`[GraphData] found array at key "${arrayKey}"`);
-            items = raw[arrayKey];
-          } else {
-            console.log('[GraphData] no array found in response — treating whole object as single item');
-            items = [raw];
-          }
+          const arrayKey = Object.keys(raw).find((k) => Array.isArray(raw[k]));
+          items = arrayKey ? raw[arrayKey] : [raw];
         }
       } else {
-        console.log('[GraphData] unexpected response shape:', raw);
         items = [];
       }
 
-      console.log('[GraphData] raw response length =', items.length);
-      
-      if (items.length > 0) {
-        const first = items[0];
-        console.log('[GraphData] first record type =', first.resource_type ?? 'unknown');
-        console.log('[GraphData] first record event_type =', first.event_type ?? 'N/A');
-      }
-
-      // ── Classify ──
-      const events = items.filter((i: any) => i.resource_type === 'event');
-      const observations = items.filter((i: any) => i.resource_type === 'observation');
-      const unknown = items.filter((i: any) => i.resource_type !== 'event' && i.resource_type !== 'observation');
-      
-      console.log(`[GraphData] events = ${events.length}`);
-      console.log(`[GraphData] observations = ${observations.length}`);
-      console.log(`[GraphData] unknown resource_type = ${unknown.length}`);
-      console.log(`[GraphData] total classified = ${events.length + observations.length + unknown.length}`);
-      
-      if (unknown.length > 0) {
-        console.log('[GraphData] unknown resource_types:', 
-          unknown.map((u: any) => u.resource_type));
-      }
-
-      // Count event types
-      const eventTypes: Record<string, number> = {};
-      events.forEach((e: any) => {
-        const t = e.event_type ?? 'unknown';
-        eventTypes[t] = (eventTypes[t] ?? 0) + 1;
-      });
-      console.log(`[GraphData] event types:`, JSON.stringify(eventTypes));
-      
-      // Count observation types
-      const obsTypes: Record<string, number> = {};
-      observations.forEach((o: any) => {
-        const t = o.observation_type ?? 'unknown';
-        obsTypes[t] = (obsTypes[t] ?? 0) + 1;
-      });
-      console.log(`[GraphData] observation types:`, JSON.stringify(obsTypes));
-      
       return items as TimelineItem[];
     },
     staleTime: 5 * 60 * 1000,
   });
 
+  // Reload on focus: a daily log saved on another screen writes to SQLite
+  // after this screen mounted. Without this, localItems stay stale while the
+  // server-dedup filter hides the fresh server copy — the entry looks lost.
+  useFocusEffect(
+    useCallback(() => {
+      setLocalRefresh((n) => n + 1);
+      void query.refetch();
+    }, [query.refetch]),
+  );
+
   const [refreshing, setRefreshing] = useState(false);
   const refresh = async () => {
     setRefreshing(true);
+    setLocalRefresh((n) => n + 1);
     await query.refetch();
     setRefreshing(false);
   };
 
-  const items = query.data ?? [];
+  const goToDocument = useCallback(
+    (docId: string) => navigation.navigate('DocumentDetail', { documentId: docId }),
+    [navigation],
+  );
+
+  const serverItems = query.data ?? [];
+
+  // Hide server daily-log duplicates only for days the on-device log covers
+  // with full values; older server-only days still render (basic cards).
+  const visibleServer = useMemo(
+    () =>
+      serverItems.filter((i) => {
+        if (i.resource_type !== 'event') return true;
+        const ev = i as TimelineEvent;
+        if (!ev.event_type || !SERVER_DAILY_TYPES.has(ev.event_type.toUpperCase())) return true;
+        return !localDays.has(dateKey(i));
+      }),
+    [serverItems, localDays],
+  );
+
+  type MergedItem =
+    | { kind: 'local'; item: HomeStoryItem }
+    | { kind: 'event'; item: TimelineEvent }
+    | { kind: 'observation'; item: TimelineObservation };
+
+  // Numeric sort key + day + display strings, computed ONCE at merge time so
+  // render never allocates Dates or runs locale formatters per row.
+  interface PreparedItem {
+    node: MergedItem;
+    key: string;
+    timeMs: number;
+    day: string;
+    category: EventCategory;
+    when: string;
+  }
+
+  function prepareItem(m: MergedItem): PreparedItem {
+    const key = m.kind === 'local' ? `local-${m.item.id}` : m.item.id;
+    const rawTime = m.kind === 'local' ? m.item.time : m.item.event_time;
+    const timeMs = new Date(rawTime).getTime();
+    const day = m.kind === 'local' ? m.item.dayKey : dateKey(m.item);
+    const category = m.kind === 'local' ? localCategory(m.item) : classifyItem(m.item);
+    const when = `${displayDate(day)} · ${timeDisplay(typeof rawTime === 'string' ? rawTime : new Date(rawTime).toISOString())}`;
+    return { node: m, key, timeMs, day, category, when };
+  }
+
+  const merged: PreparedItem[] = useMemo(() => {
+    const all: PreparedItem[] = [
+      ...localItems.map((item) => prepareItem({ kind: 'local', item })),
+      ...visibleServer.map((item) =>
+        prepareItem(
+          item.resource_type === 'observation'
+            ? { kind: 'observation', item: item as TimelineObservation }
+            : { kind: 'event', item: item as TimelineEvent },
+        ),
+      ),
+    ];
+    all.sort((a, b) => b.timeMs - a.timeMs);
+    return all;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localItems, visibleServer]);
 
   const filteredItems = useMemo(() => {
-    if (filter === 'all') return items;
-    return items.filter((i) => classifyItem(i) === filter);
-  }, [items, filter]);
+    if (filter === 'all') return merged;
+    return merged.filter((i) => i.category === filter);
+  }, [merged, filter]);
 
-  // Group items by date
+  // Rising water, no index math: a SectionList pins each date deck
+  // natively (stickySectionHeadersEnabled) while cards flow beneath the
+  // translucent deck — every card visibly overlaps at the top as the water
+  // moves upward. Section headers need no sticky indices by construction.
   const sections = useMemo(() => {
-    const grouped: { date: string; items: TimelineItem[] }[] = [];
-    let current: { date: string; items: TimelineItem[] } | null = null;
-
+    const grouped: { date: string; count: number; data: PreparedItem[] }[] = [];
+    let current: { date: string; count: number; data: PreparedItem[] } | null = null;
     for (const item of filteredItems) {
-      const dk = dateKey(item);
-      if (!current || current.date !== dk) {
-        current = { date: dk, items: [] };
+      if (!current || current.date !== item.day) {
+        current = { date: item.day, count: 0, data: [] };
         grouped.push(current);
       }
-      current.items.push(item);
+      current.data.push(item);
+      current.count += 1;
     }
-
     return grouped;
   }, [filteredItems]);
+
+  // Single-select with toggle: tapping the active view releases back to All,
+  // so a tap always shows ONLY the selected view — never a mixed state.
+  const toggleFilter = useCallback(
+    (key: FilterKey) => setFilter((prev) => (prev === key ? 'all' : key)),
+    [],
+  );
+
+  // Stat strip taps isolate their view too.
+  const STAT_FILTER: Record<string, FilterKey> = {
+    logged: 'daily_log',
+    records: 'medical_record',
+    observations: 'observation',
+  };
+
+  const loggedCount = localItems.length;  const serverRecCount = useMemo(
+    () => visibleServer.filter((i) => i.resource_type === 'event').length,
+    [visibleServer],
+  );
+  const serverObsCount = useMemo(
+    () => visibleServer.filter((i) => i.resource_type === 'observation').length,
+    [visibleServer],
+  );
+
+  // Header (back + hero + tappable stats + filter rail), memoized so filter
+  // changes and refresh toggles don't re-measure/re-mount the list chrome.
+  const listHeader = useMemo(
+    () => (
+      <View>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={8}
+        >
+          <Text style={styles.backBtnText}>‹ Back</Text>
+        </Pressable>
+        {/* Hero first… single animated title line. */}
+        <View style={styles.heroScroll}>
+          <View style={styles.heroCompact}>
+            <View style={styles.heroGlowA} pointerEvents="none" />
+            <Animated.View entering={reducedMotion ? undefined : FadeInDown.duration(350)}>
+              <Animated.Text style={[styles.title, !reducedMotion && beatStyle]}>
+                Health Timeline
+              </Animated.Text>
+            </Animated.View>
+            <Animated.View
+              entering={reducedMotion ? undefined : FadeInLeft.delay(150).duration(400)}
+              style={styles.titleRule}
+            />
+          </View>
+        </View>
+
+        {/* …metrics below it. Everything here scrolls away together. */}
+        {(() => {
+          const stats = [
+            { key: 'logged', n: loggedCount, label: loggedCount === 1 ? 'entry logged' : 'entries logged', color: '#0E9F8A' },
+            { key: 'records', n: serverRecCount, label: serverRecCount === 1 ? 'record' : 'records', color: '#2B6CB0' },
+            { key: 'observations', n: serverObsCount, label: serverObsCount === 1 ? 'observation' : 'observations', color: '#6741D9' },
+          ];
+          return (
+            <View style={styles.statStrip}>
+              {stats.map((s, i) => {
+                const target = STAT_FILTER[s.key]!;
+                const active = filter === target;
+                return (
+                  <Pressable
+                    key={s.key}
+                    onPress={() => toggleFilter(target)}
+                    style={[styles.stat, i > 0 && styles.statDivided, active && styles.statActive]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={`Show only ${s.label}, ${s.n}`}
+                  >
+                    <Text style={[styles.statNum, { color: s.color }]}>{s.n}</Text>
+                    <Text style={[styles.statLabel, active && styles.statLabelActive]}>{s.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          );
+        })()}
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRail}
+        >
+          {FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <Chip
+                key={f.key}
+                label={f.label}
+                selected={active}
+                color={COLORS.accentBlue}
+                onPress={() => toggleFilter(f.key)}
+              />
+            );
+          })}
+        </ScrollView>
+      </View>
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filter, loggedCount, serverRecCount, serverObsCount, navigation, toggleFilter, reducedMotion],
+  );
 
   // -----------------------------------------------------------------------
   // Loading / error states
@@ -569,9 +1026,15 @@ export default function TimelineScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <FlatList
-        data={sections}
-        keyExtractor={(section) => section.date}
+      <AmbientBackground tone="clinical" />
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.key}
+        stickySectionHeadersEnabled
+        windowSize={7}
+        maxToRenderPerBatch={6}
+        initialNumToRender={8}
+        removeClippedSubviews
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -580,88 +1043,47 @@ export default function TimelineScreen() {
             colors={[COLORS.primary]}
           />
         }
-        ListHeaderComponent={
-          <View>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.title}>Health Timeline</Text>
-              <Text style={styles.subtitle}>
-                Events, observations & clinical records
-              </Text>
-            </View>
-
-            {/* Summary badges */}
-            <View style={styles.summaryRow}>
-              {(() => {
-                const evCount = items.filter((i) => i.resource_type === 'event').length;
-                const obsCount = items.filter((i) => i.resource_type === 'observation').length;
-                return (
-                  <>
-                    {evCount > 0 && (
-                      <View style={styles.summaryBadge} key="badge-events">
-                        <Text style={styles.summaryBadgeText}>{evCount} events</Text>
-                      </View>
-                    )}
-                    {obsCount > 0 && (
-                      <View style={[styles.summaryBadge, { backgroundColor: 'rgba(155, 108, 255, 0.12)' }]} key="badge-observations">
-                        <Text style={[styles.summaryBadgeText, { color: '#9B6CFF' }]}>{obsCount} observations</Text>
-                      </View>
-                    )}
-                  </>
-                );
-              })()}
-            </View>
-
-            {/* Filters */}
-            <View style={styles.filterRow}>
-              {FILTERS.map((f) => {
-                const active = filter === f.key;
-                return (
-                  <Chip
-                    key={f.key}
-                    label={f.label}
-                    selected={active}
-                    color={COLORS.accentBlue}
-                    onPress={() => setFilter(f.key)}
-                  />
-                );
-              })}
-            </View>
-          </View>
-        }
+        ListHeaderComponent={listHeader}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No events yet</Text>
+            <Text style={styles.emptyTitle}>
+              {filter === 'all' ? 'No events yet' : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase() ?? 'events'} yet`}
+            </Text>
             <Text style={styles.emptyText}>
-              Saved daily logs, medical records, observations, and verified records will
-              appear here.
+              {filter === 'all'
+                ? 'Saved daily logs, medical records, observations, and verified records will appear here.'
+                : 'Try another filter — or log something today and come back.'}
             </Text>
           </View>
         }
-        renderItem={({ item: section }) => (
-          <View style={styles.dateSection}>
-            <Text style={styles.dateHeading}>{displayDate(section.date)}</Text>
-            {section.items.map((item) => {
-              if (item.resource_type === 'observation') {
-                return (
-                  <ObservationCard
-                    key={item.id}
-                    observation={item as TimelineObservation}
-                  />
-                );
-              }
-              return (
-                <EventCard
-                  key={item.id}
-                  event={item as TimelineEvent}
-                  onDocumentPress={(docId) =>
-                    navigation.navigate('DocumentDetail', { documentId: docId })
-                  }
-                />
-              );
-            })}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.dateDivider}>
+            <View style={styles.dateHeaderRow}>
+              <Text style={styles.dateHeading}>{displayDate(section.date)}</Text>
+              <View style={styles.dateCountPill}>
+                <Text style={styles.dateCountText}>{section.count}</Text>
+              </View>
+              <View style={styles.dateRule} />
+            </View>
           </View>
         )}
+        renderItem={({ item }) => {
+          const node = item.node;
+          const when = item.when;
+          if (node.kind === 'local') {
+            return <MemoLoggedCard item={node.item} when={when} />;
+          }
+          if (node.kind === 'observation') {
+            return <MemoObservationCard observation={node.item} when={when} />;
+          }
+          return (
+            <MemoEventCard
+              event={node.item}
+              when={when}
+              onDocumentPress={goToDocument}
+            />
+          );
+        }}
       />
     </SafeAreaView>
   );
@@ -674,7 +1096,7 @@ export default function TimelineScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: CLIN.bg,
   },
   center: {
     flex: 1,
@@ -685,7 +1107,7 @@ const styles = StyleSheet.create({
   },
   centerText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
+    color: CLIN.muted,
     textAlign: 'center',
   },
   content: {
@@ -693,60 +1115,159 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xxl,
   },
 
-  // Header — premium hero with subtle inner depth
-  header: {
-    paddingVertical: SPACING.md,
+  // Header content lives in the list header (scrolls away together).
+  backBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: CLIN.card,
+    borderWidth: 1,
+    borderColor: CLIN.faint,
     marginBottom: SPACING.sm,
+  },
+  backBtnText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: CLIN.red,
+  },
+  heroScroll: {
+    marginBottom: SPACING.sm,
+  },
+  // Header — white chart hero with red/blue glow
+  heroCompact: {
+    borderWidth: 1,
+    borderColor: CLIN.faint,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: CLIN.card,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    overflow: 'hidden',
+    shadowColor: '#16212C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  heroGlowA: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    top: -80,
+    right: -50,
+    backgroundColor: 'rgba(215, 38, 61, 0.07)',
   },
   title: {
     ...TYPOGRAPHY.h1,
-    color: COLORS.textPrimary,
+    color: CLIN.ink,
   },
-  subtitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+  titleRule: {
+    width: 64,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: CLIN.red,
     marginTop: SPACING.xs,
   },
 
-  // Summary badges
-  summaryRow: {
+  // Stat strip — one white surface, divided tappable stats
+  statStrip: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.md,
-  },
-  summaryBadge: {
-    paddingHorizontal: SPACING.md,
+    backgroundColor: CLIN.card,
+    borderWidth: 1,
+    borderColor: CLIN.faint,
+    borderRadius: BORDER_RADIUS.lg,
     paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.full,
-    backgroundColor: 'rgba(77, 141, 255, 0.12)',
+    shadowColor: '#16212C',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  summaryBadgeText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: '#4D8DFF',
-    fontSize: 12,
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  statActive: {
+    backgroundColor: 'rgba(215, 38, 61, 0.06)',
+  },
+  statDivided: {
+    borderLeftWidth: 1,
+    borderLeftColor: CLIN.faint,
+  },
+  statNum: {
+    ...TYPOGRAPHY.h2,
+    fontVariant: ['tabular-nums'],
+  },
+  statLabel: {
+    ...TYPOGRAPHY.caption,
+    color: CLIN.muted,
+  },
+  statLabelActive: {
+    color: CLIN.red,
+    fontWeight: '800',
   },
 
-  // Filters
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  // Filters — horizontal rail
+  filterRail: {
     gap: SPACING.xs,
-    marginBottom: SPACING.lg,
+    paddingRight: SPACING.md,
+    paddingBottom: SPACING.xs,
   },
 
-  // Date sections — hairline separator with restrained gold date label
-  dateSection: {
-    marginBottom: SPACING.lg,
+  // Pinned date deck — translucent so cards visibly flow beneath it,
+  // soft shadow so the overlap reads as floating, not clipped.
+  dateDivider: {
+    backgroundColor: 'rgba(245, 247, 250, 0.94)',
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xs,
+    marginBottom: SPACING.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: CLIN.faint,
+    shadowColor: '#16212C',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  dateHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
   dateHeading: {
     ...TYPOGRAPHY.overline,
-    color: COLORS.accentGold,
-    marginBottom: SPACING.sm,
+    color: CLIN.ink,
+    fontWeight: '800',
     letterSpacing: 1,
-    opacity: 0.9,
+  },
+  dateCountPill: {
+    minWidth: 24,
+    height: 20,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: CLIN.redSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(215, 38, 61, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  dateCountText: {
+    ...TYPOGRAPHY.label,
+    color: CLIN.red,
+    fontSize: 11,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  dateRule: {
+    flex: 1,
+    height: 1,
+    backgroundColor: CLIN.faint,
   },
 
-  // Event row (marker + content)
+  // Event row — compact: real margins only, no decorative gaps.
   eventRow: {
     flexDirection: 'row',
     marginBottom: SPACING.sm,
@@ -754,16 +1275,18 @@ const styles = StyleSheet.create({
 
   // Timeline track (marker + vertical line)
   timelineTrack: {
-    width: 28,
+    width: 26,
     alignItems: 'center',
   },
   marker: {
     width: 20,
     height: 20,
     borderRadius: BORDER_RADIUS.full,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
+    backgroundColor: CLIN.card,
   },
   markerDot: {
     width: 8,
@@ -772,104 +1295,134 @@ const styles = StyleSheet.create({
   },
   timelineLine: {
     flex: 1,
-    width: 1.5,
-    backgroundColor: COLORS.borderFaint,
-    marginTop: 4,
-    marginBottom: -4,
+    width: 2,
+    backgroundColor: CLIN.faint,
+    marginTop: 3,
+    marginBottom: -6,
   },
 
-  // Event content — elevated dark card with soft depth (Level 2)
+  // Event content — compact white chart card with category rail
   eventContent: {
     flex: 1,
-    backgroundColor: COLORS.surfaceElevated,
+    backgroundColor: CLIN.card,
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    marginLeft: SPACING.sm,
-    shadowColor: '#000',
+    borderColor: CLIN.faint,
+    borderLeftWidth: 3,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    marginLeft: SPACING.xs,
+    shadowColor: '#16212C',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
   },
   eventHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.xs,
   },
   eventCategory: {
     ...TYPOGRAPHY.label,
-    letterSpacing: 0.3,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    fontSize: 10,
   },
   eventTime: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    fontSize: 11,
+    color: CLIN.muted,
+    fontVariant: ['tabular-nums'],
   },
   eventTitle: {
     ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
+    fontSize: 15,
+    color: CLIN.ink,
   },
 
-  // Badges — muted pill on sunken tone
+  // Logged value — chart hero: big ink reading, specs beneath in muted
+  loggedValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: CLIN.ink,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.5,
+  },
+  loggedSub: {
+    fontSize: 12,
+    color: CLIN.muted,
+    marginTop: 1,
+  },
+  heroUnit: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: CLIN.red,
+  },
+  markerIcon: {
+    fontSize: 10,
+  },
+
+  // Badges — light pill on paper
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
-    marginBottom: SPACING.xs,
+    marginTop: SPACING.xs,
   },
   sourceBadge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: BORDER_RADIUS.full,
-    backgroundColor: COLORS.surfaceSunken,
+    backgroundColor: '#F1F4F7',
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
+    borderColor: CLIN.faint,
   },
   sourceBadgeText: {
     ...TYPOGRAPHY.label,
-    color: COLORS.textSecondary,
+    color: CLIN.muted,
     fontSize: 10,
+    fontWeight: '700',
   },
   docLink: {
     marginLeft: 'auto',
   },
   docLinkText: {
     ...TYPOGRAPHY.captionStrong,
-    color: COLORS.accent,
+    color: CLIN.red,
   },
 
-  // Data rows — hairline on dark elevated
+  // Data rows — hairline rules on white
   dataRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: SPACING.xs,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderFaint,
+    borderTopColor: CLIN.faint,
     marginTop: SPACING.xs,
     gap: SPACING.sm,
   },
   dataLabel: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    color: CLIN.muted,
     minWidth: 60,
   },
   dataValue: {
     ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    color: CLIN.ink,
     flex: 1,
     textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
   dataUnit: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
+    color: CLIN.red,
+    fontWeight: '700',
   },
   dataRef: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    color: CLIN.muted,
     marginTop: 2,
     textAlign: 'right',
   },
@@ -890,7 +1443,7 @@ const styles = StyleSheet.create({
   severityBarTrack: {
     width: 80,
     height: 6,
-    backgroundColor: COLORS.surfaceSecondary,
+    backgroundColor: '#EDF1F5',
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -899,39 +1452,38 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 
-  // Note block — recessed sunken note
+  // Note block — paper note
   noteBlock: {
-    marginTop: SPACING.sm,
+    marginTop: SPACING.xs,
     paddingTop: SPACING.sm,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderFaint,
+    borderTopColor: CLIN.faint,
   },
   noteText: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    color: '#3E4C59',
     lineHeight: 20,
   },
 
-  // Evidence — sunken glass edge
+  // Evidence — inset paper slip
   evidenceBlock: {
-    marginTop: SPACING.sm,
-    paddingTop: SPACING.sm,
+    marginTop: SPACING.xs,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderFaint,
-    backgroundColor: COLORS.surfaceSunken,
+    borderTopColor: CLIN.faint,
+    backgroundColor: '#F7F9FB',
     borderWidth: 1,
-    borderColor: COLORS.borderFaint,
+    borderColor: CLIN.faint,
     borderRadius: BORDER_RADIUS.sm,
     padding: SPACING.sm,
   },
   evidenceTitle: {
     ...TYPOGRAPHY.label,
-    color: COLORS.textMuted,
+    color: CLIN.muted,
     marginBottom: SPACING.xs,
   },
   evidenceText: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    color: '#3E4C59',
     lineHeight: 18,
   },
 
@@ -942,11 +1494,11 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
+    color: CLIN.ink,
   },
   emptyText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
+    color: CLIN.muted,
     textAlign: 'center',
     marginTop: SPACING.xs,
   },

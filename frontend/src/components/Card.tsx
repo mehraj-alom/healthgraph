@@ -79,14 +79,15 @@ export const Card = ({
       case 'elevated':
         return {
           backgroundColor: colors.surfaceElevated,
-          borderColor: colors.borderStrong,
+          borderColor: colors.border,
           ...elevation.medium,
         };
       case 'highlighted':
+        // Peach feature card (like "Smart Doctor Match")
         return {
-          backgroundColor: isDark ? '#1B2A40' : '#FFFFFF',
-          borderColor: 'rgba(77, 141, 255, 0.35)',
-          ...elevation.deep,
+          backgroundColor: isDark ? '#2E2A23' : '#FBEEDC',
+          borderColor: isDark ? 'rgba(232, 134, 46, 0.4)' : '#F0D3AC',
+          ...elevation.medium,
         };
       default:
         return {
@@ -99,7 +100,7 @@ export const Card = ({
 
   const hasAccentLane =
     resolvedKind === 'metric' || resolvedKind === 'highlighted' || Boolean(accentColor);
-  const laneColor = accentColor ?? colors.accentBlue;
+  const laneColor = accentColor ?? colors.teal;
 
   const Container = onPress ? Pressable : View;
 
@@ -121,7 +122,7 @@ export const Card = ({
         styles.container,
         surface,
         {
-          borderRadius: resolvedKind === 'compact' ? radius.lg : radius.xxl,
+          borderRadius: resolvedKind === 'compact' ? radius.lg : radius.xl,
           padding: paddingMap[padding],
         },
         hasAccentLane && {

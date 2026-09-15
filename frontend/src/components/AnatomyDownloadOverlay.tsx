@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
   },
   downloadButtonText: {
     ...TYPOGRAPHY.bodyStrong,
-    color: '#07111F',
+    color: '#FFFFFF',
   },
   hint: {
     ...TYPOGRAPHY.caption,
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     ...TYPOGRAPHY.bodyStrong,
-    color: '#07111F',
+    color: '#FFFFFF',
   },
 
   // ── Mini prompt (gender switch) ──
@@ -534,6 +534,6 @@ const styles = StyleSheet.create({
   },
   miniDownloadText: {
     ...TYPOGRAPHY.bodyStrong,
-    color: '#07111F',
+    color: '#FFFFFF',
   },
 });

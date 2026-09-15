@@ -19,6 +19,8 @@ interface UseCachedQueryOptions<T> {
   queryFn: () => Promise<T>;
   enabled?: boolean;
   onSuccess?: (data: T) => void;
+  /** Day-window for range-partitioned caches (trends). Defaults to 30. */
+  cacheDays?: number;
 }
 
 interface UseCachedQueryResult<T> {
@@ -32,28 +34,28 @@ interface UseCachedQueryResult<T> {
 }
 
 // Helper to get cache based on key
-async function getCache(patientId: string, key: CacheKey): Promise<{ data: any | null; cachedAt: number }> {
+async function getCache(patientId: string, key: CacheKey, days = 30): Promise<{ data: any | null; cachedAt: number }> {
   switch (key) {
     case 'profile':
       return getProfileCache(patientId);
     case 'dailyMetrics':
       return getDailyMetricsCache(patientId);
     case 'trends':
-      return getTrendsCache(patientId, 30); // Default 30 days
+      return getTrendsCache(patientId, days);
     default:
       return { data: null, cachedAt: 0 };
   }
 }
 
 // Helper to set cache based on key
-async function setCache(patientId: string, key: CacheKey, data: any): Promise<void> {
+async function setCache(patientId: string, key: CacheKey, data: any, days = 30): Promise<void> {
   switch (key) {
     case 'profile':
       return setProfileCache(patientId, data);
     case 'dailyMetrics':
       return setDailyMetricsCache(patientId, data);
     case 'trends':
-      return setTrendsCache(patientId, 30, data); // Default 30 days
+      return setTrendsCache(patientId, days, data);
     default:
       return;
   }
@@ -64,6 +66,7 @@ export function useCachedQuery<T>({
   queryFn,
   enabled = true,
   onSuccess,
+  cacheDays = 30,
 }: UseCachedQueryOptions<T>): UseCachedQueryResult<T> {
   const { user } = useAuth();
   const userId = user?.uid ?? 'anonymous';
@@ -107,7 +110,7 @@ export function useCachedQuery<T>({
       let cached: { data: T | null; cachedAt: number } = { data: null, cachedAt: 0 };
       if (!showRefreshing && patientId) {
         try {
-          cached = await getCache(patientId, cacheKey);
+          cached = await getCache(patientId, cacheKey, cacheDays);
         } catch {
           // SQLite not ready or cache corrupted — proceed to API
         }
@@ -141,7 +144,7 @@ export function useCachedQuery<T>({
         // Best-effort: cache the fresh data in SQLite (ignore write failure)
         if (patientId) {
           try {
-            await setCache(patientId, cacheKey, freshData);
+            await setCache(patientId, cacheKey, freshData, cacheDays);
           } catch {
             // SQLite not ready — data is still held in memory state
           }
@@ -165,7 +168,7 @@ export function useCachedQuery<T>({
         setIsRefreshing(false);
       }
     }
-  }, [userId, cacheKey, queryFn, enabled, user, onSuccess]);
+  }, [userId, cacheKey, cacheDays, queryFn, enabled, user, onSuccess]);
 
   // Initial fetch
   useEffect(() => {

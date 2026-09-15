@@ -19,9 +19,11 @@ interface SegmentedSwitchProps {
   value: number;
   onChange: (index: number) => void;
   style?: StyleProp<ViewStyle>;
+  /** 'dark' (default, for dark cards) or 'light' (white card: grey track, red thumb). */
+  tone?: 'dark' | 'light';
 }
 
-export default function SegmentedSwitch({ options, value, onChange, style }: SegmentedSwitchProps) {
+export default function SegmentedSwitch({ options, value, onChange, style, tone = 'dark' }: SegmentedSwitchProps) {
   const [trackWidth, setTrackWidth] = useState(0);
   const thumbX = useSharedValue(0);
 
@@ -39,9 +41,15 @@ export default function SegmentedSwitch({ options, value, onChange, style }: Seg
     transform: [{ translateX: thumbX.value }],
   }));
 
+  const trackStyle =
+    tone === 'light'
+      ? { backgroundColor: '#E2D8C3' }
+      : undefined;
+  const light = tone === 'light';
+
   return (
     <View
-      style={[styles.track, style]}
+      style={[styles.track, trackStyle, style]}
       onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
     >
       {options.map((option, i) => {
@@ -54,7 +62,18 @@ export default function SegmentedSwitch({ options, value, onChange, style }: Seg
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
           >
-            <Text style={[styles.optionText, { color: active ? mv.textOnDarkPrimary : 'rgba(255,255,255,0.60)' }]}>
+            <Text
+              style={[
+                styles.optionText,
+                {
+                  color: active
+                    ? '#FFFFFF'
+                    : light
+                      ? '#797166'
+                      : 'rgba(255,255,255,0.60)',
+                },
+              ]}
+            >
               {option}
             </Text>
           </Pressable>
@@ -62,7 +81,7 @@ export default function SegmentedSwitch({ options, value, onChange, style }: Seg
       })}
 
       <Animated.View pointerEvents="none" style={[styles.thumb, { width: slotWidth }, thumbStyle]}>
-        <View style={styles.thumbInner} />
+        <View style={[styles.thumbInner, light && styles.thumbInnerLight]} />
       </Animated.View>
     </View>
   );
@@ -99,5 +118,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     borderRadius: mv.radiusPill,
     backgroundColor: mv.surfaceWhite,
+  },
+  thumbInnerLight: {
+    backgroundColor: '#1D1B17',
   },
 });

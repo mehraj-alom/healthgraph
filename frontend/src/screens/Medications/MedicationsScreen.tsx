@@ -971,7 +971,7 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     ...TYPOGRAPHY.bodyStrong,
-    color: '#07111F',
+    color: '#FFFFFF',
   },
   tabBar: {
     flexDirection: 'row',
@@ -1200,7 +1200,7 @@ const styles = StyleSheet.create({
   },
   takeButtonText: {
     ...TYPOGRAPHY.bodyStrong,
-    color: '#07111F',
+    color: '#FFFFFF',
   },
   historyContainer: {
     gap: SPACING.md,
@@ -1223,7 +1223,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   pickerTextActive: {
-    color: '#07111F',
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   historyList: {
@@ -1344,7 +1344,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   frequencyTextActive: {
-    color: '#07111F',
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   toggleRow: {
@@ -1371,7 +1371,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   toggleTextActive: {
-    color: '#07111F',
+    color: '#FFFFFF',
     fontWeight: '600',
   },
 });

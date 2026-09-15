@@ -9,16 +9,20 @@
 
 import React, { useCallback, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, type CompositeNavigationProp } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import LiftCard from '@/components/home/LiftCard';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { healthIcon } from '@/theme/icons';
 import { mv, mvType } from '@/theme/movements';
-import type { RootStackParamList } from '@/types';
+import type { MainTabParamList, RootStackParamList } from '@/types';
 
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Dashboard'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 interface RecentPpg {
   bpm: number;
@@ -167,7 +171,7 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 3,
     width: '100%',
-    backgroundColor: '#0B6852',
+    backgroundColor: '#E8862E',
   },
   fillEmpty: {
     width: '12%',

@@ -1032,3 +1032,55 @@ function triggerSync(): void {
     syncPendingMutations().catch(() => {});
   });
 }
+
+/**
+ * Returns the mutation_id of the pending sync_queue row for a record, if any.
+ * The daily-log screen shares this id as the Idempotency-Key on its direct
+ * POST/PUT so a racing sync-engine POST cannot create a duplicate check-in.
+ */
+export async function getPendingMutationId(
+  tableName: string,
+  recordId: string,
+): Promise<string | null> {
+  try {
+    const db = await getDatabase();
+    const row = await db.getFirstAsync<{ mutation_id: string }>(
+      'SELECT mutation_id FROM sync_queue WHERE table_name = ? AND record_id = ? AND status = ?',
+      [tableName, recordId, 'pending'],
+    );
+    return row?.mutation_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reconciles a locally-created daily log with the server check-in created by
+ * the screen's direct POST: points local rows at the server group_id, marks
+ * the local record synced, and retires the now-redundant queued create so the
+ * sync engine does not POST it a second time. All steps are best-effort.
+ */
+export async function reconcileDailyLogGroupId(
+  localGroupId: string,
+  serverGroupId: string,
+): Promise<void> {
+  if (!localGroupId || !serverGroupId || localGroupId === serverGroupId) return;
+  try {
+    const db = await getDatabase();
+    await db.runAsync(
+      `UPDATE daily_logs SET group_id = ?, sync_status = 'synced' WHERE group_id = ?`,
+      [serverGroupId, localGroupId],
+    );
+    await db.runAsync(
+      `UPDATE daily_log_events SET group_id = ? WHERE group_id = ?`,
+      [serverGroupId, localGroupId],
+    );
+    await db.runAsync(
+      `UPDATE sync_queue SET status = 'completed', last_error = NULL
+       WHERE table_name = 'daily_logs' AND record_id = ? AND status = 'pending'`,
+      [localGroupId],
+    );
+  } catch {
+    // Best-effort: the sync engine will converge on the next pass.
+  }
+}

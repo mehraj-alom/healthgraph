@@ -10,3 +10,4 @@
 export * from './HealthGraphPPG.types';
 export * from './HealthGraphPPGNative';
 export * from './ppgSignal';
+export { default as PpgCameraPreview, isPreviewAvailable } from './PpgCameraPreview';

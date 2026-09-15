@@ -12,11 +12,13 @@ import { useReducedMotion } from '@/theme/useReducedMotion';
 interface PressScaleProps {
   children: ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   disabled?: boolean;
   /** Scale factor on press (default 0.96). */
   scaleTo?: number;
   accessibilityLabel?: string;
   accessibilityRole?: 'button' | 'link';
+  accessibilityState?: { disabled?: boolean; selected?: boolean };
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -30,10 +32,12 @@ interface PressScaleProps {
 export function PressScale({
   children,
   onPress,
+  onLongPress,
   disabled = false,
   scaleTo = 0.96,
   accessibilityLabel,
   accessibilityRole = 'button',
+  accessibilityState,
   style,
   testID,
 }: PressScaleProps) {
@@ -62,12 +66,13 @@ export function PressScale({
     <Animated.View style={[animatedStyle, style]}>
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
         onPressIn={disabled ? undefined : pressIn}
         onPressOut={disabled ? undefined : pressOut}
         disabled={disabled}
         accessibilityRole={accessibilityRole}
         accessibilityLabel={accessibilityLabel}
-        accessibilityState={{ disabled }}
+        accessibilityState={{ disabled, ...accessibilityState }}
         testID={testID}
       >
         {children}

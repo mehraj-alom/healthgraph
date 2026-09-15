@@ -36,6 +36,22 @@
  *     --target es2022 --esModuleInterop --skipLibCheck --noCheck \
  *     --rewriteRelativeImportExtensions --declaration false --sourceMap false && \
  *   node --test /tmp/ppgcontract-out/tests/ppgContract.test.js
+ *
+ * Stage (cp --parents) these files for the static reads below:
+ *   tests/ppgContract.test.mts
+ *   modules/healthgraph-ppg/src/HealthGraphPPG.types.ts
+ *   modules/healthgraph-ppg/src/HealthGraphPPGNative.ts
+ *   modules/healthgraph-ppg/src/PpgCameraPreview.tsx
+ *   modules/healthgraph-ppg/src/ppgSignal.ts
+ *   modules/healthgraph-ppg/android/src/main/java/com/healthgraph/ppg/HealthGraphPPGModule.kt
+ *   modules/healthgraph-ppg/android/src/main/java/com/healthgraph/ppg/PpgSignalProcessor.kt
+ *   modules/healthgraph-ppg/android/src/main/java/com/healthgraph/ppg/PpgCameraPreviewView.kt
+ *   modules/healthgraph-ppg/android/src/main/java/com/healthgraph/ppg/PpgPreviewHost.kt
+ *   src/services/ppg/simulatedProvider.ts
+ *   src/services/ppg/types.ts
+ *   src/services/ppgService.ts
+ *   src/hooks/usePpgMeasurement.ts
+ *   src/screens/PpgMeasure/PpgMeasureScreen.tsx
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -82,7 +98,10 @@ function src(rel: string): string {
 
 const KOTLIN_MODULE = 'modules/healthgraph-ppg/android/src/main/java/com/healthgraph/ppg/HealthGraphPPGModule.kt';
 const KOTLIN_PROCESSOR = 'modules/healthgraph-ppg/android/src/main/java/com/healthgraph/ppg/PpgSignalProcessor.kt';
+const KOTLIN_PREVIEW_VIEW = 'modules/healthgraph-ppg/android/src/main/java/com/healthgraph/ppg/PpgCameraPreviewView.kt';
+const KOTLIN_PREVIEW_HOST = 'modules/healthgraph-ppg/android/src/main/java/com/healthgraph/ppg/PpgPreviewHost.kt';
 const BRIDGE = 'modules/healthgraph-ppg/src/HealthGraphPPGNative.ts';
+const PREVIEW_TSX = 'modules/healthgraph-ppg/src/PpgCameraPreview.tsx';
 const HOOK = 'src/hooks/usePpgMeasurement.ts';
 const SERVICE = 'src/services/ppgService.ts';
 
@@ -106,6 +125,7 @@ test('result payload fields exist natively and cross the bridge', () => {
     'framesReceived',
     'samplesCollected',
     'failureReason',
+    'debugSummary',
     'rrIntervalsMs',
     'rmssdMs',
     'sdnnMs',
@@ -189,7 +209,7 @@ test('live session states and liveBpm cross the bridge', () => {
 });
 
 test('simulated results are flagged and refused by persistence', () => {
-  assert.equal(PPG_ALGORITHM_VERSION, 'ppg-1.0.0');
+  assert.equal(PPG_ALGORITHM_VERSION, 'ppg-1.1.0');
   const service = src(SERVICE);
   assert.ok(
     service.includes('Simulated PPG results cannot be saved'),
@@ -226,4 +246,79 @@ test('state copy covers every lifecycle state', () => {
   ] as const) {
     assert.ok(typeof PPG_COPY[s] === 'string' && PPG_COPY[s].length > 0, `copy for ${s}`);
   }
+});
+
+test('algorithm version ppg-1.1.0 is consistent across TS, Kotlin, Swift', () => {
+  assert.equal(PPG_ALGORITHM_VERSION, 'ppg-1.1.0');
+  const kt = src(KOTLIN_PROCESSOR);
+  assert.ok(kt.includes('ALGORITHM_VERSION = "ppg-1.1.0"'), 'Kotlin version bump missing');
+  const swift = src('modules/healthgraph-ppg/ios/HealthGraphPPGModule.swift');
+  assert.ok(swift.includes('algorithmVersion = "ppg-1.1.0"'), 'Swift version bump missing');
+});
+
+test('reliability pipeline stages are mirrored in TS and Kotlin', () => {
+  const tsMirror = src('modules/healthgraph-ppg/src/ppgSignal.ts');
+  const kt = src(KOTLIN_PROCESSOR);
+  for (const fn of [
+    'detrend',
+    'refinePeak',
+    'sampleTimeAt',
+    'displayHrFromRecent',
+    'qualityComponents',
+    'buildDebugSummary',
+  ]) {
+    assert.ok(tsMirror.includes(fn), `TS mirror missing ${fn}`);
+    assert.ok(kt.includes(fn), `Kotlin missing ${fn}`);
+  }
+  // Median (not mean) HR in both pipelines.
+  assert.ok(tsMirror.includes('60000 / median(rr)'), 'TS must use median HR');
+  assert.ok(kt.includes('60000.0 / median(rr)'), 'Kotlin must use median HR');
+  // Detrended peak detection threshold + dicrotic-safe refractory gap.
+  assert.ok(kt.includes('0.5f * std'), 'Kotlin peak threshold must be 0.5σ');
+  assert.ok(kt.includes('0.30f'), 'Kotlin refractory gap must be 0.30s');
+  // Quality gate is unchanged at 0.5 (drift only discounts, never the gate).
+  assert.ok(kt.includes('MIN_RELIABLE_QUALITY = 0.5f'), 'native threshold changed!');
+});
+
+test('real camera preview: Preview + analysis share one rear camera', () => {
+  const kt = src(KOTLIN_MODULE);
+  // Both use cases bound together to the same selector (one camera).
+  assert.ok(kt.includes('Preview.Builder().build()'), 'Preview use case missing');
+  assert.ok(
+    kt.includes('bindToLifecycle(lifecycleOwner, selector, preview, analysis)'),
+    'Preview + analysis must bind together to the same camera',
+  );
+  // Single back-camera selector; no second camera anywhere.
+  assert.ok(kt.includes('CameraSelector.DEFAULT_BACK_CAMERA'), 'rear selector missing');
+  // Lifecycle: preview published on bind, detached before unbind (no leak).
+  assert.ok(kt.includes('PpgPreviewHost.publish(preview)'), 'preview publish missing');
+  assert.ok(kt.includes('PpgPreviewHost.publish(null)'), 'preview detach on cleanup missing');
+  // Native view registration + surface plumbing files exist.
+  const view = src(KOTLIN_PREVIEW_VIEW);
+  assert.ok(view.includes('class PpgCameraPreviewView'), 'preview view missing');
+  assert.ok(view.includes('setSurfaceProvider'), 'surface provider wiring missing');
+  assert.ok(view.includes('willNotProvideSurface'), 'surface decline path missing');
+  const host = src(KOTLIN_PREVIEW_HOST);
+  assert.ok(host.includes('object PpgPreviewHost'), 'preview host missing');
+  assert.ok(kt.includes('View(PpgCameraPreviewView::class)'), 'view registration missing');
+  // No frames cross the bridge: the view renders from the surface only.
+  assert.ok(!view.includes('base64'), 'preview must never encode frames');
+  assert.ok(!kt.includes('base64'), 'module must never encode frames');
+  // JS preview component + screen surface.
+  const tsx = src(PREVIEW_TSX);
+  assert.ok(tsx.includes("requireNativeView('HealthGraphPPG')"), 'JS preview binding missing');
+  const screen = src('src/screens/PpgMeasure/PpgMeasureScreen.tsx');
+  assert.ok(screen.includes('PpgCameraPreview'), 'screen must mount the camera preview');
+  // Monotonic camera timestamps (frame-rate variation cannot corrupt RR).
+  assert.ok(kt.includes('imageInfo.timestamp'), 'camera timestamps missing');
+});
+
+test('debug summary crosses the bridge but never persists raw data', () => {
+  const kt = src(KOTLIN_MODULE);
+  assert.ok(kt.includes('"debugSummary"'), 'native never emits debugSummary');
+  assert.ok(kt.includes('buildDebugSummary'), 'native never builds the summary');
+  const bridge = src(BRIDGE);
+  assert.ok(bridge.includes('debugSummary'), 'bridge does not forward debugSummary');
+  const service = src(SERVICE);
+  assert.ok(!service.includes('debugSummary'), 'debug telemetry must never persist');
 });

@@ -56,6 +56,13 @@ export interface PpgMeasurementResult {
    */
   failureReason?: string;
   /**
+   * DEBUG-only end-of-measurement diagnostic summary (Android). Multi-line
+   * numeric telemetry: frames, FPS, quality components, RR stats, raw HR
+   * estimates, rejection reason. Never frames, images, or waveforms. Absent
+   * in release builds and in simulation; never persisted or synced.
+   */
+  debugSummary?: string;
+  /**
    * True for development simulation (Expo Go fallback). Simulated results
    * are NOT real measurements: they must never be persisted, synced, or
    * presented as health data.
@@ -76,7 +83,7 @@ export interface PpgStateEvent {
   message?: string;
 }
 
-export const PPG_ALGORITHM_VERSION = 'ppg-1.0.0';
+export const PPG_ALGORITHM_VERSION = 'ppg-1.1.0';
 
 /** Native module + event names. Must match the Kotlin/Swift registration. */
 export const PPG_NATIVE_MODULE_NAME = 'HealthGraphPPG';

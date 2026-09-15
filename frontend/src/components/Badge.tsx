@@ -23,13 +23,13 @@ export const Badge = ({
   const { colors, typography } = useTheme();
 
   const toneMap = {
-    default: { fg: colors.textSecondary, bg: colors.glassHighlight, dot: colors.textMuted },
-    blue: { fg: colors.accentBlue, bg: colors.accentBlueSoft, dot: colors.accentBlue },
+    default: { fg: colors.textSecondary, bg: colors.surfaceSecondary, dot: colors.textMuted },
+    blue: { fg: '#2D5F86', bg: '#D9EAF7', dot: '#4A90C2' },
     purple: { fg: colors.accentPurple, bg: colors.accentPurpleSoft, dot: colors.accentPurple },
-    gold: { fg: colors.brand, bg: colors.brandSurface, dot: colors.brand },
+    gold: { fg: colors.tealDark, bg: colors.tealSurface, dot: colors.teal },
     green: { fg: colors.success, bg: colors.successSurface, dot: colors.success },
     red: { fg: colors.error, bg: colors.errorSurface, dot: colors.error },
-    neutral: { fg: colors.textMuted, bg: colors.glassHighlight, dot: colors.textDisabled },
+    neutral: { fg: colors.textMuted, bg: colors.surfaceSecondary, dot: colors.textDisabled },
   } as const;
 
   const healthMap = {

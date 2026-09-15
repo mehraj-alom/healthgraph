@@ -12,7 +12,7 @@ import type {
 export async function uploadDocument(
   file: { uri: string; name: string; type: string },
 ): Promise<DocumentListItem> {
-  console.log(`[Upload] ▶ POST /api/v1/documents/upload name=${file.name} type=${file.type}`);
+  if (__DEV__) console.log(`[Upload] ▶ POST /api/v1/documents/upload name=${file.name} type=${file.type}`);
   const formData = new FormData();
   formData.append('file', {
     uri: file.uri,
@@ -32,7 +32,7 @@ export async function uploadDocument(
   );
 
   const doc = response.data;
-  console.log(
+  if (__DEV__) console.log(
     `[Upload] ✓ 201 document_id=${doc.document_id} status=${doc.status}`,
   );
   return doc;
@@ -51,11 +51,11 @@ export async function listDocuments(): Promise<DocumentListItem[]> {
 export async function getDocument(
   documentId: string,
 ): Promise<DocumentListItem> {
-  console.log(`[Poll]   ▶ GET /api/v1/documents/${documentId}`);
+  if (__DEV__) console.log(`[Poll]   ▶ GET /api/v1/documents/${documentId}`);
   const doc = await api.get<DocumentListItem>(
     `/api/v1/documents/${documentId}`,
   );
-  console.log(`[Poll]   ✓ status=${doc.status} id=${doc.document_id}`);
+  if (__DEV__) console.log(`[Poll]   ✓ status=${doc.status} id=${doc.document_id}`);
   return doc;
 }
 
@@ -97,20 +97,20 @@ export async function pollDocumentStatus(
     'FAILED_TRIAGE',
   ]);
 
-  console.log(
+  if (__DEV__) console.log(
     `[Poll]   Start polling documentId=${documentId} interval=${intervalMs}ms maxAttempts=${maxAttempts}`,
   );
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const doc = await getDocument(documentId);
-      console.log(
+      if (__DEV__) console.log(
         `[Poll]   attempt=${attempt + 1}/${maxAttempts} status=${doc.status}`,
       );
       onStatusChange?.(doc.status);
 
       if (terminalStatuses.has(doc.status)) {
-        console.log(`[Poll]   ★ Terminal reached: ${doc.status}`);
+        if (__DEV__) console.log(`[Poll]   ★ Terminal reached: ${doc.status}`);
         return doc;
       }
     } catch (err: unknown) {

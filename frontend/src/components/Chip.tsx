@@ -22,15 +22,14 @@ interface ChipProps {
 }
 
 /**
- * HealthGraph filter/tag chip — hairline border, calm surface. The selected
- * chip gets a restrained accent fill + soft border so it reads active
- * without neon. Pressed state scales slightly for tactile feedback.
+ * Filter/tag chip — cream pill, sandy hairline. Selected is the ink pill
+ * from the reference ("All Doctors"): dark fill + white label.
  */
 export const Chip = ({
   label,
   selected = false,
   onPress,
-  color = '#4D8DFF',
+  color = '#1D1B17',
   icon,
   disabled = false,
   size = 'small',
@@ -39,7 +38,7 @@ export const Chip = ({
 }: ChipProps) => {
   const { colors, typography } = useTheme();
   const height = HEIGHT[size];
-  const accent = selected ? color : colors.textSecondary;
+  const accent = selected ? '#FFFFFF' : colors.textSecondary;
 
   return (
     <Pressable
@@ -50,9 +49,10 @@ export const Chip = ({
       accessibilityState={{ selected, disabled }}
       style={({ pressed }) => [
         styles.container,
-        { minHeight: height, backgroundColor: colors.surfaceSunken, borderColor: colors.border },
-        selected && { backgroundColor: `${color}1F`, borderColor: color },
-        pressed && { transform: [{ scale: 0.97 }], backgroundColor: colors.surfacePressed },
+        { minHeight: height, backgroundColor: colors.surface, borderColor: colors.border },
+        selected && { backgroundColor: '#1D1B17', borderColor: '#1D1B17' },
+        pressed && !selected && { transform: [{ scale: 0.97 }], backgroundColor: colors.surfacePressed },
+        pressed && selected && { transform: [{ scale: 0.97 }], opacity: 0.88 },
         disabled && styles.disabled,
         style,
       ]}

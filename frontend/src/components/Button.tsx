@@ -64,15 +64,16 @@ export const Button = ({
 
   const surfaceMap: Record<ButtonVariant, ViewStyle> = {
     primary: {
+      // Ink pill (like "All Doctors" filter)
       backgroundColor: colors.brand,
-      shadowColor: colors.brand,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isDark ? 0.25 : 0.4,
-      shadowRadius: 8,
-      elevation: isDark ? 5 : 3,
+      shadowColor: '#7C5A2E',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.22,
+      shadowRadius: 12,
+      elevation: 4,
     },
     secondary: {
-      backgroundColor: colors.surfaceElevated,
+      backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
     },
@@ -104,7 +105,7 @@ export const Button = ({
   };
 
   const pressedMap: Record<ButtonVariant, ViewStyle> = {
-    primary: { backgroundColor: colors.brandDark },
+    primary: { backgroundColor: colors.brandLight },
     secondary: { backgroundColor: colors.surfacePressed },
     outline: { backgroundColor: colors.accentBlueSoft },
     ghost: { backgroundColor: colors.glassHighlight },
@@ -118,7 +119,7 @@ export const Button = ({
     outline: { color: colors.textPrimary },
     ghost: { color: colors.textSecondary },
     danger: { color: '#FFFFFF' },
-    success: { color: isDark ? '#07111F' : '#FFFFFF' },
+    success: { color: '#FFFFFF' },
   };
 
   return (
@@ -130,7 +131,7 @@ export const Button = ({
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={({ pressed }) => [
         styles.container,
-        { minHeight: height, borderRadius: pill ? radius.pill : radius.md },
+        { minHeight: height, borderRadius: pill || variant === 'primary' ? radius.pill : radius.md },
         surfaceMap[variant],
         isDisabled && styles.disabled,
         pressed && !isDisabled && { ...pressedMap[variant], transform: [{ scale: 0.975 }] },

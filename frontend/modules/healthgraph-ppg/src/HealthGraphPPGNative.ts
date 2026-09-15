@@ -167,6 +167,7 @@ export async function measure(
     if (typeof raw['framesReceived'] === 'number') result.framesReceived = raw['framesReceived'] as number;
     if (typeof raw['samplesCollected'] === 'number') result.samplesCollected = raw['samplesCollected'] as number;
     if (typeof raw['failureReason'] === 'string') result.failureReason = raw['failureReason'] as string;
+    if (typeof raw['debugSummary'] === 'string') result.debugSummary = raw['debugSummary'] as string;
     emit({ state: 'COMPLETE', signalQuality: result.signalQuality });
     return result;
   } catch (e: any) {

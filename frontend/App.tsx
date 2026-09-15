@@ -2,10 +2,20 @@ import React from 'react';
 import {
   ActivityIndicator,
   AppState,
+  LogBox,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+
+// Benign native-module noise, not app errors:
+// - EXGL pixelStorei: three.js sets an unpack flag expo-gl intentionally stubs.
+// - ExpoGL "context is not registered (yet)": surface-setup race when the
+//   embedded 3D view remounts during fast list scrolling.
+LogBox.ignoreLogs([
+  'gl.pixelStorei',
+  'is not registered (yet); skipping surface setup',
+]);
 
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -24,6 +34,7 @@ import { DocumentsProvider } from '@/context/DocumentsContext';
 
 import { ThemeProvider } from '@/theme';
 import { ToastProvider } from '@/components';
+import { UmbrellaTabBar } from '@/components';
 
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
 import HealthDashboardScreen from '@/screens/Dashboard/HealthDashboardScreen';
@@ -36,6 +47,7 @@ import SettingsScreen from '@/screens/Settings/SettingsScreen';
 import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
 import PpgMeasureScreen from '@/screens/PpgMeasure/PpgMeasureScreen';
+import ImproveScreen from '@/screens/Dashboard/ImproveScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
 // and prevent the WebGL renderer from blocking app startup on Android.
@@ -54,6 +66,7 @@ import type { RootStackParamList, MainTabParamList } from '@/types';
 import { syncPendingMutations, retryFailedSyncs } from '@/services/syncEngine';
 import { initNetworkMonitor, cleanupNetworkMonitor, subscribe as subscribeNetwork, isOnline } from '@/services/networkMonitor';
 import { initSyncState, clearSyncState } from '@/services/syncState';
+import { TrendRangeProvider } from '@/context/TrendRangeContext';
 
 
 /* ============================================================================
@@ -87,69 +100,14 @@ function MainTabs() {
   return (
     <Tab.Navigator
       initialRouteName="Dashboard"
+      tabBar={(props) => <UmbrellaTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-
-        tabBarActiveTintColor:
-          COLORS.primary,
-
-        tabBarInactiveTintColor:
-          COLORS.textMuted,
-
-        tabBarStyle: {
-          backgroundColor:
-            COLORS.surface,
-
-          borderTopColor:
-            COLORS.border,
-          borderTopWidth: 1,
-
-          height: 64,
-
-          paddingBottom: 8,
-
-          paddingTop: 6,
-        },
-
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-        },
-
-        tabBarHideOnKeyboard: false,
       }}
     >
-      <Tab.Screen
-        name="Dashboard"
-        component={HealthDashboardScreen}
-        options={{
-          tabBarLabel: 'Home',
-        }}
-      />
-
-      <Tab.Screen
-        name="Body"
-        component={BodyScreenWrapper}
-        options={{
-          tabBarLabel: '3D Body',
-        }}
-      />
-
-      <Tab.Screen
-        name="Timeline"
-        component={TimelineScreen}
-        options={{
-          tabBarLabel: 'Timeline',
-        }}
-      />
-
-      <Tab.Screen
-        name="Chat"
-        component={ChatScreen}
-        options={{
-          tabBarLabel: 'Chat',
-        }}
-      />
+      <Tab.Screen name="Dashboard" component={HealthDashboardScreen} />
+      <Tab.Screen name="PpgMeasure" component={PpgMeasureScreen} />
+      <Tab.Screen name="Chat" component={ChatScreen} />
     </Tab.Navigator>
   );
 }
@@ -274,6 +232,32 @@ function AppNavigator() {
                 headerShown: false,
               }}
             />
+            {/* Timeline lives here — not in the tab bar. It opens only
+                from the notification bell (and in-app links). */}
+            <RootStack.Screen
+              name="Timeline"
+              component={TimelineScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* 3D Body lives here while out of the tab bar. Chat body-links
+                and graph links resolve to this stack route. */}
+            <RootStack.Screen
+              name="Body"
+              component={BodyScreenWrapper}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Improve / Keep actions window from the dashboard duo. */}
+            <RootStack.Screen
+              name="Improve"
+              component={ImproveScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
             <RootStack.Screen
               name="Settings"
               component={SettingsScreen}
@@ -318,13 +302,6 @@ function AppNavigator() {
                 headerShown: false,
               }}
             />
-            <RootStack.Screen
-              name="PpgMeasure"
-              component={PpgMeasureScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
           </>
         )}
       </RootStack.Navigator>
@@ -347,7 +324,9 @@ export default function App() {
             <ToastProvider>
               <AnatomyProvider>
                 <DocumentsProvider>
-                  <AppNavigator />
+                  <TrendRangeProvider>
+                    <AppNavigator />
+                  </TrendRangeProvider>
                 </DocumentsProvider>
               </AnatomyProvider>
             </ToastProvider>

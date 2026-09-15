@@ -57,6 +57,11 @@ export const Slider = ({
 }: SliderProps) => {
   const { colors } = useTheme();
   const [trackWidth, setTrackWidth] = useState(0);
+  // Same lag contract as DialInput: while dragging, only this component
+  // re-renders (local `live` value); the parent commits once on release.
+  const [live, setLive] = useState<number | null>(null);
+  const touchingRef = useRef(false);
+  const pendingRef = useRef<number | null>(null);
   const stateRef = useRef({ min, max, step, disabled, onValueChange, trackWidth, value });
   stateRef.current = { min, max, step, disabled, onValueChange, trackWidth, value };
 
@@ -72,7 +77,16 @@ export const Slider = ({
 
   const apply = (x: number) => {
     const next = computeFromX(x);
-    stateRef.current.onValueChange(next);
+    pendingRef.current = next;
+    setLive(next);
+  };
+
+  const release = () => {
+    touchingRef.current = false;
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    setLive(null);
+    if (pending != null) stateRef.current.onValueChange(pending);
   };
 
   const panResponder = useMemo(
@@ -81,8 +95,15 @@ export const Slider = ({
         onStartShouldSetPanResponder: () => !stateRef.current.disabled,
         onMoveShouldSetPanResponder: () => !stateRef.current.disabled,
         onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: (evt) => apply(evt.nativeEvent.locationX),
-        onPanResponderMove: (evt) => apply(evt.nativeEvent.locationX),
+        onPanResponderGrant: (evt) => {
+          touchingRef.current = true;
+          apply(evt.nativeEvent.locationX);
+        },
+        onPanResponderMove: (evt) => {
+          if (touchingRef.current) apply(evt.nativeEvent.locationX);
+        },
+        onPanResponderRelease: () => release(),
+        onPanResponderTerminate: () => release(),
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -93,7 +114,8 @@ export const Slider = ({
   };
 
   const span = Math.max(max - min, step);
-  const frac = Math.min(1, Math.max(0, (value - min) / span));
+  const shownValue = live ?? value;
+  const frac = Math.min(1, Math.max(0, (shownValue - min) / span));
   const fillWidth = trackWidth > 0 ? Math.max(0, frac * trackWidth) : 0;
   const thumbLeft = trackWidth > 0 ? Math.max(0, frac * (trackWidth - THUMB_SIZE)) : 0;
 
@@ -129,7 +151,7 @@ export const Slider = ({
         accessible
         accessibilityRole="adjustable"
         accessibilityLabel={label ?? 'Slider'}
-        accessibilityValue={{ min, max, now: value, text: readout }}
+        accessibilityValue={{ min, max, now: shownValue, text: readout }}
         accessibilityActions={[
           { name: 'increment' },
           { name: 'decrement' },

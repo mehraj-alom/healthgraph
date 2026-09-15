@@ -45,12 +45,12 @@ interface ThemeProviderProps {
 /**
  * HealthGraph theme provider.
  *
- * - Defaults to the existing dark palette (zero visual change).
+ * - Defaults to the warm clinical light palette (Dribbble reference).
  * - `mode="system"` follows the device Appearance setting.
  * - Components opt in via useTheme(); the shared primitives in /components
  *   already render correctly in both modes.
  */
-export function ThemeProvider({ children, mode = 'dark' }: ThemeProviderProps) {
+export function ThemeProvider({ children, mode = 'light' }: ThemeProviderProps) {
   const system = useColorScheme();
   const forced = mode !== 'system';
   const isDark = forced ? mode === 'dark' : system !== 'light';

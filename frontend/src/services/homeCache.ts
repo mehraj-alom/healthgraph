@@ -52,7 +52,7 @@ class HomeCache {
       const age = Date.now() - memoryEntry.timestamp;
       if (age < ttl) {
         if (this.isDev) {
-          console.log(`[DashboardPerf] cacheHit=${key} cacheAge=${age}ms source=memory`);
+          if (__DEV__) console.log(`[DashboardPerf] cacheHit=${key} cacheAge=${age}ms source=memory`);
         }
         return { data: memoryEntry.data, fromCache: true, age };
       }
@@ -70,7 +70,7 @@ class HomeCache {
         
         if (age < ttl) {
           if (this.isDev) {
-            console.log(`[DashboardPerf] cacheHit=${key} cacheAge=${age}ms source=storage`);
+            if (__DEV__) console.log(`[DashboardPerf] cacheHit=${key} cacheAge=${age}ms source=storage`);
           }
           return { data: entry.data, fromCache: true, age };
         }
@@ -100,7 +100,7 @@ class HomeCache {
     try {
       await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
       if (this.isDev) {
-        console.log(`[DashboardPerf] cacheSet=${key} timestamp=${entry.timestamp}`);
+        if (__DEV__) console.log(`[DashboardPerf] cacheSet=${key} timestamp=${entry.timestamp}`);
       }
     } catch (error) {
       if (this.isDev) {
@@ -136,7 +136,7 @@ class HomeCache {
       }
       
       if (this.isDev) {
-        console.log(`[DashboardPerf] clearUserCache userId=${userId} keysCleared=${userKeys.length}`);
+        if (__DEV__) console.log(`[DashboardPerf] clearUserCache userId=${userId} keysCleared=${userKeys.length}`);
       }
     } catch (error) {
       if (this.isDev) {
@@ -157,7 +157,7 @@ class HomeCache {
       this.memoryCache.clear();
       
       if (this.isDev) {
-        console.log(`[DashboardPerf] clearAll keysCleared=${cacheKeys.length}`);
+        if (__DEV__) console.log(`[DashboardPerf] clearAll keysCleared=${cacheKeys.length}`);
       }
     } catch (error) {
       if (this.isDev) {

@@ -13,8 +13,9 @@
  * changes. All colors/radii/spacing come from the movements tokens.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -22,6 +23,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  Vibration,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -48,35 +50,33 @@ import Animated, {
 import Svg, { Path, Rect, Circle, Defs, Pattern } from 'react-native-svg';
 
 import { mv, mvType } from '@/theme/movements';
+import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants';
+import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
 import { timingConfig, springSnappy, durations, curves } from '@/theme/motion';
 import { useReducedMotion } from '@/theme';
-import { useAuth } from '@/context/AuthContext';
 import { IconButton } from '@/components/movements/IconButton';
+import { PressScale } from '@/components/PressScale';
 import Entrance from '@/components/home/Entrance';
 import HGraphMap, { type HMetric } from '@/components/home/HGraphMap';
-import SegmentedSwitch from '@/components/home/SegmentedSwitch';
 import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
-import LiveSignals, { type GlanceSignal } from '@/components/home/LiveSignals';
+
 import LiftCard from '@/components/home/LiftCard';
-import PpgHeartRateCard from '@/screens/PpgMeasure/PpgHeartRateCard';
 import { BrandLogo } from '@/components/BrandLogo';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
+import { formatFirstName } from '@/utils/name';
+import { useAuth } from '@/context/AuthContext';
+import { useProfilePhoto } from '@/hooks/useProfilePhoto';
 import { useMedications } from '@/hooks/useMedications';
 import { useTrends } from '@/hooks/useTrends';
 import { buildHealthDimensions, detectHeartRate, formatSleepMinutes, formatWaterMl, formatDurationMinutes, localDateString } from '@/screens/Dashboard/homeData';
 import { useHomeStory } from '@/screens/Dashboard/useHomeStory';
 import { useCorrelationFeed, trendStreams, localStreams, vitalLabelMap, assessMetric, assessSeries, type CorrelationFeedItem } from '@/screens/Dashboard/correlations';
-import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import type { MainTabParamList, RootStackParamList } from '@/types';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Dashboard'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
-
-const MODES = ['At a glance', '3D graph'] as const;
-const GLANCE = 0;
-const THREED = 1;
 
 function greetingForHour(hour: number): string {
   if (hour < 12) return 'Good morning';
@@ -128,21 +128,34 @@ function HeaderBlock({
   greeting,
   name,
   initial,
+  photoUri,
   hasActivity,
+  onAvatarPress,
   onBellPress,
 }: {
   greeting: string;
   name: string;
   initial: string;
+  photoUri: string | null;
   hasActivity: boolean;
+  onAvatarPress: () => void;
   onBellPress: () => void;
 }) {
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initial}</Text>
-        </View>
+        <Pressable
+          style={styles.avatar}
+          onPress={onAvatarPress}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile and settings"
+        >
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={styles.avatarPhoto} />
+          ) : (
+            <Text style={styles.avatarText}>{initial}</Text>
+          )}
+        </Pressable>
         <View style={styles.headerGreeting}>
           <Text style={styles.greetingSmall}>{greeting},</Text>
           <Text style={styles.greetingName} numberOfLines={1}>{name}</Text>
@@ -166,12 +179,12 @@ function HeaderBlock({
   );
 }
 
-// ─── Two-up action row ─────────────────────────────────────────────────────────
-// Colourful editorial pair: deep-teal "Daily logs" vs lime "Meds".
-// Distinct voices — tracked overlines, serif-italic display numerals on the
-// teal card, tight grotesk on lime — and three UI-thread-only life signals:
-// breathing glow (opacity loop), spring dose bar (childless width anim) and
-// a spring pop on the logged check. All gated on reduced-motion.
+// ─── Today stack ───────────────────────────────────────────────────────────────
+// One calm vertical stack instead of a cramped two-up row: a full-width daily
+// check-in hero (status → title → one CTA, honest progress ring) above a slim
+// medication "up next" row in the reference's Upcoming-schedule language.
+// One tap target per card, one type voice (grotesk), no ambient glow/sheen —
+// the cards rest until pressed (LiftCard still gives tactile feedback).
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia, serif' });
 
@@ -213,20 +226,54 @@ function DoseBar({ pct }: { pct: number }) {
   );
 }
 
-/** Midnight-garden backdrop for the Insights panel + modal.
- * Near-black green base (style), lime aurora with a slow breath, one emerald
- * wash, one warm coral kiss, and a faint dot-grid for texture. Pure views +
+/** Honest today-progress ring: mood + water + doses, nothing invented. */
+function ProgressRing({ pct, size = 58 }: { pct: number; size?: number }) {
+  const stroke = 6;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(1, pct));
+  const complete = clamped >= 1;
+  return (
+    <View style={{ width: size, height: size }} accessible accessibilityLabel={`${Math.round(clamped * 100)} percent of today's routine complete`}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E9E0CE" strokeWidth={stroke} />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={complete ? '#4E9B5F' : '#E8862E'}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${clamped * c} ${c}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <View style={styles.ringCenter} pointerEvents="none">
+        {complete ? (
+          <CheckGlyph size={18} color="#4E9B5F" />
+        ) : (
+          <Text style={styles.ringText}>{`${Math.round(clamped * 100)}%`}</Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** Clinical-red wash backdrop for the Insights panel.
+ * White card base (style), pale red aurora with a slow breath, one slate
+ * wash, one rose kiss, and a faint ink dot-grid for texture. Pure views +
  * one static Svg — no new dependencies, clipped by the card's overflow. */
 function PanelBackdrop() {
   return (
     <>
-      <BreathingGlow style={styles.auraLime} />
-      <View style={styles.auraEmerald} pointerEvents="none" />
-      <View style={styles.auraCoral} pointerEvents="none" />
+      <BreathingGlow style={styles.auraRed} />
+      <View style={styles.auraSlate} pointerEvents="none" />
+      <View style={styles.auraRose} pointerEvents="none" />
       <Svg width="100%" height="100%" style={styles.panelTexture}>
         <Defs>
           <Pattern id="panelDots" width={18} height={18} patternUnits="userSpaceOnUse">
-            <Circle cx={1.5} cy={1.5} r={1.2} fill="rgba(255,255,255,0.06)" />
+            <Circle cx={1.5} cy={1.5} r={1.2} fill="rgba(22,33,44,0.05)" />
           </Pattern>
         </Defs>
         <Rect x={0} y={0} width="100%" height="100%" fill="url(#panelDots)" />
@@ -236,41 +283,9 @@ function PanelBackdrop() {
   );
 }
 
-/** One-shot light sweep across a card on mount (transform-only, UI thread). */
-function Sheen({ color, delay }: { color: string; delay: number }) {
-  const reduced = useReducedMotion();
-  const x = useSharedValue(-130);
-  useEffect(() => {
-    if (reduced) return;
-    x.value = withDelay(
-      delay,
-      withTiming(360, { duration: 950, easing: Easing.bezier(...curves.standard) }),
-    );
-  }, [reduced, delay, x]);
-  const sheenStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: x.value }, { rotate: '14deg' }],
-  }));
-  if (reduced) return null;
-  return <Animated.View pointerEvents="none" style={[styles.sheen, { backgroundColor: color }, sheenStyle]} />;
-}
-
-/** Spring-pop wrapper: replays a 0.5 → 1 settle whenever `popKey` changes. */
-function PopBadge({ popKey, children }: { popKey: string | boolean; children: React.ReactNode }) {
-  const reduced = useReducedMotion();
-  const s = useSharedValue(reduced ? 1 : 0.5);
-  useEffect(() => {
-    if (reduced) {
-      s.value = 1;
-      return;
-    }
-    s.value = withSpring(1, { duration: 500, dampingRatio: 0.55 });
-  }, [popKey, reduced, s]);
-  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
-  return <Animated.View style={popStyle}>{children}</Animated.View>;
-}
-
 function ActionRowBlock({
   loggedToday,
+  moodLogged,
   waterMl,
   medNames,
   medCount,
@@ -281,6 +296,7 @@ function ActionRowBlock({
   onMedications,
 }: {
   loggedToday: boolean;
+  moodLogged: boolean;
   waterMl: number | null;
   medNames: string[];
   medCount: number;
@@ -290,230 +306,190 @@ function ActionRowBlock({
   onDailyLog: () => void;
   onMedications: () => void;
 }) {
+  // Honest "today" signals only — mood check-in, any water, doses done.
+  const waterDone = (waterMl ?? 0) > 0;
+  const dosesDone = medExpected > 0 ? medTaken >= medExpected : null;
+  const signals = [moodLogged, waterDone, dosesDone].filter((s) => s !== null) as boolean[];
+  const doneCount = signals.filter(Boolean).length;
+  const completion = signals.length > 0 ? doneCount / signals.length : 0;
   const dosePct = medExpected > 0 ? Math.max(0, Math.min(1, medTaken / medExpected)) : 0;
-  const dosesRemain = medActive && medExpected > medTaken;
-  const waterHero = waterMl != null ? `${(Math.round(waterMl / 100) * 100).toLocaleString('en-US')}ml` : null;
+
+  const statusColor = loggedToday ? '#4E9B5F' : '#C96A1E';
+  const waterCaption = waterDone
+    ? `${(Math.round((waterMl ?? 0) / 100) * 100).toLocaleString('en-US')}ml water`
+    : null;
 
   return (
     <View style={styles.section}>
-      <View style={styles.actionRow}>
-        <Entrance index={0} staggerMs={70} style={styles.actionHalf}>
-          <LiftCard style={styles.logCard} contentContainerStyle={styles.logCardContent} accessibilityLabel={loggedToday ? "View or edit today's daily log" : "Enter today's daily logs"} onPress={onDailyLog} pressedBg="rgba(255,255,255,0.12)">
-            <View style={styles.logBevelTop} pointerEvents="none" />
-            <View style={styles.logEdgeBottom} pointerEvents="none" />
-            <BreathingGlow style={styles.logGlow} />
-            <View style={styles.logGlowDeep} pointerEvents="none" />
-            <View style={styles.actionCardTop}>
-              <Text style={styles.logEyebrow}>{loggedToday ? '●  LOGGED TODAY' : '○  TODAY'}</Text>
-              {loggedToday ? (
-                <PopBadge popKey={loggedToday}>
-                  <View style={styles.logCheck}><CheckGlyph size={13} color="#0B3D31" /></View>
-                </PopBadge>
-              ) : (
-                <View style={styles.logPulse} />
-              )}
-            </View>
-            <Text style={styles.logTitle}>Daily logs</Text>
-            {loggedToday ? (
-              <View style={styles.actionCardBottom}>
-                <Text style={styles.logHero} numberOfLines={1}>{waterHero ?? 'Done'}</Text>
-                <Text style={styles.logCaption} numberOfLines={1}>
-                  {waterHero ? 'water logged · nicely done' : 'all caught up for today'}
+      {/* ── Daily check-in hero ── */}
+      <Entrance index={0} staggerMs={70}>
+        <LiftCard
+          style={styles.todayCard}
+          contentContainerStyle={styles.todayCardContent}
+          accessibilityLabel={loggedToday ? "View or edit today's daily log" : "Enter today's daily log"}
+          onPress={onDailyLog}
+          pressedBg="rgba(29,27,23,0.04)"
+        >
+          <View style={styles.todayRow}>
+            <View style={styles.todayText}>
+              <View style={styles.statusRow}>
+                <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                <Text style={[styles.statusText, { color: statusColor }]}>
+                  {loggedToday ? 'LOGGED TODAY' : "TODAY'S CHECK-IN"}
                 </Text>
-                <View style={styles.logCta}><Text style={styles.logCtaText}>View / Edit  →</Text></View>
+                <Text style={styles.statusCount}>{`${doneCount}/${signals.length}`}</Text>
               </View>
-            ) : (
-              <View style={styles.actionCardBottom}>
-                <Text style={styles.logCaption}>sleep · water · wellbeing</Text>
-                <View style={styles.logCta}><Text style={styles.logCtaText}>Log today  →</Text></View>
-              </View>
-            )}
-            <Sheen color="rgba(255,255,255,0.20)" delay={450} />
-          </LiftCard>
-        </Entrance>
+              <Text style={styles.todayTitle}>
+                {loggedToday ? "You're all caught up" : 'How are you today?'}
+              </Text>
+              <Text style={styles.todayCaption} numberOfLines={2}>
+                {loggedToday
+                  ? waterCaption ?? `${doneCount} of ${signals.length} signals in`
+                  : 'Sleep · water · mood — about a minute'}
+              </Text>
+            </View>
+            <ProgressRing pct={completion} />
+          </View>
+          <View style={[styles.todayCta, loggedToday ? styles.todayCtaQuiet : styles.todayCtaPrimary]}>
+            <Text style={loggedToday ? styles.todayCtaQuietText : styles.todayCtaPrimaryText}>
+              {loggedToday ? 'View / edit  →' : "Log today's check-in  →"}
+            </Text>
+          </View>
+        </LiftCard>
+      </Entrance>
 
-        <Entrance index={1} staggerMs={70} style={styles.actionHalf}>
-          <LiftCard style={styles.medCard} contentContainerStyle={styles.medCardContent} accessibilityLabel="View active medications" onPress={onMedications} pressedBg="rgba(20,20,20,0.06)">
-            <View style={styles.medBevelTop} pointerEvents="none" />
-            <View style={styles.medEdgeBottom} pointerEvents="none" />
-            <View style={styles.medBlob} pointerEvents="none" />
-            <View style={styles.actionCardTop}>
-              <View style={styles.medEyebrowRow}>
-                <Text style={styles.medEyebrow}>✚  MEDICATION</Text>
-                {dosesRemain ? <BreathingGlow style={styles.medPulse} /> : null}
-              </View>
-              <IconButton glyph="+" kind="solid" accessibilityLabel="Add medication" onPress={onMedications} size={30} />
-            </View>
+      {/* ── Medication up next ── */}
+      <Entrance index={1} staggerMs={70}>
+        <LiftCard
+          style={styles.medRowCard}
+          contentContainerStyle={styles.medRowContent}
+          accessibilityLabel={medActive ? `Medications, ${medTaken} of ${medExpected} doses taken` : 'No medications scheduled. Add one.'}
+          onPress={onMedications}
+          pressedBg="rgba(29,27,23,0.04)"
+        >
+          <View style={styles.medIconTile}>
+            <Text style={styles.medIcon}>💊</Text>
+          </View>
+          <View style={styles.medRowText}>
+            <Text style={styles.medRowEyebrow}>
+              {medActive ? 'MEDICATION · UP NEXT' : 'MEDICATION'}
+            </Text>
+            <Text style={styles.medRowName} numberOfLines={1}>
+              {medActive ? medNames[0] : 'Nothing scheduled'}
+            </Text>
             {medActive ? (
-              <View style={styles.actionCardBottom}>
-                <Text style={styles.medName} numberOfLines={1}>{medNames[0]}</Text>
-                <Text style={styles.medSub} numberOfLines={1}>
-                  {medExpected > 0 ? `${medTaken} of ${medExpected} doses · ${medCount} active` : `${medCount} active`}
-                </Text>
-                {medExpected > 0 ? <DoseBar pct={dosePct} /> : null}
-              </View>
+              <Text style={styles.medRowSub} numberOfLines={1}>
+                {medExpected > 0
+                  ? `${medTaken} of ${medExpected} doses${medCount > 1 ? ` · +${medCount - 1} more` : ''}`
+                  : `${medCount} active`}
+              </Text>
             ) : (
-              <View style={styles.actionCardBottom}>
-                <Text style={styles.medNameMuted}>Nothing scheduled</Text>
-                <Text style={styles.medSub}>Add one to start tracking</Text>
-                <View style={styles.medCta}><Text style={styles.medCtaText}>＋  Add med</Text></View>
-              </View>
+              <Text style={styles.medRowSub} numberOfLines={1}>Add one to start tracking</Text>
             )}
-            <Sheen color="rgba(255,255,255,0.45)" delay={580} />
-          </LiftCard>
-        </Entrance>
-      </View>
+            {medActive && medExpected > 0 ? <DoseBar pct={dosePct} /> : null}
+          </View>
+          {medActive && medExpected > 0 ? (
+            <View style={styles.dosePill}>
+              <Text style={styles.dosePillText}>{`${medTaken}/${medExpected}`}</Text>
+            </View>
+          ) : (
+            <Text style={styles.medChevron}>›</Text>
+          )}
+        </LiftCard>
+      </Entrance>
     </View>
   );
 }
 
-// ─── Insights panel (At a glance map ⇄ embedded 3D graph) ─────────────────────
-
-// Node colors mirror the 3D scene (NODE_COLORS in HealthGraphScreen) so the
-// legend reads true: blue = observation, etc.
-const GRAPH_LEGEND: Array<{ type: string; color: string; label: string; meaning: string }> = [
-  { type: 'patient', color: '#F4C51B', label: 'You', meaning: 'your hub — everything connects here' },
-  { type: 'body_structure', color: '#31B7A5', label: 'Body', meaning: 'anatomy areas your logs touch' },
-  { type: 'observation', color: '#4D8DFF', label: 'Observation', meaning: 'measurements, vitals & findings' },
-  { type: 'document', color: '#9B6CFF', label: 'Record', meaning: 'uploaded medical documents' },
-  { type: 'timeline_event', color: '#F4B740', label: 'Event', meaning: 'moments from your timeline' },
-  { type: 'medication', color: '#7C3AED', label: 'Medication', meaning: 'your active medications' },
-  { type: 'medication_taken_event', color: '#A78BFA', label: 'Dose taken', meaning: 'doses you logged' },
-];
+// ─── Insights panel (health overview map + actions) ─────────────────────────
 
 function InsightPanelBlock({
   hMetrics,
   mapHint,
-  signals,
   onOpenFullGraph,
-  onGraphTouch,
+  onImprove,
 }: {
   hMetrics: HMetric[];
   mapHint: string;
-  signals: GlanceSignal[];
   onOpenFullGraph: () => void;
-  /** Called on touch start/end inside the 3D canvas so the parent list can
-   * yield the gesture — dragging the graph must not scroll the page. */
-  onGraphTouch: (active: boolean) => void;
+  /** Improve / Keep duo → parent navigates to the actions window. */
+  onImprove: (focus: 'improve' | 'keep') => void;
 }) {
-  const reduced = useReducedMotion();
-  const [viewMode, setViewMode] = useState<number>(GLANCE);
   const [mapOpen, setMapOpen] = useState(false);
   const [mapWidth, setMapWidth] = useState(0);
-  const [legendOpen, setLegendOpen] = useState(false);
-
-  const glanceOpacity = useSharedValue(1);
-  const threeDOpacity = useSharedValue(0);
-
-  const setMode = useCallback((i: number) => {
-    setViewMode(i);
-    glanceOpacity.value = withTiming(i === GLANCE ? 1 : 0, timingConfig(250));
-    threeDOpacity.value = withTiming(i === GLANCE ? 0 : 1, timingConfig(250));
-  }, [glanceOpacity, threeDOpacity]);
-
-  const glanceStyle = useAnimatedStyle(() => ({ opacity: glanceOpacity.value }));
-  const threeDStyle = useAnimatedStyle(() => ({ opacity: threeDOpacity.value }));
-
-  const expand = useCallback(() => {
-    if (viewMode === THREED) onOpenFullGraph();
-    else setMapOpen(true);
-  }, [viewMode, onOpenFullGraph]);
 
   return (
     <Entrance index={1} style={styles.section}>
-      <View style={styles.panel}>
-        <PanelBackdrop />
-        <View style={styles.panelHeader}>
-          <Text style={styles.eyebrowOnDark}>Insights</Text>
-          <SegmentedSwitch options={[...MODES]} value={viewMode} onChange={setMode} style={styles.panelSwitch} />
+      <View style={styles.insightHead}>
+        <View>
+          <Text style={styles.insightEyebrow}>Insights</Text>
+          <Text style={styles.insightTitle}>Your health at a glance</Text>
         </View>
-
-        <View style={styles.panelBody}>
-          <Animated.View
-            pointerEvents={viewMode === GLANCE ? 'auto' : 'none'}
-            style={[styles.panelSubview, glanceStyle]}
-          >
-            <Pressable
-              style={styles.panelMap}
-              onLayout={(e) => setMapWidth(e.nativeEvent.layout.width)}
-              onPress={() => setMapOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Expand health overview map"
-            >
-              {mapWidth > 0 ? (
-                <>
-                  <Text style={styles.glanceHead}>
-                    Always know your <Text style={styles.glanceHeadAccent}>health</Text> over time.
-                  </Text>
-                  <HGraphMap metrics={hMetrics} width={mapWidth} />
-                </>
-              ) : null}
-              {mapWidth <= 0 ? null : (
-                <Text style={styles.panelHint} numberOfLines={1}>{mapHint}</Text>
-              )}
-            </Pressable>
-          </Animated.View>
-
-          <Animated.View
-            pointerEvents={viewMode === THREED ? 'auto' : 'none'}
-            style={[styles.panelSubview, threeDStyle]}
-          >
-            <View style={styles.threeDCol}>
-              <Text style={styles.graphHead}>
-                Your wellbeing is a constellation of connections.
-              </Text>
-              <View
-                style={styles.canvasTouch}
-                onTouchStart={() => onGraphTouch(true)}
-                onTouchEnd={() => onGraphTouch(false)}
-                onTouchCancel={() => onGraphTouch(false)}
-              >
-                <HealthGraphScreen embedded focusSource="graph" />
-              </View>
-              <View style={styles.g3Legend}>
-                <Pressable
-                  style={styles.g3LegendHead}
-                  onPress={() => setLegendOpen((v) => !v)}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: legendOpen }}
-                  accessibilityLabel={legendOpen ? 'Hide graph legend' : 'Show graph legend'}
-                >
-                  <View style={styles.g3LegendDots}>
-                    <View style={[styles.g3LegendPreview, { backgroundColor: '#4D8DFF' }]} />
-                    <View style={[styles.g3LegendPreview, { backgroundColor: '#31B7A5' }]} />
-                    <View style={[styles.g3LegendPreview, { backgroundColor: '#F4C51B' }]} />
-                  </View>
-                  <Text style={styles.g3LegendTitle}>Legend</Text>
-                  <Text style={styles.g3LegendChevron}>{legendOpen ? '▾' : '▸'}</Text>
-                </Pressable>
-                {legendOpen ? (
-                  <ScrollView style={styles.g3LegendList} showsVerticalScrollIndicator={false}>
-                    {GRAPH_LEGEND.map((row) => (
-                      <View key={row.type} style={styles.g3LegendRow}>
-                        <View style={[styles.g3LegendDot, { backgroundColor: row.color }]} />
-                        <Text style={styles.g3LegendLabel}>{row.label}</Text>
-                        <Text style={styles.g3LegendMeaning} numberOfLines={1}>{row.meaning}</Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                ) : null}
-              </View>
-              <Text style={styles.panelHintBottom}>Drag to explore · tap a node for detail</Text>
-            </View>
-          </Animated.View>
-
-          <IconButton
-            kind="softWhite"
-            glyph="↗"
-            size={34}
-            accessibilityLabel={viewMode === THREED ? 'Open full 3D graph' : 'Expand health overview'}
-            style={styles.panelExpand}
-            onPress={expand}
-          />
-        </View>
+        <Pressable
+          style={styles.insightExpand}
+          onPress={() => setMapOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Expand health overview"
+        >
+          <Text style={styles.insightExpandText}>Expand</Text>
+          <Text style={styles.insightExpandGlyph}>↗</Text>
+        </Pressable>
       </View>
 
-      <MapFullscreen visible={mapOpen} hMetrics={hMetrics} hint={mapHint} signals={signals} onClose={() => setMapOpen(false)} />
+      <View style={styles.panel}>
+        <Pressable
+          style={styles.panelMap}
+          onLayout={(e) => setMapWidth(e.nativeEvent.layout.width)}
+          onPress={() => setMapOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Expand health overview map"
+        >
+          {mapWidth > 0 ? (
+            <HGraphMap metrics={hMetrics} width={mapWidth} />
+          ) : null}
+          {mapWidth > 0 ? (
+            <Text style={styles.panelHint} numberOfLines={2}>{mapHint}</Text>
+          ) : null}
+        </Pressable>
+
+        {/* Improve / Keep duo lives inside the card, below the dial. */}
+        <View style={styles.actionDuo}>
+          <PressScale
+            onPress={() => {
+              try { Vibration.vibrate(12); } catch { /* best-effort */ }
+              onImprove('improve');
+            }}
+            accessibilityLabel="Improve — see actions based on your dial"
+            scaleTo={0.95}
+            style={[styles.duoBtn, styles.duoImprove]}
+          >
+            <Text style={styles.duoImproveText}>Improve</Text>
+          </PressScale>
+          <PressScale
+            onPress={() => {
+              try { Vibration.vibrate(12); } catch { /* best-effort */ }
+              onImprove('keep');
+            }}
+            accessibilityLabel="Keep — see what is holding steady"
+            scaleTo={0.95}
+            style={[styles.duoBtn, styles.duoKeep]}
+          >
+            <Text style={styles.duoKeepText}>Keep</Text>
+          </PressScale>
+        </View>
+
+        <Pressable
+          style={styles.graphLink}
+          onPress={onOpenFullGraph}
+          accessibilityRole="button"
+          accessibilityLabel="Explore your health in 3D"
+        >
+          <Text style={styles.graphLinkText}>Explore in 3D</Text>
+          <Text style={styles.graphLinkArrow}>→</Text>
+        </Pressable>
+      </View>
+
+      <MapFullscreen visible={mapOpen} hMetrics={hMetrics} onClose={() => setMapOpen(false)} onImprove={(focus) => { setMapOpen(false); onImprove(focus); }} />
     </Entrance>
   );
 }
@@ -523,15 +499,14 @@ function InsightPanelBlock({
 function MapFullscreen({
   visible,
   hMetrics,
-  hint,
-  signals,
   onClose,
+  onImprove,
 }: {
   visible: boolean;
   hMetrics: HMetric[];
-  hint: string;
-  signals: GlanceSignal[];
   onClose: () => void;
+  /** Improve / Keep duo → parent closes the modal and opens the window. */
+  onImprove: (focus: 'improve' | 'keep') => void;
 }) {
   const reduced = useReducedMotion();
   const { width: windowWidth, height } = useWindowDimensions();
@@ -562,7 +537,7 @@ function MapFullscreen({
     ],
   }));
 
-  // Keep the square hGraph small enough to leave room for hint + signals.
+  // Keep the square hGraph small enough to leave room for the hint.
   const mapSizeW = Math.min(windowWidth - mv.spaceScreen * 2 - mv.spaceCard * 2, Math.floor(height * 0.36));
 
   return (
@@ -572,7 +547,7 @@ function MapFullscreen({
           <PanelBackdrop />
           <View style={styles.modalHeader}>
             <View style={styles.modalTitleBlock}>
-              <Text style={styles.eyebrowOnDark}>Insights</Text>
+              <Text style={styles.eyebrowClinical}>Insights</Text>
               <Text style={styles.modalTitle}>Your health at a glance</Text>
             </View>
             <IconButton kind="white" glyph="✕" accessibilityLabel="Close insights" onPress={onClose} />
@@ -583,12 +558,30 @@ function MapFullscreen({
             showsVerticalScrollIndicator={false}
           >
             <HGraphMap metrics={hMetrics} width={mapSizeW} />
-            <Text style={styles.modalHint} numberOfLines={2}>{hint}</Text>
-            {signals.length > 0 ? (
-              <View style={styles.modalSignals}>
-                <LiveSignals signals={signals} />
-              </View>
-            ) : null}
+            <View style={styles.actionDuo}>
+              <PressScale
+                onPress={() => {
+                  try { Vibration.vibrate(12); } catch { /* best-effort */ }
+                  onImprove('improve');
+                }}
+                accessibilityLabel="Improve — see actions based on your dial"
+                scaleTo={0.95}
+                style={[styles.duoBtn, styles.duoImprove]}
+              >
+                <Text style={styles.duoImproveText}>Improve</Text>
+              </PressScale>
+              <PressScale
+                onPress={() => {
+                  try { Vibration.vibrate(12); } catch { /* best-effort */ }
+                  onImprove('keep');
+                }}
+                accessibilityLabel="Keep — see what is holding steady"
+                scaleTo={0.95}
+                style={[styles.duoBtn, styles.duoKeep]}
+              >
+                <Text style={styles.duoKeepText}>Keep</Text>
+              </PressScale>
+            </View>
           </ScrollView>
         </Animated.View>
       </Animated.View>
@@ -599,6 +592,7 @@ function MapFullscreen({
 // ─── Correlations heading ──────────────────────────────────────────────────────
 
 function CorrelationHeading({ count }: { count: number }) {
+  const { range, setRange } = useTrendRange();
   return (
     <Entrance index={2} style={[styles.section, styles.corrHeadingWrap]}>
       <View style={styles.corrHeader}>
@@ -611,6 +605,25 @@ function CorrelationHeading({ count }: { count: number }) {
           <Text style={styles.corrSeeAllText}>→</Text>
         </View>
       </View>
+      <View style={styles.rangeRow}>
+        {TREND_RANGE_ORDER.map((key) => {
+          const active = range === key;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => setRange(key)}
+              style={[styles.rangeChip, active && styles.rangeChipSelected]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`Show ${TREND_RANGES[key].label} range`}
+            >
+              <Text style={[styles.rangeChipText, active && styles.rangeChipTextSelected]}>
+                {TREND_RANGES[key].label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </Entrance>
   );
 }
@@ -619,24 +632,29 @@ function CorrelationHeading({ count }: { count: number }) {
 
 export default function HealthDashboardScreen() {
   const navigation = useNavigation<Nav>();
-  const { user } = useAuth();
 
   const metrics = useDailyMetrics();
   const medications = useMedications();
-  const trends = useTrends();
+  // Global correlation range (Week / Month / Year chips below) — drives the
+  // trends window AND the local feed window so switching range visibly
+  // retunes every graph.
+  const { days: trendDays } = useTrendRange();
+  const trends = useTrends(trendDays);
   const story = useHomeStory();
 
   const [refreshing, setRefreshing] = useState(false);
-  // Yield page scroll while a finger is on the 3D canvas (drag explores the
-  // graph instead of scrolling the feed).
-  const [listScroll, setListScroll] = useState(true);
-  const onGraphTouch = useCallback((active: boolean) => setListScroll(!active), []);
 
-  const feedQuery = useCorrelationFeed(trends.data, metrics.data);
+  const feedQuery = useCorrelationFeed(trends.data, metrics.data, Math.min(trendDays, 60));
   const feed = feedQuery.items;
 
+  // Focus refetch is time-gated: tab-hopping must not refetch 4 sources
+  // every time (refetch storms = scroll jank + spinner blink).
+  const lastFocusRefetch = useRef(0);
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastFocusRefetch.current < 30_000) return;
+      lastFocusRefetch.current = now;
       void story.refetch();
       void metrics.refetch();
       void medications.refetch();
@@ -763,78 +781,6 @@ export default function HealthDashboardScreen() {
       .join('   ·   ');
   }, [dims]);
 
-  // ── Live signals: every other real value Home already holds. Missing =
-  // hidden (never a zero tile). Each carries its hGraph band position + tone.
-  const signals = useMemo<GlanceSignal[]>(() => {
-    const out: GlanceSignal[] = [];
-    const m = metrics.data;
-    const detail = story.todayDetail;
-    const scaleTone = (v: number) => (v >= 4 ? 'good' : v === 3 ? 'neutral' : 'warn');
-
-    const energy = m?.today_wellbeing?.energy_level;
-    if (energy != null) {
-      out.push({ id: 'energy', label: 'ENERGY', value: `${energy}/5`, sub: 'today', pct: energy / 5, tone: scaleTone(energy) });
-    }
-    const wb = m?.today_wellbeing?.overall_wellbeing;
-    if (wb != null) {
-      out.push({ id: 'wellbeing', label: 'WELLBEING', value: `${wb}/5`, sub: 'overall today', pct: wb / 5, tone: scaleTone(wb) });
-    }
-    const sq = m?.latest_sleep?.sleep_quality;
-    if (sq != null) {
-      const aw = m?.latest_sleep?.awakenings;
-      out.push({
-        id: 'sleep-quality', label: 'SLEEP QUALITY', value: `${sq}/5`,
-        sub: aw != null ? `${aw} wake-up${aw === 1 ? '' : 's'}` : 'last night',
-        pct: sq / 5, tone: scaleTone(sq),
-      });
-    }
-    const meals = detail?.meals_count;
-    if (meals != null && meals > 0) {
-      const app = detail?.appetite_level;
-      out.push({
-        id: 'meals', label: 'MEALS', value: `${meals} meal${meals === 1 ? '' : 's'}`,
-        sub: app != null ? `appetite ${app}/5` : 'today',
-        pct: Math.min(meals / 3, 1), tone: meals >= 3 ? 'good' : meals === 2 ? 'neutral' : 'warn',
-      });
-    }
-    const kcal = m?.today_activity?.calories_burned;
-    if (kcal != null && kcal > 0) {
-      out.push({
-        id: 'calories', label: 'BURNED', value: `${Math.round(kcal)} kcal`,
-        sub: `${m?.today_activity?.activity_count ?? 1} session${(m?.today_activity?.activity_count ?? 1) === 1 ? '' : 's'} today`,
-        pct: Math.min(kcal / 500, 1), tone: 'neutral',
-      });
-    }
-    const hr = detectHeartRate(m ?? null);
-    if (hr) {
-      const inBand = hr.value >= 60 && hr.value <= 100;
-      out.push({
-        id: 'heart', label: 'HEART RATE', value: `${hr.value} bpm`,
-        sub: inBand ? 'resting band' : 'outside resting band',
-        pct: Math.max(0, Math.min(1, (hr.value - 40) / 80)), tone: inBand ? 'good' : 'warn',
-      });
-    }
-    const pain = m?.latest_pain;
-    if (pain) {
-      out.push({
-        id: 'pain', label: 'PAIN', value: `${pain.severity}/10`,
-        sub: pain.pain_type ?? 'latest',
-        pct: pain.severity / 10, tone: pain.severity >= 7 ? 'bad' : pain.severity >= 4 ? 'warn' : 'neutral',
-      });
-    }
-    const med = story.medSummary;
-    if (med?.hasSchedule) {
-      const done = med.dosesTaken >= med.dosesExpected;
-      out.push({
-        id: 'meds', label: 'DOSES', value: `${med.dosesTaken}/${med.dosesExpected}`,
-        sub: done ? 'all taken' : 'taken today',
-        pct: med.dosesExpected > 0 ? med.dosesTaken / med.dosesExpected : 0,
-        tone: done ? 'good' : 'neutral',
-      });
-    }
-    return out.slice(0, 8);
-  }, [metrics.data, story.todayDetail, story.medSummary]);
-
   // Primitive projections keep the memoized header stable across focus refetches
   // (so the staggered entrance only plays on first mount, not on every refetch).
   // loggedToday trusts local SQLite AND server state: a log that exists on the
@@ -862,6 +808,8 @@ export default function HealthDashboardScreen() {
   const goToDailyLog = useCallback(() => navigation.navigate('DailyLog'), [navigation]);
   const goToMedications = useCallback(() => navigation.navigate('Medications'), [navigation]);
   const goToTimeline = useCallback(() => navigation.navigate('Timeline'), [navigation]);
+  const goToSettings = useCallback(() => navigation.navigate('Settings'), [navigation]);
+  const { photoUri } = useProfilePhoto();
   const goToFullGraph = useCallback(
     () => navigation.navigate('HealthGraph', { source: 'graph' }),
     [navigation],
@@ -876,13 +824,15 @@ export default function HealthDashboardScreen() {
     transform: [{ translateY: -scrollY.value * 0.32 }],
   }));
 
-  const firstName = (user?.displayName ?? 'there').trim().split(' ')[0] || 'there';
+  const { userProfile } = useAuth();
+  const firstName = formatFirstName(userProfile?.displayName) || 'there';
   const greeting = greetingForHour(new Date().getHours());
 
   const listHeader = useMemo(() => (
     <View>
       <ActionRowBlock
         loggedToday={loggedToday}
+        moodLogged={metrics.data?.today_wellbeing != null}
         waterMl={waterMl}
         medNames={medNames}
         medCount={activeMeds.length}
@@ -892,18 +842,12 @@ export default function HealthDashboardScreen() {
         onDailyLog={goToDailyLog}
         onMedications={goToMedications}
       />
-      <InsightPanelBlock hMetrics={hMetrics} mapHint={mapHint} signals={signals} onOpenFullGraph={goToFullGraph} onGraphTouch={onGraphTouch} />
-      <PpgHeartRateCard />
-      {signals.length > 0 ? (
-        <Entrance index={2} style={styles.section}>
-          <LiveSignals signals={signals} />
-        </Entrance>
-      ) : null}
+      <InsightPanelBlock hMetrics={hMetrics} mapHint={mapHint} onOpenFullGraph={goToFullGraph} onImprove={(focus) => navigation.navigate('Improve', { focus, metrics: hMetrics })} />
       <CorrelationHeading count={feed.length} />
     </View>
   ), [
-    loggedToday, waterMl, medNames, activeMeds.length, medTaken, medExpected, medActive,
-    hMetrics, mapHint, signals, feed.length, goToDailyLog, goToMedications, goToFullGraph, onGraphTouch,
+    loggedToday, metrics.data?.today_wellbeing, waterMl, medNames, activeMeds.length, medTaken, medExpected, medActive,
+    hMetrics, mapHint, feed.length, goToDailyLog, goToMedications, goToFullGraph,
   ]);
 
   const renderItem = useCallback(({ item, index }: { item: CorrelationFeedItem; index: number }) => (
@@ -943,7 +887,9 @@ export default function HealthDashboardScreen() {
         greeting={greeting}
         name={firstName}
         initial={firstName.charAt(0).toUpperCase()}
+        photoUri={photoUri}
         hasActivity={story.story.length > 0}
+        onAvatarPress={goToSettings}
         onBellPress={goToTimeline}
       />
 
@@ -957,9 +903,12 @@ export default function HealthDashboardScreen() {
         ListEmptyComponent={listEmpty}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={listScroll}
         onScroll={onScroll}
         scrollEventThrottle={16}
+        windowSize={7}
+        maxToRenderPerBatch={5}
+        initialNumToRender={6}
+        removeClippedSubviews
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1001,11 +950,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: mv.surfaceWhite,
+    overflow: 'hidden',
+  },
+  avatarPhoto: {
+    width: '100%',
+    height: '100%',
   },
   avatarText: { ...mvType.navTitle, color: mv.textOnDarkPrimary, fontSize: 15 },
-  headerGreeting: { marginLeft: mv.spaceSideBySide, flexShrink: 1 },
-  greetingSmall: { ...mvType.caption, color: mv.textOnLightSecondary },
-  greetingName: { ...mvType.navTitle, color: mv.textOnLightPrimary, marginTop: 1 },
+  headerGreeting: { marginLeft: mv.spaceSideBySide, flexShrink: 1, maxWidth: '52%' },
+  greetingSmall: { ...mvType.caption, color: mv.textOnLightSecondary, fontSize: 12, lineHeight: 16 },
+  greetingName: { ...mvType.navTitle, color: mv.textOnLightPrimary, marginTop: 1, fontSize: 15, lineHeight: 20 },
   headerWordmark: {
     position: 'absolute',
     left: 0,
@@ -1045,258 +999,168 @@ const styles = StyleSheet.create({
 
   listContent: {
     paddingHorizontal: mv.spaceScreen,
-    paddingBottom: 36,
+    paddingBottom: 110,
     paddingTop: mv.spaceStack - 4,
     zIndex: 1,
   },
   section: { marginBottom: mv.spaceStack, zIndex: 1 },
 
-  // Action row — colourful editorial pair
-  actionRow: { flexDirection: 'row', gap: mv.spaceSideBySide },
-  actionHalf: { flex: 1 },
-  actionCardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  actionCardBottom: { flex: 1, justifyContent: 'flex-end' },
-
-  // 3D bevel: top light-catch + bottom weight edge. Sheen: one-shot diagonal
-  // light sweep on mount (transform-only, clipped by the card's overflow).
-  sheen: {
-    position: 'absolute',
-    top: -30,
-    bottom: -30,
-    left: 0,
-    width: 56,
-    borderRadius: 28,
+  // ── Shared correlation range (Week / Month / Year, global state) ──
+  rangeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
   },
-  logBevelTop: {
-    position: 'absolute',
-    top: 10,
-    left: 14,
-    right: 14,
-    height: 1.5,
-    borderRadius: 1,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-  },
-  logEdgeBottom: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 6,
-    borderBottomLeftRadius: mv.radiusCard,
-    borderBottomRightRadius: mv.radiusCard,
-    backgroundColor: 'rgba(0,0,0,0.20)',
-  },
-  medBevelTop: {
-    position: 'absolute',
-    top: 10,
-    left: 14,
-    right: 14,
-    height: 1.5,
-    borderRadius: 1,
-    backgroundColor: 'rgba(255,255,255,0.65)',
-  },
-  medEdgeBottom: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 6,
-    borderBottomLeftRadius: mv.radiusCard,
-    borderBottomRightRadius: mv.radiusCard,
-    backgroundColor: 'rgba(20,20,20,0.10)',
-  },
-
-  // — Daily-logs card: deep teal, lime glow, serif-italic display type —
-  logCard: {
+  rangeChip: {
     flex: 1,
-    backgroundColor: mv.surfaceTealDeep,
-    borderRadius: mv.radiusCard,
-    borderCurve: 'continuous',
-    minHeight: 178,
-    overflow: 'hidden',
+    paddingVertical: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(11,104,82,0.35)',
+    borderColor: '#E6DBC6',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  logCardContent: { flex: 1, padding: mv.spaceCard, gap: 6 },
-  logGlow: {
-    position: 'absolute',
-    top: -56,
-    right: -56,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: mv.accentLime,
+  rangeChipSelected: { backgroundColor: '#1D1B17', borderColor: '#1D1B17' },
+  rangeChipText: { fontSize: 12, fontWeight: '700', color: '#5C6B7A' },
+  rangeChipTextSelected: { color: '#FFFFFF' },
+
+  // ── Improve / Keep duo (replaces the signal tiles) ──
+  actionDuo: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: 10,
   },
-  logGlowDeep: {
-    position: 'absolute',
-    bottom: -70,
-    left: -50,
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-  },
-  logEyebrow: {
-    ...mvType.pill,
-    color: mv.accentLime,
-    letterSpacing: 1.6,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  logPulse: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: mv.accentLime,
-    marginTop: 3,
-    marginRight: 4,
-  },
-  logCheck: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: mv.accentLime,
+  duoBtn: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
   },
-  logTitle: {
+  duoImprove: {
+    backgroundColor: '#2B8A3E',
+    borderColor: '#2B8A3E',
+    shadowColor: '#2B8A3E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  duoImproveText: {
+    ...TYPOGRAPHY.bodyStrong,
+    fontSize: 16,
     color: '#FFFFFF',
-    fontSize: 19,
-    fontWeight: '800',
-    letterSpacing: -0.4,
-    lineHeight: 24,
   },
-  logHero: {
-    fontFamily: SERIF,
-    fontStyle: 'italic',
-    fontWeight: '700',
-    fontSize: 30,
-    letterSpacing: -0.5,
-    lineHeight: 34,
-    color: '#FFFFFF',
-    fontVariant: ['tabular-nums'],
+  duoKeep: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E6DBC6',
   },
-  logCaption: { ...mvType.caption, fontStyle: 'italic', color: 'rgba(255,255,255,0.72)', marginTop: 2 },
-  logCta: {
-    alignSelf: 'flex-start',
-    backgroundColor: mv.accentLime,
-    borderRadius: mv.radiusPill,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginTop: 10,
+  duoKeepText: {
+    ...TYPOGRAPHY.bodyStrong,
+    fontSize: 16,
+    color: '#16212C',
   },
-  logCtaText: { ...mvType.pill, color: '#0B3D31', fontWeight: '800' },
-
-  // — Meds card: lime, dark grotesk type, spring dose bar —
-  medCard: {
-    flex: 1,
-    backgroundColor: mv.accentLime,
+  // ── Today stack: check-in hero ──
+  todayCard: {
+    backgroundColor: '#FFFBF3',
     borderRadius: mv.radiusCard,
     borderCurve: 'continuous',
-    minHeight: 178,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(20,20,20,0.08)',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06), 0 12px 28px rgba(190,220,90,0.45)',
+    borderColor: '#E6DBC6',
+    boxShadow: '0 1px 2px rgba(124,90,46,0.08), 0 10px 28px rgba(124,90,46,0.10)',
   },
-  medCardContent: { flex: 1, padding: mv.spaceCard, gap: 6 },
-  medBlob: {
-    position: 'absolute',
-    bottom: -64,
-    right: -44,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-  medEyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingTop: 2 },
-  medPulse: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#C2503E' },
-  medEyebrow: {
-    ...mvType.pill,
-    color: 'rgba(20,20,20,0.55)',
-    letterSpacing: 1.6,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  medName: {
-    fontFamily: SERIF,
-    fontStyle: 'italic',
-    fontWeight: '700',
-    fontSize: 20,
-    letterSpacing: -0.2,
-    lineHeight: 24,
-    color: mv.textOnLightPrimary,
-  },
-  medNameMuted: {
-    fontFamily: SERIF,
-    fontStyle: 'italic',
-    fontSize: 17,
-    lineHeight: 22,
-    color: 'rgba(20,20,20,0.55)',
-  },
-  medSub: { ...mvType.caption, color: 'rgba(20,20,20,0.62)', marginTop: 4, fontVariant: ['tabular-nums'] },
-  medCta: {
-    alignSelf: 'flex-start',
-    backgroundColor: mv.textOnLightPrimary,
-    borderRadius: mv.radiusPill,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+  todayCardContent: { padding: 16, gap: 12 },
+  todayRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  todayText: { flex: 1, gap: 4 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusText: { ...mvType.pill, letterSpacing: 1.4, fontSize: 11, fontWeight: '800' },
+  statusCount: { ...mvType.pill, color: '#A8A094', fontSize: 11, marginLeft: 2, fontVariant: ['tabular-nums'] },
+  todayTitle: { color: '#1D1B17', fontSize: 20, fontWeight: '800', letterSpacing: -0.4, lineHeight: 26 },
+  todayCaption: { ...mvType.caption, color: '#797166' },
+  ringCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  ringText: { fontSize: 12, fontWeight: '800', color: '#1D1B17', fontVariant: ['tabular-nums'] },
+  todayCta: { alignSelf: 'flex-start', borderRadius: mv.radiusPill, paddingHorizontal: 16, paddingVertical: 10 },
+  todayCtaPrimary: { backgroundColor: '#1D1B17' },
+  todayCtaQuiet: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#D3C3A6' },
+  todayCtaPrimaryText: { ...mvType.pill, color: '#FFFFFF', fontWeight: '800' },
+  todayCtaQuietText: { ...mvType.pill, color: '#1D1B17', fontWeight: '800' },
+
+  // ── Today stack: medication up-next row ──
+  medRowCard: {
     marginTop: 10,
+    backgroundColor: '#FFFBF3',
+    borderRadius: mv.radiusCard,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E6DBC6',
+    boxShadow: '0 1px 2px rgba(124,90,46,0.08), 0 10px 28px rgba(124,90,46,0.10)',
   },
-  medCtaText: { ...mvType.pill, color: mv.accentLime, fontWeight: '800' },
+  medRowContent: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
+  medIconTile: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#FBE3C8', alignItems: 'center', justifyContent: 'center' },
+  medIcon: { fontSize: 22 },
+  medRowText: { flex: 1, gap: 2 },
+  medRowEyebrow: { ...mvType.pill, color: '#C96A1E', letterSpacing: 1.4, fontSize: 10, fontWeight: '800' },
+  medRowName: { color: '#1D1B17', fontSize: 16, fontWeight: '800', letterSpacing: -0.2, lineHeight: 21 },
+  medRowSub: { ...mvType.caption, color: '#797166', fontVariant: ['tabular-nums'] },
+  dosePill: { backgroundColor: '#D9EAF7', borderRadius: mv.radiusPill, paddingHorizontal: 10, paddingVertical: 5 },
+  dosePillText: { fontSize: 12, fontWeight: '800', color: '#2D5F86', fontVariant: ['tabular-nums'] },
+  medChevron: { fontSize: 22, fontWeight: '600', color: '#A8A094', paddingRight: 2 },
+
+  // Retired two-up card styles (replaced by the Today stack above).
   doseTrack: {
     height: 7,
     borderRadius: 4,
-    backgroundColor: 'rgba(20,20,20,0.14)',
+    backgroundColor: 'rgba(232,134,46,0.18)',
     marginTop: 10,
     overflow: 'hidden',
   },
   doseFill: {
     height: 7,
     borderRadius: 4,
-    backgroundColor: mv.surfaceTealDeep,
+    backgroundColor: '#E8862E',
   },
 
-  // Insights panel — midnight garden: near-black green ink, lime aurora,
-  // coral kiss, dot-grid texture, glass border. (Ink is a one-off: the
-  // Movements+ tokens carry no near-black green.)
+  // Insights panel — one quiet cream card: map, actions, 3D link.
   panel: {
-    backgroundColor: '#07231C',
+    backgroundColor: '#FFFBF3',
     borderRadius: mv.radiusCard,
     borderCurve: 'continuous',
     padding: mv.spaceCard,
-    overflow: 'hidden',
+    gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.30), 0 20px 48px rgba(4,32,25,0.55)',
+    borderColor: '#E6DBC6',
+    boxShadow: '0 1px 2px rgba(124,90,46,0.08), 0 12px 32px rgba(124,90,46,0.10)',
   },
-  auraLime: {
+  auraRed: {
     position: 'absolute',
     top: -90,
     right: -70,
     width: 250,
     height: 250,
     borderRadius: 125,
-    backgroundColor: mv.accentLime,
+    backgroundColor: 'rgba(232,134,46,0.10)',
   },
-  auraEmerald: {
+  auraSlate: {
     position: 'absolute',
     top: 120,
     left: -90,
     width: 230,
     height: 230,
     borderRadius: 115,
-    backgroundColor: 'rgba(30,158,122,0.35)',
+    backgroundColor: 'rgba(43,108,176,0.08)',
   },
-  auraCoral: {
+  auraRose: {
     position: 'absolute',
     bottom: -80,
     right: 40,
     width: 170,
     height: 170,
     borderRadius: 85,
-    backgroundColor: 'rgba(240,169,138,0.16)',
+    backgroundColor: 'rgba(232,134,46,0.06)',
   },
   panelTexture: {
     position: 'absolute',
@@ -1312,101 +1176,55 @@ const styles = StyleSheet.create({
     right: 18,
     height: 1.5,
     borderRadius: 1,
-    backgroundColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: 'rgba(232,134,46,0.22)',
   },
-  panelHeader: {
+  // Insights section header (mirrors the Correlations heading language)
+  insightHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  insightEyebrow: {
+    ...mvType.pill,
+    color: mv.textOnLightSecondary,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  insightTitle: { ...mvType.navTitle, color: mv.textOnLightPrimary, marginTop: 4 },
+  insightExpand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingLeft: 12,
+  },
+  insightExpandText: { ...mvType.pill, color: mv.textOnLightSecondary },
+  insightExpandGlyph: { fontSize: 13, fontWeight: '800', color: '#C96A1E' },
+  panelMap: { alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', gap: 8 },
+  panelHint: {
+    ...mvType.caption,
+    color: mv.textOnLightSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 4,
+  },
+  // Quiet footer link to the full 3D graph (replaces the embedded canvas).
+  graphLink: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: mv.spaceSideBySide,
+    paddingTop: 12,
+    marginTop: 2,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(29,27,23,0.08)',
   },
-  panelSwitch: { width: 224 },
-  // One height for both modes — toggling glance ⇄ 3D never jumps.
-  panelBody: { height: 430, marginTop: mv.spaceStack, position: 'relative' },
-  panelSubview: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  panelMap: { flex: 1, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
-  glanceHead: {
-    fontFamily: SERIF,
-    fontStyle: 'italic',
-    fontWeight: '700',
-    fontSize: 21,
-    lineHeight: 26,
-    letterSpacing: -0.2,
-    color: '#FFF7ED',
-    textAlign: 'center',
-    marginBottom: 6,
-    paddingHorizontal: 8,
-  },
-  glanceHeadAccent: { color: mv.accentLime },
-  threeDCol: {
-    flex: 1,
-    alignSelf: 'stretch',
-    justifyContent: 'flex-start',
-    gap: 8,
-  },
-  graphHead: {
-    fontFamily: SERIF,
-    fontStyle: 'italic',
-    fontSize: 14.5,
-    lineHeight: 19,
-    color: 'rgba(255,247,237,0.92)',
-    textAlign: 'center',
-    paddingHorizontal: 12,
-  },
-  canvasTouch: {
-    flex: 1,
-    borderRadius: 20,
-    borderCurve: 'continuous',
-    overflow: 'hidden',
-    backgroundColor: '#FAFAF8',
-  },
-  g3Legend: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 14,
-    borderCurve: 'continuous',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    overflow: 'hidden',
-  },
-  g3LegendHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  g3LegendDots: { flexDirection: 'row', gap: 4 },
-  g3LegendPreview: { width: 9, height: 9, borderRadius: 4.5 },
-  g3LegendTitle: { ...mvType.pill, color: 'rgba(255,255,255,0.85)', flex: 1 },
-  g3LegendChevron: { color: mv.accentLime, fontSize: 13, fontWeight: '800' },
-  g3LegendList: { maxHeight: 128, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.10)' },
-  g3LegendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  g3LegendDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)' },
-  g3LegendLabel: { ...mvType.pill, color: '#FFFFFF', minWidth: 78 },
-  g3LegendMeaning: { ...mvType.caption, color: 'rgba(255,255,255,0.62)', fontSize: 12, flex: 1 },
-  panelHint: {
-    ...mvType.caption,
-    color: 'rgba(255,255,255,0.78)',
-    textAlign: 'center',
-    marginTop: mv.spaceStack,
-    paddingHorizontal: mv.spaceScreen,
-  },
-  panelHintBottom: {
-    ...mvType.pill,
-    color: 'rgba(255,255,255,0.55)',
-    textAlign: 'center',
-  },
-  panelExpand: { position: 'absolute', right: 6, bottom: 6, zIndex: 6 },
+  graphLinkText: { ...mvType.pill, color: '#1D1B17' },
+  graphLinkArrow: { fontSize: 14, fontWeight: '800', color: '#C96A1E' },
 
-  eyebrowOnDark: {
+  eyebrowClinical: {
     ...mvType.pill,
-    color: mv.accentLime,
+    color: '#1D1B17',
     letterSpacing: 1.6,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1431,7 +1249,7 @@ const styles = StyleSheet.create({
 
   // Feed states (sunset paper to match the cards)
   feedSkeleton: {
-    backgroundColor: '#FFF8F0',
+    backgroundColor: '#FFFBF3',
     borderRadius: mv.radiusCard,
     borderCurve: 'continuous',
     padding: mv.spaceCard,
@@ -1451,7 +1269,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9EBD9',
   },
   feedEmpty: {
-    backgroundColor: '#FFF8F0',
+    backgroundColor: '#FFFBF3',
     borderRadius: mv.radiusCard,
     borderCurve: 'continuous',
     padding: mv.spaceCard,
@@ -1490,11 +1308,4 @@ const styles = StyleSheet.create({
   modalTitle: { ...mvType.hero, fontSize: 22, lineHeight: 28, color: mv.textOnDarkPrimary },
   modalChartWrap: { alignItems: 'center', marginTop: mv.spaceStack },
   modalScroll: { maxHeight: 520 },
-  modalSignals: { alignSelf: 'stretch', marginTop: mv.spaceStack },
-  modalHint: {
-    ...mvType.caption,
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
-    marginTop: mv.spaceStack,
-  },
 });

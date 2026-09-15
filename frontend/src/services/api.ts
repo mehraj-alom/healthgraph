@@ -11,7 +11,7 @@ const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   'http://10.22.93.11:8000';
 
-console.log('[MedGraph] API_URL:', API_URL);
+if (__DEV__) console.log('[MedGraph] API_URL:', API_URL);
 
 // ── Temporary structured logging for upload/poll tracing ──────────────
 // Remove after diagnosing the Network Error.
@@ -50,7 +50,7 @@ client.interceptors.request.use(
   ) => {
     const seq = ++_reqSeq.n;
     (config as any).__seq = seq;
-    console.log(
+    if (__DEV__) console.log(
       `[HTTP] #${seq} → ${String(config.method ?? '??').toUpperCase()} ${config.baseURL ?? ''}${config.url ?? ''}`,
     );
     try {
@@ -97,7 +97,7 @@ client.interceptors.request.use(
 client.interceptors.response.use(
   (response) => {
     const seq = (response.config as any).__seq ?? '?';
-    console.log(
+    if (__DEV__) console.log(
       `[HTTP] #${seq} ← ${response.status} ${String(response.config.method ?? '??').toUpperCase()} ${response.config.url ?? ''}`,
     );
     return response;

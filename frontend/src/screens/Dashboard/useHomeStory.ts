@@ -74,7 +74,13 @@ export function useHomeStory(): UseHomeStoryResult {
         () => [] as MedicationTakenEvent[],
       );
 
-      const medSummary = buildMedicationSummary(meds, taken);
+      const medSummary = buildMedicationSummary(
+        meds,
+        taken,
+        // Doses reported via today's daily check-in count too (deduped by
+        // name inside the summary so one dose never counts twice).
+        (detail?.medications ?? []).map((m) => m.medication_name),
+      );
 
       // ── Build medication name lookup for concept_id fallback ──
       const medName = new Map<string, string>();

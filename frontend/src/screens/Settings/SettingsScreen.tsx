@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,11 +11,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '@/context/AuthContext';
+import { useProfilePhoto } from '@/hooks/useProfilePhoto';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Input, NumberInput, SectionHeader } from '@/components';
-import { COLORS, SPACING, TYPOGRAPHY } from '@/constants';
+import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants';
 import { api } from '@/services/api';
 import type { PatientProfile, RootStackParamList } from '@/types';
 
@@ -26,7 +29,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function SettingsScreen() {
   const navigation = useNavigation<Nav>();
-  const { user, userProfile, logout } = useAuth();
+  const { user, userProfile, logout, refreshDisplayName } = useAuth();
   const queryClient = useQueryClient();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -91,6 +94,9 @@ export default function SettingsScreen() {
       console.log('[Profile] PROFILE_SAVE_SUCCESS');
       queryClient.setQueryData(['profile'], data);
       queryClient.invalidateQueries({ queryKey: ['profile'] });
+      if (data.display_name?.trim()) {
+        refreshDisplayName(data.display_name);
+      }
       // Reset mutation state after brief success feedback
       setTimeout(() => saveMutation.reset(), 2000);
     },
@@ -125,12 +131,112 @@ export default function SettingsScreen() {
 
   const email = userProfile?.email ?? user?.email ?? '';
 
+  // --- Local-only photo (frontend preview — never uploaded) ---
+  const { photoUri, savePhoto } = useProfilePhoto();
+  const [pickingPhoto, setPickingPhoto] = useState(false);
+
+  const pickPhoto = useCallback(async () => {
+    if (pickingPhoto) return;
+    setPickingPhoto(true);
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: 'image/*',
+        copyToCacheDirectory: true,
+      });
+      const uri = (res as { assets?: { uri: string }[]; uri?: string }).assets?.[0]?.uri
+        ?? (res as { uri?: string }).uri;
+      if (!res.canceled && uri) {
+        await savePhoto(uri);
+      }
+    } catch {
+      Alert.alert('Photo', 'Could not open the photo picker. Please try again.');
+    } finally {
+      setPickingPhoto(false);
+    }
+  }, [pickingPhoto, savePhoto]);
+
+  // --- Danger zone (frontend preview — confirmations only, nothing is sent) ---
+  const confirmDeleteData = useCallback(() => {
+    Alert.alert(
+      'Delete all my data?',
+      'This would remove daily logs, medications, documents and cached health data from this device and your account. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete everything',
+          style: 'destructive',
+          onPress: () => Alert.alert('Frontend preview', 'UI only — nothing was deleted.'),
+        },
+      ],
+    );
+  }, []);
+
+  const confirmDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Delete account?',
+      'This would permanently delete your account, profile and all health data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: () => Alert.alert('Frontend preview', 'UI only — no request was sent.'),
+        },
+      ],
+    );
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        {/* ── Photo (local only) ── */}
+        <View style={styles.photoWrap}>
+          <Pressable
+            style={styles.photoAvatar}
+            onPress={() => void pickPhoto()}
+            accessibilityRole="button"
+            accessibilityLabel="Change profile photo"
+          >
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.photoImage} />
+            ) : (
+              <Text style={styles.photoInitial}>
+                {(displayName || userProfile?.displayName || email || '?').charAt(0).toUpperCase()}
+              </Text>
+            )}
+          </Pressable>
+          <Text style={styles.photoName} numberOfLines={1}>
+            {displayName || userProfile?.displayName || 'Your profile'}
+          </Text>
+          {email ? <Text style={styles.photoEmail} numberOfLines={1}>{email}</Text> : null}
+          <View style={styles.photoActions}>
+            <Pressable
+              style={styles.photoBtn}
+              onPress={() => void pickPhoto()}
+              disabled={pickingPhoto}
+              accessibilityRole="button"
+              accessibilityLabel={photoUri ? 'Change photo' : 'Add photo'}
+            >
+              <Text style={styles.photoBtnText}>
+                {pickingPhoto ? 'Opening…' : photoUri ? 'Change photo' : 'Add photo'}
+              </Text>
+            </Pressable>
+            {photoUri ? (
+              <Pressable
+                style={styles.photoBtn}
+                onPress={() => void savePhoto(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Remove photo"
+              >
+                <Text style={styles.photoBtnText}>Remove</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+
         {/* ── Profile Section ── */}
         <SectionHeader title="Profile" />
         <Card padding="lg" level={1} style={styles.card}>
@@ -223,6 +329,40 @@ export default function SettingsScreen() {
           disabled={signingOut}
           onPress={confirmSignOut}
         />
+
+        {/* ── Danger Zone (frontend preview) ── */}
+        <Text style={[styles.sectionTitle, styles.dangerTitle]}>Danger zone</Text>
+        <View style={styles.dangerCard}>
+          <Pressable
+            style={styles.dangerRow}
+            onPress={confirmDeleteData}
+            accessibilityRole="button"
+            accessibilityLabel="Delete all my data"
+          >
+            <View style={styles.menuRowContent}>
+              <Text style={styles.dangerRowTitle}>Delete all my data</Text>
+              <Text style={styles.menuRowSubtitle}>
+                Logs, medications, documents and caches
+              </Text>
+            </View>
+            <Text style={styles.menuRowChevron}>›</Text>
+          </Pressable>
+          <View style={styles.dangerDivider} />
+          <Pressable
+            style={styles.dangerRow}
+            onPress={confirmDeleteAccount}
+            accessibilityRole="button"
+            accessibilityLabel="Delete account"
+          >
+            <View style={styles.menuRowContent}>
+              <Text style={styles.dangerRowTitle}>Delete account</Text>
+              <Text style={styles.menuRowSubtitle}>
+                Profile and everything tied to it
+              </Text>
+            </View>
+            <Text style={styles.menuRowChevron}>›</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -303,5 +443,79 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.h2,
     color: COLORS.textMuted,
     marginLeft: SPACING.sm,
+  },
+  photoWrap: {
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    gap: 4,
+  },
+  photoAvatar: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: COLORS.surfaceSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoInitial: {
+    ...TYPOGRAPHY.h1,
+    color: COLORS.textSecondary,
+  },
+  photoName: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.textPrimary,
+    marginTop: SPACING.xs,
+  },
+  photoEmail: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+  },
+  photoActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.xs,
+  },
+  photoBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.pill,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.surface,
+  },
+  photoBtnText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textPrimary,
+  },
+  dangerTitle: {
+    color: COLORS.error,
+  },
+  dangerCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  dangerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+  },
+  dangerRowTitle: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.error,
+    marginBottom: 2,
+  },
+  dangerDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginHorizontal: SPACING.md,
   },
 });

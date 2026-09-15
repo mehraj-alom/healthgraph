@@ -218,6 +218,13 @@ export function expectedDosesForMedication(med: Medication): number {
 export function buildMedicationSummary(
   medications: Medication[] | null | undefined,
   takenToday: MedicationTakenEvent[] | null | undefined,
+  /**
+   * Medication names logged via today's daily check-in (free-text drafts).
+   * The schedule "Taken" tap writes taken-events; the daily log writes
+   * check-in meds — a dose reported through EITHER path counts, matched by
+   * normalized name so one dose is never counted twice.
+   */
+  checkinMedNames: string[] = [],
 ): MedicationSummary | null {
   const active = (medications ?? []).filter((m) => m.status === 'ACTIVE');
   if (active.length === 0) return null;
@@ -226,23 +233,37 @@ export function buildMedicationSummary(
     (sum, m) => sum + expectedDosesForMedication(m),
     0,
   );
-  const dosesTaken = (takenToday ?? []).filter((e) => e.status === 'TAKEN').length;
+  const dosesTakenEvents = (takenToday ?? []).filter((e) => e.status === 'TAKEN');
+  const dosesTaken = dosesTakenEvents.length;
   const hasSchedule = dosesExpected > 0;
+
+  // Names already covered by taken-events (resolve via the med list).
+  const nameById = new Map((medications ?? []).map((m) => [m.medication_id, m.name]));
+  const covered = new Set(
+    dosesTakenEvents.map((e) => (nameById.get(e.medication_id) ?? '').trim().toLowerCase()),
+  );
+  // Check-in extras: unique, non-blank, not already covered.
+  const extra = new Set<string>();
+  for (const raw of checkinMedNames) {
+    const n = (raw ?? '').trim().toLowerCase();
+    if (n && !covered.has(n)) extra.add(n);
+  }
+  const dosesCounted = dosesTaken + extra.size;
 
   let statusText: string;
   if (!hasSchedule) {
     statusText = `${active.length} active · as needed`;
-  } else if (dosesTaken === 0) {
+  } else if (dosesCounted === 0) {
     statusText = 'No doses taken yet today';
-  } else if (dosesTaken >= dosesExpected) {
+  } else if (dosesCounted >= dosesExpected) {
     statusText = `All ${dosesExpected} dose${dosesExpected > 1 ? 's' : ''} taken today`;
   } else {
-    statusText = `${dosesTaken} of ${dosesExpected} doses taken today`;
+    statusText = `${dosesCounted} of ${dosesExpected} doses taken today`;
   }
 
   return {
     activeCount: active.length,
-    dosesTaken,
+    dosesTaken: dosesCounted,
     dosesExpected,
     hasSchedule,
     statusText,

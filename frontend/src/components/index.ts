@@ -13,6 +13,10 @@ export { Modal } from './Modal';
 export { BottomSheet } from './BottomSheet';
 export { Select } from './Select';
 export { Slider } from './Slider';
+export { DialInput, feverTint, severityTint } from './DialInput';
+export { AmbientBackground } from './AmbientBackground';
+export { UmbrellaTabBar } from './UmbrellaTabBar';
+export { LogCelebration } from './LogCelebration';
 export { ProcessingBadge } from './ProcessingBadge';
 
 // ── Reusable layout & feedback primitives ───────────────────────────────────

@@ -50,6 +50,7 @@ export function useTrends(days: number = 30) {
   
   const result = useCachedQuery<TrendsResponse>({
     cacheKey: 'trends',
+    cacheDays: days,
     queryFn,
   });
 

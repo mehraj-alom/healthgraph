@@ -54,19 +54,19 @@ const GRAPH_HEIGHT = SCREEN_HEIGHT * 0.55;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const NODE_COLORS: Record<string, string> = {
-  patient: '#F4C51B',
-  body_structure: '#31B7A5',
-  observation: '#4D8DFF',
-  document: '#9B6CFF',
-  timeline_event: '#F4B740',
+  patient: '#E8862E',
+  body_structure: '#4A90C2',
+  observation: '#4A90C2',
+  document: '#8A7BC8',
+  timeline_event: '#C96A1E',
 };
 
 const NODE_COLORS_VEC: Record<string, [number, number, number, number]> = {
-  patient: [0.89, 0.77, 0.10, 1.0],
-  body_structure: [0.13, 0.72, 0.65, 1.0],
-  observation: [0.30, 0.55, 1.00, 1.0],
-  document: [0.61, 0.42, 1.00, 1.0],
-  timeline_event: [0.96, 0.72, 0.25, 1.0],
+  patient: [0.91, 0.53, 0.18, 1.0],
+  body_structure: [0.29, 0.56, 0.76, 1.0],
+  observation: [0.29, 0.56, 0.76, 1.0],
+  document: [0.54, 0.48, 0.78, 1.0],
+  timeline_event: [0.79, 0.42, 0.11, 1.0],
 };
 
 const NODE_SIZES: Record<string, number> = {
@@ -846,5 +846,5 @@ const styles = StyleSheet.create({
   detailPropKey: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, textTransform: 'capitalize', fontSize: 11 },
   detailPropValue: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textSecondary, fontSize: 11 },
   viewBodyButton: { backgroundColor: COLORS.teal, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: BORDER_RADIUS.md, alignItems: 'center', marginTop: SPACING.sm },
-  viewBodyButtonText: { ...TYPOGRAPHY.bodyStrong, color: '#07111F' },
+  viewBodyButtonText: { ...TYPOGRAPHY.bodyStrong, color: '#FFFFFF' },
 });

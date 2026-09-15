@@ -192,8 +192,7 @@ test('finger cue thresholds are documented constants', () => {
   assert.equal(isFingerPresent({ yMean: 150, yStd: 21, uMean: 105, vMean: 150 }), false);
 });
 
-test('segment breaks exclude exactly the cross-placement RR interval', () => {
-  // Deterministic 30s 72bpm stream: cleanRR keeps every interval, so removing
+test('segment breaks exclude exactly the cross-placement RR interval', () => {  // Deterministic 30s 72bpm stream: cleanRR keeps every interval, so removing
   // one boundary must drop exactly one RR and leave the rest identical.
   const fs = 30;
   const n = 30 * fs;
@@ -235,4 +234,72 @@ test('segment breaks exclude exactly the cross-placement RR interval', () => {
     assert.ok(j < base.rrIntervalsMs.length, 'cut interval not found in base');
     j++;
   }
+});
+
+/** Deterministic pulse chunk helper for removal/reacquisition scenarios. */
+function pulseChunk(bpm: number, seconds: number, fs: number, t0Ms: number, seed: number): { s: number[]; t: number[] } {
+  const n = Math.round(seconds * fs);
+  const s = new Array<number>(n);
+  const t = new Array<number>(n);
+  const period = 60 / bpm;
+  let st = seed >>> 0;
+  const rand = () => {
+    st = (st * 1664525 + 1013904223) >>> 0;
+    return st / 0xffffffff - 0.5;
+  };
+  for (let i = 0; i < n; i++) {
+    const time = i / fs;
+    const phase = (time % period) / period;
+    const pulse =
+      Math.exp(-Math.pow((phase - 0.15) * 8, 2)) +
+      0.4 * Math.exp(-Math.pow((phase - 0.35) * 6, 2));
+    s[i] = 100 + 6 * pulse + 0.9 * rand();
+    t[i] = t0Ms + Math.round(time * 1000);
+  }
+  return { s, t };
+}
+
+test('R4: finger removal nulls live BPM, clears history, spans no RR gap', () => {
+  const fs = 30;
+  // Segment 1: 15s of 74bpm. Gap: 5s finger off. Segment 2: 15s of 74bpm.
+  const seg1 = pulseChunk(74, 15, fs, 0, 11);
+  const seg2 = pulseChunk(74, 15, fs, 20000, 22);
+  const s = [...seg1.s, ...seg2.s];
+  const t = [...seg1.t, ...seg2.t];
+  const breakAt = seg1.s.length; // native segmentBreaks index
+
+  // With the break, no RR spans the gap: every interval is physiological,
+  // and the surviving beats still measure the true pulse.
+  const cut = processPpgSignal(s, t, 30, [breakAt]);
+  for (const rr of cut.rrIntervalsMs) {
+    assert.ok(rr >= 300 && rr <= 2000, `gap-spanning RR leaked: ${rr}`);
+  }
+  assert.ok(cut.rrIntervalsMs.length >= 8, `need clean beats, got ${cut.rrIntervalsMs.length}`);
+  if (cut.heartRateBpm != null) {
+    assert.ok(Math.abs(cut.heartRateBpm - 74) <= 5, `hr=${cut.heartRateBpm} (want ~74)`);
+  }
+
+  // Removal contract: live history cleared => stability vote fails closed,
+  // so the session displays nothing (live BPM null) until reacquisition.
+  assert.equal(isStableHrSeries([]), false);
+});
+
+test('R5: reacquisition starts a clean segment (no stale contamination)', () => {
+  const fs = 30;
+  // Stale history from before removal must not leak into the new segment:
+  // the native analyzer clears recentLiveHr on FINGER_REMOVED.
+  const seg2 = pulseChunk(76, 12, fs, 0, 33);
+  const fresh = processPpgSignal(seg2.s, seg2.t, 12);
+  assert.ok(fresh.heartRateBpm != null, `reacquired segment must yield HR`);
+  assert.ok(Math.abs(fresh.heartRateBpm! - 76) <= 5, `hr=${fresh.heartRateBpm} (want ~76)`);
+  // A fresh stability history built only from the new segment converges.
+  const live: number[] = [];
+  for (let end = 8000; end <= 12000; end += 1000) {
+    const cut = end - 10000;
+    let from = 0;
+    while (from < seg2.t.length && seg2.t[from]! < cut) from++;
+    const out = processPpgSignal(seg2.s.slice(from), seg2.t.slice(from), 10);
+    if (out.heartRateBpm != null) live.push(out.heartRateBpm);
+  }
+  assert.ok(live.length >= 3, `need reacquired live estimates, got ${live.length}`);
 });

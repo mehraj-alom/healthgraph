@@ -21,7 +21,7 @@ interface AvatarStackProps {
   size?: number;
 }
 
-const AVATAR_BGS = ['#D9FF6E', '#0B6852', '#1B2425', '#F0A98A'];
+const AVATAR_BGS = ['#FBE3C8', '#E8862E', '#1D1B17', '#D9EAF7'];
 
 export function AvatarStack({
   avatars,

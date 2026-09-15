@@ -5,6 +5,19 @@ export interface User {
   createdAt: string;
 }
 
+/** Minimal dial-metric snapshot passed to the Improve window (plain data). */
+export interface ImproveMetric {
+  id: string;
+  label: string;
+  valueText: string;
+  value: number;
+  bandLo: number;
+  bandHi: number;
+  good: boolean;
+  trend: 'up' | 'down' | 'flat';
+  avgDays: number;
+}
+
 export interface Document {
   document_id: string;
   patient_id: string;
@@ -345,12 +358,14 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Main: { screen?: string } | undefined;
   DailyLog: undefined;
+  Timeline: undefined;
+  Body: { focusStructureId?: string } | undefined;
   Settings: undefined;
   DocumentUpload: undefined;
   DocumentDetail: { documentId: string };
   HealthGraph: { focusStructureId?: string; source?: 'body' | 'graph' } | undefined;
   Medications: undefined;
-  PpgMeasure: undefined;
+  Improve: { focus: 'improve' | 'keep'; metrics: ImproveMetric[] };
 };
 
 // ============================================================================
@@ -445,8 +460,7 @@ export interface TrendsResponse {
 
 export type MainTabParamList = {
   Dashboard: undefined;
-  Body: { focusStructureId?: string } | undefined;
-  Timeline: undefined;
+  PpgMeasure: undefined;
   Chat: undefined;
 };
 

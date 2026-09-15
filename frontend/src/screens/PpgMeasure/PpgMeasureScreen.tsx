@@ -39,9 +39,15 @@ import { usePpgMeasurement } from '@/hooks/usePpgMeasurement';
 import { useReducedMotion, useTheme } from '@/theme';
 import { healthIcon } from '@/theme/icons';
 import { spacing, radius, layout } from '@/theme/tokens';
-import type { RootStackParamList } from '@/types';
+import type { MainTabParamList, RootStackParamList } from '@/types';
+import { PpgCameraPreview } from 'healthgraph-ppg';
+import type { CompositeNavigationProp } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'PpgMeasure'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 /** Fixed measurement window (matches the hook's default start call). */
 const MEASURE_DURATION_SECONDS = 60;
@@ -206,7 +212,14 @@ export default function PpgMeasureScreen() {
 
   const leave = () => {
     if (busy) void cancel();
-    navigation.goBack();
+    exitMeasure();
+  };
+
+  /** Back out of the measure flow. As a tab there may be no back stack —
+      fall back to the Home tab instead of stranding the user. */
+  const exitMeasure = () => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.navigate('Dashboard');
   };
 
   // System/gesture back bypasses the header button: stop the camera and
@@ -348,6 +361,9 @@ export default function PpgMeasureScreen() {
         ) : null}
 
         {/* ── LIVE SESSION ────────────────────────────────────
+            The live rear-camera preview is the main measurement surface on
+            real builds (same camera that feeds analysis): the user sees
+            their finger and the illuminated field. Overlays carry state only.
             WAITING_FOR_FINGER: no finger yet — never show a BPM.
             ACQUIRING: finger seen, first window still filling — no BPM yet.
             MEASURING + liveBpm: confident live BPM, updates ~1Hz.
@@ -356,6 +372,57 @@ export default function PpgMeasureScreen() {
             FINGER_REMOVED: live BPM invalidated — resume automatically. */}
         {busy ? (
           <Animated.View entering={entering} style={styles.phase}>
+            {!simulated ? (
+              <View
+                accessible
+                accessibilityRole="image"
+                accessibilityLabel="Live camera preview. Cover the camera and flash with your fingertip."
+                style={[
+                  styles.previewFrame,
+                  {
+                    borderColor: colors.border,
+                    borderRadius: radius.xxl,
+                    backgroundColor: '#000',
+                  },
+                ]}
+              >
+                <PpgCameraPreview style={styles.preview} />
+                <View style={styles.previewOverlay} pointerEvents="none">
+            {/* Native sessions show the live BPM overlaid on the preview;
+                the standalone hero below is the simulation path. */}
+            {state === 'MEASURING' && liveBpm != null && simulated ? (
+                    <View
+                      accessible
+                      accessibilityLiveRegion="polite"
+                      accessibilityLabel={`Live heart rate ${Math.round(liveBpm)} beats per minute.`}
+                      style={styles.previewBpmBadge}
+                    >
+                      <Text style={[typography.metricValue, styles.previewBpmText]}>
+                        {Math.round(liveBpm)}
+                      </Text>
+                      <Text style={[typography.metricUnit, styles.previewBpmUnit]}>
+                        BPM · Live
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.previewStatePill}>
+                      <Text style={styles.previewStateText}>
+                        {state === 'WAITING_FOR_FINGER'
+                          ? 'Place your finger over the camera'
+                          : state === 'ACQUIRING' ||
+                              (state === 'MEASURING' && liveBpm == null)
+                            ? 'Detecting pulse…'
+                            : state === 'SIGNAL_WEAK'
+                              ? 'Keep your finger still'
+                              : state === 'FINGER_REMOVED'
+                                ? 'Finger removed — place your finger over the camera'
+                                : 'Measuring…'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            ) : null}
             {state === 'WAITING_FOR_FINGER' ? (
               <View
                 accessible
@@ -396,8 +463,11 @@ export default function PpgMeasureScreen() {
               </View>
             ) : null}
 
-            {state === 'ACQUIRING' ||
-            (state === 'MEASURING' && liveBpm == null) ? (
+            {/* On real builds the camera preview above is the visual; the
+                placeholder art renders for simulation only. */}
+            {(state === 'ACQUIRING' ||
+              (state === 'MEASURING' && liveBpm == null)) &&
+            simulated ? (
               <View
                 accessible
                 accessibilityLiveRegion="polite"
@@ -443,7 +513,7 @@ export default function PpgMeasureScreen() {
               </View>
             ) : null}
 
-            {state === 'SIGNAL_WEAK' ? (
+            {state === 'SIGNAL_WEAK' && simulated ? (
               <View
                 accessible
                 accessibilityLiveRegion="polite"
@@ -500,9 +570,10 @@ export default function PpgMeasureScreen() {
               </View>
             ) : null}
 
-            {state === 'STARTING' ||
-            state === 'QUALITY_WARNING' ||
-            state === 'COMPLETING' ? (
+            {(state === 'STARTING' ||
+              state === 'QUALITY_WARNING' ||
+              state === 'COMPLETING') &&
+            simulated ? (
               <View
                 accessible
                 accessibilityLiveRegion="polite"
@@ -712,7 +783,7 @@ export default function PpgMeasureScreen() {
 
             <Button
               title="Done"
-              onPress={() => navigation.goBack()}
+              onPress={() => exitMeasure()}
               size="large"
               fullWidth
               accessibilityLabel="Done, back to HealthGraph"
@@ -757,7 +828,7 @@ export default function PpgMeasureScreen() {
             <Button
               title="Done"
               variant="secondary"
-              onPress={() => navigation.goBack()}
+              onPress={() => exitMeasure()}
               fullWidth
               accessibilityLabel="Done, back to HealthGraph"
             />
@@ -803,7 +874,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.section,
+    paddingBottom: 112,
     gap: spacing.xl,
   },
   phase: {
@@ -830,6 +901,45 @@ const styles = StyleSheet.create({
   },
   instructionGlyph: {
     fontSize: 32,
+  },
+  previewFrame: {
+    borderWidth: 1,
+    overflow: 'hidden',
+    height: 300,
+  },
+  preview: {
+    ...StyleSheet.absoluteFill,
+  },
+  previewOverlay: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  previewBpmBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.xl,
+  },
+  previewBpmText: {
+    color: '#fff',
+  },
+  previewBpmUnit: {
+    color: 'rgba(255,255,255,0.8)',
+  },
+  previewStatePill: {
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+  },
+  previewStateText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   pulseRing: {
     width: 168,

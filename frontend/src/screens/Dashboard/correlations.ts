@@ -62,7 +62,7 @@ export interface StreamSeries {
 const byDate = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** Base id for verdict keying ('symptom:2' → 'symptom'). */
-function baseId(id: string): string {
+export function baseId(id: string): string {
   const i = id.indexOf(':');
   return i === -1 ? id : id.slice(0, i);
 }
@@ -324,6 +324,58 @@ const EXCLUDED_PAIRS = new Set(['activity|calories']);
 
 const MAX_SCATTERS = 8;
 
+export interface CorrelationPair {
+  aId: string;
+  bId: string;
+  aLabel: string;
+  bLabel: string;
+  aAxis: string;
+  bAxis: string;
+  r: number | null;
+  paired: number;
+  verdict: HealthVerdict;
+  points: ScatterDatum[];
+}
+
+/**
+ * All stream pairings with ≥3 shared dates (single math source for the feed
+ * cards AND the 3D graph's semantic edges — keep them in sync here).
+ */
+export function computeCorrelationPairs(streams: StreamSeries[]): CorrelationPair[] {
+  const byStream = new Map(streams.map((s) => [s.def.id, new Map(s.points.map((p) => [p.date, p.value]))]));
+  const out: CorrelationPair[] = [];
+  for (let i = 0; i < streams.length; i++) {
+    for (let j = i + 1; j < streams.length; j++) {
+      const a = streams[i];
+      const b = streams[j];
+      if (EXCLUDED_PAIRS.has(pairKey(a.def.id, b.def.id))) continue;
+      const am = byStream.get(a.def.id)!;
+      const bm = byStream.get(b.def.id)!;
+      let paired = 0;
+      const pairedPts: ScatterDatum[] = [];
+      for (const [date, x] of am) {
+        const y = bm.get(date);
+        if (y != null) { paired++; pairedPts.push({ x, y }); }
+      }
+      if (paired < 3) continue;
+      const r = correlationCoefficient(pairedPts);
+      out.push({
+        aId: a.def.id,
+        bId: b.def.id,
+        aLabel: a.def.label,
+        bLabel: b.def.label,
+        aAxis: a.def.axis,
+        bAxis: b.def.axis,
+        r,
+        paired,
+        verdict: healthVerdict(a.def.id, b.def.id, r, paired),
+        points: pairedPts,
+      });
+    }
+  }
+  return out;
+}
+
 export function buildCorrelationFeed(
   trends: TrendsResponse | null,
   dailyMetrics: DailyMetrics | null,
@@ -366,42 +418,21 @@ export function buildCorrelationFeed(
   }
 
   // ── obs1 vs obs2: every pairing with ≥3 shared dates ──
-  const byStream = new Map(streams.map((s) => [s.def.id, new Map(s.points.map((p) => [p.date, p.value]))]));
-  const ids = streams.map((s) => s.def.id);
-  const candidates: CorrelationFeedItem[] = [];
-
-  for (let i = 0; i < ids.length; i++) {
-    for (let j = i + 1; j < ids.length; j++) {
-      const a = streams[i];
-      const b = streams[j];
-      if (EXCLUDED_PAIRS.has(pairKey(a.def.id, b.def.id))) continue;
-      const am = byStream.get(a.def.id)!;
-      const bm = byStream.get(b.def.id)!;
-      const paired: ScatterDatum[] = [];
-      for (const [date, x] of am) {
-        const y = bm.get(date);
-        if (y != null) paired.push({ x, y });
-      }
-      if (paired.length < 3) continue;
-      const r = correlationCoefficient(paired);
-      const verdict = healthVerdict(a.def.id, b.def.id, r, paired.length);
-      candidates.push({
-        id: `x-${a.def.id}-${b.def.id}`,
-        title: `${a.def.label} vs ${b.def.label}`,
-        subtitle: `${paired.length} paired days · ${verdictLabel(verdict)}`,
-        data: {
-          kind: 'correlation',
-          points: paired,
-          r,
-          verdict,
-          xLabel: `${a.def.label} (${a.def.axis})`,
-          yLabel: `${b.def.label} (${b.def.axis})`,
-        },
-        verdict,
-        source: 'live',
-      });
-    }
-  }
+  const candidates: CorrelationFeedItem[] = computeCorrelationPairs(streams).map((p) => ({
+    id: `x-${p.aId}-${p.bId}`,
+    title: `${p.aLabel} vs ${p.bLabel}`,
+    subtitle: `${p.paired} paired days · ${verdictLabel(p.verdict)}`,
+    data: {
+      kind: 'correlation',
+      points: p.points,
+      r: p.r,
+      verdict: p.verdict,
+      xLabel: `${p.aLabel} (${p.aAxis})`,
+      yLabel: `${p.bLabel} (${p.bAxis})`,
+    },
+    verdict: p.verdict,
+    source: 'live',
+  }));
 
   // Verdict cards first (bad before good — attention first), then by |r|.
   const rank = (v: HealthVerdict) => (v === 'bad' ? 0 : v === 'good' ? 1 : 2);
@@ -432,6 +463,7 @@ export function buildCorrelationFeed(
 export function useCorrelationFeed(
   trends: TrendsResponse | null,
   dailyMetrics: DailyMetrics | null,
+  days = 30,
 ): {
   items: CorrelationFeedItem[];
   isLocalLoading: boolean;
@@ -457,13 +489,13 @@ export function useCorrelationFeed(
         }
         return;
       }
-      const logs = await getDailyLogs(patientId, 30).catch(() => []);
-      const out: DailyCheckInDetail[] = [];
-      for (const log of logs) {
-        const detail = await getDailyLogDetail(patientId, log.log_date).catch(() => null);
-        if (detail) out.push(detail);
-      }
-      const taken = await getMedicationTakenEvents(patientId, 50).catch(() => []);
+      const logs = await getDailyLogs(patientId, days).catch(() => []);
+      // Concurrent detail hydration — sequential awaits stall the feed.
+      const details = await Promise.all(
+        logs.map((log) => getDailyLogDetail(patientId, log.log_date).catch(() => null)),
+      );
+      const out = details.filter((d): d is DailyCheckInDetail => d !== null);
+      const taken = await getMedicationTakenEvents(patientId, Math.min(400, Math.max(50, days))).catch(() => []);
       if (run === runRef.current) {
         setLocalDetails(out);
         setTakenEvents(taken);
@@ -476,7 +508,7 @@ export function useCorrelationFeed(
     } finally {
       if (run === runRef.current) setIsLocalLoading(false);
     }
-  }, []);
+  }, [days]);
 
   useEffect(() => {
     void loadLocal();

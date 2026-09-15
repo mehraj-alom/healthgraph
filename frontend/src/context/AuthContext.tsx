@@ -70,6 +70,8 @@ export interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  /** Patch the cached display name (e.g. after a Settings save). */
+  refreshDisplayName: (name: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -155,6 +157,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.error('[MedGraph] Backend auth sync failed (non-blocking):', syncError);
         });
         setSyncPromise(syncPromise);
+        // Prefer the backend profile name (what the user typed in Settings)
+        // over the Firebase displayName. Lazy + fire-and-forget, same as above.
+        import('@/services/api').then(({ api }) =>
+          api.get<{ display_name?: string | null }>('/api/v1/profile').then(
+            (p) => {
+              const backendName = p.display_name?.trim();
+              if (backendName && mounted) {
+                setUserProfile((prev) =>
+                  prev && prev.displayName !== backendName ? { ...prev, displayName: backendName } : prev,
+                );
+              }
+            },
+            () => {},
+          ),
+        ).catch(() => {});
         // One-time cleanup: remove legacy plaintext HomeCache keys
         cleanupLegacyHomeCache(firebaseUser.uid).catch(() => {});
       } else {
@@ -205,7 +222,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return <AuthContext.Provider value={{ user, userProfile, loading, error, signup, login, logout,
-    clearError: () => setError(null) }}>{children}</AuthContext.Provider>;
+    clearError: () => setError(null),
+    refreshDisplayName: (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setUserProfile((prev) => (prev ? { ...prev, displayName: trimmed } : prev));
+    } }}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = (): AuthContextType => {

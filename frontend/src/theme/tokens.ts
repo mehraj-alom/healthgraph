@@ -82,147 +82,147 @@ export interface ColorTokens {
 }
 
 export const darkColors: ColorTokens = {
-  // Backgrounds
-  background: '#07111F',
-  surface: '#111C2C',
-  surfaceSecondary: '#172235',
-  surfaceElevated: '#1B2738',
-  surfaceSunken: '#0A121E',
-  surfacePressed: '#0B1420',
-  surfaceDisabled: 'rgba(23, 34, 53, 0.45)',
+  // Backgrounds — warm charcoal (same family as the light cream)
+  background: '#1D1B17',
+  surface: '#26231E',
+  surfaceSecondary: '#2E2A23',
+  surfaceElevated: '#35312A',
+  surfaceSunken: '#171512',
+  surfacePressed: '#1A1713',
+  surfaceDisabled: 'rgba(46, 42, 35, 0.45)',
 
   // Text
-  textPrimary: '#F7FAFC',
-  textSecondary: '#9AA8B8',
-  textMuted: '#6F7D8C',
-  textDisabled: '#4E5B6A',
-  textOnAccent: '#07111F',
+  textPrimary: '#FBF6EC',
+  textSecondary: '#B8AF9E',
+  textMuted: '#877E6D',
+  textDisabled: '#5C5546',
+  textOnAccent: '#1D1B17',
 
   // Borders
-  border: '#263447',
-  borderStrong: '#33465C',
-  borderFaint: 'rgba(255, 255, 255, 0.06)',
+  border: '#3A352C',
+  borderStrong: '#4C4638',
+  borderFaint: 'rgba(251, 246, 236, 0.07)',
 
-  // Brand (accent gold)
-  brand: '#F4C51B',
-  brandLight: '#F9D84E',
-  brandDark: '#D4A714',
-  brandSurface: 'rgba(244, 197, 27, 0.12)',
-  brandSurfaceMuted: 'rgba(244, 197, 27, 0.06)',
-  textOnBrand: '#07111F',
+  // Brand — warm ink w/ peach glow (mirrors light mode)
+  brand: '#F5C99B',
+  brandLight: '#F9DDBE',
+  brandDark: '#E8862E',
+  brandSurface: 'rgba(232, 134, 46, 0.16)',
+  brandSurfaceMuted: 'rgba(232, 134, 46, 0.08)',
+  textOnBrand: '#1D1B17',
 
-  // Teal
-  teal: '#31B7A5',
-  tealLight: '#3FD4B8',
-  tealDark: '#289A8C',
-  tealSurface: 'rgba(49, 183, 165, 0.12)',
+  // Apricot (was teal)
+  teal: '#E8862E',
+  tealLight: '#F0A35E',
+  tealDark: '#C96A1E',
+  tealSurface: 'rgba(232, 134, 46, 0.14)',
 
-  // Accent
-  accentBlue: '#4D8DFF',
-  accentBlueSoft: 'rgba(77, 141, 255, 0.14)',
-  accentPurple: '#9B6CFF',
-  accentPurpleSoft: 'rgba(155, 108, 255, 0.14)',
+  // Accent — soft sky / muted lavender
+  accentBlue: '#8FC1E8',
+  accentBlueSoft: 'rgba(143, 193, 232, 0.16)',
+  accentPurple: '#B9A8E8',
+  accentPurpleSoft: 'rgba(185, 168, 232, 0.16)',
 
   // Glass
-  glass: 'rgba(17, 28, 44, 0.78)',
-  glassStrong: 'rgba(13, 22, 35, 0.92)',
-  glassBorder: 'rgba(255, 255, 255, 0.08)',
-  glassHighlight: 'rgba(255, 255, 255, 0.06)',
-  overlayScrim: 'rgba(3, 7, 13, 0.72)',
+  glass: 'rgba(38, 35, 30, 0.78)',
+  glassStrong: 'rgba(29, 27, 23, 0.92)',
+  glassBorder: 'rgba(251, 246, 236, 0.09)',
+  glassHighlight: 'rgba(251, 246, 236, 0.06)',
+  overlayScrim: 'rgba(12, 10, 8, 0.72)',
 
   // Glow
-  glowBlue: 'rgba(77, 141, 255, 0.28)',
-  glowGold: 'rgba(244, 197, 27, 0.22)',
+  glowBlue: 'rgba(143, 193, 232, 0.28)',
+  glowGold: 'rgba(232, 134, 46, 0.24)',
 
   // Semantic
-  success: '#63C174',
-  successSurface: 'rgba(99, 193, 116, 0.12)',
-  warning: '#F4B740',
-  warningSurface: 'rgba(244, 183, 64, 0.12)',
-  error: '#E85D68',
-  errorSurface: 'rgba(232, 93, 104, 0.12)',
-  info: '#4D8DFF',
-  infoSurface: 'rgba(77, 141, 255, 0.12)',
+  success: '#7FC48D',
+  successSurface: 'rgba(127, 196, 141, 0.14)',
+  warning: '#F0A92E',
+  warningSurface: 'rgba(240, 169, 46, 0.14)',
+  error: '#E07864',
+  errorSurface: 'rgba(224, 120, 100, 0.14)',
+  info: '#8FC1E8',
+  infoSurface: 'rgba(143, 193, 232, 0.14)',
 
   // Health status
-  healthPositive: '#63C174',
-  healthPositiveSurface: 'rgba(99, 193, 116, 0.14)',
-  healthNeutral: '#4D8DFF',
-  healthNeutralSurface: 'rgba(77, 141, 255, 0.12)',
-  healthAttention: '#F4B740',
-  healthAttentionSurface: 'rgba(244, 183, 64, 0.12)',
+  healthPositive: '#7FC48D',
+  healthPositiveSurface: 'rgba(127, 196, 141, 0.14)',
+  healthNeutral: '#8FC1E8',
+  healthNeutralSurface: 'rgba(143, 193, 232, 0.14)',
+  healthAttention: '#F0A92E',
+  healthAttentionSurface: 'rgba(240, 169, 46, 0.14)',
 };
 
 export const lightColors: ColorTokens = {
-  // Backgrounds
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  surfaceSecondary: '#F0F2F5',
+  // Backgrounds — warm clinical cream (Dribbble reference)
+  background: '#EAE4D6',
+  surface: '#FFFBF3',
+  surfaceSecondary: '#F4EDDF',
   surfaceElevated: '#FFFFFF',
-  surfaceSunken: '#E8EAED',
-  surfacePressed: '#E2E5E9',
-  surfaceDisabled: 'rgba(0, 0, 0, 0.06)',
+  surfaceSunken: '#E2D8C3',
+  surfacePressed: '#E9E0CE',
+  surfaceDisabled: 'rgba(29, 27, 23, 0.06)',
 
-  // Text
-  textPrimary: '#0F1412',
-  textSecondary: '#4A5550',
-  textMuted: '#7A8580',
-  textDisabled: '#B0B8B4',
-  textOnAccent: '#0F1412',
+  // Text — warm ink
+  textPrimary: '#1D1B17',
+  textSecondary: '#797166',
+  textMuted: '#A8A094',
+  textDisabled: '#C6BDA9',
+  textOnAccent: '#FFFFFF',
 
-  // Borders
-  border: '#D6DBD8',
-  borderStrong: '#BCC3C0',
-  borderFaint: 'rgba(0, 0, 0, 0.06)',
+  // Borders — sandy hairlines
+  border: '#E6DBC6',
+  borderStrong: '#D3C3A6',
+  borderFaint: 'rgba(29, 27, 23, 0.06)',
 
-  // Brand (accent gold)
-  brand: '#D4A714',
-  brandLight: '#E5BD2E',
-  brandDark: '#B8920F',
-  brandSurface: 'rgba(212, 167, 20, 0.10)',
-  brandSurfaceMuted: 'rgba(212, 167, 20, 0.05)',
+  // Brand — ink pill (like "All Doctors"), peach tint surfaces
+  brand: '#1D1B17',
+  brandLight: '#3A372F',
+  brandDark: '#111009',
+  brandSurface: 'rgba(232, 134, 46, 0.12)',
+  brandSurfaceMuted: '#FBEEDC',
   textOnBrand: '#FFFFFF',
 
-  // Teal
-  teal: '#289A8C',
-  tealLight: '#31B7A5',
-  tealDark: '#1E7D71',
-  tealSurface: 'rgba(40, 154, 140, 0.10)',
+  // Apricot (was teal) — "Smart Doctor Match" + stars
+  teal: '#E8862E',
+  tealLight: '#F0A35E',
+  tealDark: '#C96A1E',
+  tealSurface: '#FBE3C8',
 
-  // Accent
-  accentBlue: '#3A78E0',
-  accentBlueSoft: 'rgba(58, 120, 224, 0.10)',
-  accentPurple: '#8256D9',
-  accentPurpleSoft: 'rgba(130, 86, 217, 0.10)',
+  // Accent — sky pill blue ("45 min") + soft lavender
+  accentBlue: '#4A90C2',
+  accentBlueSoft: '#D9EAF7',
+  accentPurple: '#8A7BC8',
+  accentPurpleSoft: 'rgba(138, 123, 200, 0.12)',
 
-  // Glass (opaque in light mode — no translucent glass in bright UI)
-  glass: 'rgba(255, 255, 255, 0.95)',
-  glassStrong: 'rgba(255, 255, 255, 1)',
-  glassBorder: 'rgba(0, 0, 0, 0.08)',
-  glassHighlight: 'rgba(0, 0, 0, 0.04)',
-  overlayScrim: 'rgba(0, 0, 0, 0.38)',
+  // Glass — warm translucent cream
+  glass: 'rgba(255, 251, 243, 0.92)',
+  glassStrong: 'rgba(255, 251, 243, 1)',
+  glassBorder: 'rgba(29, 27, 23, 0.08)',
+  glassHighlight: 'rgba(255, 255, 255, 0.6)',
+  overlayScrim: 'rgba(29, 27, 23, 0.38)',
 
-  // Glow
-  glowBlue: 'rgba(58, 120, 224, 0.22)',
-  glowGold: 'rgba(212, 167, 20, 0.20)',
+  // Glow — warm, never neon
+  glowBlue: 'rgba(74, 144, 194, 0.20)',
+  glowGold: 'rgba(232, 134, 46, 0.22)',
 
-  // Semantic
-  success: '#2D8F4E',
-  successSurface: 'rgba(45, 143, 78, 0.10)',
-  warning: '#C4930A',
-  warningSurface: 'rgba(196, 147, 10, 0.10)',
-  error: '#D43D48',
-  errorSurface: 'rgba(212, 61, 72, 0.10)',
-  info: '#3A78E0',
-  infoSurface: 'rgba(58, 120, 224, 0.10)',
+  // Semantic — sage / apricot / terracotta / sky
+  success: '#4E9B5F',
+  successSurface: '#DDF0DF',
+  warning: '#C9761E',
+  warningSurface: '#FBE3C8',
+  error: '#C2503E',
+  errorSurface: 'rgba(194, 80, 62, 0.10)',
+  info: '#4A90C2',
+  infoSurface: '#D9EAF7',
 
   // Health status
-  healthPositive: '#2D8F4E',
-  healthPositiveSurface: 'rgba(45, 143, 78, 0.10)',
-  healthNeutral: '#3A78E0',
-  healthNeutralSurface: 'rgba(58, 120, 224, 0.08)',
-  healthAttention: '#C4930A',
-  healthAttentionSurface: 'rgba(196, 147, 10, 0.10)',
+  healthPositive: '#4E9B5F',
+  healthPositiveSurface: '#DDF0DF',
+  healthNeutral: '#4A90C2',
+  healthNeutralSurface: '#D9EAF7',
+  healthAttention: '#C9761E',
+  healthAttentionSurface: '#FBE3C8',
 };
 
 // ─── Health Category Colors ──────────────────────────────────────────────────
@@ -249,24 +249,24 @@ export interface HealthCategoryTokens {
 }
 
 export const healthCategories: HealthCategoryTokens = {
-  sleep: '#6C7AE0',
-  sleepSurface: 'rgba(108, 122, 224, 0.12)',
-  vitals: '#E74C6F',
-  vitalsSurface: 'rgba(231, 76, 111, 0.12)',
-  nutrition: '#2FBF71',
-  nutritionSurface: 'rgba(47, 191, 113, 0.12)',
-  activity: '#00B4D8',
-  activitySurface: 'rgba(0, 180, 216, 0.12)',
-  pain: '#E84393',
-  painSurface: 'rgba(232, 67, 147, 0.12)',
-  medication: '#9B59B6',
-  medicationSurface: 'rgba(155, 89, 182, 0.12)',
-  wellbeing: '#F1C40F',
-  wellbeingSurface: 'rgba(241, 196, 15, 0.12)',
-  mood: '#FD79A8',
-  moodSurface: 'rgba(253, 121, 168, 0.12)',
-  hydration: '#3A78E0',
-  hydrationSurface: 'rgba(58, 120, 224, 0.12)',
+  sleep: '#8A7BC8',
+  sleepSurface: 'rgba(138, 123, 200, 0.14)',
+  vitals: '#C2503E',
+  vitalsSurface: 'rgba(194, 80, 62, 0.12)',
+  nutrition: '#4E9B5F',
+  nutritionSurface: '#DDF0DF',
+  activity: '#4A90C2',
+  activitySurface: '#D9EAF7',
+  pain: '#C2503E',
+  painSurface: 'rgba(194, 80, 62, 0.12)',
+  medication: '#8A7BC8',
+  medicationSurface: 'rgba(138, 123, 200, 0.14)',
+  wellbeing: '#E8862E',
+  wellbeingSurface: '#FBE3C8',
+  mood: '#E8A07C',
+  moodSurface: 'rgba(232, 160, 124, 0.16)',
+  hydration: '#4A90C2',
+  hydrationSurface: '#D9EAF7',
 };
 
 // ─── Typography ──────────────────────────────────────────────────────────────
@@ -419,10 +419,10 @@ export const spacing = {
 
 export const radius = {
   none: 0,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
+  sm: 10,
+  md: 14,
+  lg: 20,
+  xl: 22,
   xxl: 28,
   pill: 9999,
 } as const;
@@ -492,31 +492,31 @@ export const lightElevation: ElevationTokens = {
     elevation: 0,
   },
   soft: {
-    shadowColor: '#000',
+    shadowColor: '#7C5A2E',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
     elevation: 1,
   },
   medium: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#7C5A2E',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
+    shadowRadius: 12,
     elevation: 3,
   },
   deep: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#7C5A2E',
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.14,
-    shadowRadius: 12,
+    shadowRadius: 20,
     elevation: 6,
   },
   floating: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#7C5A2E',
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.18,
-    shadowRadius: 20,
+    shadowRadius: 28,
     elevation: 10,
   },
 };
@@ -638,19 +638,19 @@ export interface VisualizationTokens {
 
 export function visualizationForMode(isDark: boolean): VisualizationTokens {
   return {
-    radialSurface: isDark ? 'rgba(17, 28, 44, 0.6)' : 'rgba(240, 243, 246, 0.7)',
-    ring: isDark ? 'rgba(120, 140, 160, 0.16)' : 'rgba(0, 0, 0, 0.08)',
-    ringStrong: isDark ? 'rgba(120, 140, 160, 0.28)' : 'rgba(0, 0, 0, 0.14)',
-    hubSurface: isDark ? '#1B2738' : '#FFFFFF',
-    hubBorder: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-    hubText: isDark ? '#F7FAFC' : '#0F1412',
-    hubTextSecondary: isDark ? '#9AA8B8' : '#4A5550',
-    selectedSurface: isDark ? 'rgba(77, 141, 255, 0.16)' : 'rgba(58, 120, 224, 0.12)',
-    selectedRing: isDark ? '#4D8DFF' : '#3A78E0',
-    unselectedDim: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)',
-    shapeFill: isDark ? 'rgba(49, 183, 165, 0.14)' : 'rgba(40, 154, 140, 0.12)',
-    dimensionLabel: isDark ? '#9AA8B8' : '#4A5550',
-    dimensionValue: isDark ? '#F7FAFC' : '#0F1412',
+    radialSurface: isDark ? 'rgba(38, 35, 30, 0.6)' : 'rgba(255, 251, 243, 0.7)',
+    ring: isDark ? 'rgba(184, 175, 158, 0.16)' : 'rgba(29, 27, 23, 0.08)',
+    ringStrong: isDark ? 'rgba(184, 175, 158, 0.28)' : 'rgba(29, 27, 23, 0.14)',
+    hubSurface: isDark ? '#35312A' : '#FFFBF3',
+    hubBorder: isDark ? 'rgba(251,246,236,0.08)' : '#E6DBC6',
+    hubText: isDark ? '#FBF6EC' : '#1D1B17',
+    hubTextSecondary: isDark ? '#B8AF9E' : '#797166',
+    selectedSurface: isDark ? 'rgba(232, 134, 46, 0.16)' : '#FBE3C8',
+    selectedRing: isDark ? '#E8862E' : '#E8862E',
+    unselectedDim: isDark ? 'rgba(251,246,236,0.14)' : 'rgba(29,27,23,0.10)',
+    shapeFill: isDark ? 'rgba(232, 134, 46, 0.14)' : 'rgba(232, 134, 46, 0.12)',
+    dimensionLabel: isDark ? '#B8AF9E' : '#797166',
+    dimensionValue: isDark ? '#FBF6EC' : '#1D1B17',
     animateRing: 600,
     animateShape: 900,
     animateTransition: 350,

@@ -249,7 +249,7 @@ export class ProgressiveLoadManager {
 
     // If a higher-priority request is waiting, cancel current
     if (nextPriority < currentPriority) {
-      console.log(`[ProgressiveLoad] PREEMPT: cancelling ${this.current.request.fileName} (priority ${this.current.request.priority}) for ${this.queue[0].request.fileName} (priority ${this.queue[0].request.priority})`);
+      if (__DEV__) console.log(`[ProgressiveLoad] PREEMPT: cancelling ${this.current.request.fileName} (priority ${this.current.request.priority}) for ${this.queue[0].request.fileName} (priority ${this.queue[0].request.priority})`);
       this.cancel(this.current.request.fileName);
     }
   }
@@ -284,14 +284,14 @@ export class ProgressiveLoadManager {
     this.loadStates.set(request.fileName, 'loading');
     this.onStateChange?.(request.fileName, 'loading');
 
-    console.log(`[ProgressiveLoad] LOAD_START ${request.fileName} priority=${request.priority} gen=${gen}`);
+    if (__DEV__) console.log(`[ProgressiveLoad] LOAD_START ${request.fileName} priority=${request.priority} gen=${gen}`);
     const t0 = performance.now();
 
     try {
       // Check buffer cache first
       let buffer = this.getCachedBuffer(request.fileName);
       if (buffer) {
-        console.log(`[ProgressiveLoad] BUFFER_CACHE_HIT ${request.fileName}`);
+        if (__DEV__) console.log(`[ProgressiveLoad] BUFFER_CACHE_HIT ${request.fileName}`);
       } else {
         // Read from disk
         const tRead = performance.now();
@@ -299,13 +299,13 @@ export class ProgressiveLoadManager {
         const raw = await file.arrayBuffer();
         buffer = toRealArrayBuffer(raw);
         const readMs = (performance.now() - tRead).toFixed(0);
-        console.log(`[ProgressiveLoad] FILE_READ ${request.fileName} ${readMs}ms ${buffer.byteLength} bytes`);
+        if (__DEV__) console.log(`[ProgressiveLoad] FILE_READ ${request.fileName} ${readMs}ms ${buffer.byteLength} bytes`);
         this.cacheBuffer(request.fileName, buffer);
       }
 
       // Check generation — abort if stale
       if (this.generation !== gen) {
-        console.log(`[ProgressiveLoad] CANCELLED ${request.fileName} — generation changed`);
+        if (__DEV__) console.log(`[ProgressiveLoad] CANCELLED ${request.fileName} — generation changed`);
         entry.state = 'cancelled';
         this.loadStates.set(request.fileName, 'cancelled');
         this.onStateChange?.(request.fileName, 'cancelled');
@@ -321,7 +321,7 @@ export class ProgressiveLoadManager {
 
       // Check generation again after decode
       if (this.generation !== gen) {
-        console.log(`[ProgressiveLoad] DECODE_CANCELLED ${request.fileName} — generation changed after decode`);
+        if (__DEV__) console.log(`[ProgressiveLoad] DECODE_CANCELLED ${request.fileName} — generation changed after decode`);
         entry.state = 'cancelled';
         this.loadStates.set(request.fileName, 'cancelled');
         this.onStateChange?.(request.fileName, 'cancelled');
@@ -331,7 +331,7 @@ export class ProgressiveLoadManager {
       }
 
       const totalMs = (performance.now() - t0).toFixed(0);
-      console.log(`[ProgressiveLoad] LOAD_COMPLETE ${request.fileName} parse=${parseMs}ms total=${totalMs}ms`);
+      if (__DEV__) console.log(`[ProgressiveLoad] LOAD_COMPLETE ${request.fileName} parse=${parseMs}ms total=${totalMs}ms`);
 
       // Cache the parsed group
       this.loadedGroups.set(request.fileName, gltf);
@@ -371,13 +371,13 @@ export class ProgressiveLoadManager {
         const evicted = this.bufferCache.get(oldestKey)!;
         this.bufferCacheBytes -= evicted.buffer.byteLength;
         this.bufferCache.delete(oldestKey);
-        console.log(`[ProgressiveLoad] LRU_EVICT buffer ${oldestKey} (${(evicted.buffer.byteLength / 1024).toFixed(0)} KB)`);
+        if (__DEV__) console.log(`[ProgressiveLoad] LRU_EVICT buffer ${oldestKey} (${(evicted.buffer.byteLength / 1024).toFixed(0)} KB)`);
       }
     }
 
     this.bufferCache.set(fileName, { buffer, lastAccess: Date.now() });
     this.bufferCacheBytes += buffer.byteLength;
-    console.log(`[ProgressiveLoad] Buffer cache: ${this.bufferCache.size} entries, ${(this.bufferCacheBytes / 1024 / 1024).toFixed(1)} MB`);
+    if (__DEV__) console.log(`[ProgressiveLoad] Buffer cache: ${this.bufferCache.size} entries, ${(this.bufferCacheBytes / 1024 / 1024).toFixed(1)} MB`);
   }
 
   private getCachedBuffer(fileName: string): ArrayBuffer | undefined {

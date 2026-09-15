@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   StyleSheet,
   View,
   Text,
@@ -8,9 +9,12 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import { BottomSheet } from '@/components/BottomSheet';
+import { formatFileSize } from '@/services/documents';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -36,8 +40,9 @@ import {
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { bezier, curves } from '@/theme/motion';
 import { useAuth } from '@/context/AuthContext';
-import { useDocuments } from '@/context/DocumentsContext';
+import { useDocuments, type ProcessingStage } from '@/context/DocumentsContext';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
+import { formatFirstName } from '@/utils/name';
 
 interface ChatMessage {
   id: string;
@@ -84,12 +89,12 @@ const ALL_SUGGESTIONS: SuggestionDef[] = [
 
 // Suggestion tint per category — same accent family as the rest of Home.
 const SUGGESTION_TINT: Record<SuggestionDef['category'], string> = {
-  sleep: '#6C7AE0',
-  symptom: '#E67E22',
-  energy: '#F4C51B',
-  stress: '#31B7A5',
-  record: '#9B6CFF',
-  general: '#4D8DFF',
+  sleep: '#8A7BC8',
+  symptom: '#C2503E',
+  energy: '#E8862E',
+  stress: '#C96A1E',
+  record: '#8A7BC8',
+  general: '#4A90C2',
 };
 
 function getGreetingTime(): string {
@@ -304,11 +309,102 @@ function FollowChip({ text, onPress }: { text: string; onPress: () => void }) {
 }
 
 /**
+ * Composer — owns the draft text locally so every keystroke re-renders ONLY
+ * the input row, not the message list, backdrop, and suggestions. Sends the
+ * committed text up; the parent clears nothing (it never held the draft).
+ */
+function Composer({
+  sending,
+  busy,
+  onSend,
+  onStop,
+  onAttach,
+}: {
+  sending: boolean;
+  busy: boolean;
+  onSend: (text: string) => void;
+  onStop: () => void;
+  onAttach: () => void;
+}) {
+  const [text, setText] = useState('');
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+
+  const submit = () => {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    onSend(trimmed);
+    setText('');
+  };
+
+  return (
+    <View style={styles.inputContainer}>
+      <View style={[styles.composerShell, focused && styles.composerShellFocused]}>
+        <Pressable
+          onPress={onAttach}
+          accessibilityRole="button"
+          accessibilityLabel="Attach a medical record"
+          hitSlop={8}
+          style={({ pressed }) => [styles.attachButton, pressed && { opacity: 0.6 }]}
+        >
+          <Text style={styles.attachGlyph}>📎</Text>
+        </Pressable>
+        <TextInput
+          ref={inputRef}
+          style={styles.inputInner}
+          value={text}
+          onChangeText={setText}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={sending ? 'Waiting for reply…' : 'Ask about your health…'}
+          placeholderTextColor="#C9BBA9"
+          multiline
+          maxLength={2000}
+          editable={!sending}
+          returnKeyType="send"
+          blurOnSubmit={false}
+          onSubmitEditing={submit}
+          keyboardAppearance="light"
+          underlineColorAndroid="transparent"
+          accessibilityLabel="Message input"
+        />
+        <View style={styles.composerAction}>
+          <SendSparkles />
+          {busy ? (
+            <Pressable
+              onPress={onStop}
+              accessibilityRole="button"
+              accessibilityLabel="Stop generating"
+              style={({ pressed }) => [styles.stopButton, pressed && { opacity: 0.7, transform: [{ scale: 0.94 }] }]}
+            >
+              <Text style={styles.stopButtonText}>■</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={submit}
+              disabled={!text.trim()}
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
+              style={({ pressed }) => [
+                styles.sendButton,
+                !text.trim() && styles.sendButtonDisabled,
+                pressed && text.trim() && styles.sendButtonPressed,
+              ]}
+            >
+              <Text style={styles.sendButtonText}>↑</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/**
  * SendSparkles — light-green bubbles and "+" motes drifting up from the send
  * button. One shared UI-thread loop; each mote reads a phase-shifted window
  * of it, so eight particles cost one animation. Static when reduced motion.
- */
-const SPARK_SEEDS = [
+ */const SPARK_SEEDS = [
   { dx: -15, size: 7, delay: 0, plus: false },
   { dx: -8, size: 5, delay: 0.22, plus: true },
   { dx: -2, size: 8, delay: 0.4, plus: false },
@@ -371,8 +467,9 @@ function SendSparkles() {
 }
 
 /** Midnight-garden wash behind the conversation — lime aura, teal depth,
- * faint dot grid. Pure decoration, never intercepts touches. */
-function ChatBackdrop() {
+ * faint dot grid. Pure decoration, never intercepts touches. Memoized: the
+ * parent re-renders on every keystroke/tick, the backdrop must not. */
+const ChatBackdrop = memo(function ChatBackdrop() {
   return (
     <View pointerEvents="none" style={styles.chatBg}>
       <View style={styles.chatAuraPeach} />
@@ -387,7 +484,7 @@ function ChatBackdrop() {
       </Svg>
     </View>
   );
-}
+});
 
 /**
  * Quiet disclaimer — a one-line footnote that expands to the full medical
@@ -414,20 +511,248 @@ function DisclaimerNote({ style }: { style?: object }) {
   );
 }
 
+const DOC_ACCEPT = ['application/pdf', 'image/png', 'image/jpeg'];
+const DOC_MAX_BYTES = 50 * 1024 * 1024;
+
+const DOC_STAGES = [
+  { key: 'uploading', label: 'Uploading' },
+  { key: 'uploaded', label: 'Uploaded' },
+  { key: 'processing', label: 'Processing' },
+  { key: 'extracted', label: 'Extracted' },
+  { key: 'completed', label: 'Ready' },
+] as const;
+
+function isTerminalStage(stage: string): boolean {
+  return stage === 'completed' || stage === 'failed' || stage === 'failed_triage';
+}
+
+/**
+ * DocSheet — medical-record upload + live processing, inside Chat.
+ * Pick → preview → upload → stage tracker → "ask about it". Processing
+ * continues in DocumentsContext when the sheet closes; the header chip
+ * reopens tracking. Subscribe-only updates: nothing here polls.
+ */
+function DocSheet({
+  visible,
+  track,
+  onClose,
+  onAsk,
+}: {
+  visible: boolean;
+  track: { id: string; name: string; stage: string } | null;
+  onClose: () => void;
+  onAsk: (text: string) => void;
+}) {
+  const { uploadAndProcess, subscribeStage, dismissProcessing } = useDocuments();
+  const [file, setFile] = useState<{ uri: string; name: string; type: string; size: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [tracked, setTracked] = useState<{ id: string; name: string } | null>(null);
+  const [stage, setStage] = useState<string>('idle');
+  const [uploading, setUploading] = useState(false);
+
+  // Open in tracking mode from the header chip; reset picks on close.
+  useEffect(() => {
+    if (visible && track && !tracked) {
+      setTracked({ id: track.id, name: track.name });
+      setStage(track.stage);
+    }
+    if (!visible) {
+      setFile(null);
+      setError(null);
+      setTracked(null);
+      setStage('idle');
+      setUploading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  useEffect(() => {
+    if (!tracked) return;
+    return subscribeStage(tracked.id, (s: ProcessingStage) => setStage(String(s)));
+  }, [tracked, subscribeStage]);
+
+  const pickFile = useCallback(async () => {
+    setError(null);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: DOC_ACCEPT,
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const ext = asset.name.split('.').pop()?.toLowerCase() ?? '';
+      if (!['.pdf', '.png', '.jpg', '.jpeg'].includes(`.${ext}`) && !DOC_ACCEPT.includes(asset.mimeType ?? '')) {
+        setError('Unsupported file type. Please choose a PDF, PNG, JPG, or JPEG file.');
+        return;
+      }
+      if (asset.size && asset.size > DOC_MAX_BYTES) {
+        setError(`File is too large (${formatFileSize(asset.size)}). Maximum is ${formatFileSize(DOC_MAX_BYTES)}.`);
+        return;
+      }
+      setFile({ uri: asset.uri, name: asset.name, type: asset.mimeType ?? 'application/octet-stream', size: asset.size ?? 0 });
+    } catch {
+      setError('Failed to select file. Please try again.');
+    }
+  }, []);
+
+  const startUpload = useCallback(() => {
+    if (!file) return;
+    setError(null);
+    setUploading(true);
+    uploadAndProcess(
+      { uri: file.uri, name: file.name, type: file.type },
+      (docId) => {
+        setUploading(false);
+        setTracked({ id: docId, name: file.name });
+        setStage('uploaded');
+        setFile(null);
+      },
+      (message) => {
+        setUploading(false);
+        setError(message);
+      },
+    );
+  }, [file, uploadAndProcess]);
+
+  const terminal = tracked != null && isTerminalStage(stage);
+  const failed = stage === 'failed' || stage === 'failed_triage';
+  const stageIndex = DOC_STAGES.findIndex((s) => s.key === stage);
+
+  const closeAndDismiss = () => {
+    if (tracked) dismissProcessing(tracked.id);
+    onClose();
+  };
+
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title="Medical records">
+      <View style={styles.sheetBody}>
+        {tracked ? (
+          <>
+            <Text style={styles.sheetFileName} numberOfLines={1}>{tracked.name}</Text>
+            {DOC_STAGES.map((s, i) => {
+              const done = stageIndex >= i && !failed;
+              const current = stageIndex === i && !terminal;
+              return (
+                <View key={s.key} style={styles.sheetStageRow}>
+                  <View style={[styles.sheetDot, done && styles.sheetDotDone, current && styles.sheetDotCurrent]}>
+                    {done && !terminal ? <Text style={styles.sheetCheck}>✓</Text> : null}
+                  </View>
+                  <Text style={[styles.sheetStageLabel, (done || current) && styles.sheetStageLabelOn]}>
+                    {s.label}
+                  </Text>
+                  {current ? <ActivityIndicator size="small" color={EMBER} /> : null}
+                </View>
+              );
+            })}
+            {failed ? (
+              <Text style={styles.sheetError}>
+                {stage === 'failed_triage'
+                  ? 'This document was not recognized as a medical record.'
+                  : 'Processing failed. Your original document is still safe.'}
+              </Text>
+            ) : null}
+            {error ? <Text style={styles.sheetError}>{error}</Text> : null}
+            {terminal && !failed ? (
+              <Pressable
+                onPress={() => {
+                  const name = tracked.name;
+                  closeAndDismiss();
+                  onAsk(`What did you find in my document "${name}"?`);
+                }}
+                style={({ pressed }) => [styles.sheetPrimary, pressed && { opacity: 0.8 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Ask about this document"
+              >
+                <Text style={styles.sheetPrimaryText}>Ask about it</Text>
+              </Pressable>
+            ) : null}
+            {terminal ? (
+              <Pressable
+                onPress={closeAndDismiss}
+                style={({ pressed }) => [styles.sheetGhost, pressed && { opacity: 0.7 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Close records"
+              >
+                <Text style={styles.sheetGhostText}>Done</Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.sheetHint}>Processing continues even if you close this.</Text>
+            )}
+          </>
+        ) : file ? (
+          <>
+            <View style={styles.sheetPreview}>
+              <Text style={styles.sheetPreviewIcon}>{file.type.includes('pdf') ? '📑' : '🖼'}</Text>
+              <View style={styles.sheetPreviewInfo}>
+                <Text style={styles.sheetFileName} numberOfLines={1}>{file.name}</Text>
+                <Text style={styles.sheetMeta}>{formatFileSize(file.size)}</Text>
+              </View>
+            </View>
+            {error ? <Text style={styles.sheetError}>{error}</Text> : null}
+            <Pressable
+              onPress={startUpload}
+              disabled={uploading}
+              style={({ pressed }) => [styles.sheetPrimary, pressed && { opacity: 0.8 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Upload and process document"
+            >
+              <Text style={styles.sheetPrimaryText}>{uploading ? 'Starting…' : 'Upload & Process'}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setFile(null);
+                setError(null);
+              }}
+              style={({ pressed }) => [styles.sheetGhost, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Choose a different file"
+            >
+              <Text style={styles.sheetGhostText}>Choose different file</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable
+              onPress={() => void pickFile()}
+              style={({ pressed }) => [styles.sheetDrop, pressed && { opacity: 0.75 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Choose a medical document to upload"
+            >
+              <Text style={styles.sheetDropIcon}>📄</Text>
+              <Text style={styles.sheetDropTitle}>Tap to choose a file</Text>
+              <Text style={styles.sheetMeta}>PDF, PNG, JPG · max {formatFileSize(DOC_MAX_BYTES)}</Text>
+            </Pressable>
+            {error ? <Text style={styles.sheetError}>{error}</Text> : null}
+          </>
+        )}
+      </View>
+    </BottomSheet>
+  );
+}
+
 export default function ChatScreen() {
-  const { userProfile } = useAuth();
   const navigation = useNavigation<any>();
+  const { userProfile } = useAuth();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [revealingId, setRevealingId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [composerFocused, setComposerFocused] = useState(false);
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
-  const inputRef = useRef<TextInput>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Document processing alongside chat — subscribe-only (structural changes
+  // re-render; stage ticks stay inside the sheet via subscribeStage).
+  const { processingVersion, getActiveProcessing } = useDocuments();
+  const [docSheet, setDocSheet] = useState<{ open: boolean; track: { id: string; name: string; stage: string } | null }>({
+    open: false,
+    track: null,
+  });
+  // Reference the version counter so header-chip visibility follows it.
+  const activeDocs = processingVersion >= 0 ? getActiveProcessing() : [];
+  const firstActive = activeDocs[0] ?? null;
 
   const suggestions = useSmartSuggestions();
 
@@ -446,12 +771,12 @@ export default function ChatScreen() {
   useEffect(() => {
     const last = messages[messages.length - 1];
     if (last && last.role === 'assistant' && !sending) {
-      console.log(`[Chat] rendered=true textLength=${last.content.length}`);
+      if (__DEV__) console.log(`[Chat] rendered=true textLength=${last.content.length}`);
     }
   }, [messages, sending]);
 
   const sendMessage = async (text?: string) => {
-    const trimmedMessage = (text ?? inputText).trim();
+    const trimmedMessage = (text ?? '').trim();
     if (!trimmedMessage || sending) return;
 
     const userMessage: ChatMessage = {
@@ -462,7 +787,6 @@ export default function ChatScreen() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    if (!text) setInputText('');
     setSending(true);
 
     const controller = new AbortController();
@@ -476,8 +800,8 @@ export default function ChatScreen() {
         conversation_id: conversationId,
         focused_structure_id: null,
       };
-      console.log('[Chat] requestStarted=true');
-      console.log(`[Chat] request URL = ${chatUrl}`);
+      if (__DEV__) console.log('[Chat] requestStarted=true');
+      if (__DEV__) console.log(`[Chat] request URL = ${chatUrl}`);
       t0 = Date.now();
 
       // The agent pipeline (LLM planning + tool execution + final synthesis)
@@ -490,10 +814,10 @@ export default function ChatScreen() {
         { timeout: 180000, signal: controller.signal },
       );
       const elapsed = Date.now() - t0;
-      console.log(`[Chat] httpStatus=${http.status} duration=${elapsed}ms`);
+      if (__DEV__) console.log(`[Chat] httpStatus=${http.status} duration=${elapsed}ms`);
 
       const body: any = http.data ?? {};
-      console.log('[Chat] response keys=', Object.keys(body));
+      if (__DEV__) console.log('[Chat] response keys=', Object.keys(body));
 
       // ── Response normalization ────────────────────────────────────────────
       // Backend ChatResponse schema (app/api/v1/chat.py + schemas/chat.py):
@@ -512,8 +836,8 @@ export default function ChatScreen() {
         typeof body?.conversation_id === 'string' ? body.conversation_id : null;
       const uiActions = Array.isArray(body?.ui_actions) ? body.ui_actions : [];
 
-      console.log(`[Chat] responseParsed=${assistantText.length > 0}`);
-      console.log(`[Chat] assistantTextLength=${assistantText.length}`);
+      if (__DEV__) console.log(`[Chat] responseParsed=${assistantText.length > 0}`);
+      if (__DEV__) console.log(`[Chat] assistantTextLength=${assistantText.length}`);
 
       const assistantMessage: ChatMessage = {
         id: `${Date.now()}-assistant`,
@@ -526,12 +850,12 @@ export default function ChatScreen() {
       setMessages((prev) => [...prev, assistantMessage]);
       setRevealingId(assistantMessage.id);
       if (nextConversationId) setConversationId(nextConversationId);
-      console.log('[Chat] messageInserted=true');
+      if (__DEV__) console.log('[Chat] messageInserted=true');
     } catch (error: any) {
       // Client-side stop (Stop button) is not a failure — keep the prompt,
       // show no error bubble.
       if (axios.isAxiosError(error) && error.code === 'ERR_CANCELED') {
-        console.log('[Chat] requestStoppedByUser=true');
+        if (__DEV__) console.log('[Chat] requestStoppedByUser=true');
         return;
       }
       // Reaching this block means the request genuinely failed at the
@@ -586,8 +910,7 @@ export default function ChatScreen() {
 
   const busy = sending || revealingId != null;
   const isEmpty = messages.length === 0;
-  const displayName = userProfile?.displayName ?? null;
-  const firstName = (displayName ?? '').trim().split(' ')[0] || null;
+  const firstName = formatFirstName(userProfile?.displayName) || null;
   const greeting = getGreetingTime();
 
   const lastAssistantId =
@@ -648,6 +971,26 @@ export default function ChatScreen() {
               <Text style={styles.headerSub}>Online · reads your logs & records</Text>
             </View>
           </View>
+
+          {/* Live processing chip — tap to track the running document */}
+          {firstActive && !docSheet.open ? (
+            <Pressable
+              onPress={() =>
+                setDocSheet({
+                  open: true,
+                  track: { id: firstActive.documentId, name: firstActive.fileName, stage: firstActive.stage },
+                })
+              }
+              style={({ pressed }) => [styles.processingChip, pressed && { opacity: 0.75 }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Track processing document ${firstActive.fileName}`}
+            >
+              <ActivityIndicator size="small" color={EMBER} />
+              <Text style={styles.processingChipText} numberOfLines={1}>
+                {firstActive.fileName} · {firstActive.stage}
+              </Text>
+            </Pressable>
+          ) : null}
 
           <View style={styles.messagesContainer}>
             <ChatBackdrop />
@@ -756,57 +1099,21 @@ export default function ChatScreen() {
             )}
           </View>
 
-          {/* Composer — Gemini-style pill with the send tucked inside */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.composerShell, composerFocused && styles.composerShellFocused]}>
-              <TextInput
-                ref={inputRef}
-                style={styles.inputInner}
-                value={inputText}
-                onChangeText={setInputText}
-                onFocus={() => setComposerFocused(true)}
-                onBlur={() => setComposerFocused(false)}
-                placeholder={sending ? 'Waiting for reply…' : 'Ask about your health…'}
-                placeholderTextColor="#C9BBA9"
-                multiline
-                maxLength={2000}
-                editable={!sending}
-                returnKeyType="send"
-                blurOnSubmit={false}
-                onSubmitEditing={() => { void sendMessage(); }}
-                keyboardAppearance="light"
-                underlineColorAndroid="transparent"
-                accessibilityLabel="Message input"
-              />
-              <View style={styles.composerAction}>
-                <SendSparkles />
-                {busy ? (
-                  <Pressable
-                    onPress={stopAll}
-                    accessibilityRole="button"
-                    accessibilityLabel="Stop generating"
-                    style={({ pressed }) => [styles.stopButton, pressed && { opacity: 0.7, transform: [{ scale: 0.94 }] }]}
-                  >
-                    <Text style={styles.stopButtonText}>■</Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    onPress={() => { void sendMessage(); }}
-                    disabled={!inputText.trim()}
-                    accessibilityRole="button"
-                    accessibilityLabel="Send message"
-                    style={({ pressed }) => [
-                      styles.sendButton,
-                      !inputText.trim() && styles.sendButtonDisabled,
-                      pressed && inputText.trim() && styles.sendButtonPressed,
-                    ]}
-                  >
-                    <Text style={styles.sendButtonText}>↑</Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-          </View>
+          {/* Composer — draft lives inside it; keystrokes never re-render chat */}
+          <Composer
+            sending={sending}
+            busy={busy}
+            onSend={(text) => void sendMessage(text)}
+            onStop={stopAll}
+            onAttach={() => setDocSheet({ open: true, track: null })}
+          />
+          {/* Records live in the same page: upload + processing sheet */}
+          <DocSheet
+            visible={docSheet.open}
+            track={docSheet.track}
+            onClose={() => setDocSheet({ open: false, track: null })}
+            onAsk={(text) => void sendMessage(text)}
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -818,15 +1125,15 @@ function prettyStructure(structureId: string | null): string {
   return structureId.replace(/_/g, ' ').toLowerCase();
 }
 
-// Sunset paper palette — identical to the correlation cards.
-const PAPER = '#FFF8F0';
-const CARD = '#FFFFFF';
-const INK = '#3F1D0B';
-const EMBER = '#E8590C';
-const TITLE_RED = '#C1121F';
-const WARM = '#8A6D5B';
-const WARM_LINE = 'rgba(154,52,18,0.14)';
-const TEAL_DEEP = '#0B6852';
+// Warm cream palette — matches the app-wide Dribbble reference.
+const PAPER = '#EAE4D6';
+const CARD = '#FFFBF3';
+const INK = '#1D1B17';
+const EMBER = '#E8862E';
+const TITLE_RED = '#1D1B17';
+const WARM = '#797166';
+const WARM_LINE = '#E6DBC6';
+const TEAL_DEEP = '#1D1B17';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: PAPER },
@@ -1056,10 +1363,111 @@ const styles = StyleSheet.create({
   typingText: { ...TYPOGRAPHY.caption, color: WARM, fontStyle: 'italic', fontSize: 12.5 },
 
   // ── Composer — Gemini-style: one pill, send lives inside ────────────────
+  attachButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-end',
+  },
+  attachGlyph: {
+    fontSize: 20,
+  },
+  // ── Live processing chip ──────────────────────────────────────────────
+  processingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: WARM_LINE,
+    alignSelf: 'flex-start',
+    maxWidth: '90%',
+  },
+  processingChipText: {
+    ...TYPOGRAPHY.caption,
+    color: INK,
+    fontSize: 12,
+    flexShrink: 1,
+  },
+  // ── Records sheet ─────────────────────────────────────────────────────
+  sheetBody: {
+    gap: SPACING.md,
+    paddingBottom: SPACING.md,
+  },
+  sheetDrop: {
+    borderWidth: 2,
+    borderColor: WARM_LINE,
+    borderStyle: 'dashed',
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.xl,
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  sheetDropIcon: { fontSize: 40 },
+  sheetDropTitle: { ...TYPOGRAPHY.bodyStrong, color: INK },
+  sheetPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: PAPER,
+    borderWidth: 1,
+    borderColor: WARM_LINE,
+  },
+  sheetPreviewIcon: { fontSize: 28 },
+  sheetPreviewInfo: { flex: 1, gap: 2 },
+  sheetFileName: { ...TYPOGRAPHY.bodyStrong, color: INK },
+  sheetMeta: { ...TYPOGRAPHY.caption, color: WARM },
+  sheetError: { ...TYPOGRAPHY.caption, color: TITLE_RED },
+  sheetHint: { ...TYPOGRAPHY.caption, color: WARM, textAlign: 'center' },
+  sheetPrimary: {
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: EMBER,
+    alignItems: 'center',
+  },
+  sheetPrimaryText: { ...TYPOGRAPHY.bodyStrong, color: '#fff' },
+  sheetGhost: {
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: WARM_LINE,
+  },
+  sheetGhostText: { ...TYPOGRAPHY.bodyStrong, color: INK },
+  sheetStageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: 4,
+  },
+  sheetDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: WARM_LINE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: CARD,
+  },
+  sheetDotDone: { backgroundColor: TEAL_DEEP, borderColor: TEAL_DEEP },
+  sheetDotCurrent: { borderColor: EMBER },
+  sheetCheck: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  sheetStageLabel: { ...TYPOGRAPHY.body, color: WARM, flex: 1 },
+  sheetStageLabelOn: { color: INK, fontWeight: '600' },
   inputContainer: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.sm,
-    paddingBottom: Platform.OS === 'ios' ? SPACING.sm : SPACING.md,
+    paddingBottom: Platform.OS === 'ios' ? SPACING.sm + 84 : SPACING.md + 84,
     backgroundColor: PAPER,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(154,52,18,0.10)',

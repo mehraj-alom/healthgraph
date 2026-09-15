@@ -12,16 +12,20 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Button, Input, Slider } from '@/components';
+import Animated, { FadeInDown, FadeInUp, FadeOut, Layout } from 'react-native-reanimated';
+import { Button, AmbientBackground, DialInput, Input, LogCelebration, Slider, feverTint, severityTint } from '@/components';
+import { useReducedMotion } from '@/theme';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, SHADOWS } from '@/constants';
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
-import { useMedicationSchedule, recordMedicationTaken } from '@/hooks/useMedications';
+import { useActiveMedications, useMedicationSchedule, recordMedicationTaken } from '@/hooks/useMedications';
 import {
   getDailyLogDetail as dbGetDailyLogDetail,
   upsertDailyLog as dbUpsertDailyLog,
   hydrateDailyLog as dbHydrateDailyLog,
+  getPendingMutationId as dbGetPendingMutationId,
+  reconcileDailyLogGroupId as dbReconcileDailyLogGroupId,
 } from '@/db/queries/dailyLogs';
 import type {
   DailyCheckInRequest,
@@ -65,6 +69,14 @@ const STRESS_LABELS: Record<number, string> = {
   5: 'Very high',
 };
 
+const APPETITE_LABELS: Record<number, string> = {
+  1: 'Very poor',
+  2: 'Poor',
+  3: 'Fair',
+  4: 'Good',
+  5: 'Excellent',
+};
+
 // ---------------------------------------------------------------------------
 // Sleep quality 1–5 labels
 // ---------------------------------------------------------------------------
@@ -102,6 +114,42 @@ const ACTIVITY_OPTIONS = [
 
 const DURATION_QUICK = ['15', '30', '45', '60', '90'] as const;
 const WATER_QUICK = ['250', '500', '750', '1000', '2000'] as const;
+
+/** Body-region quick picks for pain structure_id (free text stays available). */
+const BODY_REGION_OPTIONS = [
+  'Head',
+  'Neck',
+  'Shoulder',
+  'Back',
+  'Chest',
+  'Arm',
+  'Hand',
+  'Hip',
+  'Leg',
+  'Knee',
+  'Foot',
+] as const;
+
+/** Quick unit picks for vitals — tap beats typing ("mm or whatever"). */
+const VITAL_UNIT_OPTIONS = ['bpm', 'mmHg', 'mg/dL', '°F', '°C', 'kg', '%'] as const;
+
+/** Quick dose-unit picks for medications. */
+const DOSE_UNIT_OPTIONS = ['mg', 'mcg', 'g', 'ml', 'IU', 'tablets', 'drops', 'puffs'] as const;
+
+const FREQUENCY_LABELS: Record<string, string> = {
+  ONCE_DAILY: 'Once daily',
+  TWICE_DAILY: 'Twice daily',
+  THREE_TIMES_DAILY: 'Three times daily',
+  FOUR_TIMES_DAILY: 'Four times daily',
+  EVERY_MORNING: 'Every morning',
+  EVERY_EVENING: 'Every evening',
+  EVERY_NIGHT: 'Every night',
+  EVERY_8_HOURS: 'Every 8 hours',
+  EVERY_12_HOURS: 'Every 12 hours',
+  WEEKLY: 'Weekly',
+  AS_NEEDED: 'As needed',
+  CUSTOM: 'Custom schedule',
+};
 
 /** Card tint from a 6-digit hex category color (alpha-suffixed wash). */
 const tint = (c: string) => ({ backgroundColor: `${c}14`, borderColor: `${c}38` });
@@ -200,16 +248,24 @@ function Section({
   title,
   subtitle,
   category,
+  index = 0,
+  animate = true,
   children,
 }: {
   title: string;
   subtitle?: string;
   category?: keyof typeof SECTION_ACCENTS;
+  /** Order on screen — drives the staggered entrance. */
+  index?: number;
+  animate?: boolean;
   children: React.ReactNode;
 }) {
   const accent = category ? SECTION_ACCENTS[category] : null;
+  const reduced = useReducedMotion();
+  const entering =
+    animate && !reduced ? FadeInUp.duration(300).delay(Math.min(index * 60, 360)) : undefined;
   return (
-    <View style={styles.section}>
+    <Animated.View entering={entering} style={styles.section}>
       <View style={styles.sectionHeader}>
         {accent ? (
           <View style={[styles.sectionAccent, { backgroundColor: `${accent.color}1A`, borderColor: `${accent.color}55` }]}>
@@ -224,7 +280,7 @@ function Section({
         </View>
       </View>
       {children}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -454,6 +510,280 @@ function OptionChips({
 }
 
 // ---------------------------------------------------------------------------
+// Smart vital inputs — per-concept "doctor's device" dials
+// ---------------------------------------------------------------------------
+
+type VitalPresetKind = 'hr' | 'glucose' | 'temp';
+
+/** Recognize backend manual-log concepts that deserve a dedicated dial. */
+function vitalPresetFor(concept: ManualLogConcept | undefined): VitalPresetKind | null {
+  if (!concept) return null;
+  if (concept.terminology === 'LOINC' && concept.code === '8867-4') return 'hr';
+  if (concept.terminology === 'LOINC' && concept.code === '2339-0') return 'glucose';
+  const name = `${concept.short_name ?? ''} ${concept.display_name}`.toLowerCase();
+  if (/heart|pulse/.test(name)) return 'hr';
+  if (/gluc|sugar/.test(name)) return 'glucose';
+  if (/temp|thermal/.test(name)) return 'temp';
+  return null;
+}
+
+function isFeverConcept(concept: ManualLogConcept | undefined): boolean {
+  if (!concept) return false;
+  if (concept.code === '386661006') return true;
+  const name = `${concept.short_name ?? ''} ${concept.display_name}`.toLowerCase();
+  return /fever|pyrexia/.test(name);
+}
+
+const VITAL_DIALS: Record<
+  VitalPresetKind,
+  { min: number; max: number; step: number; unit: string; label: string }
+> = {
+  hr: { min: 30, max: 220, step: 1, unit: 'bpm', label: 'Heart rate' },
+  glucose: { min: 20, max: 600, step: 1, unit: 'mg/dL', label: 'Blood glucose' },
+  temp: { min: 95, max: 108, step: 0.1, unit: '°F', label: 'Temperature' },
+};
+
+/** Default unit stamped when a vital concept is picked. */
+function autoUnitFor(concept: ManualLogConcept): string {
+  const preset = vitalPresetFor(concept);
+  return preset ? VITAL_DIALS[preset].unit : '';
+}
+
+/** Curated pain sites (valid structure_ids) when the registry is unreachable. */
+const FALLBACK_BODY_SITES = [
+  { structure_id: 'CERVICAL_SPINE', display_name: 'Neck' },
+  { structure_id: 'THORACIC_SPINE', display_name: 'Upper back' },
+  { structure_id: 'LUMBAR_SPINE', display_name: 'Lower back' },
+  { structure_id: 'JAW', display_name: 'Jaw' },
+  { structure_id: 'LEFT_HAND', display_name: 'Left hand' },
+  { structure_id: 'RIGHT_HAND', display_name: 'Right hand' },
+  { structure_id: 'LEFT_KNEE', display_name: 'Left knee' },
+  { structure_id: 'RIGHT_KNEE', display_name: 'Right knee' },
+  { structure_id: 'LEFT_FOOT', display_name: 'Left foot' },
+  { structure_id: 'RIGHT_FOOT', display_name: 'Right foot' },
+];
+
+const TEMP_TOKEN_RE = /Temp\s+[\d.]+\s*°[CF]/;
+
+function readTempToken(notes: string): number | null {
+  const m = notes.match(TEMP_TOKEN_RE);
+  if (!m) return null;
+  const n = Number(m[0].replace(/[^0-9.]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+function writeTempToken(notes: string, token: string): string {
+  if (TEMP_TOKEN_RE.test(notes)) return notes.replace(TEMP_TOKEN_RE, token);
+  return notes.trim() ? `${notes.trim()} · ${token}` : token;
+}
+
+/**
+ * FeverTempDial — temperature dial for the Fever symptom.
+ *
+ * Symptom payloads carry severity/duration/notes (no temperature field), so
+ * the dial writes an explicit, user-visible `Temp 101.3 °F` token into the
+ * notes the user already controls — honest, editable, and shown on the
+ * timeline. °F/°C toggle converts the same reading.
+ */
+function FeverTempDial({
+  notes,
+  onNotes,
+  color,
+}: {
+  notes: string;
+  onNotes: (next: string) => void;
+  color: string;
+}) {
+  const [unit, setUnit] = useState<'°F' | '°C'>('°F');
+  const stored = readTempToken(notes);
+  // Internal value is always °F; display converts.
+  const toDisplay = (f: number) => (unit === '°F' ? f : (f - 32) * (5 / 9));
+  const fromDisplay = (d: number) => (unit === '°F' ? d : d * (9 / 5) + 32);
+  const range = unit === '°F' ? { min: 95, max: 108 } : { min: 35, max: 42.2 };
+  const displayValue = stored == null ? null : Math.min(range.max, Math.max(range.min, toDisplay(stored)));
+
+  return (
+    <View>
+      <View style={styles.unitToggleRow}>
+        <Text style={styles.fieldLabel}>Temperature</Text>
+        <View style={styles.unitToggle}>
+          {(['°F', '°C'] as const).map((u) => (
+            <Pressable
+              key={u}
+              onPress={() => setUnit(u)}
+              style={[styles.unitToggleBtn, unit === u && { backgroundColor: color, borderColor: color }]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: unit === u }}
+              accessibilityLabel={`Degrees ${u === '°F' ? 'Fahrenheit' : 'Celsius'}`}
+            >
+              <Text style={[styles.unitToggleText, unit === u && styles.unitToggleTextSelected]}>{u}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+      <DialInput
+        value={displayValue}
+        onChange={(d) => {
+          const f = fromDisplay(d);
+          onNotes(writeTempToken(notes, `Temp ${f.toFixed(1)} °F`));
+        }}
+        min={range.min}
+        max={range.max}
+        step={0.1}
+        unit={unit}
+        color={color}
+        tint={feverTint}
+        accessibilityLabel="Fever temperature"
+      />
+      <Text style={styles.dialHint}>Saved into your symptom notes — visible on your timeline.</Text>
+    </View>
+  );
+}
+
+/**
+ * ActiveMedRow — one prescribed medicine as a tappable row. Tapping expands
+ * a dose-aware editor prefilled from the prescription (dose + unit +
+ * schedule), and "Log dose" stages it into today's log.
+ */
+function ActiveMedRow({
+  med,
+  onLog,
+}: {
+  med: {
+    medication_id: string;
+    name: string;
+    strength: string | null;
+    strength_unit: string | null;
+    dose_amount: number | null;
+    dose_unit: string | null;
+    frequency: string;
+    scheduled_times: string[] | null;
+    route: string | null;
+    prn: boolean;
+  };
+  onLog: (name: string, dose: string, unit: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [dose, setDose] = useState(med.dose_amount != null ? String(med.dose_amount) : '');
+  const [unit, setUnit] = useState(med.dose_unit ?? med.strength_unit ?? '');
+  const [logged, setLogged] = useState(false);
+
+  const stepFor = (v: number) => (v >= 100 ? 5 : v >= 10 ? 1 : 0.5);
+  const doseNum = Number(dose);
+  const doseStep = Number.isFinite(doseNum) && dose.length > 0 ? stepFor(Math.abs(doseNum) || 1) : 1;
+
+  return (
+    <View style={styles.activeMedRow}>
+      <Pressable
+        onPress={() => setExpanded((v) => !v)}
+        style={styles.activeMedHeader}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={`${med.name}, ${expanded ? 'collapse' : 'expand'} dose editor`}
+      >
+        <View style={styles.activeMedIcon}>
+          <Text style={styles.activeMedIconText}>💊</Text>
+        </View>
+        <View style={styles.activeMedInfo}>
+          <Text style={styles.activeMedName}>{med.name}</Text>
+          <Text style={styles.activeMedDetail}>
+            {[med.strength && med.strength_unit ? `${med.strength} ${med.strength_unit}` : med.strength,
+              FREQUENCY_LABELS[med.frequency] ?? med.frequency,
+              med.route ? med.route.toLowerCase() : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+          {med.scheduled_times && med.scheduled_times.length > 0 ? (
+            <Text style={styles.activeMedTimes}>{med.scheduled_times.join(' · ')}</Text>
+          ) : null}
+        </View>
+        {med.prn ? (
+          <View style={styles.prnBadge}>
+            <Text style={styles.prnText}>PRN</Text>
+          </View>
+        ) : null}
+        <Text style={styles.expandGlyph}>{expanded ? '▴' : '▾'}</Text>
+      </Pressable>
+
+      {expanded ? (
+        <Animated.View
+          entering={FadeInDown.duration(220)}
+          style={styles.activeMedBody}
+        >
+          <Text style={styles.fieldLabel}>Dose to log</Text>
+          <View style={styles.stepperRow}>
+            <Pressable
+              onPress={() => {
+                const cur = Number(dose);
+                const base = Number.isFinite(cur) && dose !== '' ? cur : (med.dose_amount ?? 0);
+                setDose(String(Math.max(0, base - doseStep)));
+              }}
+              style={styles.stepperBtn}
+              accessibilityLabel="Decrease dose"
+            >
+              <Text style={styles.stepperBtnText}>−</Text>
+            </Pressable>
+            <View style={styles.stepperDisplay}>
+              <Text style={styles.stepperValue}>
+                {dose === '' ? '—' : dose}
+                {unit ? ` ${unit}` : ''}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => {
+                const cur = Number(dose);
+                const base = Number.isFinite(cur) && dose !== '' ? cur : (med.dose_amount ?? 0);
+                setDose(String(base + doseStep));
+              }}
+              style={styles.stepperBtn}
+              accessibilityLabel="Increase dose"
+            >
+              <Text style={styles.stepperBtnText}>+</Text>
+            </Pressable>
+          </View>
+          <Input
+            label="Exact dose"
+            value={dose}
+            onChangeText={setDose}
+            keyboardType="decimal-pad"
+            placeholder={med.dose_amount != null ? String(med.dose_amount) : 'e.g. 500'}
+          />
+          <Text style={styles.fieldLabel}>Unit</Text>
+          <OptionChips
+            options={DOSE_UNIT_OPTIONS}
+            value={unit}
+            onChange={setUnit}
+            color={COLORS.catMedication}
+            allowClear
+            label="Dose unit"
+          />
+          <Input
+            label="Or type your own unit"
+            value={DOSE_UNIT_OPTIONS.includes(unit as (typeof DOSE_UNIT_OPTIONS)[number]) ? '' : unit}
+            onChangeText={setUnit}
+            placeholder="mg, tablets, puffs"
+          />
+          <Pressable
+            onPress={() => {
+              onLog(med.name, dose, unit);
+              setLogged(true);
+            }}
+            style={[styles.logDoseBtn, logged && styles.logDoseBtnDone]}
+            accessibilityRole="button"
+            accessibilityLabel={logged ? 'Dose staged for today’s log' : `Log ${med.name} dose`}
+          >
+            <Text style={[styles.logDoseText, logged && styles.logDoseTextDone]}>
+              {logged ? '✓ Staged — edit below if needed' : 'Log this dose'}
+            </Text>
+          </Pressable>
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
 
@@ -502,6 +832,76 @@ export default function VitalsLoggerScreen() {
   const [nextId, setNextId] = useState(1);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [formInitialized, setFormInitialized] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
+  const reducedMotion = useReducedMotion();
+
+  // ── Body-map pain logging (POST /api/v1/body-state/log — separate from
+  // the daily check-in; lands on the body state + timeline) ──
+  const [bodySites, setBodySites] = useState(FALLBACK_BODY_SITES);
+  const [bodySite, setBodySite] = useState('');
+  const [bodySeverity, setBodySeverity] = useState<number | null>(null);
+  const [bodyNote, setBodyNote] = useState('');
+  const [bodySaving, setBodySaving] = useState(false);
+  const [bodyError, setBodyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const items = await api.get<{ structure_id: string; display_name: string }[]>(
+          '/api/v1/body-state/structures',
+        );
+        if (live && Array.isArray(items) && items.length > 0) {
+          const seen = new Set<string>();
+          const clean = items
+            .filter((s) => s && typeof s.structure_id === 'string' && typeof s.display_name === 'string')
+            .filter((s) => (seen.has(s.structure_id) ? false : (seen.add(s.structure_id), true)))
+            .slice(0, 40);
+          if (clean.length > 0) setBodySites(clean);
+        }
+      } catch {
+        // Offline — curated fallback sites stay.
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const saveBodyPain = async () => {
+    setBodyError(null);
+    setFeedback(null);
+    if (!bodySite) {
+      setBodyError('Choose where it hurts first.');
+      return;
+    }
+    if (bodySeverity == null) {
+      setBodyError('Set the pain severity on the dial.');
+      return;
+    }
+    setBodySaving(true);
+    try {
+      await api.post('/api/v1/body-state/log', {
+        structure_id: bodySite,
+        finding_code: 'pain_level',
+        visual_severity_score: Math.min(1, Math.max(0, bodySeverity / 10)),
+        visual_status: bodySeverity >= 7 ? 'warning' : bodySeverity >= 4 ? 'mild_attention' : 'normal',
+        ...(bodyNote.trim() ? { clinical_summary: bodyNote.trim().slice(0, 500) } : {}),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['timeline'] }),
+        queryClient.invalidateQueries({ queryKey: ['bodyState'] }),
+      ]);
+      setFeedback({ type: 'success', message: 'Body pain logged to your body map and timeline.' });
+      setBodySeverity(null);
+      setBodyNote('');
+      setCelebrate(true);
+    } catch (error) {
+      setBodyError(apiMessage(error));
+    } finally {
+      setBodySaving(false);
+    }
+  };
 
   // --- Data queries ---
   const conceptsQuery = useQuery({
@@ -516,6 +916,9 @@ export default function VitalsLoggerScreen() {
   // Fetch today's medication schedule
   const today = dateToday();
   const { data: medicationSchedule, refetch: refetchMedSchedule } = useMedicationSchedule(today);
+
+  // Active prescriptions for the tap-to-log medicine list.
+  const { data: activeMeds } = useActiveMedications();
 
   // Fetch today's existing check-in for edit mode — local-first
   const [selectedDate, setSelectedDate] = useState(dateToday());
@@ -608,6 +1011,15 @@ export default function VitalsLoggerScreen() {
   }, [selectedDate]);
 
   const concepts = conceptsQuery.data ?? [];
+  // Date badge strings — memoized so every keystroke doesn't rebuild them.
+  const dateBadge = useMemo(() => {
+    const d = new Date(`${selectedDate}T00:00:00`);
+    return {
+      day: d.getDate(),
+      month: d.toLocaleDateString('en-US', { month: 'short' }),
+      long: d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+    };
+  }, [selectedDate]);
   // All concepts are available for symptom selection.
   // LOINC concepts (Blood glucose, Heart rate) are vitals;
   // SNOMED concepts (Headache, Nausea, etc.) are symptoms.
@@ -655,11 +1067,11 @@ export default function VitalsLoggerScreen() {
       }
 
       // Step 1: Write to SQLite immediately (offline-first)
-      console.log(`[DailyLog] LOCAL_WRITE_START date=${payload.log_date}`);
+      if (__DEV__) console.log(`[DailyLog] LOCAL_WRITE_START date=${payload.log_date}`);
       let groupId: string;
       try {
         groupId = await dbUpsertDailyLog(patientId, payload);
-        console.log('[DailyLog] LOCAL_WRITE_SUCCESS');
+        if (__DEV__) console.log('[DailyLog] LOCAL_WRITE_SUCCESS');
       } catch (error) {
         const name = error instanceof Error ? error.name : 'unknown';
         if (__DEV__) {
@@ -685,16 +1097,27 @@ export default function VitalsLoggerScreen() {
       let serverSaved = false;
       let serverGroupId: string | null = null;
       try {
-        console.log(`[DailyLog] API_SYNC_START method=${method} path=${path}`);
+        if (__DEV__) console.log(`[DailyLog] API_SYNC_START method=${method} path=${path}`);
+        // Share the queued mutation's idempotency key so a racing sync-engine
+        // POST of the same record cannot create a duplicate check-in.
+        const idempotencyKey = await dbGetPendingMutationId('daily_logs', groupId);
+        const config = idempotencyKey
+          ? { headers: { 'Idempotency-Key': idempotencyKey } }
+          : undefined;
         if (hasServerGroupId) {
-          const response = await api.put<DailyCheckInResponse>(path, payload);
+          const response = await api.put<DailyCheckInResponse>(path, payload, config);
           serverGroupId = response.group_id;
         } else {
-          const response = await api.post<DailyCheckInResponse>(path, payload);
+          const response = await api.post<DailyCheckInResponse>(path, payload, config);
           serverGroupId = response.group_id;
         }
         serverSaved = true;
-        console.log(`[DailyLog] API_SYNC_SUCCESS method=${method} path=${path}`);
+        if (__DEV__) console.log(`[DailyLog] API_SYNC_SUCCESS method=${method} path=${path}`);
+        // Point local rows at the server check-in and retire the queued
+        // duplicate so the sync engine does not POST it again.
+        if (serverGroupId) {
+          await dbReconcileDailyLogGroupId(groupId, serverGroupId);
+        }
       } catch (error) {
         // Log only method, path, HTTP status and category — never bodies/health data.
         const status = axios.isAxiosError(error) ? error.response?.status : undefined;
@@ -705,7 +1128,16 @@ export default function VitalsLoggerScreen() {
 
       return { groupId, serverSaved, serverGroupId };
     },
-    onSuccess: async ({ serverSaved }) => {
+    onSuccess: async ({ serverSaved, serverGroupId }) => {
+      // useDailyMetrics/useTrends hold local state (not React Query), so the
+      // React Query invalidations below do not refresh them — refetch the
+      // metrics directly or "Recent history" never shows the new entry.
+      void metrics.refetch();
+      // Remember the server check-in so the next save updates (PUT) instead
+      // of creating a duplicate (POST).
+      if (serverGroupId) {
+        setEditingGroupId(serverGroupId);
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['timeline'] }),
         queryClient.invalidateQueries({ queryKey: ['bodyState'] }),
@@ -727,6 +1159,7 @@ export default function VitalsLoggerScreen() {
           message: 'Saved on this device. It will sync to your account when you are back online.',
         });
       }
+      setCelebrate(true);
     },
     onError: (error) => {
       if (
@@ -764,6 +1197,32 @@ export default function VitalsLoggerScreen() {
   const addActivity = () => setActivities((items) => [...items, { id: Date.now(), activityType: '', duration: '', calories: '' }]);
   const addMedication = () => setMedications((items) => [...items, { id: Date.now(), name: '', dosage: '', unit: '' }]);
   const addVital = () => setVitals((items) => [...items, { id: Date.now(), conceptId: '', value: '', unit: '' }]);
+
+  /** Stage a dose from an active prescription into today's medication drafts. */
+  const stageActiveMedication = (name: string, dosage: string, unit: string) =>
+    setMedications((items) => [...items, { id: Date.now(), name, dosage, unit }]);
+
+  const conceptByCode = (terminology: string, code: string) =>
+    concepts.find((c) => c.terminology === terminology && c.code === code);
+
+  /** One-tap quick logs: prefilled drafts for the common vitals/symptoms. */
+  const quickAddVital = (terminology: string, code: string, unit: string) => {
+    const concept = conceptByCode(terminology, code);
+    if (!concept) return;
+    setVitals((items) => [
+      ...items,
+      { id: Date.now(), conceptId: concept.id, value: '', unit },
+    ]);
+  };
+  const quickAddSymptom = (code: string) => {
+    const concept = concepts.find((c) => c.code === code);
+    if (!concept) return;
+    setSymptoms((items) => [
+      ...items,
+      { id: nextId, conceptId: concept.id, severity: '', duration: '', notes: '' },
+    ]);
+    setNextId((n) => n + 1);
+  };
 
   // --- Validation ---
   const validate = (): boolean => {
@@ -865,6 +1324,7 @@ export default function VitalsLoggerScreen() {
   // =========================================================================
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <AmbientBackground />
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -880,36 +1340,40 @@ export default function VitalsLoggerScreen() {
           >
             <Text style={styles.backBtnText}>‹ Back</Text>
           </Pressable>
-          <View style={styles.headerRow}>
-            <View style={styles.headerText}>
-              <Text style={styles.title}>Daily Log</Text>
-              <Text style={styles.subtitle}>
-                {!todayCheckinQuery.isLoading && editingGroupId != null
-                  ? 'This day is logged — change anything below to update it.'
-                  : 'How are you feeling today?'}
-              </Text>
-              {!todayCheckinQuery.isLoading && editingGroupId != null ? (
-                <View style={styles.editingPill}>
-                  <Text style={styles.editingPillText}>
-                    {selectedDate === dateToday() ? "●  VIEWING · EDIT TODAY'S LOG" : '●  VIEWING · EDIT THIS LOG'}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <View style={styles.dateBadge}>
-              <Text style={styles.dateBadgeDay}>
-                {new Date(`${selectedDate}T00:00:00`).getDate()}
-              </Text>
-              <Text style={styles.dateBadgeMonth}>
-                {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short' })}
-              </Text>
+          <View style={styles.hero}>
+            <View style={styles.heroGlowA} pointerEvents="none" />
+            <View style={styles.heroGlowB} pointerEvents="none" />
+            <View style={styles.headerRow}>
+              <View style={styles.headerText}>
+                <Text style={styles.title}>Daily Log</Text>
+                <Text style={styles.subtitle}>
+                  {!todayCheckinQuery.isLoading && editingGroupId != null
+                    ? 'This day is logged — change anything below to update it.'
+                    : 'How are you feeling today?'}
+                </Text>
+                {!todayCheckinQuery.isLoading && editingGroupId != null ? (
+                  <View style={styles.editingPill}>
+                    <Text style={styles.editingPillText}>
+                      {selectedDate === dateToday() ? "●  VIEWING · EDIT TODAY'S LOG" : '●  VIEWING · EDIT THIS LOG'}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.dateBadge}>
+                <Text style={styles.dateBadgeDay}>
+                  {dateBadge.day}
+                </Text>
+                <Text style={styles.dateBadgeMonth}>
+                  {dateBadge.month}
+                </Text>
+              </View>
             </View>
           </View>
           <View style={styles.dateControls}>
             <Pressable onPress={() => setSelectedDate((value) => shiftDate(value, -1))} style={styles.dateControl}>
               <Text style={styles.dateControlText}>Previous</Text>
             </Pressable>
-            <Text style={styles.selectedDateText}>{new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</Text>
+            <Text style={styles.selectedDateText}>{dateBadge.long}</Text>
             <Pressable onPress={() => setSelectedDate(dateToday())} style={styles.dateControl}>
               <Text style={styles.dateControlText}>Today</Text>
             </Pressable>
@@ -975,7 +1439,7 @@ export default function VitalsLoggerScreen() {
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* SLEEP                                                             */}
         {/* ══════════════════════════════════════════════════════════════════ */}
-        <Section category="sleep" title="Sleep" subtitle="How much did you sleep last night?">
+        <Section index={0} category="sleep" title="Sleep" subtitle="How much did you sleep last night?">
           <View style={[styles.card, tint(COLORS.catSleep)]}>
             <Text style={styles.fieldLabel}>Duration</Text>
             <SleepDurationPicker
@@ -1025,12 +1489,27 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section category="symptomsPain" title="Symptoms & pain" subtitle="Record symptoms and pain only when present.">
+        <Section index={1} category="symptomsPain" title="Symptoms & pain" subtitle="Record symptoms and pain only when present.">
           <View style={[styles.card, tint(COLORS.catPain)]}>
             <Text style={styles.fieldLabel}>Pain entries</Text>
             {pain.map((item) => (
-              <View key={item.id} style={styles.entryBlock}>
-                <Input label="Structure ID (optional)" value={item.structureId} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, structureId: value } : painItem))} placeholder="e.g. RIGHT_KNEE" />
+              <Animated.View
+                key={item.id}
+                entering={reducedMotion ? undefined : FadeInDown.duration(260)}
+                exiting={reducedMotion ? undefined : FadeOut.duration(180)}
+                layout={reducedMotion ? undefined : Layout.springify()}
+              >
+              <View style={styles.entryBlock}>
+                <Text style={styles.fieldLabel}>Where does it hurt?</Text>
+                <OptionChips
+                  options={BODY_REGION_OPTIONS}
+                  value={item.structureId}
+                  onChange={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, structureId: value } : painItem))}
+                  color={COLORS.catPain}
+                  allowClear
+                  label="Pain body region"
+                />
+                <Input label="Or describe the spot" value={item.structureId} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, structureId: value } : painItem))} placeholder="e.g. RIGHT_KNEE" />
                 <Input label="Body location ID (optional)" value={item.bodyLocationId} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, bodyLocationId: value } : painItem))} error={errors[`pain-location-${item.id}`]} />
                 <Text style={styles.fieldLabel}>Pain severity (1-10)</Text>
                 <View style={styles.severityRow}>
@@ -1062,6 +1541,7 @@ export default function VitalsLoggerScreen() {
                 <Input label="Or describe your own" value={item.painType} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, painType: value } : painItem))} placeholder="Sharp, dull, throbbing" />
                 <Pressable onPress={() => setPain((items) => items.filter((painItem) => painItem.id !== item.id))}><Text style={styles.removeBtn}>Remove pain</Text></Pressable>
               </View>
+              </Animated.View>
             ))}
             <Pressable onPress={addPain} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add pain</Text></Pressable>
           </View>
@@ -1069,10 +1549,78 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section category="activity" title="Activity" subtitle="Exercise type, duration, and calories.">
+        <Section index={2} category="symptomsPain" title="Body map" subtitle="Log pain on a real anatomical structure — saved to your body state and timeline.">
+          <View style={[styles.card, tint(COLORS.catPain)]}>
+            <Text style={styles.fieldLabel}>Where does it hurt?</Text>
+            <View style={styles.chipGrid}>
+              {bodySites.map((site) => {
+                const selected = bodySite === site.structure_id;
+                return (
+                  <Pressable
+                    key={site.structure_id}
+                    onPress={() => setBodySite(selected ? '' : site.structure_id)}
+                    style={[styles.chip, selected && { backgroundColor: COLORS.catPain, borderColor: COLORS.catPain }]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${site.display_name}${selected ? ', selected' : ''}`}
+                  >
+                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                      {site.display_name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {bodySite ? (
+              <>
+                <View style={styles.fieldSpacer} />
+                <DialInput
+                  value={bodySeverity}
+                  onChange={setBodySeverity}
+                  min={0}
+                  max={10}
+                  step={1}
+                  unit="/10"
+                  label="Pain severity"
+                  color={COLORS.catPain}
+                  tint={severityTint}
+                  accessibilityLabel="Body map pain severity"
+                />
+                <Input
+                  label="Note for your doctor (optional)"
+                  value={bodyNote}
+                  onChangeText={setBodyNote}
+                  placeholder="What were you doing when it started…"
+                  multiline
+                  autoCapitalize="sentences"
+                  maxLength={500}
+                />
+              </>
+            ) : null}
+            {bodyError ? <Text style={styles.fieldError}>{bodyError}</Text> : null}
+            <Button
+              title={bodySaving ? 'Logging…' : 'Log body pain'}
+              onPress={() => void saveBodyPain()}
+              fullWidth
+              loading={bodySaving}
+              disabled={bodySaving}
+              style={styles.saveButton}
+            />
+          </View>
+        </Section>
+
+        <Divider />
+
+        <Section index={2} category="activity" title="Activity" subtitle="Exercise type, duration, and calories.">
           <View style={[styles.card, tint(COLORS.catActivity)]}>
             {activities.map((item) => (
-              <View key={item.id} style={styles.entryBlock}>
+              <Animated.View
+                key={item.id}
+                entering={reducedMotion ? undefined : FadeInDown.duration(260)}
+                exiting={reducedMotion ? undefined : FadeOut.duration(180)}
+                layout={reducedMotion ? undefined : Layout.springify()}
+              >
+              <View style={styles.entryBlock}>
                 <Text style={styles.fieldLabel}>Activity type</Text>
                 <OptionChips
                   options={ACTIVITY_OPTIONS}
@@ -1095,6 +1643,7 @@ export default function VitalsLoggerScreen() {
                 <Input label="Calories (optional)" value={item.calories} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, calories: value } : activity))} keyboardType="decimal-pad" />
                 <Pressable onPress={() => setActivities((items) => items.filter((activity) => activity.id !== item.id))}><Text style={styles.removeBtn}>Remove activity</Text></Pressable>
               </View>
+              </Animated.View>
             ))}
             <Pressable onPress={addActivity} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add activity</Text></Pressable>
           </View>
@@ -1102,7 +1651,7 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section category="nutrition" title="Hydration & nutrition" subtitle="Use the fields recorded by HealthGraph.">
+        <Section index={3} category="nutrition" title="Hydration & nutrition" subtitle="Use the fields recorded by HealthGraph.">
           <View style={[styles.card, tint(COLORS.catNutrition)]}>
             <Text style={styles.fieldLabel}>Water</Text>
             <Slider
@@ -1137,7 +1686,7 @@ export default function VitalsLoggerScreen() {
             {errors.meals ? <Text style={styles.fieldError}>{errors.meals}</Text> : null}
             <View style={styles.fieldSpacer} />
             <Text style={styles.fieldLabel}>Appetite</Text>
-            <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={ENERGY_LABELS} />
+            <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={APPETITE_LABELS} />
           </View>
         </Section>
 
@@ -1145,7 +1694,7 @@ export default function VitalsLoggerScreen() {
 
         {/* ── Today's Scheduled Medications ── */}
         {medicationSchedule && medicationSchedule.length > 0 && (
-          <Section category="medication" title="Today's Medications" subtitle="Mark doses as taken.">
+          <Section index={4} category="medication" title="Today's Medications" subtitle="Mark doses as taken.">
             <View style={[styles.card, tint(COLORS.catMedication)]}>
               {medicationSchedule.map((item) => {
                 const med = item.medication;
@@ -1205,17 +1754,50 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section category="medication" title="Additional Medications" subtitle="Record any other medicine taken today.">
+        {/* ── Your Medicines: tap a prescription to stage its dose ── */}
+        {activeMeds && activeMeds.length > 0 && (
+          <Section index={4} category="medication" title="Your medicines" subtitle="Tap a medicine to log a dose with its prescription details.">
+            <View style={[styles.card, tint(COLORS.catMedication)]}>
+              {activeMeds.map((med) => (
+                <ActiveMedRow
+                  key={med.medication_id}
+                  med={med}
+                  onLog={(name, dose, unit) => stageActiveMedication(name, dose, unit)}
+                />
+              ))}
+            </View>
+          </Section>
+        )}
+
+        <Divider />
+
+        <Section index={5} category="medication" title="Additional Medications" subtitle="Record any other medicine taken today.">
           <View style={[styles.card, tint(COLORS.catMedication)]}>
             {medications.map((item) => (
-              <View key={item.id} style={styles.entryBlock}>
+              <Animated.View
+                key={item.id}
+                entering={reducedMotion ? undefined : FadeInDown.duration(260)}
+                exiting={reducedMotion ? undefined : FadeOut.duration(180)}
+                layout={reducedMotion ? undefined : Layout.springify()}
+              >
+              <View style={styles.entryBlock}>
                 <Input label="Medication name" value={item.name} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, name: value } : medication))} error={errors[`medication-${item.id}`]} />
                 <View style={styles.inlineFields}>
                   <Input label="Dosage" value={item.dosage} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, dosage: value } : medication))} keyboardType="decimal-pad" style={styles.inlineInput} />
                   <Input label="Unit" value={item.unit} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, unit: value } : medication))} placeholder="mg" style={styles.inlineInput} />
                 </View>
+                <Text style={styles.fieldLabel}>Unit</Text>
+                <OptionChips
+                  options={DOSE_UNIT_OPTIONS}
+                  value={item.unit}
+                  onChange={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, unit: value } : medication))}
+                  color={COLORS.catMedication}
+                  allowClear
+                  label="Dose unit"
+                />
                 <Pressable onPress={() => setMedications((items) => items.filter((medication) => medication.id !== item.id))}><Text style={styles.removeBtn}>Remove medication</Text></Pressable>
               </View>
+              </Animated.View>
             ))}
             <Pressable onPress={addMedication} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add medication</Text></Pressable>
           </View>
@@ -1223,12 +1805,44 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section category="vitals" title="Vitals" subtitle="Select a vital sign, enter a value and unit.">
+        <Section index={6} category="vitals" title="Vitals" subtitle="Pick a vital — the right device-style input appears.">
           <View style={[styles.card, tint(COLORS.catVitals)]}>
+            <View style={styles.quickRow}>
+              <Pressable
+                onPress={() => quickAddVital('LOINC', '8867-4', 'bpm')}
+                style={styles.quickBtn}
+                disabled={mutation.isPending || conceptsQuery.isLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Quick log heart rate"
+              >
+                <Text style={styles.quickBtnText}>❤️ Quick: Pulse</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => quickAddVital('LOINC', '2339-0', 'mg/dL')}
+                style={styles.quickBtn}
+                disabled={mutation.isPending || conceptsQuery.isLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Quick log blood glucose"
+              >
+                <Text style={styles.quickBtnText}>🩸 Quick: Glucose</Text>
+              </Pressable>
+            </View>
+            {conceptsQuery.isError ? (
+              <Text style={styles.dialHint}>Options need a connection — typing still works.</Text>
+            ) : null}
             {vitals.map((item) => {
               const selectedConcept = concepts.find((c) => c.id === item.conceptId);
+              const presetKind = vitalPresetFor(selectedConcept);
+              const preset = presetKind ? VITAL_DIALS[presetKind] : null;
+              const dialValue = item.value.trim() === '' ? null : Number(item.value);
               return (
-                <View key={item.id} style={styles.entryBlock}>
+                <Animated.View
+                  key={item.id}
+                  entering={reducedMotion ? undefined : FadeInDown.duration(260)}
+                  exiting={reducedMotion ? undefined : FadeOut.duration(180)}
+                  layout={reducedMotion ? undefined : Layout.springify()}
+                >
+                <View style={styles.entryBlock}>
                   {selectedConcept ? (
                     <View style={styles.selectedVitalRow}>
                       <View style={styles.selectedVitalInfo}>
@@ -1245,13 +1859,13 @@ export default function VitalsLoggerScreen() {
                         label="Search vitals"
                         value={vitalSearch}
                         onChangeText={setVitalSearch}
-                        placeholder="Heart Rate, Blood Pressure…"
+                        placeholder="Heart Rate, Blood Glucose…"
                       />
                       <View style={styles.chipGrid}>
                         {filteredVitalConcepts.slice(0, 20).map((concept) => (
                           <Pressable
                             key={concept.id}
-                            onPress={() => setVitals((items) => items.map((v) => v.id === item.id ? { ...v, conceptId: concept.id } : v))}
+                            onPress={() => setVitals((items) => items.map((v) => v.id === item.id ? { ...v, conceptId: concept.id, unit: v.unit || autoUnitFor(concept) } : v))}
                             style={[styles.chip, item.conceptId === concept.id && styles.chipSelected]}
                           >
                             <Text style={[styles.chipText, item.conceptId === concept.id && styles.chipTextSelected]}>
@@ -1262,13 +1876,45 @@ export default function VitalsLoggerScreen() {
                       </View>
                     </>
                   )}
-                  <View style={styles.inlineFields}>
-                    <Input label="Value (optional)" value={item.value} onChangeText={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, value } : vital))} keyboardType="decimal-pad" style={styles.inlineInput} />
-                    <Input label="Unit (optional)" value={item.unit} onChangeText={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, unit: value } : vital))} placeholder="bpm, mmHg" style={styles.inlineInput} />
-                  </View>
+                  {preset ? (
+                    <>
+                      <DialInput
+                        value={dialValue != null && Number.isFinite(dialValue) ? dialValue : null}
+                        onChange={(v) => {
+                          const decimals = preset.step < 1 ? 1 : 0;
+                          setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, value: v.toFixed(decimals), unit: preset.unit } : vital));
+                        }}
+                        min={preset.min}
+                        max={preset.max}
+                        step={preset.step}
+                        unit={preset.unit}
+                        label={preset.label}
+                        color={COLORS.catVitals}
+                        accessibilityLabel={`${preset.label} dial`}
+                      />
+                      <Input label="Or type the exact value" value={item.value} onChangeText={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, value } : vital))} keyboardType="decimal-pad" />
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.inlineFields}>
+                        <Input label="Value (optional)" value={item.value} onChangeText={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, value } : vital))} keyboardType="decimal-pad" style={styles.inlineInput} />
+                        <Input label="Unit (optional)" value={item.unit} onChangeText={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, unit: value } : vital))} placeholder="bpm, mmHg" style={styles.inlineInput} />
+                      </View>
+                      <Text style={styles.fieldLabel}>Unit</Text>
+                      <OptionChips
+                        options={VITAL_UNIT_OPTIONS}
+                        value={item.unit}
+                        onChange={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, unit: value } : vital))}
+                        color={COLORS.catVitals}
+                        allowClear
+                        label="Vital unit"
+                      />
+                    </>
+                  )}
                   {errors[`vital-${item.id}`] ? <Text style={styles.fieldError}>{errors[`vital-${item.id}`]}</Text> : null}
                   <Pressable onPress={() => setVitals((items) => items.filter((vital) => vital.id !== item.id))}><Text style={styles.removeBtn}>Remove vital</Text></Pressable>
                 </View>
+                </Animated.View>
               );
             })}
             <Pressable onPress={addVital} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add vital</Text></Pressable>
@@ -1281,6 +1927,7 @@ export default function VitalsLoggerScreen() {
         {/* HOW YOU FEEL                                                     */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <Section
+          index={7}
           category="wellbeing"
           title="How you feel"
           subtitle="Rate your mood, energy, and stress today."
@@ -1305,12 +1952,22 @@ export default function VitalsLoggerScreen() {
         {/* SYMPTOMS                                                         */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <Section
+          index={8}
           category="symptoms"
           title="Symptoms"
           subtitle="Select symptoms and rate their severity."
         >
-          {symptoms.map((item) => (
-            <View key={item.id} style={[styles.symptomCard, tint(COLORS.catSymptom)]}>
+          {symptoms.map((item) => {
+            const selectedSymptom = symptomConcepts.find((c) => c.id === item.conceptId);
+            const showFeverDial = isFeverConcept(selectedSymptom);
+            return (
+            <Animated.View
+              key={item.id}
+              entering={reducedMotion ? undefined : FadeInDown.duration(260)}
+              exiting={reducedMotion ? undefined : FadeOut.duration(180)}
+              layout={reducedMotion ? undefined : Layout.springify()}
+            >
+            <View style={[styles.symptomCard, tint(COLORS.catSymptom)]}>
               <View style={styles.symptomHeader}>
                 <Text style={styles.symptomIndex}>Symptom</Text>
                 <Pressable
@@ -1422,8 +2079,32 @@ export default function VitalsLoggerScreen() {
                 autoCapitalize="sentences"
                 placeholder="Any additional context…"
               />
+              {showFeverDial ? (
+                <>
+                  <View style={styles.fieldSpacer} />
+                  <FeverTempDial
+                    notes={item.notes}
+                    onNotes={(text) => updateSymptom(item.id, { notes: text })}
+                    color={COLORS.catSymptom}
+                  />
+                </>
+              ) : null}
             </View>
-          ))}
+            </Animated.View>
+            );
+          })}
+
+          <View style={styles.quickRow}>
+            <Pressable
+              onPress={() => quickAddSymptom('386661006')}
+              style={styles.quickBtn}
+              disabled={mutation.isPending || conceptsQuery.isLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Quick log fever"
+            >
+              <Text style={styles.quickBtnText}>🌡️ Quick: Fever</Text>
+            </Pressable>
+          </View>
 
           <Pressable
             onPress={addSymptom}
@@ -1440,6 +2121,7 @@ export default function VitalsLoggerScreen() {
         {/* NOTES                                                            */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <Section
+          index={9}
           category="notes"
           title="Notes"
           subtitle="Optional. Anything else you want to record."
@@ -1475,7 +2157,7 @@ export default function VitalsLoggerScreen() {
         {recentLogs.length > 0 && (
           <>
             <Divider />
-            <Section title="Recent history" subtitle="Your past daily logs.">
+            <Section animate={false} title="Recent history" subtitle="Your past daily logs.">
               {recentLogs.slice(0, 14).map((log) => (
                 <View key={log.log_date} style={styles.historyRow}>
                   <View style={styles.historyLeft}>
@@ -1511,6 +2193,9 @@ export default function VitalsLoggerScreen() {
         {/* Spacer */}
         <View style={{ height: SPACING.xxl }} />
       </ScrollView>
+
+      {/* Celebration overlay — one-shot delight on save */}
+      <LogCelebration visible={celebrate} onDone={() => setCelebrate(false)} />
     </SafeAreaView>
   );
 }
@@ -1541,6 +2226,34 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   backBtnText: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary },
+  // Hero header card — deep gradient illusion via layered glows.
+  hero: {
+    borderWidth: 1,
+    borderColor: 'rgba(77, 141, 255, 0.35)',
+    borderRadius: BORDER_RADIUS.xl,
+    backgroundColor: '#101F38',
+    padding: SPACING.lg,
+    overflow: 'hidden',
+    marginBottom: SPACING.sm,
+  },
+  heroGlowA: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    top: -90,
+    right: -60,
+    backgroundColor: 'rgba(77, 141, 255, 0.35)',
+  },
+  heroGlowB: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    bottom: -100,
+    left: -50,
+    backgroundColor: 'rgba(49, 183, 165, 0.28)',
+  },
   header: {
     paddingVertical: SPACING.lg,
   },
@@ -2012,6 +2725,146 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
+  // ── Quick-log + unit toggles ──
+  quickRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  quickBtn: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+  },
+  quickBtnText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textPrimary,
+  },
+  unitToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xs,
+  },
+  unitToggle: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.full,
+    overflow: 'hidden',
+  },
+  unitToggleBtn: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: BORDER_RADIUS.full,
+  },
+  unitToggleText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textSecondary,
+  },
+  unitToggleTextSelected: {
+    color: COLORS.textOnAccent,
+  },
+  dialHint: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+  },
+
+  // ── Active medicines (tap-to-log) ──
+  activeMedRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+    paddingVertical: SPACING.xs,
+  },
+  activeMedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    minHeight: 44,
+  },
+  activeMedIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: `${COLORS.catMedication}1A`,
+    borderWidth: 1,
+    borderColor: `${COLORS.catMedication}55`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeMedIconText: {
+    fontSize: 20,
+  },
+  activeMedInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  activeMedName: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.textPrimary,
+  },
+  activeMedDetail: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+  },
+  activeMedTimes: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontVariant: ['tabular-nums'],
+  },
+  prnBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: `${COLORS.catMedication}1A`,
+    borderWidth: 1,
+    borderColor: `${COLORS.catMedication}55`,
+  },
+  prnText: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.catMedication,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  expandGlyph: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textMuted,
+  },
+  activeMedBody: {
+    gap: SPACING.sm,
+    paddingTop: SPACING.xs,
+    paddingBottom: SPACING.sm,
+  },
+  logDoseBtn: {
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.catMedication,
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+  },
+  logDoseBtnDone: {
+    backgroundColor: COLORS.successBg,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+  },
+  logDoseText: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: COLORS.textOnAccent,
+  },
+  logDoseTextDone: {
+    color: COLORS.success,
+  },
+
   // ── Today's Medications ──
   medScheduleRow: {
     flexDirection: 'row',
@@ -2053,7 +2906,7 @@ const styles = StyleSheet.create({
   },
   medTakeButtonText: {
     ...TYPOGRAPHY.bodyStrong,
-    color: '#07111F',
+    color: '#FFFFFF',
   },
 
   // ── Notes ──

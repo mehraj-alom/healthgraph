@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTrends } from '@/hooks/useTrends';
+import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, CATEGORY_COLORS } from '@/constants';
 import type {
   TrendsResponse,
@@ -23,12 +24,6 @@ import type {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const RANGE_OPTIONS = [
-  { label: '7D', value: 7 },
-  { label: '30D', value: 30 },
-  { label: '90D', value: 90 },
-] as const;
 
 const SCORE_LABELS: Record<number, string> = {
   1: 'Very low', 2: 'Low', 3: 'Moderate', 4: 'High', 5: 'Very high',
@@ -365,11 +360,11 @@ function InsightCard({ text }: { text: string }) {
 
 export default function TrendsScreen({ embedded = false }: { embedded?: boolean }) {
   const navigation = useNavigation();
-  const [selectedDays, setSelectedDays] = useState(30);
+  // Single global range — one selection drives every correlation graph.
+  const { range, days: selectedDays, setRange } = useTrendRange();
   const [selectedSymptom, setSelectedSymptom] = useState<string | null>(null);
 
-  // When embedded in Dashboard, use 7-day range by default (lighter query)
-  const { data: trend, isLoading, error } = useTrends(embedded ? 7 : selectedDays);
+  const { data: trend, isLoading, error } = useTrends(selectedDays);
 
   const availableSymptoms = trend?.available_symptoms ?? [];
   const activeSymptomId = selectedSymptom ?? availableSymptoms[0] ?? null;
@@ -390,22 +385,22 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
       {embedded && (
         <View style={styles.embeddedHeader}>
           <Text style={styles.headerTitle}>Trends</Text>
-          <Text style={styles.embeddedSubtitle}>This week</Text>
+          <Text style={styles.embeddedSubtitle}>This {TREND_RANGES[range].label.toLowerCase()}</Text>
         </View>
       )}
 
-      {/* Range selector */}
+      {/* Range selector — global: one tap retunes every graph */}
       <View style={styles.rangeRow}>
-        {RANGE_OPTIONS.map((opt) => {
-          const selected = selectedDays === opt.value;
+        {TREND_RANGE_ORDER.map((key) => {
+          const selected = range === key;
           return (
             <Pressable
-              key={opt.value}
-              onPress={() => { setSelectedDays(opt.value); setSelectedSymptom(null); }}
+              key={key}
+              onPress={() => { setRange(key); setSelectedSymptom(null); }}
               style={[styles.rangeChip, selected && styles.rangeChipSelected]}
             >
               <Text style={[styles.rangeChipText, selected && styles.rangeChipTextSelected]}>
-                {opt.label}
+                {TREND_RANGES[key].label}
               </Text>
             </Pressable>
           );

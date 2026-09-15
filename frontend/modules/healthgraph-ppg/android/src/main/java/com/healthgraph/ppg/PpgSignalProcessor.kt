@@ -16,7 +16,7 @@ import kotlin.math.sqrt
  * measurement window (e.g. 300s @ 30fps -> <= 9000 scalars).
  */
 object PpgSignalProcessor {
-  const val ALGORITHM_VERSION = "ppg-1.0.0"
+  const val ALGORITHM_VERSION = "ppg-1.1.0"
   const val MIN_RELIABLE_QUALITY = 0.5f
   const val MIN_HR_BPM = 25.0
   const val MAX_HR_BPM = 250.0
@@ -55,6 +55,8 @@ object PpgSignalProcessor {
     val rmssdMs: Double?,
     val sdnnMs: Double?,
     val signalQuality: Float,
+    /** Detected pulse peaks in the window (diagnostics; quality uses it too). */
+    val peakCount: Int,
   )
 
   /** Exponential moving-average low-pass (alpha ~0.25). */
@@ -70,15 +72,76 @@ object PpgSignalProcessor {
     return out
   }
 
-  /** Local-maxima peak detection with adaptive threshold + refractory period. */
+  /**
+   * Baseline-drift removal (P0 fix for camera auto-exposure / finger-pressure
+   * wander). Mirrors detrend() in ppgSignal.ts — see the TS comment for the
+   * full rationale. Trailing moving average over [trendSeconds] (2s),
+   * front-padded with the first sample so no startup ramp injects false
+   * edge peaks into any window.
+   */
+  fun detrend(signal: List<Float>, sampleRateHz: Float, trendSeconds: Float = 2.0f): List<Float> {
+    if (signal.isEmpty()) return emptyList()
+    if (sampleRateHz.isNaN() || sampleRateHz <= 0f) return signal.toList()
+    val window = maxOf(3, minOf(signal.size, (sampleRateHz * trendSeconds).toInt()))
+    val out = ArrayList<Float>(signal.size)
+    val s0 = signal[0]
+    var run = s0 * window
+    for (i in signal.indices) {
+      run += signal[i] - (if (i < window) s0 else signal[i - window])
+      out.add(signal[i] - run / window)
+    }
+    return out
+  }
+
+  /** Upper-median (matches cleanRR's median convention). */
+  fun median(values: List<Double>): Double {
+    if (values.isEmpty()) return Double.NaN
+    val sorted = values.sorted()
+    return sorted[sorted.size / 2]
+  }
+
+  /**
+   * Sub-sample peak refinement (P1 fix for integer-sample quantization).
+   * Mirrors refinePeak() in ppgSignal.ts: parabolic interpolation recovers
+   * the fractional peak position so RR intervals are not quantized to the
+   * 33ms frame grid (±2 BPM bias at 30fps).
+   */
+  fun refinePeak(filtered: List<Float>, i: Int): Double {
+    if (i <= 0 || i >= filtered.size - 1) return i.toDouble()
+    val y0 = filtered[i - 1].toDouble()
+    val y1 = filtered[i].toDouble()
+    val y2 = filtered[i + 1].toDouble()
+    val denom = y0 - 2.0 * y1 + y2
+    if (!(denom < 0.0)) return i.toDouble()
+    val offset = (y0 - y2) / (2.0 * denom)
+    if (offset.isNaN() || offset.isInfinite()) return i.toDouble()
+    return i + offset.coerceIn(-0.5, 0.5)
+  }
+
+  /** Timestamp (ms) at a fractional sample position via local interpolation. */
+  fun sampleTimeAt(timestampsMs: List<Long>, pos: Double): Double {
+    if (timestampsMs.isEmpty()) return Double.NaN
+    val clampedLo = pos.toInt().coerceIn(0, timestampsMs.size - 1)
+    val hi = minOf(timestampsMs.size - 1, clampedLo + 1)
+    val frac = (pos - clampedLo).coerceIn(0.0, 1.0)
+    return timestampsMs[clampedLo] + frac * (timestampsMs[hi] - timestampsMs[clampedLo])
+  }
+
+  /**
+   * Local-maxima peak detection with adaptive threshold + refractory period.
+   * Operates on the DETRENDED series (callers must detrend first). Threshold
+   * mean + 0.5σ (0.35σ admitted noise-ripple false peaks on real camera data
+   * -> wild 100+ BPM spikes); refractory gap 0.30s rejects dicrotic-notch
+   * double counts while the 25–250 BPM plausibility gate stays unchanged.
+   */
   fun detectPeaks(filtered: List<Float>, sampleRateHz: Float): List<Int> {
     if (filtered.size < 3 || sampleRateHz <= 0f) return emptyList()
     val mean = filtered.sum() / filtered.size
     var v = 0.0
     for (x in filtered) v += (x - mean) * (x - mean)
     val std = sqrt(v / filtered.size)
-    val threshold = mean + 0.35f * std
-    val minGap = maxOf(1, (sampleRateHz * 0.27f).toInt())
+    val threshold = mean + 0.5f * std
+    val minGap = maxOf(1, (sampleRateHz * 0.30f).toInt())
     val peaks = ArrayList<Int>()
     for (i in 1 until filtered.size - 1) {
       if (filtered[i] > filtered[i - 1] && filtered[i] >= filtered[i + 1] && filtered[i] > threshold) {
@@ -110,18 +173,73 @@ object PpgSignalProcessor {
     return sqrt(rrMs.sumOf { (it - m) * (it - m) } / rrMs.size)
   }
 
-  fun signalQuality(raw: List<Float>, peakCount: Int, durationSeconds: Int): Float {
-    if (raw.size < 8 || durationSeconds <= 0) return 0f
-    val m = raw.sum() / raw.size
-    var v = 0.0
-    for (x in raw) v += (x - m) * (x - m)
-    val std = sqrt(v / raw.size)
-    val cv = if (m != 0f) std / abs(m) else 0.0
+  data class QualityComponents(
+    val amplitude: Float,
+    val coverage: Float,
+    val stability: Float,
+    val driftFactor: Float,
+    /** Std of the detrended (AC) series in raw units. */
+    val pulseAmplitude: Float,
+    /** Std of the slow baseline trend relative to the raw mean. */
+    val driftCv: Float,
+  )
+
+  /**
+   * Quality components in [0,1]. Amplitude is measured on the DETRENDED
+   * series (pulsatile AC ripple vs raw DC mean): raw-CV rewarded slow drift
+   * as pulse strength, letting drift garbage pass the 0.5 gate.
+   * [driftFactor] only discounts quality for wander the detrending already
+   * removed (floor 0.3); fast jumps still surface via RR validation.
+   * Non-finite samples are dropped fail-closed. A flat line still scores 0.
+   */
+  fun qualityComponents(
+    raw: List<Float>,
+    peakCount: Int,
+    durationSeconds: Int,
+    sampleRateHz: Float,
+  ): QualityComponents {
+    val zero = QualityComponents(0f, 0f, 0f, 0f, 0f, 0f)
+    if (raw.size < 8 || durationSeconds <= 0) return zero
+    // Fail closed: one NaN/Infinity must never poison quality into NaN
+    // (which would neither pass nor clearly fail downstream gates).
+    val finite = raw.filter { it.isFinite() }
+    if (finite.size < 8) return zero
+    val m = finite.sum() / finite.size
+    val detrended = detrend(finite, sampleRateHz)
+    var acVar = 0.0
+    for (x in detrended) acVar += x * x
+    val acStd = sqrt(acVar / detrended.size)
+    val cv = if (m != 0f) acStd / abs(m) else 0.0
     val amplitude = ((cv - 0.002) / 0.05).toFloat().coerceIn(0f, 1f)
     val expected = maxOf(1, (durationSeconds * 0.9).toInt())
     val coverage = (peakCount.toFloat() / expected).coerceIn(0f, 1f)
     val stability = (peakCount.toFloat() / 5f).coerceIn(0f, 1f)
-    return (0.45f * amplitude + 0.35f * coverage + 0.2f * stability).coerceIn(0f, 1f)
+    // Baseline trend = raw minus detrended; its relative energy is drift.
+    var detrendedMean = 0.0
+    for (x in detrended) detrendedMean += x
+    detrendedMean /= detrended.size
+    val trendMean = m - detrendedMean
+    var driftVar = 0.0
+    for (i in finite.indices) {
+      val trend = finite[i] - detrended[i]
+      driftVar += (trend - trendMean) * (trend - trendMean)
+    }
+    val driftStd = sqrt(driftVar / finite.size)
+    val driftCv = if (m != 0f) driftStd / abs(m) else 0.0
+    // Drift slower than the 2s detrend window is already removed before peak
+    // detection, so it only DISCOUNTS quality (fast jumps still surface via
+    // RR validation). A 0.3 floor keeps the 0.5 gate meaningful without
+    // vetoing a cleanly detected pulse over a wandering baseline.
+    val driftFactor = (1.0 - driftCv / 0.15).toFloat().coerceIn(0.3f, 1f)
+    return QualityComponents(amplitude, coverage, stability, driftFactor, acStd.toFloat(), driftCv.toFloat())
+  }
+
+  fun signalQuality(raw: List<Float>, peakCount: Int, durationSeconds: Int): Float {
+    if (raw.size < 8 || durationSeconds <= 0) return 0f
+    val fs = maxOf(1f, raw.size / maxOf(1, durationSeconds).toFloat())
+    val c = qualityComponents(raw, peakCount, durationSeconds, fs)
+    val base = 0.45f * c.amplitude + 0.35f * c.coverage + 0.2f * c.stability
+    return (base * c.driftFactor).coerceIn(0f, 1f)
   }
 
   fun process(
@@ -131,7 +249,7 @@ object PpgSignalProcessor {
     segmentBreaks: List<Int> = emptyList(),
   ): Output {
     if (samples.size != timestampsMs.size || samples.size < 8) {
-      return Output(null, emptyList(), null, null, 0f)
+      return Output(null, emptyList(), null, null, 0f, 0)
     }
     // Numerical safety: drop non-finite pairs instead of letting one NaN or
     // infinity poison the mean/std/quality math. Never invent replacements.
@@ -146,26 +264,39 @@ object PpgSignalProcessor {
       }
     }
     if (finiteSamples.size < 8) {
-      return Output(null, emptyList(), null, null, 0f)
+      return Output(null, emptyList(), null, null, 0f, 0)
     }
     val samples = finiteSamples
     val timestampsMs = finiteTs
     val spanMs = (timestampsMs.last() - timestampsMs.first()).toDouble()
     val sampleRateHz = if (spanMs > 0) (samples.size - 1) / (spanMs / 1000.0) else samples.size / durationSeconds.toDouble()
-    val filtered = lowPass(samples)
+    // Detrend BEFORE smoothing: slow baseline drift (auto-exposure, pressure)
+    // must not reach the global peak threshold. Then low-pass the residual.
+    val detrended = detrend(samples, sampleRateHz.toFloat())
+    val filtered = lowPass(detrended)
     val peaks = detectPeaks(filtered, sampleRateHz.toFloat())
     // Segment breaks (finger-removal boundaries as sample indexes): an RR
     // interval spanning a break bridges two separate placements and must not
     // contaminate HR/HRV. Out-of-range breaks are ignored.
+    // RR intervals are measured between SUB-SAMPLE peak positions (parabolic
+    // refinement) on the real timestamp track — integer indexes would
+    // quantize every beat to the 33ms frame grid (±2 BPM bias at 30fps).
     val rawRR = ArrayList<Double>()
     for (i in 1 until peaks.size) {
       val spansBreak = segmentBreaks.any { b -> b > peaks[i - 1] && b <= peaks[i] }
-      if (!spansBreak) rawRR.add((timestampsMs[peaks[i]] - timestampsMs[peaks[i - 1]]).toDouble())
+      if (!spansBreak) {
+        val tPrev = sampleTimeAt(timestampsMs, refinePeak(filtered, peaks[i - 1]))
+        val tCurr = sampleTimeAt(timestampsMs, refinePeak(filtered, peaks[i]))
+        rawRR.add(tCurr - tPrev)
+      }
     }
     val rr = cleanRR(rawRR)
     var hr: Double? = null
     if (rr.size >= 2) {
-      val candidate = 60000.0 / (rr.sum() / rr.size)
+      // Median, not mean: one mistimed peak (noise double-count or a
+      // drift-edge miss) shifts the mean by ~15% (74 -> ~64 BPM) but barely
+      // moves the median. Direct fix for the observed reference discrepancy.
+      val candidate = 60000.0 / median(rr)
       if (candidate in MIN_HR_BPM..MAX_HR_BPM) hr = candidate
     }
     val hrvOk = durationSeconds >= 30 && rr.size >= 5
@@ -177,6 +308,7 @@ object PpgSignalProcessor {
       rmssdMs = if (hrvOk && reliable) rmssd(rr) else null,
       sdnnMs = if (hrvOk && reliable) sdnn(rr) else null,
       signalQuality = q,
+      peakCount = peaks.size,
     )
   }
 
@@ -327,6 +459,118 @@ object PpgSignalProcessor {
     if (spanMs < LIVE_MIN_SECONDS * 1000.0) return null
     val out = process(wSamples, wTs, windowSeconds)
     return out.heartRateBpm
+  }
+
+  /**
+   * Displayed live BPM from recent raw estimates: median of the last up to 3.
+   * All inputs are real pipeline estimates — this hides single-tick display
+   * jitter (72, 74, 72) without converting an invalid sequence (119, 83, 61)
+   * into a believable number. Callers must still gate on isStableHrSeries
+   * over the RAW history; this performs no stability judgment.
+   */
+  fun displayHrFromRecent(recentRaw: List<Double>): Double? {
+    if (recentRaw.isEmpty()) return null
+    return median(recentRaw.takeLast(3))
+  }
+
+  /** DEBUG-only diagnostic snapshot (telemetry). No images, no waveforms. */
+  data class Diagnostics(
+    val sampleCount: Int,
+    val windowSeconds: Int,
+    val signalMean: Double,
+    val signalStd: Double,
+    val pulseAmplitude: Float,
+    val driftCv: Float,
+    val amplitudeScore: Float,
+    val coverageScore: Float,
+    val stabilityScore: Float,
+    val driftFactor: Float,
+    val quality: Float,
+    val peakCount: Int,
+    val beatCount: Int,
+    val rrMedianMs: Double?,
+    val rrSpreadMs: Double?,
+  )
+
+  fun diagnose(
+    raw: List<Float>,
+    durationSeconds: Int,
+    sampleRateHz: Float,
+    peakCount: Int,
+    rrIntervalsMs: List<Double>,
+  ): Diagnostics {
+    val c = qualityComponents(raw, peakCount, durationSeconds, maxOf(1f, sampleRateHz))
+    val base = 0.45f * c.amplitude + 0.35f * c.coverage + 0.2f * c.stability
+    var m = Double.NaN
+    var std = Double.NaN
+    if (raw.isNotEmpty()) {
+      m = raw.sum() / raw.size.toDouble()
+      var v = 0.0
+      for (x in raw) v += (x - m) * (x - m)
+      std = sqrt(v / raw.size)
+    }
+    val sorted = rrIntervalsMs.sorted()
+    return Diagnostics(
+      sampleCount = raw.size,
+      windowSeconds = durationSeconds,
+      signalMean = m,
+      signalStd = std,
+      pulseAmplitude = c.pulseAmplitude,
+      driftCv = c.driftCv,
+      amplitudeScore = c.amplitude,
+      coverageScore = c.coverage,
+      stabilityScore = c.stability,
+      driftFactor = c.driftFactor,
+      quality = (base * c.driftFactor).coerceIn(0f, 1f),
+      peakCount = peakCount,
+      beatCount = rrIntervalsMs.size,
+      rrMedianMs = if (sorted.isNotEmpty()) sorted[sorted.size / 2] else null,
+      rrSpreadMs = if (sorted.size > 1) sorted.last() - sorted.first() else null,
+    )
+  }
+
+  data class DebugSummaryInput(
+    val fingerPresencePct: Double?,
+    val framesReceived: Int,
+    val samplesAccepted: Int,
+    val framesRejected: Int,
+    val effectiveFps: Double?,
+    val diagnostics: Diagnostics,
+    val rawHrEstimates: List<Double>,
+    val displayedHr: Double?,
+    val finalHr: Double?,
+    val failureReason: String?,
+    val stable: Boolean,
+  )
+
+  /**
+   * DEBUG-only end-of-measurement summary. Lets a hardware run answer "was
+   * the optical signal or the estimator wrong?" without persisting or
+   * logging any frame, image, or waveform data.
+   */
+  fun buildDebugSummary(input: DebugSummaryInput): String {
+    val d = input.diagnostics
+    fun fmt(v: Double?, digits: Int = 1): String {
+      if (v == null || v.isNaN() || v.isInfinite()) return "n/a"
+      return "%.${digits}f".format(v)
+    }
+    fun fmtF(v: Float, digits: Int = 1): String = fmt(v.toDouble(), digits)
+    val sb = StringBuilder()
+    sb.appendLine("PPG DEBUG SUMMARY")
+    sb.appendLine("Finger presence: ${if (input.fingerPresencePct == null) "n/a" else "%.0f%%".format(input.fingerPresencePct)}")
+    sb.appendLine("Frames: ${input.framesReceived} Accepted: ${input.samplesAccepted} Rejected: ${input.framesRejected}")
+    sb.appendLine("FPS: ${fmt(input.effectiveFps)}")
+    sb.appendLine("Window: ${fmt(d.windowSeconds.toDouble())}s (n=${d.sampleCount})")
+    sb.appendLine("Signal mean: ${fmt(d.signalMean)} std: ${fmt(d.signalStd, 2)}")
+    sb.appendLine("Pulse amplitude: ${fmtF(d.pulseAmplitude, 3)} Drift CV: ${fmtF(d.driftCv, 4)}")
+    sb.appendLine("Quality: amp=${fmtF(d.amplitudeScore, 2)} cov=${fmtF(d.coverageScore, 2)} stab=${fmtF(d.stabilityScore, 2)} drift=${fmtF(d.driftFactor, 2)} final=${fmtF(d.quality, 2)}")
+    sb.appendLine("Peaks: ${d.peakCount} Beats: ${d.beatCount}")
+    sb.appendLine("RR median: ${fmt(d.rrMedianMs, 0)}ms spread: ${fmt(d.rrSpreadMs, 0)}ms")
+    sb.appendLine("Raw HR estimates: ${if (input.rawHrEstimates.isEmpty()) "none" else input.rawHrEstimates.joinToString(", ") { "%.0f".format(it) }}")
+    sb.appendLine("Displayed HR: ${if (input.displayedHr == null) "none" else "%.0f".format(input.displayedHr)}")
+    sb.appendLine("Final HR: ${if (input.finalHr == null) "REJECTED${if (input.failureReason != null) " (${input.failureReason})" else ""}" else "%.0f".format(input.finalHr)}")
+    sb.append("Stability: ${if (input.stable) "PASS" else "FAIL"}")
+    return sb.toString()
   }
 
   /**

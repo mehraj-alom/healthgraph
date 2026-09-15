@@ -11,7 +11,6 @@
  *   - SYNC_FAILED: Permanent sync failure requiring attention
  */
 
-import { getSyncState } from './syncEngine';
 import { deriveSyncStatus } from './syncClassification';
 
 // ============================================================================
@@ -78,9 +77,15 @@ export async function initSyncState(): Promise<void> {
 /**
  * Refresh sync state from database.
  * Call after mutations or sync operations.
+ *
+ * NOTE: the engine is imported dynamically (not statically) because
+ * syncEngine statically imports this module — a static import back would
+ * recreate the Metro require cycle
+ * (syncEngine -> syncState -> syncEngine).
  */
 export async function refreshSyncState(): Promise<void> {
   try {
+    const { getSyncState } = await import('./syncEngine');
     const dbState = await getSyncState();
 
     // Derived purely from queue counts: 'failed' rows are the only source of

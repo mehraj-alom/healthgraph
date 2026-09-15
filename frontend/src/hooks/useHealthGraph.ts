@@ -57,9 +57,9 @@ export function useHealthGraph(options?: {
       const edgesByType: Record<string, number> = {};
       let derivedCount = 0;
       (data.edges ?? []).forEach((e) => { edgesByType[e.relationship] = (edgesByType[e.relationship] ?? 0) + 1; if (e.derived) derivedCount++; });
-      console.log('[HealthGraphNeo4j] raw nodes=', data.nodes?.length ?? 0, 'relationships=', data.edges?.length ?? 0);
-      console.log('[HealthGraphNeo4j] relationship types:', JSON.stringify(edgesByType));
-      console.log('[HealthGraph] patient=', nodesByType['patient'] ?? 0,
+      if (__DEV__) console.log('[HealthGraphNeo4j] raw nodes=', data.nodes?.length ?? 0, 'relationships=', data.edges?.length ?? 0);
+      if (__DEV__) console.log('[HealthGraphNeo4j] relationship types:', JSON.stringify(edgesByType));
+      if (__DEV__) console.log('[HealthGraph] patient=', nodesByType['patient'] ?? 0,
         'body_structure=', nodesByType['body_structure'] ?? 0,
         'observation=', nodesByType['observation'] ?? 0,
         'document=', nodesByType['document'] ?? 0,
@@ -77,9 +77,9 @@ export function useGraphNodeDetail(nodeId: string | null) {
     queryKey: ['health-graph-node', nodeId],
     queryFn: async () => {
       const url = `/api/v1/health-graph/${encodeURIComponent(nodeId!)}`;
-      console.log('[HealthGraphDetail] request=start nodeId=', nodeId);
+      if (__DEV__) console.log('[HealthGraphDetail] request=start nodeId=', nodeId);
       const http = await api.getClient().get<GraphNodeDetail>(url);
-      console.log('[HealthGraphDetail] request=done status=', http.status, 'nodeId=', nodeId, 'loaded=true');
+      if (__DEV__) console.log('[HealthGraphDetail] request=done status=', http.status, 'nodeId=', nodeId, 'loaded=true');
       return http.data as unknown as GraphNodeDetail;
     },
     enabled: !!nodeId,

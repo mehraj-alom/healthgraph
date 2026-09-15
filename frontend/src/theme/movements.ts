@@ -7,27 +7,27 @@
  */
 
 export const mv = {
-  // ── Base surfaces ──
-  surfaceWhite: '#FFFFFF',
-  surfaceOffwhite: '#FAFAF8',
-  surfaceDark: '#141B1C',
-  surfaceDarkCard: '#1B2425',
-  surfaceTealDeep: '#0B6852',
+  // ── Base surfaces (warm clinical cream) ──
+  surfaceWhite: '#FFFBF3',
+  surfaceOffwhite: '#EAE4D6',
+  surfaceDark: '#1D1B17',
+  surfaceDarkCard: '#26231E',
+  surfaceTealDeep: '#E8862E',
 
-  // ── Accents ──
-  accentLime: '#D9FF6E',
-  accentLimeSoft: '#EAFFAA',
-  accentCoral: '#F0A98A',
-  accentCream: '#F5F5F0',
+  // ── Accents (peach / sky / sage pills) ──
+  accentLime: '#FBE3C8',
+  accentLimeSoft: '#FBEEDC',
+  accentCoral: '#E8862E',
+  accentCream: '#F4EDDF',
 
-  // ── Text ──
-  textOnLightPrimary: '#141414',
-  textOnLightSecondary: '#8A8A8A',
+  // ── Text (warm ink) ──
+  textOnLightPrimary: '#1D1B17',
+  textOnLightSecondary: '#797166',
   textOnDarkPrimary: '#FFFFFF',
   textOnDarkSecondary: 'rgba(255,255,255,0.6)',
 
-  // ── Radii ──
-  radiusCard: 30,
+  // ── Radii (soft 20–22px cards, full pills) ──
+  radiusCard: 22,
   radiusPill: 999,
 
   // ── Spacing ──
