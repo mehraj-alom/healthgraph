@@ -22,7 +22,12 @@ type NativePreviewProps = {
 let NativePreview: React.ComponentType<NativePreviewProps> | null = null;
 try {
   // Single-view module: resolves the DEFAULT view (RppgCameraPreviewView).
-  // Throws in Expo Go / web where the native module does not exist.
+  //
+  // NOTE: requireNativeView does NOT throw when the native module is absent
+  // (Expo Go / web) — it returns a stub whose view config resolves lazily on
+  // first render with a console warning. The try/catch below is therefore
+  // NOT the fallback mechanism; isPreviewAvailable() is. Never render
+  // NativePreview unless isPreviewAvailable() is true.
   NativePreview = requireNativeView('HealthGraphRPPG');
 } catch {
   NativePreview = null;
@@ -37,14 +42,14 @@ export function isPreviewAvailable(): boolean {
 }
 
 export default function RppgCameraPreview({ style }: { style?: StyleProp<ViewStyle> }) {
-  if (NativePreview) {
-    return <NativePreview style={[styles.preview, style]} />;
+  if (!isPreviewAvailable() || !NativePreview) {
+    return (
+      <View style={[styles.preview, styles.placeholder, style]} accessible accessibilityLabel="Camera preview unavailable">
+        <Text style={styles.placeholderText}>Camera preview</Text>
+      </View>
+    );
   }
-  return (
-    <View style={[styles.preview, styles.placeholder, style]} accessible accessibilityLabel="Camera preview unavailable">
-      <Text style={styles.placeholderText}>Camera preview</Text>
-    </View>
-  );
+  return <NativePreview style={[styles.preview, style]} />;
 }
 
 const styles = StyleSheet.create({

@@ -18,7 +18,8 @@
  *     src/screens/PpgMeasure/PpgMeasureScreen.tsx \
  *     src/hooks/useRppgMeasurement.ts src/hooks/usePpgMeasurement.ts \
  *     src/components/UmbrellaTabBar.tsx \
- *     src/screens/Timeline/TimelineScreen.tsx /tmp/rppgflow/ && \
+ *     src/screens/Timeline/TimelineScreen.tsx \
+ *     modules/healthgraph-rppg/src/RppgCameraPreview.tsx /tmp/rppgflow/ && \
  *   mv /tmp/rppgflow/tests/rppgFlow.test.mts /tmp/rppgflow/tests/rppgFlow.test.ts && \
  *   ./node_modules/.bin/tsc --ignoreConfig --ignoreDeprecations 6.0 \
  *     /tmp/rppgflow/tests/rppgFlow.test.ts --rootDir /tmp/rppgflow \
@@ -66,6 +67,7 @@ const RPPG_HOOK = 'src/hooks/useRppgMeasurement.ts';
 const PPG_HOOK = 'src/hooks/usePpgMeasurement.ts';
 const TABBAR = 'src/components/UmbrellaTabBar.tsx';
 const TIMELINE = 'src/screens/Timeline/TimelineScreen.tsx';
+const RPPG_PREVIEW = 'modules/healthgraph-rppg/src/RppgCameraPreview.tsx';
 
 test('red-button tab still lands on the Pulse method screen', () => {
   const app = src(APP);
@@ -125,6 +127,19 @@ test('face screen honors the honesty rules', () => {
   assert.ok(!/simulat/i.test(s), 'no simulation fallback');
   assert.ok(s.includes('never leave this phone'), 'privacy copy');
   assert.ok(s.includes('Not a medical device'), 'wellness disclaimer');
+});
+
+test('face preview never renders the native stub without the module', () => {
+  // requireNativeView does NOT throw for a missing native module (Expo Go):
+  // it returns a stub that warns "Unable to get the view config" on render.
+  // The component must therefore gate rendering on isPreviewAvailable()
+  // (backed by requireOptionalNativeModule, which IS null-safe).
+  const p = src(RPPG_PREVIEW);
+  assert.ok(p.includes('isPreviewAvailable'), 'availability gate exists');
+  assert.ok(
+    p.includes('if (!isPreviewAvailable() || !NativePreview)'),
+    'stub renders only when the module is registered',
+  );
 });
 
 test('face hook never persists unreliable runs, never invents HRV', () => {

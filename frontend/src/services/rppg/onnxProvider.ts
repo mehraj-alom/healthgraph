@@ -82,7 +82,29 @@ function loadExpoAsset(): unknown {
   }
 }
 
+/**
+ * Expo Go hosts no custom native modules: onnxruntime-react-native's JS
+ * entrypoint calls Module.install() on a null native module at require
+ * time. Short-circuit BEFORE requiring it (same appOwnership pattern the
+ * fingertip PPG selector uses) so Expo Go observes a clean unavailable
+ * provider with no native-load attempt at all.
+ */
+function runningInExpoGo(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('expo-constants') as {
+      default?: { appOwnership?: string };
+      appOwnership?: string;
+    };
+    const ownership = mod?.default?.appOwnership ?? mod?.appOwnership;
+    return ownership === 'expo';
+  } catch {
+    return false;
+  }
+}
+
 function defaultBindings(): OnnxRuntimeBindings | null {
+  if (runningInExpoGo()) return null;
   const mod = loadOnnxRuntime() as {
     InferenceSession?: {
       create(modelPath: string): Promise<RppgOrtSession>;
