@@ -96,6 +96,7 @@ class HealthGraphRPPGModule : Module() {
       }
       val myRun = runId.incrementAndGet()
       cancelRequested.set(false)
+      Log.w(TAG, "rppg stage: startCapture invoked run=$myRun timeout=${timeoutSeconds}s")
       sendEvent("HealthGraphRPPGState", mapOf("state" to "STARTING"))
       startCaptureRun(timeoutSeconds, promise, myRun)
     }
@@ -345,21 +346,49 @@ class HealthGraphRPPGModule : Module() {
       }
     }
 
+    // CameraX binds use cases on the main thread only: bindToLifecycle calls
+    // Threads.checkMainThread() as its first instruction and otherwise throws
+    // IllegalStateException("Not in application's main thread"). Expo runs
+    // AsyncFunctions on a background "AsyncFunctionQueue", so the provider
+    // future must be resolved and the use cases bound on the main executor —
+    // the same pattern as the validated fingertip PPG module.
     try {
-      val provider = ProcessCameraProvider.getInstance(context).get()
-      cameraProvider = provider
-      val selector = CameraSelector.DEFAULT_FRONT_CAMERA
-      val preview = Preview.Builder().build()
-      provider.unbindAll()
-      boundCamera = provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
-      RppgPreviewHost.publish(preview)
-      emitState("FIND_FACE")
-    } catch (e: SecurityException) {
-      mainHandler.removeCallbacks(timeoutRunnable)
-      failRun("CAMERA_PERMISSION", "CAMERA_START", "Camera permission denied")
+      Log.w(TAG, "rppg stage: requesting camera provider")
+      val providerFuture = ProcessCameraProvider.getInstance(context)
+      providerFuture.addListener({
+        if (myRun != runId.get()) {
+          settleStale()
+          return@addListener
+        }
+        try {
+          val provider = providerFuture.get()
+          cameraProvider = provider
+          val selector = CameraSelector.DEFAULT_FRONT_CAMERA
+          if (!provider.hasCamera(selector)) {
+            mainHandler.removeCallbacks(timeoutRunnable)
+            Log.e(TAG, "rppg stage: no front camera")
+            failRun("NO_CAMERA", "CAMERA_START", "No front camera is available for a face scan.")
+            return@addListener
+          }
+          provider.unbindAll()
+          val preview = Preview.Builder().build()
+          boundCamera = provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
+          RppgPreviewHost.publish(preview)
+          Log.w(TAG, "rppg stage: camera bound, preview published, analyzer live")
+          emitState("FIND_FACE")
+        } catch (e: SecurityException) {
+          mainHandler.removeCallbacks(timeoutRunnable)
+          Log.e(TAG, "rppg stage: camera permission denied", e)
+          failRun("CAMERA_PERMISSION", "CAMERA_START", "Camera permission denied")
+        } catch (e: Exception) {
+          mainHandler.removeCallbacks(timeoutRunnable)
+          Log.e(TAG, "rppg stage: camera start failed: ${e.message}", e)
+          failRun("CAMERA_START", "CAMERA_START", "Camera could not be started")
+        }
+      }, ContextCompat.getMainExecutor(context))
     } catch (e: Exception) {
       mainHandler.removeCallbacks(timeoutRunnable)
-      dlog("camera start failed: ${e.message}")
+      Log.e(TAG, "rppg stage: camera provider init failed: ${e.message}", e)
       failRun("CAMERA_START", "CAMERA_START", "Camera could not be started")
     }
   }
@@ -535,6 +564,7 @@ class HealthGraphRPPGModule : Module() {
   }
 
   private fun stopCamera() {
+    Log.w(TAG, "rppg stage: stopCamera (unbinding preview + use cases)")
     try {
       RppgPreviewHost.publish(null)
     } catch (_: Exception) { }
