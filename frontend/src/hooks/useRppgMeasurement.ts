@@ -79,7 +79,13 @@ const HINTS: Record<RppgScreenState, string> = {
 };
 
 export function useRppgMeasurement(): UseRppgMeasurement {
-  const provider = useMemo(() => getRppgProvider(), []);
+  // NOTE: getRppgProvider() is intentionally NOT called during render. It
+  // resolves the ONNX provider, which requires 'onnxruntime-react-native' —
+  // and requiring that package runs Module.install(), a blocking synchronous
+  // JSI native call. Running it in a render-phase useMemo crashed the app on
+  // screen open. It is resolved lazily inside start() (an async event
+  // handler) instead. getRppgFrameSource() is JS-only (no JSI install) and
+  // safe to resolve here.
   const frameSource = useMemo(() => getRppgFrameSource(), []);
   const [state, setState] = useState<RppgScreenState>('IDLE');
   const [result, setResult] = useState<RppgMeasurementResult | null>(null);
@@ -92,9 +98,11 @@ export function useRppgMeasurement(): UseRppgMeasurement {
   const settled = useRef(false);
 
   useEffect(() => {
+    console.log('rppg stage: measure screen mounted');
     mounted.current = true;
     syncPendingRppg().catch(() => {});
     return () => {
+      console.log('rppg stage: measure screen unmounted');
       mounted.current = false;
     };
   }, []);
@@ -122,6 +130,12 @@ export function useRppgMeasurement(): UseRppgMeasurement {
       );
       return;
     }
+    // Resolved here (not during render) so the ONNX native install never runs
+    // in the React render phase. Log the stage so the exact point of any
+    // future failure is identifiable in logcat.
+    console.log('rppg stage: resolving on-device pulse provider');
+    const provider = getRppgProvider();
+    console.log('rppg stage: pulse provider resolved, available=' + provider.isAvailable);
     if (!provider.isAvailable) {
       fail(
         'The on-device pulse model is not available in this build. Please install the latest version of HealthGraph.',
@@ -159,9 +173,11 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     });
 
     try {
+      console.log('rppg stage: starting native camera capture');
       const capture = await frameSource.capture({ timeoutSeconds: 30 });
       off();
       if (!mounted.current || settled.current) return;
+      console.log('rppg stage: capture complete frames=' + capture.frameCount);
       setState('MEASURING');
       setProgressFrames(capture.frameCount);
 
@@ -171,6 +187,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
       if (!mounted.current || settled.current) return;
       const { input, fpsMeasured } = preprocessWindow(window);
 
+      console.log('rppg stage: running on-device model inference');
       const waveform = await provider.infer(input);
       if (!mounted.current || settled.current) return;
 
@@ -267,7 +284,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
         fail(e?.message ?? 'Measurement could not be completed. Try again.');
       }
     }
-  }, [frameSource, provider, fail]);
+  }, [frameSource, fail]);
 
   const cancel = useCallback(async () => {
     try {
