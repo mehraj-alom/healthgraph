@@ -1962,12 +1962,14 @@ export default function BodyScreen() {
           scene.setSystemVisibility(sysKey, true);
         } else {
           scene.setSystemVisibility(sysKey, true);
-          setTimeout(() => scene.fitCameraToScene(), 50);
+          // Skip the deferred fit if the scene was torn down meanwhile
+          // (unmount/dispose nulls sceneRef) — never act on a dead scene.
+          setTimeout(() => { if (sceneRef.current === scene) scene.fitCameraToScene(); }, 50);
         }
       } else {
         // Toggling OFF — just hide
         scene.setSystemVisibility(sysKey, false);
-        setTimeout(() => scene.fitCameraToScene(), 50);
+        setTimeout(() => { if (sceneRef.current === scene) scene.fitCameraToScene(); }, 50);
       }
 
       return next;

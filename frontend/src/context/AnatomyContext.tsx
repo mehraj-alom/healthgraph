@@ -99,10 +99,22 @@ export function AnatomyProvider({ children }: { children: ReactNode }) {
   const isDownloadingRef = useRef(isDownloading);
   const abortRef = useRef<AbortController | null>(null);
   const lastProgressTimeRef = useRef(0);
+  const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep refs in sync with state
   useEffect(() => { selectedGenderRef.current = selectedGender; }, [selectedGender]);
   useEffect(() => { isDownloadingRef.current = isDownloading; }, [isDownloading]);
+
+  // Unmount (e.g. auth reset) must not leave a dangling progress-clear that
+  // would setState on an unmounted provider.
+  useEffect(() => {
+    return () => {
+      if (progressTimerRef.current) {
+        clearTimeout(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // -----------------------------------------------------------------------
   // Hydrate persisted gender on mount
@@ -213,8 +225,12 @@ export function AnatomyProvider({ children }: { children: ReactNode }) {
         isDownloadingRef.current = false;
         setIsDownloading(false);
         abortRef.current = null;
-        // Clear progress after a brief delay so success state is visible
-        setTimeout(() => {
+        // Clear progress after a brief delay so success state is visible.
+        // Tracked so unmount (or a new download) cancels the pending clear
+        // instead of setting state on an unmounted provider.
+        if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
+        progressTimerRef.current = setTimeout(() => {
+          progressTimerRef.current = null;
           setDownloadProgress(null);
         }, 1200);
       });

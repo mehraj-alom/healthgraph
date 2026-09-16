@@ -364,6 +364,9 @@ export async function hydrateMedications(
   const db = await getDatabase();
   const now = nowIso();
 
+  // One transaction for the whole batch: atomic and far fewer round-trips
+  // than per-medication commits. Logic per row is unchanged.
+  await db.withTransactionAsync(async () => {
   for (const med of serverMedications) {
     // Check if local record exists with pending mutation
     const existing = await db.getFirstAsync<{ sync_status: string }>(
@@ -443,6 +446,7 @@ export async function hydrateMedications(
       ],
     );
   }
+  });
 }
 
 // ─── Sync Queue ──────────────────────────────────────────────────────────────

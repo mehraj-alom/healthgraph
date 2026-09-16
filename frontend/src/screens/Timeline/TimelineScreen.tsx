@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -28,6 +28,7 @@ import { AmbientBackground, Button, Card, Chip } from '@/components';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants';
 import { useReducedMotion } from '@/theme';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import { perfStart } from '@/utils/perfLog';
 import {
   getDailyLogs as dbGetDailyLogs,
   getDailyLogEvents as dbGetDailyLogEvents,
@@ -706,7 +707,13 @@ export default function TimelineScreen() {
   const [localDays, setLocalDays] = useState<Set<string>>(new Set());
   const [localRefresh, setLocalRefresh] = useState(0);
 
+  // Freshness stamp shared by the load effect and the focus gate below.
+  const lastFocusReload = useRef(0);
+
   const loadLocal = useCallback(async () => {
+    // Dev-only load timing (counts only, never item contents).
+    const endLoadLog = perfStart('timeline.loadLocal');
+    let itemCount = 0;
     try {
       const patientId = getCachedPatientId();
       if (!patientId) return;
@@ -790,14 +797,20 @@ export default function TimelineScreen() {
         // Pulse history is additive; daily logs still render without it.
       }
       out.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+      itemCount = out.length;
       setLocalItems(out);
       setLocalDays(new Set(out.map((i) => i.dayKey)));
     } catch {
       // Local-first is best-effort; the server timeline still renders.
     }
+    endLoadLog(`items=${itemCount}`);
   }, []);
 
   useEffect(() => {
+    // Every loadLocal run (mount, focus bump, manual refresh) stamps
+    // freshness, so the focus gate above never re-fires for data that
+    // was just loaded — including screen entry (mount + focus coincide).
+    lastFocusReload.current = Date.now();
     void loadLocal();
   }, [loadLocal, localRefresh]);
 
@@ -830,11 +843,16 @@ export default function TimelineScreen() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Reload on focus: a daily log saved on another screen writes to SQLite
-  // after this screen mounted. Without this, localItems stay stale while the
-  // server-dedup filter hides the fresh server copy — the entry looks lost.
+  // Reload on focus, time-gated to a 30 s freshness window: a daily log
+  // saved on another screen writes to SQLite after this screen mounted, so
+  // focus must refresh — but tab-hopping must not reload 90 days of SQLite
+  // plus the full server timeline every time. Data loaded <30 s ago counts
+  // as fresh; manual pull-to-refresh (`refresh` below) always bypasses.
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastFocusReload.current < 30_000) return;
+      lastFocusReload.current = now;
       setLocalRefresh((n) => n + 1);
       void query.refetch();
     }, [query.refetch]),
@@ -851,6 +869,30 @@ export default function TimelineScreen() {
   const goToDocument = useCallback(
     (docId: string) => navigation.navigate('DocumentDetail', { documentId: docId }),
     [navigation],
+  );
+
+  // Stable row renderer: a pure function of (item, goToDocument). Previously
+  // an inline closure recreated on every parent render, defeating
+  // SectionList's row memoization for rows whose props never changed.
+  const renderTimelineItem = useCallback(
+    ({ item }: { item: PreparedItem }) => {
+      const node = item.node;
+      const when = item.when;
+      if (node.kind === 'local') {
+        return <MemoLoggedCard item={node.item} when={when} />;
+      }
+      if (node.kind === 'observation') {
+        return <MemoObservationCard observation={node.item} when={when} />;
+      }
+      return (
+        <MemoEventCard
+          event={node.item}
+          when={when}
+          onDocumentPress={goToDocument}
+        />
+      );
+    },
+    [goToDocument],
   );
 
   const serverItems = query.data ?? [];
@@ -1113,23 +1155,7 @@ export default function TimelineScreen() {
             </View>
           </View>
         )}
-        renderItem={({ item }) => {
-          const node = item.node;
-          const when = item.when;
-          if (node.kind === 'local') {
-            return <MemoLoggedCard item={node.item} when={when} />;
-          }
-          if (node.kind === 'observation') {
-            return <MemoObservationCard observation={node.item} when={when} />;
-          }
-          return (
-            <MemoEventCard
-              event={node.item}
-              when={when}
-              onDocumentPress={goToDocument}
-            />
-          );
-        }}
+        renderItem={renderTimelineItem}
       />
     </SafeAreaView>
   );

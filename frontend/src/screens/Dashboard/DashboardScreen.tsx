@@ -12,7 +12,7 @@
  * useHomeStory (SQLite), useMedications, useTrends, docs, profile, sync status.
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, RefreshControl, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, type CompositeNavigationProp } from '@react-navigation/native';
@@ -221,8 +221,15 @@ export default function DashboardScreen() {
   const [range, setRange] = useState<RangeKey>('week');
   const [refreshing, setRefreshing] = useState(false);
 
+  // Focus refetch is time-gated (same 30 s freshness window as
+  // HealthDashboardScreen): tab-hopping must not refetch on every focus.
+  // Manual pull-to-refresh (`refresh` below) always bypasses the gate.
+  const lastFocusRefetch = useRef(0);
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - lastFocusRefetch.current < 30_000) return;
+      lastFocusRefetch.current = now;
       void story.refetch();
       void metrics.refetch();
       void medications.refetch();

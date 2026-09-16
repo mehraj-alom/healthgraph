@@ -143,6 +143,12 @@ export interface RppgProvider {
   readonly isAvailable: boolean;
   getMetadata(): RppgModelMetadata;
   infer(input: RppgTensorInput): Promise<RppgWaveform>;
+  /**
+   * Optional lifecycle hook: drop cached native resources (e.g. the ONNX
+   * session) when the measurement flow is torn down. Must never invalidate
+   * in-flight infer() calls; the next infer() recreates lazily.
+   */
+  release?(): void;
 }
 
 /** Thrown when the caller supplies a malformed inference tensor. */

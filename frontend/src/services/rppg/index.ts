@@ -11,13 +11,18 @@
  * is lazy and guarded, so unsupported runtimes never crash on import.
  */
 
-import { createOnnxRppgProvider, isOnnxRuntimeSupported } from './onnxProvider';
+import { createOnnxRppgProvider, getOnnxRuntimeStatus } from './onnxProvider';
 import { createUnavailableRppgProvider } from './unavailableProvider';
 import type { RppgProvider } from './types';
 
 export * from './types';
 export { validateRppgInput, validateRppgOutput, rppgNormalizePixel } from './validation';
-export { createOnnxRppgProvider, isOnnxRuntimeSupported } from './onnxProvider';
+export {
+  createOnnxRppgProvider,
+  isOnnxRuntimeSupported,
+  getOnnxRuntimeStatus,
+} from './onnxProvider';
+export type { OnnxRuntimeStatus, OnnxRuntimeStatusReason } from './onnxProvider';
 export { createUnavailableRppgProvider } from './unavailableProvider';
 export { buildRppgSmokeTensor, runRppgDevValidation } from './devValidate';
 export type { RppgDevValidationResult } from './devValidate';
@@ -25,7 +30,7 @@ export { parseRppgWindow, readRppgWindowFile, buildRppgWindowForTests, RppgWindo
 export type { RppgWindowFile, RppgWindowBytesReader } from './frameWindow';
 export { FaceTracker, buildTelemetryFixture, mapNativeCaptureState } from './faceTracker';
 export type { RppgTelemetrySample, FaceTrackState, FaceTrackSnapshot, FaceTrackerOptions, RppgScreenState } from './faceTracker';
-export { preprocessWindow, measuredFps, RppgPreprocessError } from './preprocessor';
+export { preprocessWindow, preprocessWindowYielding, measuredFps, RppgPreprocessError } from './preprocessor';
 export type { PreprocessedWindow } from './preprocessor';
 export { estimateRppgHeartRate, buildSineWaveform } from './hrEstimator';
 export type { RppgHrEstimate, RppgHrRejectReason } from './hrEstimator';
@@ -42,17 +47,25 @@ let cached: RppgProvider | null = null;
 /** Select the usable rPPG provider for this runtime (cached). */
 export function getRppgProvider(): RppgProvider {
   if (!cached) {
-    let useOnnx = false;
+    let status = { supported: false, reason: 'require-failed' } as ReturnType<
+      typeof getOnnxRuntimeStatus
+    >;
     try {
-      useOnnx = isOnnxRuntimeSupported();
+      status = getOnnxRuntimeStatus();
     } catch {
-      useOnnx = false;
+      // Keep the default unavailable status above.
     }
-    cached = useOnnx
+    // RPPG_PROVIDER_SELECT with the exact failing leg. Metadata only —
+    // never frames, tensors, or health data.
+    console.log(
+      `rppg stage: RPPG_PROVIDER_SELECT supported=${status.supported} reason=${status.reason}`,
+    );
+    cached = status.supported
       ? createOnnxRppgProvider()
       : createUnavailableRppgProvider(
-          'onnxruntime-react-native could not be loaded in this runtime, ' +
-            'so the on-device PhysFormer model cannot run here.',
+          `onnxruntime-react-native could not be loaded in this runtime ` +
+            `(reason: ${status.reason}), so the on-device PhysFormer model ` +
+            `cannot run here.`,
         );
   }
   return cached;
@@ -61,4 +74,20 @@ export function getRppgProvider(): RppgProvider {
 /** Test seam: reset the cached selection. */
 export function __resetRppgProviderForTests(): void {
   cached = null;
+}
+
+/**
+ * Release the cached provider's native resources (ONNX session) when the
+ * rPPG flow is torn down (screen unmount). Never throws; safe to call when
+ * idle or unavailable. The next getRppgProvider() re-resolves lazily, so a
+ * later measurement simply re-initializes the session on demand.
+ */
+export function releaseRppgProvider(): void {
+  try {
+    cached?.release?.();
+  } catch {
+    // Release is best-effort; a throwing release must never break teardown.
+  } finally {
+    cached = null;
+  }
 }

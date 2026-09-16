@@ -786,13 +786,16 @@ export default function HealthDashboardScreen() {
   // loggedToday trusts local SQLite AND server state: a log that exists on the
   // server but hasn't hydrated locally (fresh install, cleared storage, another
   // device) must still flip the card to View / Edit.
-  const todayKey = localDateString();
-  const loggedToday =
-    (story.water ?? 0) > 0 ||
-    story.todayDetail != null ||
-    metrics.data?.today_wellbeing != null ||
-    (metrics.data?.recent_daily_logs ?? []).some((l) => l.log_date === todayKey) ||
-    story.story.some((s) => s.dayKey === todayKey);
+  const loggedToday = useMemo(() => {
+    const todayKey = localDateString();
+    return (
+      (story.water ?? 0) > 0 ||
+      story.todayDetail != null ||
+      metrics.data?.today_wellbeing != null ||
+      (metrics.data?.recent_daily_logs ?? []).some((l) => l.log_date === todayKey) ||
+      story.story.some((s) => s.dayKey === todayKey)
+    );
+  }, [story.water, story.todayDetail, metrics.data, story.story]);
   const waterMl = story.water;
   const medTaken = story.medSummary?.dosesTaken ?? 0;
   const medExpected = story.medSummary?.dosesExpected ?? 0;

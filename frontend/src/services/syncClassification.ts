@@ -120,15 +120,52 @@ export function shouldExhaustRetries(
  * Exponential backoff for the next automatic attempt.
  * attemptCount is the number of attempts already made (1 for the first
  * failure). Growth: base * 2^(attemptCount-1), capped at max. Always >= 1.
+ *
+ * jitterRatio (default 0 = historical behavior) subtracts a random fraction
+ * of up to jitterRatio * delay so simultaneous clients do not retry in
+ * lockstep. Callers that need identical deterministic values keep the
+ * default; the sync engine passes a small ratio for network retries.
  */
 export function computeBackoffDelayMs(
   attemptCount: number,
   baseMs = 1000,
   maxMs = 30000,
+  jitterRatio = 0,
 ): number {
   if (attemptCount <= 0) return baseMs;
-  const delay = baseMs * Math.pow(2, attemptCount - 1);
-  return Math.max(1, Math.min(maxMs, delay));
+  const capped = Math.min(maxMs, baseMs * Math.pow(2, attemptCount - 1));
+  const jitter =
+    jitterRatio > 0 ? Math.floor(Math.random() * capped * Math.min(jitterRatio, 1)) : 0;
+  return Math.max(1, capped - jitter);
+}
+
+/**
+ * Extract a server-directed retry delay from an axios-style error.
+ * Honors the `Retry-After` response header (delta-seconds or HTTP-date);
+ * returns null when absent or unparsable. Pure and dependency-free.
+ */
+export function getRetryAfterMs(error: unknown): number | null {
+  const headers = (error as { response?: { headers?: Record<string, unknown> } } | null)
+    ?.response?.headers;
+  if (!headers) return null;
+  const raw = headers['retry-after'] ?? headers['Retry-After'];
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {
+    return Math.min(raw * 1000, 10 * 60 * 1000);
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed === '') return null;
+    const seconds = Number(trimmed);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1000, 10 * 60 * 1000);
+    }
+    const at = Date.parse(trimmed);
+    if (!Number.isNaN(at)) {
+      return Math.max(0, Math.min(at - Date.now(), 10 * 60 * 1000));
+    }
+  }
+  return null;
 }
 
 // ============================================================================

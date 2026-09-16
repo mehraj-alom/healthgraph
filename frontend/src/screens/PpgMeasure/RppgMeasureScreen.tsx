@@ -28,7 +28,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Badge, Button, ErrorState, ProgressBar } from '@/components';
 import { useRppgMeasurement } from '@/hooks/useRppgMeasurement';
-import { RppgCameraPreview } from 'healthgraph-rppg';
+import { RppgCameraPreview, RppgCameraPreviewBoundary } from 'healthgraph-rppg';
 import { useTheme } from '@/theme';
 import { spacing, radius } from '@/theme/tokens';
 import type { RootStackParamList } from '@/types';
@@ -110,7 +110,9 @@ export default function RppgMeasureScreen() {
         </Text>
 
         <View style={styles.previewWrap}>
-          <RppgCameraPreview style={styles.preview} />
+          <RppgCameraPreviewBoundary style={styles.preview}>
+            <RppgCameraPreview style={styles.preview} />
+          </RppgCameraPreviewBoundary>
           {busy && (
             <View style={styles.guide} pointerEvents="none">
               <View style={[styles.oval, { borderColor: colors.brand }]} />

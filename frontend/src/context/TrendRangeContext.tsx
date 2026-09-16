@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type TrendRangeKey = 'week' | 'month' | 'year';
@@ -50,8 +50,16 @@ export function TrendRangeProvider({ children }: { children: React.ReactNode }) 
     AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
   }, []);
 
+  // Memoized value: without this, every provider re-render (including
+  // parent-driven ones) re-renders all consumers even when `range` is
+  // unchanged — retriggering the full dashboard feed recompute downstream.
+  const value = useMemo(
+    () => ({ range, days: TREND_RANGES[range].days, setRange }),
+    [range, setRange],
+  );
+
   return (
-    <TrendRangeContext.Provider value={{ range, days: TREND_RANGES[range].days, setRange }}>
+    <TrendRangeContext.Provider value={value}>
       {children}
     </TrendRangeContext.Provider>
   );

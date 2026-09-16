@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 /**
  * Migration function type.
@@ -472,6 +472,107 @@ const migrations: Record<number, MigrationFn> = {
       5,
     );
   },
+
+  // ========================================================================
+  // Migration 6: Cache/hydration correctness (non-destructive)
+  // ========================================================================
+  // 6a. trends_cache: the v3 DDL declared `patient_id TEXT PRIMARY KEY` while
+  //     the writer upserts ON CONFLICT(patient_id, days), so a second day
+  //     range fails with UNIQUE constraint and multi-range caching is
+  //     silently dead. Rebuild with PRIMARY KEY (patient_id, days),
+  //     preserving every existing row.
+  // 6b. hydration_state: taken-events hydration was stored as housekeeping
+  //     rows inside sync_queue, but that table requires mutation_id NOT NULL
+  //     and has no UNIQUE(table_name, record_id), so hydration writes could
+  //     never persist. A dedicated table carries them instead; legacy
+  //     _hydration rows (if any) are carried over, then removed from the
+  //     mutation queue. No user data is touched.
+  6: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS trends_cache_new (
+        patient_id TEXT NOT NULL,
+        days INTEGER NOT NULL,
+        trends_json TEXT NOT NULL,
+        cached_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (patient_id, days)
+      );
+    `);
+
+    await db.runAsync(`
+      INSERT OR IGNORE INTO trends_cache_new
+        (patient_id, days, trends_json, cached_at)
+      SELECT patient_id, days, trends_json, cached_at FROM trends_cache
+    `);
+
+    await db.execAsync(`DROP TABLE trends_cache;`);
+    await db.execAsync(`ALTER TABLE trends_cache_new RENAME TO trends_cache;`);
+
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS hydration_state (
+        scope TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (scope, key)
+      );
+    `);
+
+    // Carry over legacy housekeeping rows: record_id is kept verbatim as
+    // the hydration_state key so it matches getHydrationKey() readers
+    // (`taken_hydrated:<patient_id>` under scope 'taken-events').
+    await db.runAsync(`
+      INSERT OR IGNORE INTO hydration_state (scope, key, value, updated_at)
+      SELECT 'taken-events',
+        record_id,
+        payload_json,
+        created_at
+      FROM sync_queue
+      WHERE table_name = '_hydration'
+        AND record_id LIKE 'taken_hydrated:%'
+    `);
+
+    await db.runAsync(
+      `DELETE FROM sync_queue WHERE table_name = '_hydration'`,
+    );
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      6,
+      'Cache correctness: trends_cache (patient_id, days) key + hydration_state table',
+      6,
+    );
+  },
+
+  // ========================================================================
+  // Migration 7: Justified secondary indexes (non-destructive, additive)
+  // ========================================================================
+  // Each index serves an existing hot query; no table is rebuilt, no data
+  // moves, and CREATE INDEX IF NOT EXISTS keeps re-runs safe:
+  // - documents (patient_id, status): getDocumentsByStatus filter.
+  // - ppg_measurements (patient_id, sync_status): pending-sync scan on every
+  //   fingertip measurement mount.
+  // - rppg_measurements (patient_id, sync_status): same for face scans.
+  7: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_documents_patient_status
+        ON documents (patient_id, status);
+      CREATE INDEX IF NOT EXISTS ix_ppg_patient_sync
+        ON ppg_measurements (patient_id, sync_status);
+      CREATE INDEX IF NOT EXISTS ix_rppg_patient_sync
+        ON rppg_measurements (patient_id, sync_status);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      7,
+      'Secondary indexes: documents (patient_id, status), ppg/rppg (patient_id, sync_status)',
+      7,
+    );
+  },
 };
 
 /**
@@ -520,6 +621,8 @@ const REQUIRED_TABLES = [
   'ppg_measurements',
   // On-device face-rPPG derived measurements (migration 5)
   'rppg_measurements',
+  // Hydration control state (migration 6)
+  'hydration_state',
 ];
 
 /**

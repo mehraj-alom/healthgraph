@@ -51,6 +51,8 @@ export interface SyncResult {
   error?: string;
   errorCategory?: SyncErrorCategory;
   serverId?: string;
+  /** Server-directed retry delay parsed from Retry-After (ms), if present. */
+  retryAfterMs?: number;
 }
 
 // ============================================================================

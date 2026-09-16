@@ -3,6 +3,7 @@ package com.healthgraph.rppg
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -141,6 +142,7 @@ class HealthGraphRPPGModule : Module() {
     val activityDead = (activity as? Activity)?.let { it.isDestroyed || it.isFinishing } ?: false
     val lifecycleReady = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
     if (activityDead || !lifecycleReady) {
+      Log.e(TAG, "rppg stage: RPPG_CAMERA_INIT_FAILURE activityDead=$activityDead lifecycle=${lifecycleOwner.lifecycle.currentState}")
       if (myRun == runId.get()) {
         isCapturing.set(false)
         sendEvent("HealthGraphRPPGState", mapOf("state" to "FAILED", "reason" to "CAMERA_START"))
@@ -149,6 +151,18 @@ class HealthGraphRPPGModule : Module() {
       return
     }
     // Camera permission must already be granted (JS requests it first).
+    // Re-checked here (same backstop as the validated fingertip PPG module)
+    // so a revoked/stale grant becomes a structured FAILED event instead of
+    // a SecurityException thrown out of the CameraX bind path.
+    if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+      Log.e(TAG, "rppg stage: RPPG_CAMERA_INIT_FAILURE RPPG_PERMISSION_DENIED at bind time")
+      if (myRun == runId.get()) {
+        isCapturing.set(false)
+        sendEvent("HealthGraphRPPGState", mapOf("state" to "FAILED", "reason" to "CAMERA_START"))
+        promise.reject("CAMERA_PERMISSION", "Camera permission is required for a face scan.", null)
+      } else settleStale()
+      return
+    }
     val pm = context.packageManager
     val hasCamera = pm.hasSystemFeature("android.hardware.camera.front") ||
       pm.hasSystemFeature("android.hardware.camera")
@@ -160,6 +174,7 @@ class HealthGraphRPPGModule : Module() {
       } else settleStale()
       return
     }
+    Log.w(TAG, "rppg stage: RPPG_CAMERA_INIT_START run=$myRun")
 
     val ring = ArrayDeque<QualifiedFrame>(WINDOW_FRAMES + 1)
     var droppedFrames = 0
@@ -374,7 +389,7 @@ class HealthGraphRPPGModule : Module() {
           val preview = Preview.Builder().build()
           boundCamera = provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
           RppgPreviewHost.publish(preview)
-          Log.w(TAG, "rppg stage: camera bound, preview published, analyzer live")
+          Log.w(TAG, "rppg stage: RPPG_CAMERA_INIT_SUCCESS run=$myRun preview published, analyzer live")
           emitState("FIND_FACE")
         } catch (e: SecurityException) {
           mainHandler.removeCallbacks(timeoutRunnable)
@@ -407,9 +422,12 @@ class HealthGraphRPPGModule : Module() {
     val side = (min(w, h) * GUIDE_FRAC).toInt().coerceAtLeast(64)
     val x0 = (w - side) / 2
     val y0 = (h - side) / 2
-    val yPlane = image.planes[0]
-    val uPlane = image.planes[1]
-    val vPlane = image.planes[2]
+    // Plane access is null-safe (same guard as the validated fingertip PPG
+    // module): a malformed frame degrades to a dropped frame, never to an
+    // IndexOutOfBoundsException escaping the analyzer.
+    val yPlane = image.planes.getOrNull(0) ?: return null
+    val uPlane = image.planes.getOrNull(1) ?: return null
+    val vPlane = image.planes.getOrNull(2) ?: return null
     val yBuf = yPlane.buffer
     val uBuf = uPlane.buffer
     val vBuf = vPlane.buffer
@@ -528,9 +546,9 @@ class HealthGraphRPPGModule : Module() {
     try {
       val w = image.width
       val h = image.height
-      val yPlane = image.planes[0]
-      val uPlane = image.planes[1]
-      val vPlane = image.planes[2]
+      val yPlane = image.planes.getOrNull(0) ?: return null
+      val uPlane = image.planes.getOrNull(1) ?: return null
+      val vPlane = image.planes.getOrNull(2) ?: return null
       val out = ByteArray(w * h + w * h / 2)
       val yBuf = yPlane.buffer
       val yRow = yPlane.rowStride
@@ -551,7 +569,7 @@ class HealthGraphRPPGModule : Module() {
         var col = 0
         while (col < w / 2) {
           val uIdx = row * uvRow + col * uvPix
-          val vIdx = row * image.planes[2].rowStride + col * image.planes[2].pixelStride
+          val vIdx = row * vPlane.rowStride + col * vPlane.pixelStride
           out[o++] = vBuf.get(vIdx) // V first (NV21 = VU)
           out[o++] = uBuf.get(uIdx)
           col++
@@ -564,7 +582,7 @@ class HealthGraphRPPGModule : Module() {
   }
 
   private fun stopCamera() {
-    Log.w(TAG, "rppg stage: stopCamera (unbinding preview + use cases)")
+    Log.w(TAG, "rppg stage: RPPG_STOP/RPPG_CLEANUP (unbinding preview + use cases)")
     try {
       RppgPreviewHost.publish(null)
     } catch (_: Exception) { }

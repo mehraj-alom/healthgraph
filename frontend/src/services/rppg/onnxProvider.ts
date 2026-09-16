@@ -61,18 +61,10 @@ export interface OnnxRppgProviderOptions {
  * Metro requires statically-analyzable require calls: every runtime
  * dependency below uses a LITERAL specifier inside try/catch. Bundling
  * always includes them; on runtimes without the native side (Expo Go,
- * web, node tests) the require throws and the provider degrades to
- * unavailable — the app never crashes.
+ * web, node tests) the native-module presence probe fails first and the
+ * provider degrades to unavailable without ever requiring the ORT
+ * package — the app never crashes.
  */
-function loadOnnxRuntime(): unknown {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('onnxruntime-react-native');
-  } catch {
-    return null;
-  }
-}
-
 function loadExpoAsset(): unknown {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -103,32 +95,127 @@ function runningInExpoGo(): boolean {
   }
 }
 
-function defaultBindings(): OnnxRuntimeBindings | null {
-  if (runningInExpoGo()) return null;
-  const mod = loadOnnxRuntime() as {
-    InferenceSession?: {
-      create(modelPath: string): Promise<RppgOrtSession>;
+/**
+ * Why the ONNX Runtime backend was (not) selected. The `reason` is a stable
+ * machine-readable leg for diagnostics — surfaced in logcat as
+ * `rppg stage: pulse provider ...` so a Preview build that reports the
+ * model unavailable can be attributed to exactly one cause:
+ * - 'expo-go': Expo Go hosts no custom native modules (expected).
+ * - 'native-module-absent': `NativeModules.Onnxruntime` is not registered
+ *   in this build (stale APK, autolink/build failure) — requiring the JS
+ *   package would run its JSI `Module.install()` against an undefined
+ *   native module, so it is not attempted.
+ * - 'require-failed': the package threw during require (native install
+ *   failure). Never a process crash: always caught here.
+ * - 'exports-missing': the package loaded but without InferenceSession/Tensor.
+ * - 'ok': the runtime binding is usable.
+ */
+export type OnnxRuntimeStatusReason =
+  | 'expo-go'
+  | 'native-module-absent'
+  | 'require-failed'
+  | 'exports-missing'
+  | 'ok';
+
+export interface OnnxRuntimeStatus {
+  readonly supported: boolean;
+  readonly reason: OnnxRuntimeStatusReason;
+}
+
+/**
+ * Presence probe for the native Onnxruntime binding. Lazy + guarded: never
+ * executes third-party native code, never throws, never imports react-native
+ * at module scope (which would break node unit tests).
+ */
+function hasOnnxNativeModule(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rn = require('react-native') as {
+      NativeModules?: Record<string, unknown>;
     };
-    Tensor?: new (
-      type: string,
-      data: Float32Array,
-      dims: number[],
-    ) => unknown;
-  } | null;
-  if (!mod || !mod.InferenceSession || !mod.Tensor) return null;
-  const InferenceSession = mod.InferenceSession;
-  const Tensor = mod.Tensor;
-  return {
-    createSession: (modelPath: string) => InferenceSession.create(modelPath),
-    createTensor: (data: Float32Array, dims: readonly number[]) =>
-      new Tensor(RPPG_INPUT_DTYPE, data, [...dims]),
+    return rn?.NativeModules?.['Onnxruntime'] != null;
+  } catch {
+    return false;
+  }
+}
+
+interface LoadedOrtModule {
+  InferenceSession?: {
+    create(modelPath: string): Promise<RppgOrtSession>;
   };
+  Tensor?: new (
+    type: string,
+    data: Float32Array,
+    dims: number[],
+  ) => unknown;
+}
+
+/**
+ * Single-probe backend resolution: evaluates each leg in order and returns
+ * the usable bindings (if any) together with the exact leg that decided.
+ * Never throws; never executes third-party native code before the native
+ * binding presence is confirmed.
+ */
+function probeBindings(): {
+  bindings: OnnxRuntimeBindings | null;
+  reason: OnnxRuntimeStatusReason;
+} {
+  try {
+    if (runningInExpoGo()) return { bindings: null, reason: 'expo-go' };
+    // Probe the native binding BEFORE requiring the JS package: its
+    // module-scope `Module.install()` is a blocking synchronous JSI call
+    // that must never run against an absent native module, and must never
+    // run during the React render phase (callers resolve lazily in start()).
+    if (!hasOnnxNativeModule()) {
+      return { bindings: null, reason: 'native-module-absent' };
+    }
+    let mod: LoadedOrtModule | null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      mod = require('onnxruntime-react-native') as LoadedOrtModule | null;
+    } catch {
+      return { bindings: null, reason: 'require-failed' };
+    }
+    if (!mod || !mod.InferenceSession || !mod.Tensor) {
+      return { bindings: null, reason: 'exports-missing' };
+    }
+    const InferenceSession = mod.InferenceSession;
+    const Tensor = mod.Tensor;
+    return {
+      bindings: {
+        createSession: (modelPath: string) => InferenceSession.create(modelPath),
+        createTensor: (data: Float32Array, dims: readonly number[]) =>
+          new Tensor(RPPG_INPUT_DTYPE, data, [...dims]),
+      },
+      reason: 'ok',
+    };
+  } catch {
+    return { bindings: null, reason: 'require-failed' };
+  }
+}
+
+function defaultBindings(): OnnxRuntimeBindings | null {
+  try {
+    return probeBindings().bindings;
+  } catch {
+    return null;
+  }
+}
+
+/** Evaluate the ONNX Runtime backend legs in order. Never throws. */
+export function getOnnxRuntimeStatus(): OnnxRuntimeStatus {
+  try {
+    const probed = probeBindings();
+    return { supported: probed.bindings !== null, reason: probed.reason };
+  } catch {
+    return { supported: false, reason: 'require-failed' };
+  }
 }
 
 /** True when the ONNX Runtime native module can be loaded here. Never throws. */
 export function isOnnxRuntimeSupported(): boolean {
   try {
-    return defaultBindings() !== null;
+    return getOnnxRuntimeStatus().supported;
   } catch {
     return false;
   }
@@ -235,6 +322,7 @@ export function createOnnxRppgProvider(
     }
     const bindings = staticBindings;
     if (!sessionPromise) {
+      console.log('rppg stage: RPPG_MODEL_INIT_START');
       sessionPromise = (async () => {
         const modelPath = await resolveModelPath();
         if (!modelPath) {
@@ -246,9 +334,17 @@ export function createOnnxRppgProvider(
       })();
     }
     try {
-      return { session: await sessionPromise, bindings };
+      const session = await sessionPromise;
+      console.log('rppg stage: RPPG_MODEL_INIT_SUCCESS');
+      return { session, bindings };
     } catch (e) {
       sessionPromise = null;
+      // Diagnostics only: exception class + message. Never tensor contents,
+      // frames, or health data.
+      const name = e instanceof Error ? e.constructor.name : typeof e;
+      console.log(
+        `rppg stage: RPPG_MODEL_INIT_FAILURE error=${name} message=${errorMessage(e)}`,
+      );
       if (e instanceof RppgInferenceError) throw e;
       throw new RppgInferenceError(
         `the PhysFormer model could not be loaded: ${errorMessage(e)}`,
@@ -286,6 +382,15 @@ export function createOnnxRppgProvider(
       }
       validateRppgOutput(out.data, out.dims);
       return { data: out.data, dims: [...RPPG_OUTPUT_SHAPE] };
+    },
+
+    release(): void {
+      // Drop the cached session so the native model resources can be
+      // garbage-collected when the measurement flow is torn down (e.g. the
+      // rPPG screen unmounts). In-flight infer() calls hold their own
+      // session reference via ensureSession(), so release never invalidates
+      // running work — the next infer() lazily recreates the session.
+      sessionPromise = null;
     },
   };
 }

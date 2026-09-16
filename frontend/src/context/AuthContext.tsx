@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import * as FirebaseAuth from 'firebase/auth';
@@ -183,7 +183,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => { mounted = false; unsubscribe(); };
   }, []);
 
-  const signup = async (email: string, password: string, displayName?: string): Promise<void> => {
+  // Stable callbacks + memoized value: the provider wraps the whole app,
+  // so an inline value object would re-render every consumer on each auth
+  // state change (even a transient error). No deps — all use setState or
+  // stable module imports only.
+  const signup = useCallback(async (email: string, password: string, displayName?: string): Promise<void> => {
     setError(null);
     try {
       const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
@@ -193,9 +197,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setError(authError instanceof Error ? authError.message : 'Signup failed');
       throw authError;
     }
-  };
+  }, []);
 
-  const login = async (email: string, password: string): Promise<void> => {
+  const login = useCallback(async (email: string, password: string): Promise<void> => {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -204,11 +208,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setError(authError instanceof Error ? authError.message : 'Login failed');
       throw authError;
     }
-  };
+  }, []);
 
-  const logout = async (): Promise<void> => {
+  const logout = useCallback(async (): Promise<void> => {
     setError(null);
-    // Clear SQLite health cache and patient identity before signing out
+    // Clear SQLite health cache and patient identity before signing out.
+    // The sync_queue is intentionally left intact: pending rows are unsynced
+    // user data and must never be deleted on logout.
     const { getCachedPatientId, clearPatientId } = await import('@/services/patientIdentity');
     const { clearHomeCache } = await import('@/db/queries/homeCache');
     const patientId = getCachedPatientId();
@@ -219,15 +225,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await firebaseSignOut(auth);
     setUser(null);
     setUserProfile(null);
-  };
+  }, []);
 
-  return <AuthContext.Provider value={{ user, userProfile, loading, error, signup, login, logout,
-    clearError: () => setError(null),
-    refreshDisplayName: (name: string) => {
-      const trimmed = name.trim();
-      if (!trimmed) return;
-      setUserProfile((prev) => (prev ? { ...prev, displayName: trimmed } : prev));
-    } }}>{children}</AuthContext.Provider>;
+  const clearError = useCallback(() => setError(null), []);
+
+  const refreshDisplayName = useCallback((name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setUserProfile((prev) => (prev ? { ...prev, displayName: trimmed } : prev));
+  }, []);
+
+  const value = useMemo(
+    () => ({ user, userProfile, loading, error, signup, login, logout, clearError, refreshDisplayName }),
+    [user, userProfile, loading, error, signup, login, logout, clearError, refreshDisplayName],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = (): AuthContextType => {

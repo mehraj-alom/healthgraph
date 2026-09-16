@@ -58,7 +58,7 @@ import {
   FaceTracker,
   mapNativeCaptureState,
 } from '../src/services/rppg/faceTracker';
-import { measuredFps, preprocessWindow } from '../src/services/rppg/preprocessor';
+import { measuredFps, preprocessWindow, preprocessWindowYielding } from '../src/services/rppg/preprocessor';
 import {
   buildSineWaveform,
   estimateRppgHeartRate,
@@ -174,6 +174,25 @@ test('preprocessor: exact BGR layout + normalization', () => {
   for (let i = 0; i < input.data.length; i += 4096) {
     assert.ok(Number.isFinite(input.data[i]));
   }
+});
+
+test('preprocessor yielding variant: bit-identical tensor, same refusals', async () => {
+  const bytes = buildRppgWindowForTests(160, 30, (f, b) => (f * 3 + b * 7) & 0xff);
+  const w = parseRppgWindow(bytes);
+  const sync = preprocessWindow(w);
+  const chunked = await preprocessWindowYielding(w);
+  assert.deepEqual([...chunked.input.dims], [...sync.input.dims]);
+  assert.equal(chunked.input.dtype, sync.input.dtype);
+  assert.equal(chunked.fpsMeasured, sync.fpsMeasured);
+  assert.equal(chunked.input.data.length, sync.input.data.length);
+  for (let i = 0; i < sync.input.data.length; i++) {
+    assert.equal(chunked.input.data[i], sync.input.data[i], `tensor differs at ${i}`);
+  }
+  // Same refusal contract as the sync reference.
+  const short = parseRppgWindow(buildRppgWindowForTests(120, 30, () => 128));
+  await assert.rejects(() => preprocessWindowYielding(short), /exactly 160/);
+  const slow = parseRppgWindow(buildRppgWindowForTests(160, 15, () => 128));
+  await assert.rejects(() => preprocessWindowYielding(slow), /outside the supported/);
 });
 
 test('preprocessor refusals: incomplete window, unsupported fps', () => {

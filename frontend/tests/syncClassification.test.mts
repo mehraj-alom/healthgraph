@@ -23,6 +23,7 @@ import {
   classifySyncError,
   computeBackoffDelayMs,
   deriveSyncStatus,
+  getRetryAfterMs,
   isRetryableCategory,
   shouldExhaustRetries,
 } from '../src/services/syncClassification.ts';
@@ -254,3 +255,38 @@ const payloadShape: Record<string, unknown> = {
   activities: [{ concept_id: 'c4' }],
   medications: [{ concept_id: 'c5' }],
 };
+test('getRetryAfterMs: honors Retry-After delta-seconds, dates, and absence', () => {
+  assert.equal(
+    getRetryAfterMs({ response: { status: 429, headers: { 'retry-after': '120' } } }),
+    120000,
+  );
+  assert.equal(
+    getRetryAfterMs({ response: { status: 503, headers: { 'retry-after': 5 } } }),
+    5000,
+  );
+  // HTTP-date form resolves to a non-negative delay bounded at 10 minutes.
+  const future = new Date(Date.now() + 60000).toUTCString();
+  const fromDate = getRetryAfterMs({ response: { status: 429, headers: { 'retry-after': future } } });
+  assert.ok(fromDate !== null && fromDate > 0 && fromDate <= 60000);
+  // Absent / unparsable / missing response → null (engine falls back to backoff).
+  assert.equal(getRetryAfterMs({ response: { status: 429, headers: {} } }), null);
+  assert.equal(getRetryAfterMs({ response: { status: 429, headers: { 'retry-after': 'nonsense' } } }), null);
+  assert.equal(getRetryAfterMs({ code: 'ERR_NETWORK' }), null);
+  assert.equal(getRetryAfterMs(null), null);
+  // Absurd values are clamped, never passed through unbounded.
+  assert.equal(
+    getRetryAfterMs({ response: { status: 429, headers: { 'retry-after': '999999' } } }),
+    600000,
+  );
+});
+
+test('computeBackoffDelayMs: default callers keep exact historical values; jitter only trims', () => {
+  // Existing 3-arg behavior is unchanged (regression-guarded above too).
+  assert.equal(computeBackoffDelayMs(2, 1000, 30000), 2000);
+  // Jitter subtracts at most ratio*delay and never below 1.
+  for (let i = 0; i < 50; i++) {
+    const j = computeBackoffDelayMs(3, 1000, 30000, 0.25);
+    assert.ok(j >= 3000 && j <= 4000, `jittered backoff out of range: ${j}`);
+  }
+  assert.equal(computeBackoffDelayMs(1, 1000, 30000, 0.25) >= 1, true);
+});

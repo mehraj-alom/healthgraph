@@ -151,11 +151,15 @@ function AppNavigator() {
     // builds that misclassified transient failures as failed, or a previous
     // permanent failure) back to 'pending' so the sync pass re-attempts them.
     // True permanent failures are re-classified as 'failed' right after.
-    const startupSync = async () => {
-      await retryFailedSyncs();
-      await syncPendingMutations();
-    };
-    startupSync().catch(() => {});
+    // Deferred past first paint so the startup flush does not compete with
+    // Dashboard mount IO (SQLite open + migrations + initial reads).
+    const startupSyncTimer = setTimeout(() => {
+      const startupSync = async () => {
+        await retryFailedSyncs();
+        await syncPendingMutations();
+      };
+      startupSync().catch(() => {});
+    }, 2500);
 
     // Sync on foreground transition
     const appSubscription = AppState.addEventListener('change', (nextState) => {
@@ -172,6 +176,7 @@ function AppNavigator() {
     });
 
     return () => {
+      clearTimeout(startupSyncTimer);
       appSubscription.remove();
       networkUnsubscribe();
       cleanupNetworkMonitor();

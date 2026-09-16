@@ -50,6 +50,8 @@ client.interceptors.request.use(
   ) => {
     const seq = ++_reqSeq.n;
     (config as any).__seq = seq;
+    // Dev-only request timing (perfLog gate keeps production untouched).
+    (config as any).__t0 = Date.now();
     if (__DEV__) console.log(
       `[HTTP] #${seq} → ${String(config.method ?? '??').toUpperCase()} ${config.baseURL ?? ''}${config.url ?? ''}`,
     );
@@ -97,20 +99,24 @@ client.interceptors.request.use(
 client.interceptors.response.use(
   (response) => {
     const seq = (response.config as any).__seq ?? '?';
+    const t0 = (response.config as any).__t0 as number | undefined;
+    const dur = typeof t0 === 'number' ? ` ms=${Date.now() - t0}` : '';
     if (__DEV__) console.log(
-      `[HTTP] #${seq} ← ${response.status} ${String(response.config.method ?? '??').toUpperCase()} ${response.config.url ?? ''}`,
+      `[HTTP] #${seq} ← ${response.status} ${String(response.config.method ?? '??').toUpperCase()} ${response.config.url ?? ''}${dur}`,
     );
     return response;
   },
 
   async (error) => {
     const seq = (error.config as any)?.__seq ?? '?';
+    const t0 = (error.config as any)?.__t0 as number | undefined;
+    const dur = typeof t0 === 'number' ? ` ms=${Date.now() - t0}` : '';
     // Suppress 404 logging — these are expected for resources that don't exist yet
     // (e.g., daily check-in for a date with no entry)
     const is404 = error.response?.status === 404;
     if (!is404) {
       console.error(
-        `[HTTP] #${seq} ✖ ${String(error.config?.method ?? '??').toUpperCase()} ${error.config?.url ?? ''}`,
+        `[HTTP] #${seq} ✖ ${String(error.config?.method ?? '??').toUpperCase()} ${error.config?.url ?? ''}${dur}`,
         `code=${error.code} message=${error.message}`,
         error.response ? `status=${error.response.status}` : 'NO_RESPONSE',
       );

@@ -895,6 +895,18 @@ export default function ChatScreen() {
     setRevealingId(null);
   }, []);
 
+  // Deferred-resend timer: cleared on unmount so a regenerate tap cannot
+  // fire sendMessage after the screen is gone.
+  const regenerateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (regenerateTimer.current) {
+        clearTimeout(regenerateTimer.current);
+        regenerateTimer.current = null;
+      }
+    };
+  }, []);
+
   const regenerate = useCallback(() => {
     if (sending) return;
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
@@ -902,7 +914,9 @@ export default function ChatScreen() {
     if (!lastAssistant || !lastUser) return;
     setMessages((prev) => prev.filter((m) => m.id !== lastAssistant.id));
     // Defer the resend until the removal has committed.
-    setTimeout(() => {
+    if (regenerateTimer.current) clearTimeout(regenerateTimer.current);
+    regenerateTimer.current = setTimeout(() => {
+      regenerateTimer.current = null;
       void sendMessage(lastUser.content);
     }, 60);
     // eslint-disable-next-line react-hooks/exhaustive-deps

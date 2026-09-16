@@ -24,8 +24,9 @@ import {
   getRppgProvider,
   mapNativeCaptureState,
   measuredFps,
-  preprocessWindow,
+  preprocessWindowYielding,
   readRppgWindowFile,
+  releaseRppgProvider,
   type RppgQualityLevel,
   type RppgScreenState,
 } from '@/services/rppg';
@@ -96,6 +97,12 @@ export function useRppgMeasurement(): UseRppgMeasurement {
   const [permissionBlocked, setPermissionBlocked] = useState(false);
   const mounted = useRef(true);
   const settled = useRef(false);
+  // Throttle high-frequency capture telemetry into UI updates: the native
+  // analyzer emits per-frame callbacks (tens/sec) but the progress bar and
+  // stability label cannot meaningfully move that fast. State transitions
+  // still dispatch per event; only the numeric progress/stability setters
+  // are gated here. Sampling/inference correctness is untouched.
+  const uiTelemetry = useRef({ frames: -1, stability: -1, at: 0 });
 
   useEffect(() => {
     console.log('rppg stage: measure screen mounted');
@@ -104,6 +111,11 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     return () => {
       console.log('rppg stage: measure screen unmounted');
       mounted.current = false;
+      // Drop the cached ONNX session so native model resources can be
+      // reclaimed when the flow is torn down. In-flight infer() calls hold
+      // their own session reference; the next measurement re-initializes
+      // lazily via getRppgProvider().
+      releaseRppgProvider();
     };
   }, []);
 
@@ -120,6 +132,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     setSynced(null);
     setProgressFrames(0);
     setLiveStability(null);
+    uiTelemetry.current = { frames: -1, stability: -1, at: 0 };
     setPermissionBlocked(false);
     settled.current = false;
     if (!mounted.current) return;
@@ -135,7 +148,14 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     // future failure is identifiable in logcat.
     console.log('rppg stage: resolving on-device pulse provider');
     const provider = getRppgProvider();
-    console.log('rppg stage: pulse provider resolved, available=' + provider.isAvailable);
+    // Internal diagnosis only (logcat): the user-facing copy below stays
+    // the designed graceful unavailable message.
+    console.log(
+      'rppg stage: RPPG_PROVIDER_SELECT kind=' +
+        provider.kind +
+        ' available=' +
+        provider.isAvailable,
+    );
     if (!provider.isAvailable) {
       fail(
         'The on-device pulse model is not available in this build. Please install the latest version of HealthGraph.',
@@ -143,6 +163,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
       return;
     }
     const permission = await ensureRppgCameraPermission();
+    console.log('rppg stage: RPPG_PERMISSION_CHECK result=' + permission);
     if (!mounted.current || settled.current) return;
     if (permission !== 'granted') {
       setPermissionBlocked(permission === 'blocked');
@@ -157,9 +178,32 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     setState('PREPARING');
     const off = frameSource.addListener((e) => {
       if (!mounted.current || settled.current) return;
-      if (typeof e.framesCollected === 'number') setProgressFrames(e.framesCollected);
+      // UI throttle: progress moves in >=4-frame steps (or >=250 ms), and
+      // stability only on meaningful (>=0.05) change or the same heartbeat.
+      // Final values are still set explicitly on COMPLETE below.
+      const nowMs = Date.now();
+      const ui = uiTelemetry.current;
+      if (typeof e.framesCollected === 'number') {
+        if (
+          e.framesCollected >= 160 ||
+          e.framesCollected - ui.frames >= 4 ||
+          nowMs - ui.at >= 250
+        ) {
+          ui.frames = e.framesCollected;
+          ui.at = nowMs;
+          setProgressFrames(e.framesCollected);
+        }
+      }
       const stability = typeof e.stability === 'number' ? e.stability : null;
-      setLiveStability(stability);
+      if (
+        stability === null ||
+        ui.stability < 0 ||
+        Math.abs(stability - ui.stability) >= 0.05 ||
+        nowMs - ui.at >= 250
+      ) {
+        ui.stability = stability ?? -1;
+        setLiveStability(stability);
+      }
       if (e.state === 'FAILED') {
         fail(e.message ?? 'Capture could not be completed. Try again.');
         return;
@@ -182,13 +226,26 @@ export function useRppgMeasurement(): UseRppgMeasurement {
       setProgressFrames(capture.frameCount);
 
       // Window file → validated tensor (refuses incomplete/corrupt windows,
-      // unsupported capture rates, and non-monotonic timestamps).
+      // unsupported capture rates, and non-monotonic timestamps). The
+      // yielding variant produces a bit-identical tensor while letting the
+      // JS event loop interleave between frame chunks (durations logged;
+      // shapes/values only, never tensor contents).
       const window = await readRppgWindowFile(capture.windowUri);
       if (!mounted.current || settled.current) return;
-      const { input, fpsMeasured } = preprocessWindow(window);
+      const preprocessStart = Date.now();
+      const { input, fpsMeasured } = await preprocessWindowYielding(window);
+      console.log(
+        `rppg stage: RPPG_PREPROCESS_DONE ms=${Date.now() - preprocessStart} ` +
+          `dims=${input.dims.join('x')}`,
+      );
 
       console.log('rppg stage: running on-device model inference');
+      const inferStart = Date.now();
       const waveform = await provider.infer(input);
+      console.log(
+        `rppg stage: RPPG_INFERENCE_DONE ms=${Date.now() - inferStart} ` +
+          `dims=${waveform.dims.join('x')}`,
+      );
       if (!mounted.current || settled.current) return;
 
       let variance = 0;

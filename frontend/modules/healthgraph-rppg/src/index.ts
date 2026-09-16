@@ -10,4 +10,8 @@
  */
 export * from './HealthGraphRPPG.types';
 export * from './HealthGraphRPPGNative';
-export { default as RppgCameraPreview, isPreviewAvailable } from './RppgCameraPreview';
+export {
+  default as RppgCameraPreview,
+  isPreviewAvailable,
+  RppgCameraPreviewBoundary,
+} from './RppgCameraPreview';

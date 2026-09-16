@@ -29,10 +29,12 @@ import {
 import {
   classifySyncError,
   computeBackoffDelayMs,
+  getRetryAfterMs,
   isRetryableCategory,
   shouldExhaustRetries,
 } from './syncClassification';
 import { markOnline, markOffline } from './networkMonitor';
+import { perfStart } from '../utils/perfLog';
 import type {
   SyncQueueItem,
   SyncResult,
@@ -47,6 +49,12 @@ import type {
 const MAX_RETRY_ATTEMPTS = 5;
 const BASE_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 30000;
+/** Per-request timeout for sync flush mutations (small JSON bodies). */
+const SYNC_REQUEST_TIMEOUT_MS = 30000;
+/** Max queue rows pulled into memory per flush pass (FIFO preserved). */
+const SYNC_BATCH_LIMIT = 100;
+/** Jitter fraction applied to computed backoff so clients don't retry in lockstep. */
+const RETRY_JITTER_RATIO = 0.25;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function buildDailyLogBody(payload: any) {
@@ -84,13 +92,27 @@ const STALE_PROCESSING_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
 const _retryBackoff = new Map<number, number>(); // item id -> epoch ms
 
-function scheduleRetry(id: number, attemptCount: number): void {
+function scheduleRetry(id: number, attemptCount: number, minDelayMs = 0): void {
   const delay = computeBackoffDelayMs(
     attemptCount,
     BASE_RETRY_DELAY_MS,
     MAX_RETRY_DELAY_MS,
+    RETRY_JITTER_RATIO,
   );
-  _retryBackoff.set(id, Date.now() + delay);
+  _retryBackoff.set(id, Date.now() + Math.max(delay, Math.max(0, minDelayMs)));
+}
+
+/**
+ * Drop backoff entries for queue rows that no longer exist or are no longer
+ * pending, so the in-memory map cannot grow without bound on long sessions.
+ */
+function pruneRetryBackoff(pendingIds: Set<number>): void {
+  if (_retryBackoff.size === 0) return;
+  for (const id of _retryBackoff.keys()) {
+    if (!pendingIds.has(id)) _retryBackoff.delete(id);
+  }
+  // Absolute safety cap (entries are tiny, but never unbounded).
+  if (_retryBackoff.size > 2000) _retryBackoff.clear();
 }
 
 function clearRetryBackoff(id: number): void {
@@ -128,21 +150,26 @@ function releaseLock(): void {
 // ============================================================================
 
 /**
- * Get all pending mutations from the sync queue.
+ * Get pending mutations from the sync queue, oldest first.
+ * Bounded per pass (SYNC_BATCH_LIMIT); callers loop while a full batch was
+ * returned so a single flush still drains everything without ever holding
+ * an unbounded queue in memory.
  */
-async function getPendingMutations(): Promise<SyncQueueItem[]> {
+async function getPendingMutations(limit = SYNC_BATCH_LIMIT): Promise<SyncQueueItem[]> {
   const db = await getDatabase();
 
   return db.getAllAsync<SyncQueueItem>(
     `
     SELECT
-      id, table_name, record_id, operation, payload_json,
+      id, table_name, record_id, mutation_id, operation, payload_json,
       created_at, attempt_count, last_error, status
     FROM sync_queue
     WHERE status = 'pending'
       AND table_name != '_hydration'
-    ORDER BY created_at ASC
+    ORDER BY created_at ASC, id ASC
+    LIMIT ?
     `,
+    [limit],
   );
 }
 
@@ -417,16 +444,21 @@ async function syncRecord(item: SyncQueueItem): Promise<SyncResult> {
 
     let response: any;
 
+    // Sync mutations are small JSON bodies: a bounded per-request timeout
+    // keeps one slow POST from head-of-line blocking the whole queue for
+    // the 120 s global default (chat/agent calls keep that default).
     if (method === 'POST') {
       response = await api.post(url, body, {
         headers: { 'Idempotency-Key': idempotencyKey },
+        timeout: SYNC_REQUEST_TIMEOUT_MS,
       });
     } else if (method === 'PUT') {
       response = await api.put(url, body, {
         headers: { 'Idempotency-Key': idempotencyKey },
+        timeout: SYNC_REQUEST_TIMEOUT_MS,
       });
     } else if (method === 'DELETE') {
-      response = await api.delete(url);
+      response = await api.delete(url, { timeout: SYNC_REQUEST_TIMEOUT_MS });
     }
 
     // Extract server ID from response if available
@@ -462,6 +494,7 @@ async function syncRecord(item: SyncQueueItem): Promise<SyncResult> {
       recordId: item.record_id,
       error: safeError,
       errorCategory,
+      retryAfterMs: getRetryAfterMs(error) ?? undefined,
     };
   }
 }
@@ -555,7 +588,9 @@ async function processQueueItem(item: SyncQueueItem): Promise<SyncResult> {
       clearRetryBackoff(item.id);
     } else {
       await updateQueueItem(item.id, 'pending', result.error);
-      scheduleRetry(item.id, attemptNumber);
+      // Honor a server-directed Retry-After window when present; the
+      // computed exponential backoff (with jitter) remains the floor.
+      scheduleRetry(item.id, attemptNumber, result.retryAfterMs ?? 0);
     }
   }
 
@@ -606,11 +641,19 @@ async function markRecordSynced(
  *   - after local mutation
  *   - manually from development/testing
  *
- * Safe to call multiple times (uses mutex to prevent concurrent execution).
+ * Safe to call multiple times: concurrent calls collapse via the mutex and
+ * a trailing-edge flag (no duplicate flushes, no dropped work — a request
+ * that arrives mid-pass triggers exactly one follow-up pass). Queue reads
+ * are bounded per pass (SYNC_BATCH_LIMIT, FIFO preserved); a full batch
+ * means more may remain, so the pass repeats until drained.
  */
+let syncAgainRequested = false;
+
 export async function syncPendingMutations(): Promise<SyncResult[]> {
-  // Acquire lock
+  // Acquire lock — a concurrent call only records the request; the running
+  // pass picks it up as a trailing pass (coalescing, never overlapping).
   if (!(await acquireLock())) {
+    syncAgainRequested = true;
     return [];
   }
 
@@ -618,42 +661,59 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
 
   try {
     // Verify authentication
-    const patientId = getCachedPatientId();
-    if (!patientId) {
+    if (!getCachedPatientId()) {
       return [];
     }
 
     // Mark sync as started
     markSyncing();
 
+    // Flush timing (dev only): depth + duration, never payload contents.
+    const endFlushLog = perfStart('sync.flush');
+
     // Recover stale processing items
     await recoverStaleProcessing();
 
-    // Get pending mutations (only 'pending' — 'failed' rows need explicit
-    // attention and are recovered via retryFailedSyncs / the Retry button)
-    const pending = await getPendingMutations();
+    let batchFull: boolean;
+    let authLost = false;
+    do {
+      syncAgainRequested = false;
+      batchFull = false;
 
-    // Respect backoff: skip items whose next automatic attempt isn't due yet
-    const due = pending.filter((item) => isRetryDue(item.id));
+      // Get pending mutations (only 'pending' — 'failed' rows need explicit
+      // attention and are recovered via retryFailedSyncs / the Retry button)
+      const pending = await getPendingMutations();
+      pruneRetryBackoff(new Set(pending.map((item) => item.id)));
 
-    // Process items in order
-    for (const item of due) {
-      // Re-check authentication before each item
-      if (!getCachedPatientId()) {
-        break;
+      // Respect backoff: skip items whose next automatic attempt isn't due yet
+      const due = pending.filter((item) => isRetryDue(item.id));
+
+      // Process items in order
+      for (const item of due) {
+        // Re-check authentication before each item
+        if (!getCachedPatientId()) {
+          authLost = true;
+          break;
+        }
+
+        const result = await processQueueItem(item);
+        results.push(result);
+
+        // Stop on auth failure
+        if (result.errorCategory === 'auth') {
+          authLost = true;
+          break;
+        }
       }
 
-      const result = await processQueueItem(item);
-      results.push(result);
-
-      // Stop on auth failure
-      if (result.errorCategory === 'auth') {
-        break;
-      }
-    }
+      // A full batch may mean more rows remain — re-read rather than drop.
+      batchFull = pending.length >= SYNC_BATCH_LIMIT;
+    } while (!authLost && (syncAgainRequested || batchFull));
 
     // Cleanup old completed items
     await cleanupCompletedItems();
+
+    endFlushLog(`items=${results.length}`);
   } finally {
     releaseLock();
   }

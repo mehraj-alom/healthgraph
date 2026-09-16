@@ -1,3 +1,4 @@
+import { Component, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { requireNativeView } from 'expo';
 import { isRppgAvailable } from './HealthGraphRPPGNative';
@@ -41,15 +42,52 @@ export function isPreviewAvailable(): boolean {
   );
 }
 
+function PreviewPlaceholder({ style }: { style?: StyleProp<ViewStyle> }) {
+  return (
+    <View style={[styles.preview, styles.placeholder, style]} accessible accessibilityLabel="Camera preview unavailable">
+      <Text style={styles.placeholderText}>Camera preview</Text>
+    </View>
+  );
+}
+
 export default function RppgCameraPreview({ style }: { style?: StyleProp<ViewStyle> }) {
   if (!isPreviewAvailable() || !NativePreview) {
-    return (
-      <View style={[styles.preview, styles.placeholder, style]} accessible accessibilityLabel="Camera preview unavailable">
-        <Text style={styles.placeholderText}>Camera preview</Text>
-      </View>
-    );
+    return <PreviewPlaceholder style={style} />;
   }
   return <NativePreview style={[styles.preview, style]} />;
+}
+
+/**
+ * RppgCameraPreviewBoundary — process-crash guard for the native preview.
+ *
+ * Mounting the genuine CameraX surface inflates platform view code
+ * (SurfaceView, view manager) that can throw on specific devices or in
+ * builds where the native view failed to register. In a release build an
+ * uncaught render error kills the app process, which previously presented
+ * as "open the rPPG feature → the app immediately closes". Any inflation
+ * failure degrades to the same static placeholder the unavailable path
+ * already renders — capture itself still reports through the structured
+ * FAILED/unavailable states, never through a process exit.
+ */
+export class RppgCameraPreviewBoundary extends Component<
+  { style?: StyleProp<ViewStyle>; children?: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  componentDidCatch(): void {
+    // Intentionally silent: the placeholder is the entire UX, and the
+    // native capture path already emits structured failure events.
+  }
+
+  render(): ReactNode {
+    if (this.state.failed) return <PreviewPlaceholder style={this.props.style} />;
+    return this.props.children;
+  }
 }
 
 const styles = StyleSheet.create({

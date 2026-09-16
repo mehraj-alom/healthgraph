@@ -60,13 +60,16 @@ function getHydrationKey(patientId: string): string {
 /**
  * Check if taken events have been hydrated for this patient.
  * Returns true if hydration has occurred (even if no events exist on server).
+ *
+ * Reads the dedicated hydration_state table (migration 6). A single-row
+ * lookup by primary key; no mutation-queue involvement.
  */
 export async function areTakenEventsHydrated(patientId: string): Promise<boolean> {
   const db = await getDatabase();
   const key = getHydrationKey(patientId);
-  const result = await db.getFirstAsync<{ value: string }>(
-    "SELECT value FROM sync_queue WHERE table_name = '_hydration' AND record_id = ?",
-    [key],
+  const result = await db.getFirstAsync<{ value: string | null }>(
+    'SELECT value FROM hydration_state WHERE scope = ? AND key = ?',
+    ['taken-events', key],
   );
   return result !== null;
 }
@@ -74,6 +77,9 @@ export async function areTakenEventsHydrated(patientId: string): Promise<boolean
 /**
  * Mark taken events as hydrated for this patient.
  * Called after successful server fetch (even if server returns empty array).
+ *
+ * Single-statement idempotent upsert into hydration_state (migration 6):
+ * atomic, replay-safe, and never enqueued for network sync.
  */
 export async function markTakenEventsHydrated(patientId: string): Promise<void> {
   const db = await getDatabase();
@@ -81,12 +87,12 @@ export async function markTakenEventsHydrated(patientId: string): Promise<void> 
   const now = nowIso();
 
   await db.runAsync(
-    `INSERT INTO sync_queue (table_name, record_id, operation, payload_json, status)
-     VALUES ('_hydration', ?, 'create', ?, 'completed')
-     ON CONFLICT(table_name, record_id) DO UPDATE SET
-       payload_json = excluded.payload_json,
-       created_at = datetime('now')`,
-    [key, JSON.stringify({ hydrated_at: now })],
+    `INSERT INTO hydration_state (scope, key, value, updated_at)
+     VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(scope, key) DO UPDATE SET
+       value = excluded.value,
+       updated_at = datetime('now')`,
+    ['taken-events', key, JSON.stringify({ hydrated_at: now })],
   );
 }
 
@@ -193,20 +199,44 @@ export async function getMedicationTakenEventById(
 }
 
 /**
+ * UTC bounds of a local calendar day (YYYY-MM-DD).
+ *
+ * taken_at is stored as an ISO-8601 UTC string, so lexical comparison is
+ * chronological. `taken_at >= start AND taken_at < end` matches exactly the
+ * rows `strftime('%Y-%m-%d', taken_at, 'localtime') = date` would match, but
+ * as a sargable range over the (patient_id, taken_at) /
+ * (medication_id, taken_at) indexes instead of a per-row function call.
+ * Returns null for malformed input (matches nothing, never throws).
+ */
+export function localDayUtcBounds(date: string): [string, string] | null {
+  const parts = date.split('-');
+  if (parts.length !== 3) return null;
+  const [y, m, d] = parts.map(Number);
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const start = new Date(y, m - 1, d);
+  const end = new Date(y, m - 1, d + 1);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return [start.toISOString(), end.toISOString()];
+}
+
+/**
  * Get taken events for a specific date (YYYY-MM-DD), scoped to patient.
- * Uses strftime('%Y-%m-%d', taken_at, 'localtime') to match the user's local calendar day.
+ * Matches the user's local calendar day via an index-friendly UTC range.
  */
 export async function getMedicationTakenEventsForDate(
   patientId: string,
   date: string,
 ): Promise<MedicationTakenEvent[]> {
+  const bounds = localDayUtcBounds(date);
+  if (!bounds) return [];
   const db = await getDatabase();
   const result = await db.getAllAsync<TakenEventRow>(
     `SELECT * FROM medication_taken_events
      WHERE patient_id = ?
-       AND strftime('%Y-%m-%d', taken_at, 'localtime') = ?
+       AND taken_at >= ? AND taken_at < ?
      ORDER BY taken_at DESC`,
-    [patientId, date],
+    [patientId, bounds[0], bounds[1]],
   );
   return result.map(rowToEvent);
 }
@@ -219,14 +249,16 @@ export async function getTakenEventsForMedicationOnDate(
   medicationId: string,
   date: string,
 ): Promise<MedicationTakenEvent[]> {
+  const bounds = localDayUtcBounds(date);
+  if (!bounds) return [];
   const db = await getDatabase();
   const result = await db.getAllAsync<TakenEventRow>(
     `SELECT * FROM medication_taken_events
      WHERE patient_id = ?
        AND medication_id = ?
-       AND strftime('%Y-%m-%d', taken_at, 'localtime') = ?
+       AND taken_at >= ? AND taken_at < ?
      ORDER BY taken_at ASC`,
-    [patientId, medicationId, date],
+    [patientId, medicationId, bounds[0], bounds[1]],
   );
   return result.map(rowToEvent);
 }
@@ -458,15 +490,22 @@ export async function findMatchingLocalEvent(
   medicationId: string,
   takenAt: string,
 ): Promise<string | null> {
+  // Minute-precision match as a half-open UTC range: identical rows to
+  // `strftime('%Y-%m-%dT%H:%M', taken_at) = strftime('%Y-%m-%dT%H:%M', ?)`
+  // for ISO-8601 values, without per-row function evaluation.
+  const at = new Date(takenAt).getTime();
+  if (Number.isNaN(at)) return null;
+  const start = new Date(Math.floor(at / 60000) * 60000).toISOString();
+  const end = new Date(Math.floor(at / 60000) * 60000 + 60000).toISOString();
   const db = await getDatabase();
   const result = await db.getFirstAsync<{ event_id: string }>(
     `SELECT event_id FROM medication_taken_events
      WHERE patient_id = ?
        AND medication_id = ?
        AND sync_status = 'pending_create'
-       AND strftime('%Y-%m-%dT%H:%M', taken_at) = strftime('%Y-%m-%dT%H:%M', ?)
+       AND taken_at >= ? AND taken_at < ?
      LIMIT 1`,
-    [patientId, medicationId, takenAt],
+    [patientId, medicationId, start, end],
   );
   return result?.event_id ?? null;
 }
@@ -484,6 +523,9 @@ export async function hydrateTakenEvents(
 ): Promise<void> {
   const db = await getDatabase();
 
+  // One transaction for the whole batch: atomic and far fewer round-trips
+  // than per-event commits. Per-row logic is unchanged.
+  await db.withTransactionAsync(async () => {
   for (const event of serverEvents) {
     // Check if this event_id exists locally (could be from reconciliation)
     const existing = await db.getFirstAsync<{ sync_status: string }>(
@@ -511,16 +553,24 @@ export async function hydrateTakenEvents(
         ],
       );
     } else {
-      // Check for a matching local pending event (from failed reconciliation)
-      const localMatch = await db.getFirstAsync<{ event_id: string }>(
-        `SELECT event_id FROM medication_taken_events
-         WHERE patient_id = ?
-           AND medication_id = ?
-           AND sync_status = 'pending_create'
-           AND strftime('%Y-%m-%dT%H:%M', taken_at) = strftime('%Y-%m-%dT%H:%M', ?)
-         LIMIT 1`,
-        [patientId, event.medication_id, event.taken_at],
-      );
+      // Check for a matching local pending event (from failed reconciliation).
+      // Same minute-precision match as findMatchingLocalEvent, inlined so the
+      // whole hydration loop runs inside a single transaction.
+      const matchAt = new Date(event.taken_at).getTime();
+      let localMatch: { event_id: string } | null = null;
+      if (!Number.isNaN(matchAt)) {
+        const matchStart = new Date(Math.floor(matchAt / 60000) * 60000).toISOString();
+        const matchEnd = new Date(Math.floor(matchAt / 60000) * 60000 + 60000).toISOString();
+        localMatch = await db.getFirstAsync<{ event_id: string }>(
+          `SELECT event_id FROM medication_taken_events
+           WHERE patient_id = ?
+             AND medication_id = ?
+             AND sync_status = 'pending_create'
+             AND taken_at >= ? AND taken_at < ?
+           LIMIT 1`,
+          [patientId, event.medication_id, matchStart, matchEnd],
+        );
+      }
 
       if (localMatch) {
         // Found matching local event — reconcile it
@@ -542,6 +592,7 @@ export async function hydrateTakenEvents(
       }
     }
   }
+  });
 }
 
 // ─── Local Schedule Computation ──────────────────────────────────────────────
@@ -593,6 +644,24 @@ export async function computeLocalSchedule(
 
   const schedule: DailyMedicationSchedule[] = [];
 
+  // One range lookup for the whole local day (index-friendly); the per-med
+  // loop below filters the in-memory rows instead of issuing N queries.
+  const dayBounds = localDayUtcBounds(targetDate);
+  const dayRows = dayBounds
+    ? await db.getAllAsync<{ medication_id: string; scheduled_for: string | null; taken_at: string; event_id: string }>(
+        `SELECT medication_id, scheduled_for, taken_at, event_id FROM medication_taken_events
+         WHERE patient_id = ?
+           AND taken_at >= ? AND taken_at < ?`,
+        [patientId, dayBounds[0], dayBounds[1]],
+      )
+    : [];
+  const rowsByMed = new Map<string, typeof dayRows>();
+  for (const row of dayRows) {
+    const list = rowsByMed.get(row.medication_id);
+    if (list) list.push(row);
+    else rowsByMed.set(row.medication_id, [row]);
+  }
+
   for (const med of medications) {
     // Skip if outside date range
     if (med.start_date && med.start_date > targetDate) continue;
@@ -625,14 +694,11 @@ export async function computeLocalSchedule(
       scheduledTimes = getDefaultScheduledTimes(med.frequency);
     }
 
-    // Get taken events for this medication on this date (local timezone)
-    const takenEvents = await db.getAllAsync<{ scheduled_for: string | null; taken_at: string; event_id: string }>(
-      `SELECT scheduled_for, taken_at, event_id FROM medication_taken_events
-       WHERE patient_id = ? AND medication_id = ?
-         AND strftime('%Y-%m-%d', taken_at, 'localtime') = ?
-       ORDER BY taken_at ASC`,
-      [patientId, med.medication_id, targetDate],
-    );
+    // Taken events for this medication on this date (local timezone),
+    // sliced from the single day-range lookup above.
+    const takenEvents = (rowsByMed.get(med.medication_id) ?? [])
+      .slice()
+      .sort((a, b) => (a.taken_at < b.taken_at ? -1 : a.taken_at > b.taken_at ? 1 : 0));
 
     // Build a map of taken times (HH:MM) to events
     const takenByTime = new Map<string, { event_id: string; taken_at: string }>();

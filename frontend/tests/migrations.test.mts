@@ -197,7 +197,7 @@ test('migrations are idempotent on re-run', async () => {
   );
   assert.deepEqual(
     log.map((r) => r.version),
-    [1, 2, 3, 4, 5],
+    [1, 2, 3, 4, 5, 6, 7],
     'guarded migration log must not insert duplicates',
   );
 });
@@ -221,7 +221,7 @@ test('stale checkpoint is repaired back to a complete schema', async () => {
   );
   assert.deepEqual(
     log.map((r) => r.version),
-    [1, 2, 3, 4, 5],
+    [1, 2, 3, 4, 5, 6, 7],
   );
 });
 
@@ -502,4 +502,155 @@ test('daily metrics cache: write/read JSON round-trip and conflict upsert', asyn
   await db.runAsync(UPSERT_DAILY_METRICS, ['patient-1', JSON.stringify({ ...metrics, today_wellbeing: null })]);
   const row2 = await db.getFirstAsync<{ c: number }>(`SELECT COUNT(*) AS c FROM daily_metrics_cache`);
   assert.equal(row2!.c, 1, 'upsert must not duplicate rows');
+});
+test('migration 6: trends_cache keyed by (patient_id, days) — multi-range coexistence', async () => {
+  const db = makeDb();
+  await runMigrations(db);
+
+  // Exact writer SQL from queries/homeCache.ts setTrendsCache().
+  const UPSERT_TRENDS = `
+    INSERT INTO trends_cache (patient_id, days, trends_json, cached_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(patient_id, days) DO UPDATE SET
+      trends_json = excluded.trends_json,
+      cached_at = datetime('now')
+  `;
+  await db.runAsync(UPSERT_TRENDS, ['p1', 7, '{"days":7}']);
+  await db.runAsync(UPSERT_TRENDS, ['p1', 30, '{"days":30}']);
+  await db.runAsync(UPSERT_TRENDS, ['p1', 90, '{"days":90}']);
+
+  const rows = await db.getAllAsync<{ days: number; trends_json: string }>(
+    `SELECT days, trends_json FROM trends_cache WHERE patient_id = 'p1' ORDER BY days`,
+  );
+  assert.deepEqual(
+    rows.map((r) => r.days),
+    [7, 30, 90],
+    'three day-ranges must coexist for one patient',
+  );
+
+  // Same-range rewrite updates in place (no duplicate).
+  await db.runAsync(UPSERT_TRENDS, ['p1', 30, '{"days":30,"v":2}']);
+  const count = await db.getFirstAsync<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM trends_cache WHERE patient_id = 'p1'`,
+  );
+  assert.equal(count!.c, 3);
+  const updated = await db.getFirstAsync<{ trends_json: string }>(
+    `SELECT trends_json FROM trends_cache WHERE patient_id = 'p1' AND days = 30`,
+  );
+  assert.equal(updated!.trends_json, '{"days":30,"v":2}');
+});
+
+test('migration 6: existing trends rows survive the v5 -> v6 rebuild', async () => {
+  const db = makeDb();
+  await runMigrations(db);
+
+  // Seed a row, then roll the checkpoint back to 5 and re-run: migration 6
+  // must rebuild the table without losing the row. (The old v3 DDL allowed
+  // only one row per patient, which is exactly the legacy shape to carry.)
+  await db.runAsync(
+    `INSERT INTO trends_cache (patient_id, days, trends_json, cached_at)
+     VALUES ('p1', 30, '{"legacy":true}', '2026-01-01 00:00:00')`,
+  );
+  await setSchemaVersion(db, 5);
+  const version = await runMigrations(db);
+  assert.equal(version, CURRENT_SCHEMA_VERSION);
+
+  const row = await db.getFirstAsync<{ trends_json: string; days: number }>(
+    `SELECT trends_json, days FROM trends_cache WHERE patient_id = 'p1' AND days = 30`,
+  );
+  assert.equal(row?.trends_json, '{"legacy":true}');
+  assert.equal(row?.days, 30);
+});
+
+test('migration 6: legacy _hydration rows carried to hydration_state, removed from queue', async () => {
+  const db = makeDb();
+  await runMigrations(db);
+
+  // A legacy housekeeping row shaped like the old writer intended it
+  // (mutation_id supplied so the NOT NULL constraint is satisfied here —
+  // production could never persist one, which is the bug being fixed).
+  await db.runAsync(
+    `INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, payload_json, status, created_at)
+     VALUES ('_hydration', 'taken_hydrated:p1', 'm-h', 'create', '{"hydrated_at":"2026-01-01T00:00:00.000Z"}', 'completed', '2026-01-01 00:00:00')`,
+  );
+  // A real pending mutation must survive untouched.
+  await db.runAsync(
+    `INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, status)
+     VALUES ('medications', 'r1', 'm-r1', 'create', 'pending')`,
+  );
+
+  await setSchemaVersion(db, 5);
+  await runMigrations(db);
+
+  const carried = await db.getFirstAsync<{ scope: string; key: string; value: string }>(
+    `SELECT scope, key, value FROM hydration_state WHERE scope = 'taken-events' AND key = 'taken_hydrated:p1'`,
+  );
+  assert.equal(carried?.scope, 'taken-events');
+  assert.ok((carried?.value ?? '').includes('hydrated_at'));
+
+  const queueLeft = await db.getAllAsync<{ record_id: string }>(
+    `SELECT record_id FROM sync_queue`,
+  );
+  assert.deepEqual(
+    queueLeft.map((r) => r.record_id),
+    ['r1'],
+    'housekeeping rows leave the queue; user mutations stay',
+  );
+});
+
+test('hydration_state: upsert is idempotent and primary-key addressed', async () => {
+  const db = makeDb();
+  await runMigrations(db);
+
+  // Mirrors queries/medicationTakenEvents.ts mark/areTakenEventsHydrated.
+  const UPSERT_HYDRATION = `
+    INSERT INTO hydration_state (scope, key, value, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(scope, key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = datetime('now')
+  `;
+  await db.runAsync(UPSERT_HYDRATION, ['taken-events', 'taken_hydrated:p1', '{"hydrated_at":"t1"}']);
+  await db.runAsync(UPSERT_HYDRATION, ['taken-events', 'taken_hydrated:p1', '{"hydrated_at":"t2"}']);
+
+  const count = await db.getFirstAsync<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM hydration_state`,
+  );
+  assert.equal(count!.c, 1, 'repeat marks must not duplicate rows');
+  const row = await db.getFirstAsync<{ value: string }>(
+    `SELECT value FROM hydration_state WHERE scope = 'taken-events' AND key = 'taken_hydrated:p1'`,
+  );
+  assert.ok((row?.value ?? '').includes('t2'));
+});
+
+test('migration 7: justified secondary indexes exist and serve hot queries', async () => {
+  const db = makeDb();
+  await runMigrations(db);
+
+  const indexes = await db.getAllAsync<{ tbl_name: string; name: string }>(
+    `SELECT tbl_name, name FROM sqlite_master WHERE type = 'index'`,
+  );
+  const byTable = new Map<string, Set<string>>();
+  for (const i of indexes) {
+    if (!byTable.has(i.tbl_name)) byTable.set(i.tbl_name, new Set());
+    byTable.get(i.tbl_name)!.add(i.name);
+  }
+  assert.ok(byTable.get('documents')?.has('ix_documents_patient_status'));
+  assert.ok(byTable.get('ppg_measurements')?.has('ix_ppg_patient_sync'));
+  assert.ok(byTable.get('rppg_measurements')?.has('ix_rppg_patient_sync'));
+
+  // The pending-sync scans must be able to use an index (no full scan).
+  for (const [table, where] of [
+    ['ppg_measurements', `patient_id = 'p1' AND sync_status = 'pending'`],
+    ['rppg_measurements', `patient_id = 'p1' AND sync_status = 'pending'`],
+    ['documents', `patient_id = 'p1' AND status = 'x'`],
+  ] as Array<[string, string]>) {
+    const plan = await db.getAllAsync<{ detail: string }>(
+      `EXPLAIN QUERY PLAN SELECT * FROM ${table} WHERE ${where}`,
+    );
+    assert.ok(
+      plan.some((r) => r.detail.includes('USING INDEX') || r.detail.includes('USING COVERING INDEX')),
+      `${table} pending/status scan must use an index: ${JSON.stringify(plan)}`,
+    );
+  }
 });
