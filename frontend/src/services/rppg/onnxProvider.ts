@@ -244,7 +244,11 @@ async function defaultResolveModelPath(): Promise<string> {
       'expo-asset is unavailable, so the bundled rPPG model cannot be resolved.',
     );
   }
-  // Literal require: Metro must see the path statically to bundle the .onnx.
+  // Bundled source of truth: frontend/assets/models/rppg/ (Option 1 — Metro
+  // can only bundle files under the project root, so the repo-root
+  // rppg_models/ copy cannot be referenced here). Filename must match
+  // RPPG_MODEL_ASSET in types.ts; literal require: Metro must see the path
+  // statically to bundle the .onnx (no variables/interpolation allowed).
   let assetId: number;
   try {
     assetId =
