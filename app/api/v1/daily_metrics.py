@@ -42,6 +42,15 @@ def get_daily_metrics(
     daily_counts: dict[tuple[object, UUID | None], int] = defaultdict(int)
     today = datetime.now(timezone.utc).date()
 
+    # Two-phase read (same semantics, no N+1): the scan below records only
+    # event IDs; payloads/concepts are then fetched with bulk IN queries
+    # (PK-indexed) instead of one db.get per event.
+    vital_hits: list[tuple] = []  # (event_id, concept_id, event_time), scan order
+    wellbeing_hit = None  # (event_id, event_time)
+    pain_hit = None  # (event_id, event_time)
+    sleep_hit = None  # (event_id, event_time)
+    activity_event_ids: list = []
+
     for event in patient_events:
         event_date = event.event_time.date()
         # Daily-checkin events share a group_id. Standalone clinical/anatomical
@@ -51,48 +60,86 @@ def get_daily_metrics(
             daily_counts[group_key] += 1
             daily_groups[group_key].add(event.event_type.value)
 
-        if event.event_type == EventType.VITAL_SIGN and event.concept_id not in seen_concepts:
-            payload = db.get(VitalSignPayload, event.event_id)
-            concept = db.get(MedicalConcept, event.concept_id) if event.concept_id else None
-            if payload:
-                latest_vitals.append(LatestVitalMetric(
-                    concept_id=event.concept_id,
-                    display_name=(concept.short_name or concept.display_name) if concept else "Vital sign",
-                    value=payload.value,
-                    unit=payload.unit,
-                    event_time=event.event_time,
-                ))
-                if event.concept_id:
-                    seen_concepts.add(event.concept_id)
+        if event.event_type == EventType.VITAL_SIGN:
+            vital_hits.append((event.event_id, event.concept_id, event.event_time))
 
-        if event.event_type == EventType.WELLBEING_LOG and today_wellbeing is None and event_date == today:
-            payload = db.get(WellbeingPayload, event.event_id)
-            if payload:
-                today_wellbeing = WellbeingMetric(
-                    overall_wellbeing=payload.overall_wellbeing,
-                    energy_level=payload.energy_level,
-                    stress_level=payload.stress_level,
-                    event_time=event.event_time,
-                )
+        if event.event_type == EventType.WELLBEING_LOG and wellbeing_hit is None and event_date == today:
+            wellbeing_hit = (event.event_id, event.event_time)
 
-        if event.event_type == EventType.PAIN_LOG and latest_pain is None:
-            payload = db.get(PainPayload, event.event_id)
-            if payload:
-                latest_pain = PainMetric(severity=payload.severity, pain_type=payload.pain_type, event_time=event.event_time)
+        if event.event_type == EventType.PAIN_LOG and pain_hit is None:
+            pain_hit = (event.event_id, event.event_time)
 
-        if event.event_type == EventType.SLEEP_LOG and latest_sleep is None:
-            payload = db.get(SleepPayload, event.event_id)
-            if payload:
-                latest_sleep = SleepMetric(duration_minutes=payload.duration_minutes, sleep_quality=payload.sleep_quality, awakenings=payload.awakenings, event_time=event.event_time)
+        if event.event_type == EventType.SLEEP_LOG and sleep_hit is None:
+            sleep_hit = (event.event_id, event.event_time)
 
         if event.event_type == EventType.ACTIVITY_LOG and event_date == today:
-            payload = db.get(ActivityPayload, event.event_id)
-            if payload:
-                activity_duration_minutes += payload.duration_minutes or 0
-                if payload.calories_burned is not None:
-                    activity_calories_burned += payload.calories_burned
-                activity_count += 1
-                latest_activity_time = max(latest_activity_time or event.event_time, event.event_time)
+            activity_event_ids.append(event.event_id)
+
+    vital_ids = [hit[0] for hit in vital_hits]
+    vital_payloads = (
+        {p.event_id: p for p in db.scalars(
+            select(VitalSignPayload).where(VitalSignPayload.event_id.in_(vital_ids))
+        ).all()} if vital_ids else {}
+    )
+    concept_ids = {hit[1] for hit in vital_hits if hit[1] is not None}
+    concepts = (
+        {c.id: c for c in db.scalars(
+            select(MedicalConcept).where(MedicalConcept.id.in_(list(concept_ids)))
+        ).all()} if concept_ids else {}
+    )
+    for event_id, concept_id, event_time in vital_hits:
+        # Same rule as the original inline loop: skip concepts already
+        # produced; a concept is marked only when its payload exists (a
+        # payload-less first occurrence does not block a later one), and
+        # null-concept vitals each produce their own row.
+        if concept_id in seen_concepts:
+            continue
+        payload = vital_payloads.get(event_id)
+        concept = concepts.get(concept_id) if concept_id else None
+        if payload:
+            latest_vitals.append(LatestVitalMetric(
+                concept_id=concept_id,
+                display_name=(concept.short_name or concept.display_name) if concept else "Vital sign",
+                value=payload.value,
+                unit=payload.unit,
+                event_time=event_time,
+            ))
+            if concept_id:
+                seen_concepts.add(concept_id)
+
+    if wellbeing_hit is not None:
+        payload = db.get(WellbeingPayload, wellbeing_hit[0])
+        if payload:
+            today_wellbeing = WellbeingMetric(
+                overall_wellbeing=payload.overall_wellbeing,
+                energy_level=payload.energy_level,
+                stress_level=payload.stress_level,
+                event_time=wellbeing_hit[1],
+            )
+
+    if pain_hit is not None:
+        payload = db.get(PainPayload, pain_hit[0])
+        if payload:
+            latest_pain = PainMetric(severity=payload.severity, pain_type=payload.pain_type, event_time=pain_hit[1])
+
+    if sleep_hit is not None:
+        payload = db.get(SleepPayload, sleep_hit[0])
+        if payload:
+            latest_sleep = SleepMetric(duration_minutes=payload.duration_minutes, sleep_quality=payload.sleep_quality, awakenings=payload.awakenings, event_time=sleep_hit[1])
+
+    if activity_event_ids:
+        activity_payloads = {p.event_id: p for p in db.scalars(
+            select(ActivityPayload).where(ActivityPayload.event_id.in_(activity_event_ids))
+        ).all()}
+        for event in patient_events:
+            if event.event_id not in activity_payloads:
+                continue
+            payload = activity_payloads[event.event_id]
+            activity_duration_minutes += payload.duration_minutes or 0
+            if payload.calories_burned is not None:
+                activity_calories_burned += payload.calories_burned
+            activity_count += 1
+            latest_activity_time = max(latest_activity_time or event.event_time, event.event_time)
 
     if activity_count:
         today_activity = ActivityMetric(

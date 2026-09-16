@@ -103,18 +103,39 @@ def get_daily_schedule(
         )
     )
     medications = db.execute(query).scalars().all()
-    
+
+    # Single bulk fetch of taken events for the whole day (one indexed range
+    # query) instead of one query per medication. Grouped in Python below —
+    # identical matching semantics.
+    day_start = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone.utc)
+    day_end = datetime.combine(target_date, datetime.max.time(), tzinfo=timezone.utc)
+    candidate_ids = [med.medication_id for med in medications]
+    taken_by_med: dict = {}
+    if candidate_ids:
+        all_taken = db.execute(
+            select(MedicationTakenEvent).where(
+                and_(
+                    MedicationTakenEvent.medication_id.in_(candidate_ids),
+                    MedicationTakenEvent.patient_id == patient_id,
+                    MedicationTakenEvent.taken_at >= day_start,
+                    MedicationTakenEvent.taken_at <= day_end,
+                )
+            )
+        ).scalars().all()
+        for event in all_taken:
+            taken_by_med.setdefault(event.medication_id, []).append(event)
+
     schedule = []
-    
+
     for med in medications:
         # Skip medications that haven't started yet
         if med.start_date and med.start_date > target_date:
             continue
-        
+
         # Skip medications that have ended
         if med.end_date and med.end_date < target_date:
             continue
-        
+
         # Check if medication is scheduled for this day of week
         if med.scheduled_weekdays and target_date.weekday() not in med.scheduled_weekdays:
             continue
@@ -149,23 +170,9 @@ def get_daily_schedule(
             else:
                 scheduled_times = ["08:00"]  # Default
         
-        # Get taken events for this medication on this date
-        day_start = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone.utc)
-        day_end = datetime.combine(target_date, datetime.max.time(), tzinfo=timezone.utc)
-        
-        taken_query = (
-            select(MedicationTakenEvent)
-            .where(
-                and_(
-                    MedicationTakenEvent.medication_id == med.medication_id,
-                    MedicationTakenEvent.patient_id == patient_id,
-                    MedicationTakenEvent.taken_at >= day_start,
-                    MedicationTakenEvent.taken_at <= day_end,
-                )
-            )
-        )
-        taken_events = db.execute(taken_query).scalars().all()
-        
+        # Taken events for this medication on this date (from the bulk fetch).
+        taken_events = taken_by_med.get(med.medication_id, [])
+
         # Build schedule entries
         for scheduled_time in scheduled_times:
             # Check if this scheduled time has been taken

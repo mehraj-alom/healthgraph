@@ -88,14 +88,17 @@ def get_timeline(
     start_date: Optional[datetime] = Query(None, description="Filter events after this date"),
     end_date: Optional[datetime] = Query(None, description="Filter events before this date"),
     event_type: Optional[EventType] = Query(None, description="Filter by specific event type (e.g., LAB_RESULT)"),
+    limit: int = Query(500, ge=1, le=2000, description="Max events and observations each (newest first)"),
     db: Session = Depends(get_db),
     patient_id: UUID = Depends(get_authenticated_patient_id)
 ):
     """
     Fetches the unified, chronological health timeline for the patient.
-    
+
     Returns BOTH clinical events AND anatomical observations in chronological order.
     Each item has a `resource_type` field: "event" or "observation".
+    Both lists are newest-first and bounded by `limit` so the endpoint can
+    never full-scan an unbounded patient history into one response.
     """
 
     # ── 1. Clinical Events ──────────────────────────────────────────────
@@ -127,8 +130,8 @@ def get_timeline(
     if event_type:
         query = query.filter(ClinicalEvent.event_type == event_type)
 
-    # Sort (newest first)
-    query = query.order_by(desc(ClinicalEvent.event_time))
+    # Sort (newest first), bounded — same window semantics, never unbounded.
+    query = query.order_by(desc(ClinicalEvent.event_time)).limit(limit)
 
     results = query.all()
     
@@ -176,8 +179,8 @@ def get_timeline(
     if end_date:
         obs_query = obs_query.where(AnatomicalObservation.recorded_at <= end_date)
     
-    obs_query = obs_query.order_by(desc(AnatomicalObservation.recorded_at))
-    
+    obs_query = obs_query.order_by(desc(AnatomicalObservation.recorded_at)).limit(limit)
+
     observations = db.scalars(obs_query).all()
     
     observation_count = len(observations)
