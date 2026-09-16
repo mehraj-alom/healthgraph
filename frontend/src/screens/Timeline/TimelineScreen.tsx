@@ -29,6 +29,7 @@ import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants';
 import { useReducedMotion } from '@/theme';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { perfStart } from '@/utils/perfLog';
+import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import {
   getDailyLogs as dbGetDailyLogs,
   getDailyLogEvents as dbGetDailyLogEvents,
@@ -871,6 +872,9 @@ export default function TimelineScreen() {
     [navigation],
   );
 
+  // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
+  const onTabScroll = useHideTabBarOnScroll();
+
   // Stable row renderer: a pure function of (item, goToDocument). Previously
   // an inline closure recreated on every parent render, defeating
   // SectionList's row memoization for rows whose props never changed.
@@ -1119,6 +1123,8 @@ export default function TimelineScreen() {
         sections={sections}
         keyExtractor={(item) => item.key}
         stickySectionHeadersEnabled
+        onScroll={onTabScroll}
+        scrollEventThrottle={16}
         windowSize={7}
         maxToRenderPerBatch={6}
         initialNumToRender={8}

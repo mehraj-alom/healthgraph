@@ -8,18 +8,21 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import Animated, { FadeInDown, FadeInUp, FadeOut, Layout } from 'react-native-reanimated';
 import { Button, AmbientBackground, DialInput, Input, LogCelebration, Slider, feverTint, severityTint } from '@/components';
+import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useReducedMotion } from '@/theme';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, SHADOWS } from '@/constants';
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import { requestDataRefresh } from '@/services/dataRefresh';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
-import { useActiveMedications, useMedicationSchedule, recordMedicationTaken } from '@/hooks/useMedications';
+import { useActiveMedications } from '@/hooks/useMedications';
 import {
   getDailyLogDetail as dbGetDailyLogDetail,
   upsertDailyLog as dbUpsertDailyLog,
@@ -133,24 +136,6 @@ const BODY_REGION_OPTIONS = [
 /** Quick unit picks for vitals — tap beats typing ("mm or whatever"). */
 const VITAL_UNIT_OPTIONS = ['bpm', 'mmHg', 'mg/dL', '°F', '°C', 'kg', '%'] as const;
 
-/** Quick dose-unit picks for medications. */
-const DOSE_UNIT_OPTIONS = ['mg', 'mcg', 'g', 'ml', 'IU', 'tablets', 'drops', 'puffs'] as const;
-
-const FREQUENCY_LABELS: Record<string, string> = {
-  ONCE_DAILY: 'Once daily',
-  TWICE_DAILY: 'Twice daily',
-  THREE_TIMES_DAILY: 'Three times daily',
-  FOUR_TIMES_DAILY: 'Four times daily',
-  EVERY_MORNING: 'Every morning',
-  EVERY_EVENING: 'Every evening',
-  EVERY_NIGHT: 'Every night',
-  EVERY_8_HOURS: 'Every 8 hours',
-  EVERY_12_HOURS: 'Every 12 hours',
-  WEEKLY: 'Weekly',
-  AS_NEEDED: 'As needed',
-  CUSTOM: 'Custom schedule',
-};
-
 /** Card tint from a 6-digit hex category color (alpha-suffixed wash). */
 const tint = (c: string) => ({ backgroundColor: `${c}14`, borderColor: `${c}38` });
 
@@ -231,16 +216,17 @@ function apiMessage(error: unknown): string {
 // ---------------------------------------------------------------------------
 
 // Per-category accents — same restrained palette as the Health Graph nodes.
-const SECTION_ACCENTS: Record<string, { icon: string; color: string }> = {
-  sleep: { icon: '🌙', color: COLORS.catSleep },
-  symptomsPain: { icon: '🤕', color: COLORS.catPain },
-  activity: { icon: '🏃', color: COLORS.catActivity },
-  nutrition: { icon: '💧', color: COLORS.catNutrition },
-  medication: { icon: '💊', color: COLORS.catMedication },
-  vitals: { icon: '❤️', color: COLORS.catVitals },
-  wellbeing: { icon: '✨', color: COLORS.catMood },
-  symptoms: { icon: '🩺', color: COLORS.catSymptom },
-  notes: { icon: '📝', color: COLORS.textMuted },
+// Text and dots only; no emoji anywhere in the log form.
+const SECTION_ACCENTS: Record<string, { color: string }> = {
+  sleep: { color: COLORS.catSleep },
+  symptomsPain: { color: COLORS.catPain },
+  activity: { color: COLORS.catActivity },
+  nutrition: { color: COLORS.catNutrition },
+  medication: { color: COLORS.catMedication },
+  vitals: { color: COLORS.catVitals },
+  wellbeing: { color: COLORS.catMood },
+  symptoms: { color: COLORS.catSymptom },
+  notes: { color: COLORS.textMuted },
 };
 
 /** Section wrapper with optional heading, accent icon and category color. */
@@ -267,13 +253,15 @@ function Section({
   return (
     <Animated.View entering={entering} style={styles.section}>
       <View style={styles.sectionHeader}>
-        {accent ? (
-          <View style={[styles.sectionAccent, { backgroundColor: `${accent.color}1A`, borderColor: `${accent.color}55` }]}>
-            <Text style={styles.sectionAccentIcon}>{accent.icon}</Text>
-          </View>
-        ) : null}
         <View style={styles.sectionHeading}>
-          <Text style={styles.sectionTitle}>{title}</Text>
+          {accent ? (
+            <View style={[styles.sectionTitleChip, { backgroundColor: `${accent.color}1A` }]}>
+              <View style={[styles.sectionTitleDot, { backgroundColor: accent.color }]} />
+              <Text style={[styles.sectionTitle, { color: accent.color }]}>{title}</Text>
+            </View>
+          ) : (
+            <Text style={styles.sectionTitle}>{title}</Text>
+          )}
           {subtitle ? (
             <Text style={styles.sectionSubtitle}>{subtitle}</Text>
           ) : null}
@@ -640,149 +628,6 @@ function FeverTempDial({
   );
 }
 
-/**
- * ActiveMedRow — one prescribed medicine as a tappable row. Tapping expands
- * a dose-aware editor prefilled from the prescription (dose + unit +
- * schedule), and "Log dose" stages it into today's log.
- */
-function ActiveMedRow({
-  med,
-  onLog,
-}: {
-  med: {
-    medication_id: string;
-    name: string;
-    strength: string | null;
-    strength_unit: string | null;
-    dose_amount: number | null;
-    dose_unit: string | null;
-    frequency: string;
-    scheduled_times: string[] | null;
-    route: string | null;
-    prn: boolean;
-  };
-  onLog: (name: string, dose: string, unit: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [dose, setDose] = useState(med.dose_amount != null ? String(med.dose_amount) : '');
-  const [unit, setUnit] = useState(med.dose_unit ?? med.strength_unit ?? '');
-  const [logged, setLogged] = useState(false);
-
-  const stepFor = (v: number) => (v >= 100 ? 5 : v >= 10 ? 1 : 0.5);
-  const doseNum = Number(dose);
-  const doseStep = Number.isFinite(doseNum) && dose.length > 0 ? stepFor(Math.abs(doseNum) || 1) : 1;
-
-  return (
-    <View style={styles.activeMedRow}>
-      <Pressable
-        onPress={() => setExpanded((v) => !v)}
-        style={styles.activeMedHeader}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        accessibilityLabel={`${med.name}, ${expanded ? 'collapse' : 'expand'} dose editor`}
-      >
-        <View style={styles.activeMedIcon}>
-          <Text style={styles.activeMedIconText}>💊</Text>
-        </View>
-        <View style={styles.activeMedInfo}>
-          <Text style={styles.activeMedName}>{med.name}</Text>
-          <Text style={styles.activeMedDetail}>
-            {[med.strength && med.strength_unit ? `${med.strength} ${med.strength_unit}` : med.strength,
-              FREQUENCY_LABELS[med.frequency] ?? med.frequency,
-              med.route ? med.route.toLowerCase() : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </Text>
-          {med.scheduled_times && med.scheduled_times.length > 0 ? (
-            <Text style={styles.activeMedTimes}>{med.scheduled_times.join(' · ')}</Text>
-          ) : null}
-        </View>
-        {med.prn ? (
-          <View style={styles.prnBadge}>
-            <Text style={styles.prnText}>PRN</Text>
-          </View>
-        ) : null}
-        <Text style={styles.expandGlyph}>{expanded ? '▴' : '▾'}</Text>
-      </Pressable>
-
-      {expanded ? (
-        <Animated.View
-          entering={FadeInDown.duration(220)}
-          style={styles.activeMedBody}
-        >
-          <Text style={styles.fieldLabel}>Dose to log</Text>
-          <View style={styles.stepperRow}>
-            <Pressable
-              onPress={() => {
-                const cur = Number(dose);
-                const base = Number.isFinite(cur) && dose !== '' ? cur : (med.dose_amount ?? 0);
-                setDose(String(Math.max(0, base - doseStep)));
-              }}
-              style={styles.stepperBtn}
-              accessibilityLabel="Decrease dose"
-            >
-              <Text style={styles.stepperBtnText}>−</Text>
-            </Pressable>
-            <View style={styles.stepperDisplay}>
-              <Text style={styles.stepperValue}>
-                {dose === '' ? '—' : dose}
-                {unit ? ` ${unit}` : ''}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => {
-                const cur = Number(dose);
-                const base = Number.isFinite(cur) && dose !== '' ? cur : (med.dose_amount ?? 0);
-                setDose(String(base + doseStep));
-              }}
-              style={styles.stepperBtn}
-              accessibilityLabel="Increase dose"
-            >
-              <Text style={styles.stepperBtnText}>+</Text>
-            </Pressable>
-          </View>
-          <Input
-            label="Exact dose"
-            value={dose}
-            onChangeText={setDose}
-            keyboardType="decimal-pad"
-            placeholder={med.dose_amount != null ? String(med.dose_amount) : 'e.g. 500'}
-          />
-          <Text style={styles.fieldLabel}>Unit</Text>
-          <OptionChips
-            options={DOSE_UNIT_OPTIONS}
-            value={unit}
-            onChange={setUnit}
-            color={COLORS.catMedication}
-            allowClear
-            label="Dose unit"
-          />
-          <Input
-            label="Or type your own unit"
-            value={DOSE_UNIT_OPTIONS.includes(unit as (typeof DOSE_UNIT_OPTIONS)[number]) ? '' : unit}
-            onChangeText={setUnit}
-            placeholder="mg, tablets, puffs"
-          />
-          <Pressable
-            onPress={() => {
-              onLog(med.name, dose, unit);
-              setLogged(true);
-            }}
-            style={[styles.logDoseBtn, logged && styles.logDoseBtnDone]}
-            accessibilityRole="button"
-            accessibilityLabel={logged ? 'Dose staged for today’s log' : `Log ${med.name} dose`}
-          >
-            <Text style={[styles.logDoseText, logged && styles.logDoseTextDone]}>
-              {logged ? '✓ Staged — edit below if needed' : 'Log this dose'}
-            </Text>
-          </Pressable>
-        </Animated.View>
-      ) : null}
-    </View>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
@@ -830,6 +675,60 @@ export default function VitalsLoggerScreen() {
     message: string;
   } | null>(null);
   const [nextId, setNextId] = useState(1);
+  // Log mode — Normal (default) shows the full form; Quick shows only the
+  // essentials (mood + water) that turn the dashboard green.
+  const [logMode, setLogMode] = useState<'normal' | 'quick'>('normal');
+  // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
+  const onTabScroll = useHideTabBarOnScroll();
+
+  // Essentials customization — first run shows everything; the user picks
+  // which rows belong to their Quick card and can re-edit anytime via the
+  // Customize toggle below. Persisted per device.
+  type EssentialRowKey = 'mood' | 'water' | 'sleep' | 'nutrition' | 'meds';
+  const ESSENTIAL_ROWS: { key: EssentialRowKey; label: string }[] = [
+    { key: 'mood', label: 'Mood' },
+    { key: 'water', label: 'Water' },
+    { key: 'sleep', label: 'Sleep' },
+    { key: 'nutrition', label: 'Meals' },
+    { key: 'meds', label: 'Medicines' },
+  ];
+  const ESSENTIALS_KEY = 'essentials-rows-v1';
+  const [essentialRows, setEssentialRows] = useState<EssentialRowKey[] | null>(null);
+  const [customizing, setCustomizing] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(ESSENTIALS_KEY)
+      .then((saved) => {
+        if (!saved) {
+          setEssentialRows(ESSENTIAL_ROWS.map((r) => r.key));
+          return;
+        }
+        try {
+          const parsed = JSON.parse(saved) as unknown;
+          const valid = Array.isArray(parsed)
+            ? (parsed as string[]).filter((k): k is EssentialRowKey =>
+                ESSENTIAL_ROWS.some((r) => r.key === k),
+              )
+            : [];
+          setEssentialRows(valid.length > 0 ? valid : ESSENTIAL_ROWS.map((r) => r.key));
+        } catch {
+          setEssentialRows(ESSENTIAL_ROWS.map((r) => r.key));
+        }
+      })
+      .catch(() => setEssentialRows(ESSENTIAL_ROWS.map((r) => r.key)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const toggleEssentialRow = (key: EssentialRowKey) => {
+    setEssentialRows((prev) => {
+      const base = prev ?? ESSENTIAL_ROWS.map((r) => r.key);
+      const next = base.includes(key)
+        ? base.filter((k) => k !== key)
+        : [...ESSENTIAL_ROWS.map((r) => r.key).filter((k) => base.includes(k) || k === key)];
+      AsyncStorage.setItem(ESSENTIALS_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  };
+  const showEssential = (key: EssentialRowKey) =>
+    (essentialRows ?? ESSENTIAL_ROWS.map((r) => r.key)).includes(key);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [formInitialized, setFormInitialized] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -913,12 +812,18 @@ export default function VitalsLoggerScreen() {
 
   const metrics = useDailyMetrics();
 
-  // Fetch today's medication schedule
-  const today = dateToday();
-  const { data: medicationSchedule, refetch: refetchMedSchedule } = useMedicationSchedule(today);
-
-  // Active prescriptions for the tap-to-log medicine list.
+  // Active prescriptions for the essentials medicines row.
   const { data: activeMeds } = useActiveMedications();
+
+  /** Stage a prescription dose into today's drafts (tick on). */
+  const stageEssentialMed = (name: string, dosage: string, unit: string) => {
+    if (medications.some((m) => m.name === name)) return;
+    setMedications((items) => [...items, { id: Date.now(), name, dosage, unit }]);
+  };
+
+  /** Remove a staged prescription dose (tick off). */
+  const unstageEssentialMed = (name: string) =>
+    setMedications((items) => items.filter((m) => m.name !== name));
 
   // Fetch today's existing check-in for edit mode — local-first
   const [selectedDate, setSelectedDate] = useState(dateToday());
@@ -1133,6 +1038,11 @@ export default function VitalsLoggerScreen() {
       // React Query invalidations below do not refresh them — refetch the
       // metrics directly or "Recent history" never shows the new entry.
       void metrics.refetch();
+      // Dashboard reads SQLite through gated focus refetches only — tell it
+      // a fresh save landed so its next focus reloads immediately instead
+      // of serving up to 30 s of stale numbers (e.g. an unticked medicine
+      // still showing as taken).
+      requestDataRefresh();
       // Remember the server check-in so the next save updates (PUT) instead
       // of creating a duplicate (POST).
       if (serverGroupId) {
@@ -1195,12 +1105,7 @@ export default function VitalsLoggerScreen() {
 
   const addPain = () => setPain((items) => [...items, { id: Date.now(), structureId: '', bodyLocationId: '', severity: '', painType: '' }]);
   const addActivity = () => setActivities((items) => [...items, { id: Date.now(), activityType: '', duration: '', calories: '' }]);
-  const addMedication = () => setMedications((items) => [...items, { id: Date.now(), name: '', dosage: '', unit: '' }]);
   const addVital = () => setVitals((items) => [...items, { id: Date.now(), conceptId: '', value: '', unit: '' }]);
-
-  /** Stage a dose from an active prescription into today's medication drafts. */
-  const stageActiveMedication = (name: string, dosage: string, unit: string) =>
-    setMedications((items) => [...items, { id: Date.now(), name, dosage, unit }]);
 
   const conceptByCode = (terminology: string, code: string) =>
     concepts.find((c) => c.terminology === terminology && c.code === code);
@@ -1280,6 +1185,24 @@ export default function VitalsLoggerScreen() {
   };
 
   // --- Submit ---
+  // Essentials fast-path: mood + water are the two signals that turn the
+  // dashboard green (doses live on the dashboard med card). Same save path
+  // and same honesty rules as a full save — never invented, only what the
+  // user actually entered. Small button by design; the full log stays big.
+  const saveEssentials = () => {
+    setFeedback(null);
+    const missing: string[] = [];
+    if (mood == null) missing.push('mood');
+    if (waterMl.trim() === '') missing.push('water');
+    if (missing.length > 0) {
+      setFeedback({
+        type: 'error',
+        message: `Essentials need your ${missing.join(' and ')} first — add ${missing.length > 1 ? 'them' : 'it'} above, then tap again.`,
+      });
+      return;
+    }
+    save();
+  };
   const save = () => {
     setFeedback(null);
     if (!validate()) return;
@@ -1328,6 +1251,8 @@ export default function VitalsLoggerScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        onScroll={onTabScroll}
+        scrollEventThrottle={16}
       >
         {/* ── Header ── */}
         <View style={styles.header}>
@@ -1436,6 +1361,178 @@ export default function VitalsLoggerScreen() {
         {/* ── Form error ── */}
         {errors.form ? <Text style={styles.formError}>{errors.form}</Text> : null}
 
+        {/* ── Log mode: Quick essentials vs full log ── */}
+        <View
+          style={styles.modeRow}
+          accessibilityRole="radiogroup"
+          accessibilityLabel="Log mode"
+        >
+          {(['quick', 'normal'] as const).map((m) => {
+            const selected = logMode === m;
+            return (
+              <Pressable
+                key={m}
+                onPress={() => setLogMode(m)}
+                style={[styles.modeBtn, selected && styles.modeBtnSelected]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={m === 'quick' ? 'Quick essentials log' : 'Normal full log'}
+                hitSlop={6}
+              >
+                <Text style={[styles.modeBtnText, selected && styles.modeBtnTextSelected]}>
+                  {m === 'quick' ? 'Quick' : 'Normal'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* Quick mode: essentials only (all rows share the main form's
+            state, so switching modes never loses input). */}
+        {logMode === 'quick' && (
+          <Section index={0} category="wellbeing" title="Essentials" subtitle="Only what turns today green — customize below.">
+            <View style={[styles.card, tint(COLORS.catMood)]}>
+              {showEssential('mood') && (
+                <>
+                  <Text style={styles.fieldLabel}>Mood</Text>
+                  <MoodSelector value={mood} onChange={setMood} />
+                  <View style={styles.fieldSpacer} />
+                </>
+              )}
+              {showEssential('water') && (
+                <>
+                  <Text style={styles.fieldLabel}>Water</Text>
+                  <Slider
+                    value={waterMl ? Number(waterMl) : 0}
+                    onValueChange={(v) => setWaterMl(String(v))}
+                    min={0}
+                    max={3000}
+                    step={50}
+                    color={COLORS.catNutrition}
+                    showValue
+                    displayValue={waterMl ? `${Number(waterMl).toLocaleString('en-US')} ml` : 'Not set'}
+                  />
+                  <OptionChips
+                    options={WATER_QUICK}
+                    value={waterMl}
+                    onChange={setWaterMl}
+                    color={COLORS.catNutrition}
+                    allowClear
+                    label="Quick water amounts"
+                  />
+                  {errors.water ? <Text style={styles.fieldError}>{errors.water}</Text> : null}
+                  <View style={styles.fieldSpacer} />
+                </>
+              )}
+              {showEssential('sleep') && (
+                <>
+                  <Text style={styles.fieldLabel}>Sleep (minutes last night)</Text>
+                  <SleepDurationPicker totalMinutes={sleepMinutes} onChange={setSleepMinutes} />
+                  <View style={styles.fieldSpacer} />
+                </>
+              )}
+              {showEssential('nutrition') && (
+                <>
+                  <Text style={styles.fieldLabel}>Meals</Text>
+                  <QualitySelector
+                    value={mealsCount ? Number(mealsCount) : null}
+                    onChange={(v) => setMealsCount(String(v))}
+                    labels={MEAL_LABELS}
+                  />
+                  <View style={styles.fieldSpacer} />
+                  <Text style={styles.fieldLabel}>Appetite</Text>
+                  <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={APPETITE_LABELS} />
+                  <View style={styles.fieldSpacer} />
+                </>
+              )}
+              {showEssential('meds') && activeMeds && activeMeds.length > 0 && (
+                <>
+                  <Text style={styles.fieldLabel}>Medicines</Text>
+                  {activeMeds.map((med) => {
+                    const staged = medications.some((m) => m.name === med.name);
+                    return (
+                      <View key={med.medication_id} style={styles.essMedRow}>
+                        <View style={styles.essMedInfo}>
+                          <Text style={styles.essMedName} numberOfLines={1}>{med.name}</Text>
+                          {(med.strength || med.strength_unit) ? (
+                            <Text style={styles.essMedDetail} numberOfLines={1}>
+                              {[med.strength, med.strength_unit].filter(Boolean).join(' ')}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Pressable
+                          onPress={() => {
+                            if (staged) {
+                              unstageEssentialMed(med.name);
+                            } else {
+                              stageEssentialMed(
+                                med.name,
+                                med.dose_amount != null ? String(med.dose_amount) : '',
+                                med.dose_unit ?? med.strength_unit ?? '',
+                              );
+                            }
+                          }}
+                          style={[styles.essMedToggle, staged ? styles.essMedToggleOn : styles.essMedToggleOff]}
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked: staged }}
+                          accessibilityLabel={staged ? `${med.name} staged — tap to remove` : `Stage ${med.name} dose`}
+                          hitSlop={8}
+                        >
+                          <Text style={[styles.essMedToggleGlyph, staged ? styles.essMedToggleGlyphOn : styles.essMedToggleGlyphOff]}>
+                            {staged ? '✓' : '✕'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                  <View style={styles.fieldSpacer} />
+                </>
+              )}
+              {/* First-time pick + edit-later: choose which rows belong here. */}
+              <Pressable
+                onPress={() => setCustomizing((v) => !v)}
+                style={styles.essCustomizeBtn}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: customizing }}
+                accessibilityLabel={customizing ? 'Close essentials customization' : 'Customize essentials rows'}
+                hitSlop={8}
+              >
+                <Text style={styles.essCustomizeText}>
+                  {customizing ? 'Done customizing ▴' : 'Customize · choose rows ▾'}
+                </Text>
+              </Pressable>
+              {customizing && (
+                <View style={styles.essCustomizeList}>
+                  {ESSENTIAL_ROWS.map((row) => {
+                    const on = showEssential(row.key);
+                    return (
+                      <Pressable
+                        key={row.key}
+                        onPress={() => toggleEssentialRow(row.key)}
+                        style={styles.essCustomizeRow}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: on }}
+                        accessibilityLabel={`${row.label} ${on ? 'shown' : 'hidden'}`}
+                        hitSlop={6}
+                      >
+                        <View style={[styles.essCheck, on && styles.essCheckOn]}>
+                          {on ? <Text style={styles.essCheckGlyph}>✓</Text> : null}
+                        </View>
+                        <Text style={styles.essCheckLabel}>{row.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                  <Text style={styles.essCustomizeHint}>
+                    Your picks are remembered on this device — edit them here anytime.
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Section>
+        )}
+
+        {logMode === 'normal' && (
+        <>
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* SLEEP                                                             */}
         {/* ══════════════════════════════════════════════════════════════════ */}
@@ -1692,119 +1789,6 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        {/* ── Today's Scheduled Medications ── */}
-        {medicationSchedule && medicationSchedule.length > 0 && (
-          <Section index={4} category="medication" title="Today's Medications" subtitle="Mark doses as taken.">
-            <View style={[styles.card, tint(COLORS.catMedication)]}>
-              {medicationSchedule.map((item) => {
-                const med = item.medication;
-                const timeStr = item.scheduled_time;
-                const [hours, minutes] = timeStr.split(':').map(Number);
-                const period = hours >= 12 ? 'PM' : 'AM';
-                const displayHours = hours % 12 || 12;
-                const formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-
-                return (
-                  <View key={`${med.medication_id}-${item.scheduled_time}`} style={styles.medScheduleRow}>
-                    <View style={styles.medScheduleInfo}>
-                      <Text style={styles.medScheduleName}>{med.name}</Text>
-                      <Text style={styles.medScheduleDetail}>
-                        {med.strength}{med.strength_unit ? ` ${med.strength_unit}` : ''}
-                        {` · ${formattedTime}`}
-                      </Text>
-                    </View>
-                    {item.taken ? (
-                      <View style={styles.medTakenBadge}>
-                        <Text style={styles.medTakenText}>✓ Taken</Text>
-                        {item.taken_at && (
-                          <Text style={styles.medTakenTime}>
-                            {new Date(item.taken_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                          </Text>
-                        )}
-                      </View>
-                    ) : (
-                      <Pressable
-                        style={styles.medTakeButton}
-                        onPress={async () => {
-                          try {
-                            const patientId = getCachedPatientId();
-                            if (!patientId) return;
-                            await recordMedicationTaken(
-                              patientId,
-                              med.medication_id,
-                              med.dose_amount,
-                              med.dose_unit,
-                              timeStr,
-                            );
-                            refetchMedSchedule();
-                          } catch (error) {
-                            // Silent fail - user can retry
-                          }
-                        }}
-                      >
-                        <Text style={styles.medTakeButtonText}>Taken</Text>
-                      </Pressable>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          </Section>
-        )}
-
-        <Divider />
-
-        {/* ── Your Medicines: tap a prescription to stage its dose ── */}
-        {activeMeds && activeMeds.length > 0 && (
-          <Section index={4} category="medication" title="Your medicines" subtitle="Tap a medicine to log a dose with its prescription details.">
-            <View style={[styles.card, tint(COLORS.catMedication)]}>
-              {activeMeds.map((med) => (
-                <ActiveMedRow
-                  key={med.medication_id}
-                  med={med}
-                  onLog={(name, dose, unit) => stageActiveMedication(name, dose, unit)}
-                />
-              ))}
-            </View>
-          </Section>
-        )}
-
-        <Divider />
-
-        <Section index={5} category="medication" title="Additional Medications" subtitle="Record any other medicine taken today.">
-          <View style={[styles.card, tint(COLORS.catMedication)]}>
-            {medications.map((item) => (
-              <Animated.View
-                key={item.id}
-                entering={reducedMotion ? undefined : FadeInDown.duration(260)}
-                exiting={reducedMotion ? undefined : FadeOut.duration(180)}
-                layout={reducedMotion ? undefined : Layout.springify()}
-              >
-              <View style={styles.entryBlock}>
-                <Input label="Medication name" value={item.name} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, name: value } : medication))} error={errors[`medication-${item.id}`]} />
-                <View style={styles.inlineFields}>
-                  <Input label="Dosage" value={item.dosage} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, dosage: value } : medication))} keyboardType="decimal-pad" style={styles.inlineInput} />
-                  <Input label="Unit" value={item.unit} onChangeText={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, unit: value } : medication))} placeholder="mg" style={styles.inlineInput} />
-                </View>
-                <Text style={styles.fieldLabel}>Unit</Text>
-                <OptionChips
-                  options={DOSE_UNIT_OPTIONS}
-                  value={item.unit}
-                  onChange={(value) => setMedications((items) => items.map((medication) => medication.id === item.id ? { ...medication, unit: value } : medication))}
-                  color={COLORS.catMedication}
-                  allowClear
-                  label="Dose unit"
-                />
-                <Pressable onPress={() => setMedications((items) => items.filter((medication) => medication.id !== item.id))}><Text style={styles.removeBtn}>Remove medication</Text></Pressable>
-              </View>
-              </Animated.View>
-            ))}
-            <Pressable onPress={addMedication} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add medication</Text></Pressable>
-          </View>
-        </Section>
-
-        <Divider />
-
         <Section index={6} category="vitals" title="Vitals" subtitle="Pick a vital — the right device-style input appears.">
           <View style={[styles.card, tint(COLORS.catVitals)]}>
             <View style={styles.quickRow}>
@@ -1815,7 +1799,7 @@ export default function VitalsLoggerScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Quick log heart rate"
               >
-                <Text style={styles.quickBtnText}>❤️ Quick: Pulse</Text>
+                <Text style={styles.quickBtnText}>Quick: Pulse</Text>
               </Pressable>
               <Pressable
                 onPress={() => quickAddVital('LOINC', '2339-0', 'mg/dL')}
@@ -1824,7 +1808,7 @@ export default function VitalsLoggerScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Quick log blood glucose"
               >
-                <Text style={styles.quickBtnText}>🩸 Quick: Glucose</Text>
+                <Text style={styles.quickBtnText}>Quick: Glucose</Text>
               </Pressable>
             </View>
             {conceptsQuery.isError ? (
@@ -2102,7 +2086,7 @@ export default function VitalsLoggerScreen() {
               accessibilityRole="button"
               accessibilityLabel="Quick log fever"
             >
-              <Text style={styles.quickBtnText}>🌡️ Quick: Fever</Text>
+              <Text style={styles.quickBtnText}>Quick: Fever</Text>
             </Pressable>
           </View>
 
@@ -2139,12 +2123,14 @@ export default function VitalsLoggerScreen() {
             />
           </View>
         </Section>
+        </>
+        )}
 
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* SAVE                                                             */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <Button           title={mutation.isPending ? 'Saving…' : editingGroupId ? "Update today's log" : "Save today's log"}
-          onPress={save}
+          onPress={logMode === 'quick' ? saveEssentials : save}
           fullWidth
           loading={mutation.isPending}
           disabled={conceptsQuery.isLoading || mutation.isPending}
@@ -2152,9 +2138,9 @@ export default function VitalsLoggerScreen() {
         />
 
         {/* ══════════════════════════════════════════════════════════════════ */}
-        {/* RECENT HISTORY                                                   */}
+        {/* RECENT HISTORY (full mode only — quick stays minimal)            */}
         {/* ══════════════════════════════════════════════════════════════════ */}
-        {recentLogs.length > 0 && (
+        {logMode === 'normal' && recentLogs.length > 0 && (
           <>
             <Divider />
             <Section animate={false} title="Recent history" subtitle="Your past daily logs.">
@@ -2409,16 +2395,20 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     marginBottom: SPACING.sm,
   },
-  sectionAccent: {
-    width: 34,
-    height: 34,
-    borderRadius: BORDER_RADIUS.medium,
-    borderWidth: 1,
+  // Category-tinted title chip + dot (replaces the old emoji badge).
+  sectionTitleChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 9999,
   },
-  sectionAccentIcon: {
-    fontSize: 16,
+  sectionTitleDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 9999,
   },
   sectionHeading: {
     flex: 1,
@@ -2684,9 +2674,14 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: COLORS.primary,
   },
+  // 10 fixed dots overflow narrow screens (10×32 + 9×6 = 374px > ~300px
+  // usable), so the row wraps into a clean grid instead of spilling past
+  // the card edge. Dots keep fixed size for stable tap targets.
   severityRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
+    rowGap: 8,
   },
   severityDot: {
     width: 32,
@@ -2802,8 +2797,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activeMedIconText: {
-    fontSize: 20,
+  activeMedDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 9999,
+    backgroundColor: COLORS.catMedication,
   },
   activeMedInfo: {
     flex: 1,
@@ -2898,6 +2896,39 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 10,
   },
+  // Read-only schedule state (dose toggling lives on the active rows).
+  medPendingText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+  },
+  // Tick/cross dose toggle, right of the medicine name.
+  medTakenToggle: {
+    width: 34,
+    height: 34,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  medTakenToggleOn: {
+    backgroundColor: COLORS.green,
+    borderColor: COLORS.green,
+  },
+  medTakenToggleOff: {
+    backgroundColor: 'transparent',
+    borderColor: COLORS.error,
+  },
+  medTakenToggleGlyph: {
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  medTakenToggleGlyphOn: {
+    color: '#FFFFFF',
+  },
+  medTakenToggleGlyphOff: {
+    color: COLORS.error,
+  },
   medTakeButton: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.md,
@@ -2931,7 +2962,142 @@ const styles = StyleSheet.create({
   // ── Save ──
   saveButton: {
     marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  // Log-mode segmented switch: compact pills, Normal selected by default.
+  modeRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  modeBtn: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+  },
+  modeBtnSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  modeBtnText: {
+    ...TYPOGRAPHY.bodyStrong,
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  modeBtnTextSelected: {
+    color: '#FFFFFF',
+  },
+  // Essentials rows (quick mode): compact medicine tick rows + customize UI.
+  essMedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  essMedInfo: {
+    flex: 1,
+    gap: 1,
+  },
+  essMedName: {
+    ...TYPOGRAPHY.bodyStrong,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+  essMedDetail: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+  },
+  essMedToggle: {
+    width: 32,
+    height: 32,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  essMedToggleOn: {
+    backgroundColor: COLORS.green,
+    borderColor: COLORS.green,
+  },
+  essMedToggleOff: {
+    backgroundColor: 'transparent',
+    borderColor: COLORS.error,
+  },
+  essMedToggleGlyph: {
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  essMedToggleGlyphOn: {
+    color: '#FFFFFF',
+  },
+  essMedToggleGlyphOff: {
+    color: COLORS.error,
+  },
+  essCustomizeBtn: {
+    alignSelf: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  essCustomizeText: {
+    ...TYPOGRAPHY.captionStrong,
+    color: COLORS.textSecondary,
+  },
+  essCustomizeList: {
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  essCustomizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  essCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+  },
+  essCheckOn: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  essCheckGlyph: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  essCheckLabel: {
+    ...TYPOGRAPHY.body,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+  essCustomizeHint: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  // Essentials fast-path sits under the big save, deliberately smaller and
+  // centered so the full log reads as the primary action.
+  essentialsWrap: {
+    alignItems: 'center',
     marginBottom: SPACING.lg,
+  },
+  essentialsButton: {
+    paddingHorizontal: SPACING.lg,
   },
 
   // ── History ──

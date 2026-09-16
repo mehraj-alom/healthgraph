@@ -5,15 +5,18 @@ import {
   Text,
   TextInput,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import { BottomSheet } from '@/components/BottomSheet';
+import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { formatFileSize } from '@/services/documents';
 import Animated, {
   useSharedValue,
@@ -208,6 +211,35 @@ function TypingDots() {
   );
 }
 
+/**
+ * ThinkingStatus — live activity line shown while a reply generates.
+ * Rotates through what the assistant is actually doing behind the scenes
+ * (reading logs → checking records → writing the answer) so a long wait
+ * feels alive instead of stuck on one word. Timer-driven, cleaned up on
+ * unmount; screen-reader announces changes politely.
+ */
+const THINKING_STAGES = [
+  'Thinking…',
+  'Reading your health logs…',
+  'Checking your records…',
+  'Writing your answer…',
+];
+
+function ThinkingStatus() {
+  const [stage, setStage] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setStage((s) => (s + 1) % THINKING_STAGES.length);
+    }, 2400);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <Text style={styles.typingText} accessibilityLiveRegion="polite">
+      {THINKING_STAGES[stage]}
+    </Text>
+  );
+}
+
 // ─── Streaming reveal (client-side progressive render over one blocking call) ─
 
 const REVEAL_TICK_MS = 32;
@@ -316,12 +348,15 @@ function FollowChip({ text, onPress }: { text: string; onPress: () => void }) {
 function Composer({
   sending,
   busy,
+  keyboardOpen,
   onSend,
   onStop,
   onAttach,
 }: {
   sending: boolean;
   busy: boolean;
+  /** True while the soft keyboard is open (tab bar hidden then). */
+  keyboardOpen: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
   onAttach: () => void;
@@ -335,10 +370,22 @@ function Composer({
     if (!trimmed || sending) return;
     onSend(trimmed);
     setText('');
+    // Sending hands the floor to the reply: dismiss the keyboard so the
+    // incoming answer is visible instead of the composer staying covered.
+    inputRef.current?.blur();
+    Keyboard.dismiss();
   };
 
   return (
-    <View style={styles.inputContainer}>
+    <View
+      style={[
+        styles.inputContainer,
+        // Keyboard open → tab bar is hidden, so drop the tall tab-clearing
+        // pad and hug the keyboard. Keyboard closed → keep the clearance
+        // that keeps the composer above the floating tab bar.
+        keyboardOpen && styles.inputContainerKeyboardOpen,
+      ]}
+    >
       <View style={[styles.composerShell, focused && styles.composerShellFocused]}>
         <Pressable
           onPress={onAttach}
@@ -741,6 +788,8 @@ export default function ChatScreen() {
   const [conversationId, setConversationId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
+  // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
+  const onTabScroll = useHideTabBarOnScroll();
   const abortRef = useRef<AbortController | null>(null);
 
   // Document processing alongside chat — subscribe-only (structural changes
@@ -765,6 +814,43 @@ export default function ChatScreen() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  // Keyboard-aware composer spacing: the floating tab bar hides while the
+  // keyboard is open (tabBarHideOnKeyboard), so the tall tab-clearing
+  // padding is only needed while the keyboard is closed. Tracks open state
+  // explicitly instead of assuming it, so the input can never end up
+  // buried under — or floating far above — the keyboard.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const { height: windowHeight } = useWindowDimensions();
+  const baseHeightRef = useRef(0);
+  useEffect(() => {
+    // Baseline tracks the keyboard-closed window height (orientation-safe:
+    // refreshed whenever the keyboard is closed).
+    if (keyboardHeight === 0) baseHeightRef.current = windowHeight;
+  }, [windowHeight, keyboardHeight]);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardOpen(true);
+      setKeyboardHeight(e.endCoordinates.height);
+      scrollToBottom();
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardOpen(false);
+      setKeyboardHeight(0);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [scrollToBottom]);
+  // Adaptive bottom spacer: under adjustResize the window shrinks by the
+  // keyboard height and no spacer is needed; under adjustPan / Expo Go's
+  // runtime (no shrink) the spacer lifts the composer by exactly the
+  // uncovered remainder. Never negative, zero when closed.
+  const heightShrunk = Math.max(0, baseHeightRef.current - windowHeight);
+  const keyboardSpacer =
+    keyboardHeight > 0 ? Math.max(0, keyboardHeight - heightShrunk) : 0;
 
   // Once the newest assistant message has been committed to state and the
   // list rendered it (sending == false), report it for the success diagnostic.
@@ -1049,10 +1135,16 @@ export default function ChatScreen() {
                   contentContainerStyle={styles.messagesContent}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
+                  onScroll={onTabScroll}
+                  scrollEventThrottle={16}
                   ListFooterComponent={<DisclaimerNote style={styles.dnFoot} />}
                   renderItem={({ item, index }) => {
                     const isLast = index === messages.length - 1;
                     const live = revealingId === item.id;
+                    // Timestamps only close out a same-role run — a back-and-
+                    // forth of 6 bubbles shows 2 times, not 6.
+                    const next = messages[index + 1];
+                    const showTime = isLast || next == null || next.role !== item.role;
                     return (
                       <Enter index={0} style={item.role === 'user' ? styles.userRow : styles.aiRow}>
                         <View
@@ -1079,14 +1171,16 @@ export default function ChatScreen() {
                                 onDone={() => setRevealingId((cur) => (cur === item.id ? null : cur))}
                               />
                             )}
-                            <Text
-                              style={[
-                                styles.messageTime,
-                                item.role === 'user' ? styles.userTime : styles.assistantTime,
-                              ]}
-                            >
-                              {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </Text>
+                            {showTime ? (
+                              <Text
+                                style={[
+                                  styles.messageTime,
+                                  item.role === 'user' ? styles.userTime : styles.assistantTime,
+                                ]}
+                              >
+                                {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </Text>
+                            ) : null}
                           </View>
                         </View>
                         {renderMessageActions(item, isLast && !live)}
@@ -1108,7 +1202,7 @@ export default function ChatScreen() {
             {sending && (
               <View style={styles.typingContainer}>
                 <TypingDots />
-                <Text style={styles.typingText}>Thinking… reading your health data</Text>
+                <ThinkingStatus />
               </View>
             )}
           </View>
@@ -1117,10 +1211,15 @@ export default function ChatScreen() {
           <Composer
             sending={sending}
             busy={busy}
+            keyboardOpen={keyboardOpen}
             onSend={(text) => void sendMessage(text)}
             onStop={stopAll}
             onAttach={() => setDocSheet({ open: true, track: null })}
           />
+          {/* Adaptive spacer: lifts the composer when the runtime doesn't
+              shrink the window for the keyboard (adjustPan / Expo Go). Zero
+              under adjustResize — purely a no-op there. */}
+          {keyboardSpacer > 0 ? <View style={{ height: keyboardSpacer }} /> : null}
           {/* Records live in the same page: upload + processing sheet */}
           <DocSheet
             visible={docSheet.open}
@@ -1485,6 +1584,11 @@ const styles = StyleSheet.create({
     backgroundColor: PAPER,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(154,52,18,0.10)',
+  },
+  // Soft keyboard open: tab bar hidden, so hug the keyboard instead of
+  // holding the (now empty) tab-clearing gap.
+  inputContainerKeyboardOpen: {
+    paddingBottom: SPACING.md,
   },
   composerShell: {
     flexDirection: 'row',

@@ -28,6 +28,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMedications, useMedicationSchedule, useMedicationTakenEvents, recordMedicationTaken } from '@/hooks/useMedications';
+import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useAuth } from '@/context/AuthContext';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { api } from '@/services/api';
@@ -86,6 +87,8 @@ export default function MedicationsScreen() {
   const navigation = useNavigation<Nav>();
   const { user } = useAuth();
   const [selectedTab, setSelectedTab] = useState<'active' | 'schedule' | 'history'>('active');
+  // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
+  const onTabScroll = useHideTabBarOnScroll();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
 
@@ -231,6 +234,8 @@ export default function MedicationsScreen() {
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
+        onScroll={onTabScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={medicationsLoading || scheduleLoading}

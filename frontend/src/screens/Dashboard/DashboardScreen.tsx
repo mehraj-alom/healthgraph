@@ -27,6 +27,8 @@ import { useSyncStatus, getSyncStatusMessage } from '@/hooks/useSyncStatus';
 import { useAuth } from '@/context/AuthContext';
 import { useDocuments } from '@/context/DocumentsContext';
 import { isOnline, subscribe as subscribeNetwork } from '@/services/networkMonitor';
+import { consumeDataRefreshRequest } from '@/services/dataRefresh';
+import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { api } from '@/services/api';
 import {
   MovementsCard,
@@ -216,6 +218,8 @@ export default function DashboardScreen() {
 
   const [online, setOnline] = useState<boolean>(isOnline());
   useEffect(() => subscribeNetwork(() => setOnline(isOnline())), []);
+  // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
+  const onTabScroll = useHideTabBarOnScroll();
 
   const [selectedDimId, setSelectedDimId] = useState<DimensionId | null>(null);
   const [range, setRange] = useState<RangeKey>('week');
@@ -223,12 +227,14 @@ export default function DashboardScreen() {
 
   // Focus refetch is time-gated (same 30 s freshness window as
   // HealthDashboardScreen): tab-hopping must not refetch on every focus.
-  // Manual pull-to-refresh (`refresh` below) always bypasses the gate.
+  // A pending save elsewhere bypasses the gate; manual pull-to-refresh
+  // (`refresh` below) always bypasses too.
   const lastFocusRefetch = useRef(0);
   useFocusEffect(
     useCallback(() => {
+      const forced = consumeDataRefreshRequest();
       const now = Date.now();
-      if (now - lastFocusRefetch.current < 30_000) return;
+      if (!forced && now - lastFocusRefetch.current < 30_000) return;
       lastFocusRefetch.current = now;
       void story.refetch();
       void metrics.refetch();
@@ -597,6 +603,8 @@ export default function DashboardScreen() {
       <ScrollView
         contentContainerStyle={screen.scroll}
         showsVerticalScrollIndicator={false}
+        onScroll={onTabScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

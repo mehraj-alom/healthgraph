@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Polyline } from 'react-native-svg';
@@ -15,6 +15,11 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { COLORS } from '@/constants';
 import { useReducedMotion } from '@/theme';
 import { PressScale } from './PressScale';
+import {
+  isTabBarHidden,
+  resetTabBarScroll,
+  subscribeTabBarVisibility,
+} from './tabBarVisibility';
 
 const RED = '#D7263D';
 const RED_DARK = '#A8162B';
@@ -98,6 +103,19 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
     transform: [{ scale: 1 + haloB.value * 0.85 }],
   }));
 
+  // Scroll-aware side tabs: hide on scroll down, return on scroll up.
+  // The center pulse button is intentionally outside this animation and
+  // never hides. Tab switches reset to visible.
+  const [sidesHidden, setSidesHidden] = useState(isTabBarHidden());
+  useEffect(() => subscribeTabBarVisibility(setSidesHidden), []);
+  useEffect(() => {
+    resetTabBarScroll();
+  }, [state.index]);
+  const sidesStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(sidesHidden ? 0 : 1, { duration: reduced ? 0 : 220 }),
+    transform: [{ translateY: withTiming(sidesHidden ? 28 : 0, { duration: reduced ? 0 : 220 }) }],
+  }));
+
   const onTabPress = (routeName: string, routeKey: string, isFocused: boolean) => {
     const event = navigation.emit({
       type: 'tabPress',
@@ -122,9 +140,11 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
         scaleTo={0.9}
         style={styles.side}
       >
-        <Text style={[styles.glyph, { opacity: isFocused ? 1 : 0.7 }]}>{glyph}</Text>
-        <Text style={[styles.sideLabel, { color }]}>{label}</Text>
-        <View style={[styles.dot, { backgroundColor: isFocused ? color : 'transparent' }]} />
+        <View style={styles.sidePill}>
+          <Text style={[styles.glyph, { opacity: isFocused ? 1 : 0.7 }]}>{glyph}</Text>
+          <Text style={[styles.sideLabel, { color }]}>{label}</Text>
+          <View style={[styles.dot, { backgroundColor: isFocused ? color : 'transparent' }]} />
+        </View>
       </PressScale>
     );
   };
@@ -138,11 +158,14 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
         <Path d={topCurve} fill="none" stroke={COLORS.border} strokeWidth={1.5} />
       </Svg>
 
-      <View style={styles.row}>
+      <Animated.View
+        style={[styles.row, sidesStyle]}
+        pointerEvents={sidesHidden ? 'none' : 'auto'}
+      >
         {sideTab('Dashboard', 'Home', '🏠')}
         <View style={styles.centerSpacer} />
         {sideTab('Chat', 'Chat', '💬')}
-      </View>
+      </Animated.View>
 
       {ppgRoute ? (
         <View style={[styles.centerWrap, { left: cx - BTN / 2, top: BTN_TOP }]} pointerEvents="box-none">
@@ -198,8 +221,20 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 1,
     paddingTop: 8,
+  },
+  // Translucent pill so Home/Chat stay legible over scrolling content while
+  // keeping the floating transparent-dock feel (never a solid block).
+  sidePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 9999,
+    backgroundColor: 'rgba(255,251,243,0.82)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(29,27,23,0.10)',
   },
   glyph: {
     fontSize: 22,

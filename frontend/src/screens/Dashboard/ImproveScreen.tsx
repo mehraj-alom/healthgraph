@@ -46,6 +46,8 @@ export default function ImproveScreen() {
     return 'in zone';
   };
 
+  // Card tone drives the whole interior: green-tinted "keep" cards,
+  // warm/red-tinted "improve" cards, neutral "watch" blocks.
   const renderCard = (m: ImproveMetric, index: number, maintain: boolean) => {
     const g = SPOKE_GUIDANCE[m.id] ?? GUIDANCE_FALLBACK;
     // Spotlight the direction that moves toward the goal.
@@ -62,15 +64,30 @@ export default function ImproveScreen() {
       : towardLow
         ? { title: 'Watch for', items: g.raise, color: CLIN.muted }
         : { title: 'Ease off', items: g.lower, color: CLIN.red };
+    const tone = maintain ? 'keep' : 'improve';
+    const toneColor = maintain ? CLIN.green : CLIN.red;
     return (
       <Animated.View
         key={m.id}
         entering={reducedMotion ? undefined : FadeInUp.duration(280).delay(Math.min(index * 50, 300))}
       >
-        <View style={[styles.card, { borderLeftColor: maintain ? CLIN.green : CLIN.red }]}>
-          <Text style={styles.cardLabel}>
-            {m.label} · {m.valueText}
-          </Text>
+        <View
+          style={[
+            styles.card,
+            tone === 'keep' ? styles.cardKeep : styles.cardImprove,
+            { borderLeftColor: toneColor },
+          ]}
+        >
+          <View style={styles.cardTopRow}>
+            <View style={[styles.toneDot, { backgroundColor: toneColor }]} />
+            <Text style={[styles.toneLabel, { color: toneColor }]}>
+              {maintain ? 'Keep it steady' : 'Needs a nudge'}
+            </Text>
+            <View style={[styles.valuePill, { backgroundColor: toneColor + '1A' }]}>
+              <Text style={[styles.valuePillText, { color: toneColor }]}>{m.valueText}</Text>
+            </View>
+          </View>
+          <Text style={styles.cardLabel}>{m.label}</Text>
           <Text style={styles.cardStatus}>
             {positionOf(m)} ({g.zone}) · {m.avgDays}d avg
           </Text>
@@ -80,12 +97,12 @@ export default function ImproveScreen() {
             <Text key={tip} style={styles.tip}>· {tip}</Text>
           ))}
           {second ? (
-            <>
+            <View style={styles.watchBlock}>
               <Text style={[styles.listTitle, { color: second.color }]}>{second.title}</Text>
               {second.items.map((tip) => (
                 <Text key={tip} style={styles.tip}>· {tip}</Text>
               ))}
-            </>
+            </View>
           ) : null}
         </View>
       </Animated.View>
@@ -114,16 +131,49 @@ export default function ImproveScreen() {
         </Text>
 
         {primary.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>
-              {focus === 'improve' ? 'All steady — nothing to chase 🎉' : 'Log a few more days to see patterns.'}
-            </Text>
-            <Text style={styles.emptyText}>
-              {focus === 'improve'
-                ? 'Every signal sits in its usual zone. Keep doing what you are doing.'
-                : 'Signals appear here once they have real history behind them.'}
-            </Text>
-          </View>
+          focus === 'improve' ? (
+            <View style={[styles.emptyCard, styles.emptyCelebrate]}>
+              <Text style={styles.celebrateEmoji}>🎉</Text>
+              <Text style={styles.emptyTitle}>
+                Congratulations — nothing to improve!
+              </Text>
+              <Text style={styles.emptyText}>
+                Every signal is sitting in its healthy zone. Whatever you are
+                doing is working — keep it up, and check back after your next
+                few logs.
+              </Text>
+              <Pressable
+                onPress={() => navigation.setParams({ focus: 'keep' })}
+                style={styles.emptyBtn}
+                accessibilityRole="button"
+                accessibilityLabel="See what to keep doing"
+                hitSlop={8}
+              >
+                <Text style={styles.emptyBtnText}>See what to keep doing →</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>
+                Nothing steady yet — let's build it 🌱
+              </Text>
+              <Text style={styles.emptyText}>
+                Signals show up here once they have a few days of history.
+                Meanwhile, tap below to see exactly what to improve first.
+              </Text>
+              <Pressable
+                onPress={() => navigation.setParams({ focus: 'improve' })}
+                style={[styles.emptyBtn, styles.emptyBtnImprove]}
+                accessibilityRole="button"
+                accessibilityLabel="See what to improve"
+                hitSlop={8}
+              >
+                <Text style={[styles.emptyBtnText, styles.emptyBtnImproveText]}>
+                  See what to improve →
+                </Text>
+              </Pressable>
+            </View>
+          )
         ) : (
           primary.map((m, i) => renderCard(m, i, focus === 'keep'))
         )}
@@ -190,6 +240,45 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
+  // Tone-tinted interiors: keep cards breathe green, improve cards glow warm.
+  cardKeep: {
+    backgroundColor: '#F2F8F0',
+    borderColor: 'rgba(78,155,95,0.35)',
+  },
+  cardImprove: {
+    backgroundColor: '#FBF3E4',
+    borderColor: 'rgba(194,80,62,0.30)',
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  toneDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 9999,
+  },
+  toneLabel: {
+    ...TYPOGRAPHY.captionStrong,
+    flex: 1,
+  },
+  valuePill: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: 9999,
+  },
+  valuePillText: {
+    ...TYPOGRAPHY.captionStrong,
+    fontSize: 12,
+  },
+  watchBlock: {
+    marginTop: SPACING.xs,
+    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: 'rgba(121,113,102,0.08)',
+    gap: 2,
+  },
   cardLabel: {
     ...TYPOGRAPHY.bodyStrong,
     fontSize: 16,
@@ -234,6 +323,32 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     gap: 6,
     alignItems: 'center',
+  },
+  emptyCelebrate: {
+    backgroundColor: '#F2F8F0',
+    borderColor: 'rgba(78,155,95,0.45)',
+    borderWidth: 1.5,
+  },
+  celebrateEmoji: {
+    fontSize: 40,
+  },
+  emptyBtn: {
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: 9999,
+    backgroundColor: CLIN.green,
+  },
+  emptyBtnText: {
+    ...TYPOGRAPHY.bodyStrong,
+    color: '#FFFFFF',
+    fontSize: 14,
+  },
+  emptyBtnImprove: {
+    backgroundColor: CLIN.red,
+  },
+  emptyBtnImproveText: {
+    color: '#FFFFFF',
   },
   emptyTitle: {
     ...TYPOGRAPHY.h3,

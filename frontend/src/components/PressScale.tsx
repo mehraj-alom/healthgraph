@@ -21,6 +21,8 @@ interface PressScaleProps {
   accessibilityState?: { disabled?: boolean; selected?: boolean };
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  /** Extra tappable area around the button (default none). */
+  hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
 }
 
 /**
@@ -40,6 +42,7 @@ export function PressScale({
   accessibilityState,
   style,
   testID,
+  hitSlop,
 }: PressScaleProps) {
   const scale = useSharedValue(1);
   const reduced = useReducedMotion();
@@ -67,6 +70,7 @@ export function PressScale({
       <Pressable
         onPress={onPress}
         onLongPress={onLongPress}
+        hitSlop={hitSlop}
         onPressIn={disabled ? undefined : pressIn}
         onPressOut={disabled ? undefined : pressOut}
         disabled={disabled}

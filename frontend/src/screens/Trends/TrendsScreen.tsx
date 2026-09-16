@@ -8,7 +8,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
+import { Skeleton } from '@/components';
 import { useTrends } from '@/hooks/useTrends';
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
 import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, CATEGORY_COLORS } from '@/constants';
@@ -366,6 +368,13 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
 
   const { data: trend, isLoading, error } = useTrends(selectedDays);
 
+  // Range transitions (week → month → year) refetch while the previous
+  // range's charts are still on screen. Instead of flashing a full-screen
+  // spinner, keep the stale charts visible under a blur + skeleton overlay
+  // so the switch feels continuous and premium.
+  const hasContent = trend != null && trend.logged_days > 0;
+  const transitioning = isLoading && hasContent;
+
   const availableSymptoms = trend?.available_symptoms ?? [];
   const activeSymptomId = selectedSymptom ?? availableSymptoms[0] ?? null;
   const activeSymptomSeries = trend?.symptom_time_series.find(
@@ -407,12 +416,12 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
         })}
       </View>
 
-      {isLoading ? (
+      {isLoading && !hasContent ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading trends…</Text>
         </View>
-      ) : error ? (
+      ) : error && !hasContent ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Unable to load trends</Text>
           <Text style={styles.emptyText}>Please check your connection and try again.</Text>
@@ -423,6 +432,7 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
           <Text style={styles.emptyText}>Start your first Daily Log to begin building your health history.</Text>
         </View>
       ) : (
+        <View style={embedded ? undefined : styles.contentWrap}>
         <TrendsScrollContainer embedded={embedded}>
           {/* HEALTH OVERVIEW */}
           <Section title="Health Overview">
@@ -581,6 +591,32 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
 
           <View style={{ height: SPACING.xxl * 2 }} />
         </TrendsScrollContainer>
+        {transitioning && (
+          <View
+            style={styles.transitionOverlay}
+            accessible
+            accessibilityRole="progressbar"
+            accessibilityLabel={`Updating trends to ${TREND_RANGES[range].label}`}
+          >
+            <BlurView
+              intensity={60}
+              tint="default"
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.transitionCard}>
+              <View style={styles.transitionPill}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.transitionPillText}>
+                  Updating to {TREND_RANGES[range].label}…
+                </Text>
+              </View>
+              <Skeleton width="45%" height={12} />
+              <Skeleton width="100%" height={110} accent />
+              <Skeleton width="70%" height={14} />
+            </View>
+          </View>
+        )}
+        </View>
       )}
     </SafeAreaView>
   );
@@ -716,6 +752,41 @@ const styles = StyleSheet.create({
 
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md },
   loadingText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  // Range-transition layer: stale charts stay mounted underneath while the
+  // new range loads; the blur + skeleton card sits on top and swallows
+  // touches so users can't act on stale numbers mid-flight.
+  contentWrap: { flex: 1 },
+  transitionOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xl,
+  },
+  transitionCard: {
+    width: '100%',
+    maxWidth: 340,
+    gap: SPACING.sm,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  transitionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 9999,
+    backgroundColor: COLORS.primaryBg,
+  },
+  transitionPillText: { ...TYPOGRAPHY.label, color: COLORS.primary, fontSize: 12, fontWeight: '600' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xl },
   emptyTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, marginBottom: SPACING.sm },
   emptyText: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center', lineHeight: 22 },

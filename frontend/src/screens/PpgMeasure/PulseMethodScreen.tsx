@@ -20,6 +20,7 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Badge, Button, Card } from '@/components';
+import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getRecentRppgMeasurements } from '@/db/queries/rppg';
@@ -60,6 +61,8 @@ export default function PulseMethodScreen() {
   const { colors, typography } = useTheme();
   const [recentPpg, setRecentPpg] = useState<RecentRow | null>(null);
   const [recentRppg, setRecentRppg] = useState<RecentRow | null>(null);
+  // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
+  const onTabScroll = useHideTabBarOnScroll();
 
   const load = useCallback(async () => {
     try {
@@ -116,7 +119,11 @@ export default function PulseMethodScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        onScroll={onTabScroll}
+        scrollEventThrottle={16}
+      >
         <Text style={[typography.heading, { color: colors.textPrimary }]}>
           Pulse
         </Text>

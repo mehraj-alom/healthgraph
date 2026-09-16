@@ -14,7 +14,9 @@ import {
   getDailyLogs as dbGetDailyLogs,
   getDailyLogEvents as dbGetDailyLogEvents,
   getDailyLogDetail as dbGetDailyLogDetail,
+  hydrateDailyLog as dbHydrateDailyLog,
 } from '@/db/queries/dailyLogs';
+import { api } from '@/services/api';
 import { getMedications as dbGetMedications } from '@/db/queries/medications';
 import { getMedicationTakenEventsForDate as dbGetTakenEventsForDate } from '@/db/queries/medicationTakenEvents';
 import { getDocuments as dbGetDocuments } from '@/db/queries/documents';
@@ -64,7 +66,31 @@ export function useHomeStory(): UseHomeStoryResult {
     const today = localDateString();
     try {
       // ── Today's detail (water, wellbeing summary, sleep summary) ──
-      const detail = await dbGetDailyLogDetail(patientId, today).catch(() => null);
+      // Local-first; after an app-data wipe/reinstall the local row is gone
+      // while the server still holds today's check-in, so fall back to one
+      // server fetch and hydrate SQLite (same pattern as VitalsLogger).
+      // Local pending edits always win: hydrate skips non-synced rows.
+      let detail = await dbGetDailyLogDetail(patientId, today).catch(() => null);
+      if (!detail) {
+        try {
+          const serverDetail = await api.get<DailyCheckInDetail>(
+            `/api/v1/logs/daily-checkin/${today}`,
+          );
+          await dbHydrateDailyLog(patientId, serverDetail).catch(() => {});
+          detail =
+            (await dbGetDailyLogDetail(patientId, today).catch(() => null)) ??
+            serverDetail;
+          if (__DEV__) console.log(`[HomeStory] today recovered from server date=${today}`);
+        } catch (e: any) {
+          // 404 (nothing logged today) or offline — detail stays null.
+          // Status only (never bodies): tells wipe-recovery apart from
+          // no-log and no-network when reading dev logs.
+          if (__DEV__) {
+            const status = e?.response?.status ?? 'none';
+            console.log(`[HomeStory] today server fallback missed date=${today} status=${status}`);
+          }
+        }
+      }
 
       // ── Active medications (local DB, non-blocking) ──
       const meds = await dbGetMedications(patientId).catch(() => [] as Medication[]);

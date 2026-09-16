@@ -33,7 +33,7 @@ import { AnatomyProvider } from '@/context/AnatomyContext';
 import { DocumentsProvider } from '@/context/DocumentsContext';
 
 import { ThemeProvider } from '@/theme';
-import { ToastProvider } from '@/components';
+import { BootSplash, ToastProvider } from '@/components';
 import { UmbrellaTabBar } from '@/components';
 
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
@@ -111,7 +111,14 @@ function MainTabs() {
       {/* Pulse entry: method selector (fingertip PPG vs face rPPG). The
           red tab button lands here; each method pushes its own flow. */}
       <Tab.Screen name="PpgMeasure" component={PulseMethodScreen} />
-      <Tab.Screen name="Chat" component={ChatScreen} />
+      {/* Chat hides the floating tab bar while typing so the keyboard never
+          fights it for bottom space (the composer clears the bar only when
+          the bar is actually visible). */}
+      <Tab.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{ tabBarHideOnKeyboard: true }}
+      />
     </Tab.Navigator>
   );
 }
@@ -351,6 +358,10 @@ export default function App() {
                 <DocumentsProvider>
                   <TrendRangeProvider>
                     <AppNavigator />
+                    {/* Video boot animation over first paint: internal init
+                        (auth restore, providers, navigation) runs underneath
+                        and the overlay fades once ready — never blocking. */}
+                    <BootSplash />
                   </TrendRangeProvider>
                 </DocumentsProvider>
               </AnatomyProvider>

@@ -26,6 +26,8 @@ export { PressScale } from './PressScale';
 
 // ── Toast feedback ──────────────────────────────────────────────────────────
 export { ToastProvider, useToast } from './Toast';
+// ── Boot splash (video loading animation) ───────────────────────────────────
+export { BootSplash } from './BootSplash';
 
 // ── Health metric primitives ────────────────────────────────────────────────
 export { MetricValue } from './MetricValue';

@@ -36,12 +36,14 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Animated, {
+  runOnJS,
   useSharedValue,
   useAnimatedStyle,
   useAnimatedScrollHandler,
   withTiming,
   withSpring,
   withRepeat,
+  withSequence,
   withDelay,
   interpolate,
   Extrapolation,
@@ -62,11 +64,14 @@ import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
 
 import LiftCard from '@/components/home/LiftCard';
 import { BrandLogo } from '@/components/BrandLogo';
+import { consumeDataRefreshRequest } from '@/services/dataRefresh';
+import { reportTabScroll } from '@/components/tabBarVisibility';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { formatFirstName } from '@/utils/name';
 import { useAuth } from '@/context/AuthContext';
 import { useProfilePhoto } from '@/hooks/useProfilePhoto';
-import { useMedications } from '@/hooks/useMedications';
+import { recordMedicationTaken, useMedications } from '@/hooks/useMedications';
+import { getCachedPatientId } from '@/services/patientIdentity';
 import { useTrends } from '@/hooks/useTrends';
 import { buildHealthDimensions, detectHeartRate, formatSleepMinutes, formatWaterMl, formatDurationMinutes, localDateString } from '@/screens/Dashboard/homeData';
 import { useHomeStory } from '@/screens/Dashboard/useHomeStory';
@@ -226,8 +231,59 @@ function DoseBar({ pct }: { pct: number }) {
   );
 }
 
+/**
+ * DupDup — lub-dub heartbeat badge: two quick pulses, then rest, on loop.
+ * Green tick when the day is done, red cross when it isn't. Static under
+ * reduced motion.
+ */
+function DupDup({
+  done,
+  size = 26,
+}: {
+  done: boolean;
+  size?: number;
+}) {
+  const reduced = useReducedMotion();
+  const beat = useSharedValue(1);
+  const color = done ? '#4E9B5F' : '#C2503E';
+  useEffect(() => {
+    if (reduced) return;
+    beat.value = withRepeat(
+      withSequence(
+        withTiming(1.22, { duration: 170 }),
+        withTiming(1, { duration: 150 }),
+        withTiming(1.22, { duration: 170 }),
+        withTiming(1, { duration: 150 }),
+        withTiming(1, { duration: 1300 }),
+      ),
+      -1,
+      false,
+    );
+  }, [beat, reduced]);
+  const beatStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: beat.value }],
+  }));
+  return (
+    <Animated.View
+      style={[
+        styles.dupBadge,
+        { width: size, height: size, borderRadius: size / 2, backgroundColor: color + '1A', borderColor: color },
+        beatStyle,
+      ]}
+      accessible
+      accessibilityLabel={done ? "Today's log complete" : "Today's log not done"}
+    >
+      {done ? (
+        <CheckGlyph size={Math.round(size * 0.55)} color={color} />
+      ) : (
+        <Text style={[styles.dupCross, { color, fontSize: Math.round(size * 0.55) }]}>✕</Text>
+      )}
+    </Animated.View>
+  );
+}
+
 /** Honest today-progress ring: mood + water + doses, nothing invented. */
-function ProgressRing({ pct, size = 58 }: { pct: number; size?: number }) {
+function ProgressRing({ pct, size = 84 }: { pct: number; size?: number }) {
   const stroke = 6;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -250,11 +306,7 @@ function ProgressRing({ pct, size = 58 }: { pct: number; size?: number }) {
         />
       </Svg>
       <View style={styles.ringCenter} pointerEvents="none">
-        {complete ? (
-          <CheckGlyph size={18} color="#4E9B5F" />
-        ) : (
-          <Text style={styles.ringText}>{`${Math.round(clamped * 100)}%`}</Text>
-        )}
+        <Text style={styles.ringText}>{`${Math.round(clamped * 100)}%`}</Text>
       </View>
     </View>
   );
@@ -292,8 +344,11 @@ function ActionRowBlock({
   medTaken,
   medExpected,
   medActive,
+  upNextMedId,
+  upNextTaken,
   onDailyLog,
   onMedications,
+  onToggleUpNextTaken,
 }: {
   loggedToday: boolean;
   moodLogged: boolean;
@@ -303,8 +358,13 @@ function ActionRowBlock({
   medTaken: number;
   medExpected: number;
   medActive: boolean;
+  /** Up-next prescription id for the inline taken toggle (null when none). */
+  upNextMedId: string | null;
+  /** Whether the up-next dose is already taken today. */
+  upNextTaken: boolean;
   onDailyLog: () => void;
   onMedications: () => void;
+  onToggleUpNextTaken: () => void;
 }) {
   // Honest "today" signals only — mood check-in, any water, doses done.
   const waterDone = (waterMl ?? 0) > 0;
@@ -314,17 +374,17 @@ function ActionRowBlock({
   const completion = signals.length > 0 ? doneCount / signals.length : 0;
   const dosePct = medExpected > 0 ? Math.max(0, Math.min(1, medTaken / medExpected)) : 0;
 
+  // "Caught up" means 100% — every today-signal done — not merely that a
+  // log row exists. A partial day keeps the working state (cross, CTA).
+  const fullyDone = signals.length > 0 && doneCount >= signals.length;
   const statusColor = loggedToday ? '#4E9B5F' : '#C96A1E';
-  const waterCaption = waterDone
-    ? `${(Math.round((waterMl ?? 0) / 100) * 100).toLocaleString('en-US')}ml water`
-    : null;
 
   return (
     <View style={styles.section}>
       {/* ── Daily check-in hero ── */}
       <Entrance index={0} staggerMs={70}>
         <LiftCard
-          style={styles.todayCard}
+          style={[styles.todayCard, fullyDone && styles.todayCardLit]}
           contentContainerStyle={styles.todayCardContent}
           accessibilityLabel={loggedToday ? "View or edit today's daily log" : "Enter today's daily log"}
           onPress={onDailyLog}
@@ -335,25 +395,27 @@ function ActionRowBlock({
               <View style={styles.statusRow}>
                 <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
                 <Text style={[styles.statusText, { color: statusColor }]}>
-                  {loggedToday ? 'LOGGED TODAY' : "TODAY'S CHECK-IN"}
+                  {loggedToday ? 'TODAY' : "TODAY'S CHECK-IN"}
                 </Text>
                 <Text style={styles.statusCount}>{`${doneCount}/${signals.length}`}</Text>
               </View>
-              <Text style={styles.todayTitle}>
-                {loggedToday ? "You're all caught up" : 'How are you today?'}
-              </Text>
-              <Text style={styles.todayCaption} numberOfLines={2}>
-                {loggedToday
-                  ? waterCaption ?? `${doneCount} of ${signals.length} signals in`
-                  : 'Sleep · water · mood — about a minute'}
-              </Text>
+              <View style={styles.titleRow}>
+                <Text style={[styles.todayTitle, fullyDone && styles.todayTitleCaughtUp]}>
+                  {fullyDone
+                    ? "You're all caught up"
+                    : doneCount > 0
+                      ? 'Almost there'
+                      : "Time to check in"}
+                </Text>
+                <DupDup done={fullyDone} />
+              </View>
+              {!fullyDone ? (
+                <View style={[styles.todayCta, styles.todayCtaPrimary]}>
+                  <Text style={styles.todayCtaPrimaryText}>Check in</Text>
+                </View>
+              ) : null}
             </View>
             <ProgressRing pct={completion} />
-          </View>
-          <View style={[styles.todayCta, loggedToday ? styles.todayCtaQuiet : styles.todayCtaPrimary]}>
-            <Text style={loggedToday ? styles.todayCtaQuietText : styles.todayCtaPrimaryText}>
-              {loggedToday ? 'View / edit  →' : "Log today's check-in  →"}
-            </Text>
           </View>
         </LiftCard>
       </Entrance>
@@ -388,6 +450,32 @@ function ActionRowBlock({
             )}
             {medActive && medExpected > 0 ? <DoseBar pct={dosePct} /> : null}
           </View>
+          {medActive && upNextMedId ? (
+            <Pressable
+              onPress={onToggleUpNextTaken}
+              style={[
+                styles.medTakenToggle,
+                upNextTaken ? styles.medTakenToggleOn : styles.medTakenToggleOff,
+              ]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: upNextTaken }}
+              accessibilityLabel={
+                upNextTaken
+                  ? `${medNames[0]} taken — already recorded`
+                  : `Mark ${medNames[0]} taken`
+              }
+              hitSlop={8}
+            >
+              <Text
+                style={[
+                  styles.medTakenToggleGlyph,
+                  upNextTaken ? styles.medTakenToggleGlyphOn : styles.medTakenToggleGlyphOff,
+                ]}
+              >
+                {upNextTaken ? '✓' : '✕'}
+              </Text>
+            </Pressable>
+          ) : null}
           {medActive && medExpected > 0 ? (
             <View style={styles.dosePill}>
               <Text style={styles.dosePillText}>{`${medTaken}/${medExpected}`}</Text>
@@ -461,6 +549,7 @@ function InsightPanelBlock({
             }}
             accessibilityLabel="Improve — see actions based on your dial"
             scaleTo={0.95}
+            hitSlop={12}
             style={[styles.duoBtn, styles.duoImprove]}
           >
             <Text style={styles.duoImproveText}>Improve</Text>
@@ -472,6 +561,7 @@ function InsightPanelBlock({
             }}
             accessibilityLabel="Keep — see what is holding steady"
             scaleTo={0.95}
+            hitSlop={12}
             style={[styles.duoBtn, styles.duoKeep]}
           >
             <Text style={styles.duoKeepText}>Keep</Text>
@@ -566,6 +656,7 @@ function MapFullscreen({
                 }}
                 accessibilityLabel="Improve — see actions based on your dial"
                 scaleTo={0.95}
+                hitSlop={12}
                 style={[styles.duoBtn, styles.duoImprove]}
               >
                 <Text style={styles.duoImproveText}>Improve</Text>
@@ -577,6 +668,7 @@ function MapFullscreen({
                 }}
                 accessibilityLabel="Keep — see what is holding steady"
                 scaleTo={0.95}
+                hitSlop={12}
                 style={[styles.duoBtn, styles.duoKeep]}
               >
                 <Text style={styles.duoKeepText}>Keep</Text>
@@ -648,12 +740,15 @@ export default function HealthDashboardScreen() {
   const feed = feedQuery.items;
 
   // Focus refetch is time-gated: tab-hopping must not refetch 4 sources
-  // every time (refetch storms = scroll jank + spinner blink).
+  // every time (refetch storms = scroll jank + spinner blink). A pending
+  // save elsewhere (daily log) bypasses the gate so fresh saves never read
+  // stale — e.g. an unticked medicine must stop showing as taken at once.
   const lastFocusRefetch = useRef(0);
   useFocusEffect(
     useCallback(() => {
+      const forced = consumeDataRefreshRequest();
       const now = Date.now();
-      if (now - lastFocusRefetch.current < 30_000) return;
+      if (!forced && now - lastFocusRefetch.current < 30_000) return;
       lastFocusRefetch.current = now;
       void story.refetch();
       void metrics.refetch();
@@ -808,6 +903,33 @@ export default function HealthDashboardScreen() {
   const medNames = useMemo(() => activeMeds.map((m) => m.name), [activeMeds]);
   const medActive = activeMeds.length > 0;
 
+  // Up-next dose toggle: green tick = taken today (status only — taken
+  // events are permanent), red cross = tap to record it now.
+  const upNextMed = medActive ? activeMeds[0] : null;
+  const upNextTaken = upNextMed
+    ? story.takenToday.some((e) => e.medication_id === upNextMed.medication_id)
+    : false;
+  const toggleUpNextTaken = useCallback(async () => {
+    if (!upNextMed) return;
+    if (story.takenToday.some((e) => e.medication_id === upNextMed.medication_id)) return;
+    const patientId = getCachedPatientId();
+    if (!patientId) return;
+    try {
+      const now = new Date();
+      const fallbackTime = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+      await recordMedicationTaken(
+        patientId,
+        upNextMed.medication_id,
+        upNextMed.dose_amount,
+        upNextMed.dose_unit,
+        upNextMed.scheduled_times?.[0] ?? fallbackTime,
+      );
+      await Promise.all([medications.refetch(), story.refetch()]);
+    } catch {
+      // Silent fail — the cross stays and the user can retry.
+    }
+  }, [upNextMed, story, medications]);
+
   const goToDailyLog = useCallback(() => navigation.navigate('DailyLog'), [navigation]);
   const goToMedications = useCallback(() => navigation.navigate('Medications'), [navigation]);
   const goToTimeline = useCallback(() => navigation.navigate('Timeline'), [navigation]);
@@ -822,6 +944,8 @@ export default function HealthDashboardScreen() {
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.value = e.contentOffset.y;
+    // Side-tab auto-hide runs on the JS side (notified only on flips).
+    runOnJS(reportTabScroll)(e.contentOffset.y);
   });
   const decoStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -scrollY.value * 0.32 }],
@@ -842,14 +966,18 @@ export default function HealthDashboardScreen() {
         medTaken={medTaken}
         medExpected={medExpected}
         medActive={medActive}
+        upNextMedId={upNextMed?.medication_id ?? null}
+        upNextTaken={upNextTaken}
         onDailyLog={goToDailyLog}
         onMedications={goToMedications}
+        onToggleUpNextTaken={() => void toggleUpNextTaken()}
       />
       <InsightPanelBlock hMetrics={hMetrics} mapHint={mapHint} onOpenFullGraph={goToFullGraph} onImprove={(focus) => navigation.navigate('Improve', { focus, metrics: hMetrics })} />
       <CorrelationHeading count={feed.length} />
     </View>
   ), [
     loggedToday, metrics.data?.today_wellbeing, waterMl, medNames, activeMeds.length, medTaken, medExpected, medActive,
+    upNextMed, upNextTaken, toggleUpNextTaken,
     hMetrics, mapHint, feed.length, goToDailyLog, goToMedications, goToFullGraph,
   ]);
 
@@ -1074,18 +1202,48 @@ const styles = StyleSheet.create({
     borderColor: '#E6DBC6',
     boxShadow: '0 1px 2px rgba(124,90,46,0.08), 0 10px 28px rgba(124,90,46,0.10)',
   },
-  todayCardContent: { padding: 16, gap: 12 },
+  // Same breathing room as the medication card below (medRowContent),
+  // with a tighter top so TODAY sits closer to the card edge.
+  todayCardContent: { padding: 14, paddingTop: 5, gap: 0.5 },
+  // Lit-up state when the day is fully logged: light green wash, green
+  // border, soft green glow.
+  todayCardLit: {
+    backgroundColor: '#EDF6EE',
+    borderColor: 'rgba(78,155,95,0.55)',
+    boxShadow: '0 1px 2px rgba(78,155,95,0.18), 0 10px 30px rgba(78,155,95,0.22)',
+  },
   todayRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  todayText: { flex: 1, gap: 4 },
+  todayText: { flex: 1, gap: 2 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dupBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  dupCross: { fontWeight: '800', lineHeight: undefined },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { ...mvType.pill, letterSpacing: 1.4, fontSize: 11, fontWeight: '800' },
   statusCount: { ...mvType.pill, color: '#A8A094', fontSize: 11, marginLeft: 2, fontVariant: ['tabular-nums'] },
-  todayTitle: { color: '#1D1B17', fontSize: 20, fontWeight: '800', letterSpacing: -0.4, lineHeight: 26 },
+  // Hug-the-text: grow 0 + shrink 1 (NOT flex:1) so the tick/cross badge
+  // sits immediately after the words instead of docking at the row's far
+  // edge. Long titles still wrap instead of overflowing.
+  todayTitle: { color: '#1D1B17', fontSize: 20, fontWeight: '800', letterSpacing: -0.4, lineHeight: 24, flexGrow: 0, flexShrink: 1 },
+  // Caught-up title in a different face: Georgia serif italic, larger,
+  // deep green — instantly distinct from every grotesk headline.
+  todayTitleCaughtUp: {
+    fontFamily: 'Georgia, serif',
+    fontStyle: 'italic',
+    fontWeight: '700',
+    fontSize: 22,
+    lineHeight: 26,
+    letterSpacing: 0,
+    color: '#2F7A3E',
+  },
   todayCaption: { ...mvType.caption, color: '#797166' },
   ringCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  ringText: { fontSize: 12, fontWeight: '800', color: '#1D1B17', fontVariant: ['tabular-nums'] },
-  todayCta: { alignSelf: 'flex-start', borderRadius: mv.radiusPill, paddingHorizontal: 16, paddingVertical: 10 },
+  ringText: { fontSize: 16, fontWeight: '800', color: '#1D1B17', fontVariant: ['tabular-nums'] },
+  todayCta: { alignSelf: 'flex-start', borderRadius: mv.radiusPill, paddingHorizontal: 16, paddingVertical: 9 },
   todayCtaPrimary: { backgroundColor: '#1D1B17' },
   todayCtaQuiet: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#D3C3A6' },
   todayCtaPrimaryText: { ...mvType.pill, color: '#FFFFFF', fontWeight: '800' },
@@ -1111,6 +1269,21 @@ const styles = StyleSheet.create({
   medRowSub: { ...mvType.caption, color: '#797166', fontVariant: ['tabular-nums'] },
   dosePill: { backgroundColor: '#D9EAF7', borderRadius: mv.radiusPill, paddingHorizontal: 10, paddingVertical: 5 },
   dosePillText: { fontSize: 12, fontWeight: '800', color: '#2D5F86', fontVariant: ['tabular-nums'] },
+  // Up-next taken toggle: green filled tick (taken, status only) vs red
+  // outline cross (tap to record the dose now).
+  medTakenToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  medTakenToggleOn: { backgroundColor: '#2B8A3E', borderColor: '#2B8A3E' },
+  medTakenToggleOff: { backgroundColor: 'transparent', borderColor: '#C2503E' },
+  medTakenToggleGlyph: { fontSize: 17, fontWeight: '800', lineHeight: 22 },
+  medTakenToggleGlyphOn: { color: '#FFFFFF' },
+  medTakenToggleGlyphOff: { color: '#C2503E' },
   medChevron: { fontSize: 22, fontWeight: '600', color: '#A8A094', paddingRight: 2 },
 
   // Retired two-up card styles (replaced by the Today stack above).

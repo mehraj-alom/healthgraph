@@ -7,7 +7,8 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
-      "assets/models/rppg/*"
+      "assets/models/rppg/*",
+      "assets/app-load.mp4"
     ],
     "ios": {
       "supportsTablet": true,
@@ -39,7 +40,8 @@
         {
           "urlScheme": "medgraph"
         }
-      ]
+      ],
+      "expo-video"
     ],
     "extra": {
       "eas": {
