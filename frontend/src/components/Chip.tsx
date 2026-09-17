@@ -1,6 +1,6 @@
 import { StyleSheet, Text, Pressable, View, type ViewStyle } from 'react-native';
-import { useTheme } from '@/theme';
 import { spacing, radius, type ControlSize } from '@/theme/tokens';
+import { GV, TYPE, FONT } from '@/theme/guava';
 
 const HEIGHT: Record<ControlSize, number> = {
   small: 32,
@@ -22,23 +22,22 @@ interface ChipProps {
 }
 
 /**
- * Filter/tag chip — cream pill, sandy hairline. Selected is the ink pill
- * from the reference ("All Doctors"): dark fill + white label.
+ * Guava-flat filter chip — white pill, hairline. Selected is the CTA green
+ * pill with white label. API unchanged.
  */
 export const Chip = ({
   label,
   selected = false,
   onPress,
-  color = '#1D1B17',
+  color = GV.cta,
   icon,
   disabled = false,
   size = 'small',
   style,
   accessibilityLabel,
 }: ChipProps) => {
-  const { colors, typography } = useTheme();
   const height = HEIGHT[size];
-  const accent = selected ? '#FFFFFF' : colors.textSecondary;
+  const accent = selected ? '#FFFFFF' : GV.body;
 
   return (
     <Pressable
@@ -49,9 +48,9 @@ export const Chip = ({
       accessibilityState={{ selected, disabled }}
       style={({ pressed }) => [
         styles.container,
-        { minHeight: height, backgroundColor: colors.surface, borderColor: colors.border },
-        selected && { backgroundColor: '#1D1B17', borderColor: '#1D1B17' },
-        pressed && !selected && { transform: [{ scale: 0.97 }], backgroundColor: colors.surfacePressed },
+        { minHeight: height, backgroundColor: GV.card, borderColor: GV.line },
+        selected && { backgroundColor: color, borderColor: color },
+        pressed && !selected && { transform: [{ scale: 0.97 }], backgroundColor: GV.wash },
         pressed && selected && { transform: [{ scale: 0.97 }], opacity: 0.88 },
         disabled && styles.disabled,
         style,
@@ -65,10 +64,9 @@ export const Chip = ({
       <Text
         style={[
           styles.label,
-          typography.captionStrong,
           { color: accent },
           selected && styles.selected,
-          disabled && { color: colors.textDisabled },
+          disabled && { color: GV.muted },
         ]}
         numberOfLines={1}
       >
@@ -95,9 +93,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   label: {
-    fontSize: 13,
+    ...TYPE.chip,
   },
   selected: {
-    fontWeight: '700',
+    fontFamily: FONT.bold,
   },
 });

@@ -10,23 +10,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, {
-  Easing,
-  FadeInDown,
-  FadeInLeft,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '@/services/api';
-import { AmbientBackground, Button, Card, Chip } from '@/components';
-import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants';
-import { useReducedMotion } from '@/theme';
+import { Button, Chip } from '@/components';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { perfStart } from '@/utils/perfLog';
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
@@ -97,18 +86,9 @@ interface TimelineObservation {
 type TimelineItem = TimelineEvent | TimelineObservation;
 
 // ---------------------------------------------------------------------------
-// Warm clinical theme — scoped to this screen (cream canvas, ink + peach
-// accents, warm ink typography). Matches the app-wide Dribbble reference.
+// Guava-flat accents — every marker is a small flat GV.fx tile inside a
+// white card. Color is information; hues never touch text, fills, or rails.
 // ---------------------------------------------------------------------------
-const CLIN = {
-  bg: '#EAE4D6',
-  card: '#FFFBF3',
-  ink: '#1D1B17',
-  muted: '#797166',
-  faint: '#E6DBC6',
-  red: '#1D1B17',
-  redSoft: '#FBEEDC',
-};
 
 // ---------------------------------------------------------------------------
 // Event type classification
@@ -173,27 +153,17 @@ const SERVER_DAILY_TYPES = new Set([
   'PATIENT_NOTE',
 ]);
 
-// Marker colors per category — warm clinical set on the cream chart.
+// Marker colors per category — Guava functional hues, flat tiles on white.
+// `bg` mirrors `color` (solid tile, white glyph); both flow into RowShell.
 const CATEGORY_MARKER: Record<EventCategory, { color: string; bg: string }> = {
-  daily_log:     { color: '#4E9B5F', bg: '#DDF0DF' },
-  medical_record:{ color: '#4A90C2', bg: '#D9EAF7' },
-  symptom:       { color: '#C2503E', bg: 'rgba(194, 80, 62, 0.10)' },
-  pain:          { color: '#C2503E', bg: 'rgba(194, 80, 62, 0.10)' },
-  vital:         { color: '#C96A1E', bg: '#FBE3C8' },
-  medication:    { color: '#8A7BC8', bg: 'rgba(138, 123, 200, 0.12)' },
-  observation:   { color: '#4A90C2', bg: '#D9EAF7' },
-  other:         { color: '#797166', bg: '#F4EDDF' },
-};
-
-const CATEGORY_LABEL: Record<EventCategory, string> = {
-  daily_log: 'Daily Log',
-  medical_record: 'Medical Record',
-  symptom: 'Symptom',
-  pain: 'Pain',
-  vital: 'Vital Sign',
-  medication: 'Medication',
-  observation: 'Observation',
-  other: 'Clinical Event',
+  daily_log:     { color: GV.fx.green, bg: GV.fx.green },
+  medical_record:{ color: GV.fx.blue, bg: GV.fx.blue },
+  symptom:       { color: GV.fx.pink, bg: GV.fx.pink },
+  pain:          { color: GV.fx.amber, bg: GV.fx.amber },
+  vital:         { color: GV.fx.sky, bg: GV.fx.sky },
+  medication:    { color: GV.fx.green, bg: GV.fx.green },
+  observation:   { color: GV.fx.purple, bg: GV.fx.purple },
+  other:         { color: GV.fx.brown, bg: GV.fx.brown },
 };
 
 // ---------------------------------------------------------------------------
@@ -287,11 +257,11 @@ function trendLabel(trend: string): string {  switch (trend) {
 
 function statusColor(status: string): string {
   switch (status) {
-    case 'normal': return '#2B8A3E';
-    case 'mild_attention': return '#E67700';
-    case 'warning': return '#D9480F';
-    case 'critical': return CLIN.red;
-    default: return '#5C6B7A';
+    case 'normal': return GV.fx.green;
+    case 'mild_attention': return GV.fx.amber;
+    case 'warning': return GV.danger;
+    case 'critical': return GV.danger;
+    default: return GV.muted;
   }
 }
 
@@ -325,19 +295,49 @@ function localCategory(item: HomeStoryItem): EventCategory {
   }
 }
 
-/** Preferred accent per local category (deepened for the white chart). */
+/** One glyph family for every marker — system-font geometric shapes, never
+ * mixed emoji styles. Color (domain hue) carries the meaning. */
+const CATEGORY_GLYPH: Record<EventCategory, string> = {
+  daily_log: '●',
+  medical_record: '□',
+  symptom: '◆',
+  pain: '!',
+  vital: '✚',
+  medication: '△',
+  observation: '◇',
+  other: '○',
+};
+
+/** Local story sub-category → marker glyph (same family, same rule). */
+function localGlyph(category: HomeStoryItem['category']): string {
+  switch (category) {
+    case 'sleep': return '●';
+    case 'wellbeing': return '○';
+    case 'activity': return '▲';
+    case 'nutrition': return '■';
+    case 'note': return '✎';
+    case 'symptom': return '◆';
+    case 'pain': return '!';
+    case 'vital': return '✚';
+    case 'medication': return '△';
+    case 'document': return '□';
+    default: return '○';
+  }
+}
+
+/** Preferred accent per local category — domain hues, one per family. */
 function localAccent(item: HomeStoryItem): { color: string; bg: string } {
   const base = CATEGORY_MARKER[localCategory(item)];
   switch (item.category) {
     case 'sleep':
-      return { color: '#4263EB', bg: 'rgba(66, 99, 235, 0.08)' };
+      return { color: GV.fx.purple, bg: GV.fx.purple };
     case 'activity':
-      return { color: '#0C8599', bg: 'rgba(12, 133, 153, 0.08)' };
+      return { color: GV.fx.green, bg: GV.fx.green };
     case 'nutrition':
-      return { color: '#2B8A3E', bg: 'rgba(43, 138, 62, 0.08)' };
+      return { color: GV.fx.sky, bg: GV.fx.sky };
     case 'wellbeing':
     case 'note':
-      return { color: '#E67700', bg: 'rgba(230, 119, 0, 0.10)' };
+      return { color: GV.fx.amber, bg: GV.fx.amber };
     default:
       return base;
   }
@@ -363,242 +363,283 @@ function splitHero(title: string, detail: string): { hero: string; sub: string |
  * 4/5", "Resting pulse / 72 bpm", "Paracetamol · 500 mg". Built from the
  * on-device daily log (full payload values), never just "reported by patient".
  */
-function LoggedCard({ item, when }: { item: HomeStoryItem; when: string }) {
+/**
+ * Compact ledger row — one calm line per moment: title left, value right,
+ * time + specs beneath. Expandable rows reveal their details inline
+ * (progressive disclosure); terminal rows render everything up front.
+ */
+function RowShell({
+  color,
+  bg,
+  glyph,
+  title,
+  value,
+  subline,
+  a11yLabel,
+  expanded,
+  onToggle,
+  children,
+}: {
+  color: string;
+  glyph: string;
+  title: string;
+  value: string | null;
+  subline: string;
+  a11yLabel: string;
+  expanded: boolean | null;
+  onToggle?: () => void;
+  children?: React.ReactNode;
+  bg: string;
+}) {
+  const expandable = expanded !== null;
+  const body = (
+    <>
+      <View style={styles.rowTop}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        {value ? (
+          <Text style={styles.rowValue} numberOfLines={1}>
+            {value}
+          </Text>
+        ) : null}
+        {expandable ? (
+          <Text style={styles.rowChev}>{expanded ? '⌄' : '›'}</Text>
+        ) : null}
+      </View>
+      <Text style={styles.rowSub} numberOfLines={1}>
+        {subline}
+      </Text>
+      {expandable && expanded ? (
+        <View style={styles.rowDetails}>{children}</View>
+      ) : null}
+    </>
+  );
+  return (
+    <View style={styles.eventRow}>
+      <View style={styles.timelineTrack}>
+        <View style={[styles.marker, { backgroundColor: color }]}>
+          <Text style={[styles.markerGlyph, { color: '#FFFFFF' }]}>{glyph}</Text>
+        </View>
+        <View style={styles.timelineLine} />
+      </View>
+      <View style={styles.rowBody}>
+        {expandable ? (
+          <Pressable
+            onPress={onToggle}
+            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
+            accessibilityLabel={a11yLabel}
+          >
+            {body}
+          </Pressable>
+        ) : (
+          <View accessible accessibilityLabel={a11yLabel}>
+            {body}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function LoggedCard({ item, time }: { item: HomeStoryItem; time: string }) {
   const category = localCategory(item);
   const { color, bg } = localAccent(item);
   const { hero, sub } = splitHero(item.title, item.detail);
   return (
-    <View style={styles.eventRow}>
-      <View style={styles.timelineTrack}>
-        <View style={[styles.marker, { backgroundColor: bg, borderColor: color }]}>
-          <Text style={styles.markerIcon}>{item.icon}</Text>
-        </View>
-        <View style={styles.timelineLine} />
-      </View>
-      <View style={[styles.eventContent, { borderLeftColor: color }]}>
-        <View style={styles.eventHeader}>
-          <Text style={[styles.eventCategory, { color }]}>
-            {CATEGORY_LABEL[category]}
-          </Text>
-          <Text style={styles.eventTime}>{when}</Text>
-        </View>
-        <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
-        {/* The logged value — chart hero: big ink reading, specs beneath */}
-        <Text style={styles.loggedValue} numberOfLines={1} selectable>
-          {hero}
-        </Text>
-        {sub ? (
-          <Text style={styles.loggedSub} numberOfLines={1}>{sub}</Text>
-        ) : null}
-      </View>
-    </View>
+    <RowShell
+      color={color}
+      bg={bg}
+      glyph={localGlyph(item.category)}
+      title={item.title}
+      value={hero}
+      subline={sub ? `${time} · ${sub}` : time}
+      a11yLabel={`${item.title}, ${hero}`}
+      expanded={null}
+    />
   );
 }
 
-function EventMarker({ category }: { category: EventCategory }) {
-  const { color, bg } = CATEGORY_MARKER[category];
-  return (
-    <View style={[styles.marker, { backgroundColor: bg, borderColor: color }]}>
-      <View style={[styles.markerDot, { backgroundColor: color }]} />
-    </View>
-  );
-}
-
-function ObservationCard({ observation, when }: { observation: TimelineObservation; when: string }) {
+function ObservationCard({ observation, time }: { observation: TimelineObservation; time: string }) {
   const category = classifyItem(observation);
-  const { color } = CATEGORY_MARKER[category];
+  const { color, bg } = CATEGORY_MARKER[category];
   const severityPct = Math.round(observation.visual_severity_score * 100);
+  const [open, setOpen] = useState(false);
+  const title = observation.finding_display_name;
+  const value = `${severityPct}%`;
+  const sub = `${time} · ${trendLabel(observation.trend)}`;
 
   return (
-    <View style={styles.eventRow}>
-      {/* Timeline line + marker */}
-      <View style={styles.timelineTrack}>
-        <EventMarker category={category} />
-        <View style={styles.timelineLine} />
-      </View>
-
-      {/* Content */}
-      <View style={[styles.eventContent, { borderLeftColor: color }]}>
-        <View style={styles.eventHeader}>
-          <Text style={[styles.eventCategory, { color }]}>
-            {CATEGORY_LABEL[category]}
+    <RowShell
+      color={color}
+      bg={bg}
+      glyph={CATEGORY_GLYPH[category]}
+      title={title}
+      value={value}
+      subline={sub}
+      a11yLabel={`${title}, severity ${value}, ${sub}`}
+      expanded={open}
+      onToggle={() => setOpen((o) => !o)}
+    >
+      {/* Body structure */}
+      <View style={styles.badgeRow}>
+        <View style={styles.sourceBadge}>
+          <Text style={styles.sourceBadgeText}>
+            {observation.structure_id.replace(/_/g, ' ')}
           </Text>
-          <Text style={styles.eventTime}>{when}</Text>
         </View>
-
-        <Text style={styles.eventTitle}>{observation.finding_display_name}</Text>
-
-        {/* Body structure */}
-        <View style={styles.badgeRow}>
+        {observation.source_type && (
           <View style={styles.sourceBadge}>
             <Text style={styles.sourceBadgeText}>
-              {observation.structure_id.replace(/_/g, ' ')}
+              {sourceLabel(observation.source_type)}
             </Text>
-          </View>
-          {observation.source_type && (
-            <View style={styles.sourceBadge}>
-              <Text style={styles.sourceBadgeText}>
-                {sourceLabel(observation.source_type)}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Severity bar */}
-        <View style={styles.dataRow}>
-          <Text style={styles.dataLabel}>Severity</Text>
-          <View style={styles.severityBarContainer}>
-            <View style={styles.severityBarTrack}>
-              <View
-                style={[
-                  styles.severityBarFill,
-                  {
-                    width: `${severityPct}%`,
-                    backgroundColor: statusColor(observation.visual_status),
-                  },
-                ]}
-              />
-            </View>
-            <Text style={styles.dataValue}>{severityPct}%</Text>
-          </View>
-        </View>
-
-        {/* Trend */}
-        <View style={styles.dataRow}>
-          <Text style={styles.dataLabel}>Trend</Text>
-          <Text style={styles.dataValue}>{trendLabel(observation.trend)}</Text>
-        </View>
-
-        {/* Finding code */}
-        {observation.finding_code && (
-          <View style={styles.dataRow}>
-            <Text style={styles.dataLabel}>Code</Text>
-            <Text style={[styles.dataValue, { fontSize: 12 }]}>
-              {observation.finding_code}
-            </Text>
-          </View>
-        )}
-
-        {/* Clinical summary */}
-        {observation.clinical_summary && (
-          <View style={styles.noteBlock}>
-            <Text style={styles.noteText}>{observation.clinical_summary}</Text>
           </View>
         )}
       </View>
-    </View>
+
+      {/* Severity bar */}
+      <View style={styles.dataRow}>
+        <Text style={styles.dataLabel}>Severity</Text>
+        <View style={styles.severityBarContainer}>
+          <View style={styles.severityBarTrack}>
+            <View
+              style={[
+                styles.severityBarFill,
+                {
+                  width: `${severityPct}%`,
+                  backgroundColor: statusColor(observation.visual_status),
+                },
+              ]}
+            />
+          </View>
+          <Text style={styles.dataValue}>{severityPct}%</Text>
+        </View>
+      </View>
+
+      {/* Finding code */}
+      {observation.finding_code && (
+        <View style={styles.dataRow}>
+          <Text style={styles.dataLabel}>Code</Text>
+          <Text style={[styles.dataValue, { fontSize: 12 }]}>
+            {observation.finding_code}
+          </Text>
+        </View>
+      )}
+
+      {/* Clinical summary */}
+      {observation.clinical_summary && (
+        <View style={styles.noteBlock}>
+          <Text style={styles.noteText}>{observation.clinical_summary}</Text>
+        </View>
+      )}
+    </RowShell>
   );
 }
 
 function EventCard({
   event,
-  when,
+  time,
   onDocumentPress,
 }: {
   event: TimelineEvent;
-  when: string;
+  time: string;
   onDocumentPress: (docId: string) => void;
 }) {
   const category = classifyItem(event);
-  const { color } = CATEGORY_MARKER[category];
+  const { color, bg } = CATEGORY_MARKER[category];
+  const [open, setOpen] = useState(false);
+
+  const title = titleFor(event);
+  const measure =
+    event.vital_sign && event.vital_sign.value != null
+      ? `${event.vital_sign.value}${event.vital_sign.unit ? ` ${event.vital_sign.unit}` : ''}`
+      : event.lab_result
+        ? `${event.lab_result.value}${event.lab_result.unit ? ` ${event.lab_result.unit}` : ''}`
+        : null;
+  const hasDetails = Boolean(
+    event.vital_sign?.value != null ||
+      event.lab_result ||
+      event.safe_notes ||
+      event.evidence,
+  );
 
   return (
-    <View style={styles.eventRow}>
-      {/* Timeline line + marker */}
-      <View style={styles.timelineTrack}>
-        <EventMarker category={category} />
-        <View style={styles.timelineLine} />
-      </View>
-
-      {/* Content */}
-      <View style={[styles.eventContent, { borderLeftColor: color }]}>
-        <View style={styles.eventHeader}>
-          <Text style={[styles.eventCategory, { color }]}>
-            {CATEGORY_LABEL[category]}
-          </Text>
-          <Text style={styles.eventTime}>{when}</Text>
+    <RowShell
+      color={color}
+      bg={bg}
+      glyph={CATEGORY_GLYPH[category]}
+      title={title}
+      value={measure}
+      subline={time}
+      a11yLabel={measure ? `${title}, ${measure}` : title}
+      expanded={hasDetails ? open : null}
+      onToggle={hasDetails ? () => setOpen((o) => !o) : undefined}
+    >
+      {/* Source badges */}
+      <View style={styles.badgeRow}>
+        <View style={styles.sourceBadge}>
+          <Text style={styles.sourceBadgeText}>{sourceLabel(event.source_type)}</Text>
         </View>
-
-        <Text style={styles.eventTitle}>{titleFor(event)}</Text>
-
-        {/* Hero value — big ink reading + red unit */}
-        {event.vital_sign && event.vital_sign.value != null ? (
-          <Text style={styles.loggedValue} selectable>
-            {event.vital_sign.value}
-            {event.vital_sign.unit ? <Text style={styles.heroUnit}> {event.vital_sign.unit}</Text> : null}
-          </Text>
-        ) : null}
-        {event.lab_result ? (
-          <Text style={styles.loggedValue} selectable>
-            {event.lab_result.value}
-            {event.lab_result.unit ? <Text style={styles.heroUnit}> {event.lab_result.unit}</Text> : null}
-          </Text>
-        ) : null}
-
-        {/* Source badge */}
-        <View style={styles.badgeRow}>
+        {event.verification_status ? (
           <View style={styles.sourceBadge}>
-            <Text style={styles.sourceBadgeText}>{sourceLabel(event.source_type)}</Text>
+            <Text style={styles.sourceBadgeText}>
+              {event.verification_status.replaceAll('_', ' ').toLowerCase()}
+            </Text>
           </View>
-          {event.verification_status ? (
-            <View style={styles.sourceBadge}>
-              <Text style={styles.sourceBadgeText}>
-                {event.verification_status.replaceAll('_', ' ').toLowerCase()}
-              </Text>
-            </View>
-          ) : null}
-          {event.evidence && (
-            <Pressable
-              onPress={() => onDocumentPress(event.evidence!.document_id)}
-              style={styles.docLink}
-            >
-              <Text style={styles.docLinkText}>View document →</Text>
-            </Pressable>
-          )}
-        </View>
-
-        {/* Data rows (vital value already shown as hero above) */}
-        {event.lab_result && (
-          <View style={styles.dataRow}>
-            <Text style={styles.dataLabel}>Result</Text>
-            <View>
-              <Text style={styles.dataValue}>
-                {event.lab_result.value}{' '}
-                <Text style={styles.dataUnit}>{event.lab_result.unit ?? ''}</Text>
-              </Text>
-              {event.lab_result.reference_range && (
-                <Text style={styles.dataRef}>
-                  Ref: {event.lab_result.reference_range}
-                </Text>
-              )}
-              {event.lab_result.abnormal_flag && (
-                <Text style={[styles.dataFlag, { color: CLIN.red }]}>
-                  Flag: {event.lab_result.abnormal_flag}
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
-
-        {event.safe_notes && (
-          <View style={styles.noteBlock}>
-            <Text style={styles.noteText}>{event.safe_notes}</Text>
-          </View>
-        )}
-
+        ) : null}
         {event.evidence && (
           <Pressable
-            style={styles.evidenceBlock}
             onPress={() => onDocumentPress(event.evidence!.document_id)}
+            style={({ pressed }) => [styles.docLink, pressed && { opacity: 0.7 }]}
           >
-            <Text style={styles.evidenceTitle}>📎 Source Evidence</Text>
-            <Text style={styles.evidenceText} numberOfLines={3}>
-              {event.evidence.extracted_text}
-            </Text>
+            <Text style={styles.docLinkText}>View document →</Text>
           </Pressable>
         )}
       </View>
-    </View>
+
+      {/* Data rows (vital value already shown in the row) */}
+      {event.lab_result && (
+        <View style={styles.dataRow}>
+          <Text style={styles.dataLabel}>Result</Text>
+          <View>
+            <Text style={styles.dataValue}>
+              {event.lab_result.value}{' '}
+              <Text style={styles.dataUnit}>{event.lab_result.unit ?? ''}</Text>
+            </Text>
+            {event.lab_result.reference_range && (
+              <Text style={styles.dataRef}>
+                Ref: {event.lab_result.reference_range}
+              </Text>
+            )}
+            {event.lab_result.abnormal_flag && (
+              <Text style={[styles.dataFlag, { color: GV.danger }]}>
+                Flag: {event.lab_result.abnormal_flag}
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
+
+      {event.safe_notes && (
+        <View style={styles.noteBlock}>
+          <Text style={styles.noteText}>{event.safe_notes}</Text>
+        </View>
+      )}
+
+      {event.evidence && (
+        <Pressable
+          style={({ pressed }) => [styles.evidenceBlock, pressed && { opacity: 0.7 }]}
+          onPress={() => onDocumentPress(event.evidence!.document_id)}
+        >
+          <Text style={styles.evidenceTitle}>SOURCE EVIDENCE</Text>
+          <Text style={styles.evidenceText} numberOfLines={3}>
+            {event.evidence.extracted_text}
+          </Text>
+        </Pressable>
+      )}
+    </RowShell>
   );
 }
 
@@ -681,27 +722,6 @@ const MemoEventCard = memo(EventCard);
 export default function TimelineScreen() {
   const navigation = useNavigation<Nav>();
   const [filter, setFilter] = useState<FilterKey>('all');
-  const reducedMotion = useReducedMotion();
-
-  // Resting heartbeat on the hero title: lub… dub… pause. Small amplitude,
-  // slow cycle, UI-thread loop. Static text under reduced motion.
-  const beat = useSharedValue(1);
-  useEffect(() => {
-    if (reducedMotion) return;
-    beat.value = withRepeat(
-      withSequence(
-        withTiming(1.035, { duration: 150, easing: Easing.out(Easing.quad) }),
-        withTiming(1, { duration: 170 }),
-        withTiming(1.055, { duration: 130, easing: Easing.out(Easing.quad) }),
-        withTiming(1, { duration: 230 }),
-        withTiming(1, { duration: 1000 }),
-      ),
-      -1,
-    );
-  }, [beat, reducedMotion]);
-  const beatStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: beat.value }],
-  }));
 
   // ── On-device daily logs (full values) + concept names ──
   const [localItems, setLocalItems] = useState<HomeStoryItem[]>([]);
@@ -779,7 +799,7 @@ export default function TimelineScreen() {
             category: 'vital',
             title: 'Pulse — Fingertip',
             detail: `${Math.round(row.heart_rate_bpm)} BPM · ${pulseQualityLabel(row.signal_quality)}`,
-            icon: '❤️',
+            icon: '✚',
           });
         }
         for (const row of rppgRows) {
@@ -791,7 +811,7 @@ export default function TimelineScreen() {
             category: 'vital',
             title: 'Pulse — Face scan',
             detail: `${Math.round(row.heart_rate_bpm)} BPM · ${pulseQualityLabel(row.signal_quality)}`,
-            icon: '❤️',
+            icon: '✚',
           });
         }
       } catch {
@@ -878,20 +898,21 @@ export default function TimelineScreen() {
   // Stable row renderer: a pure function of (item, goToDocument). Previously
   // an inline closure recreated on every parent render, defeating
   // SectionList's row memoization for rows whose props never changed.
+  // Rows mount static — no entrance motion anywhere on this screen.
   const renderTimelineItem = useCallback(
     ({ item }: { item: PreparedItem }) => {
       const node = item.node;
-      const when = item.when;
+      const time = item.time;
       if (node.kind === 'local') {
-        return <MemoLoggedCard item={node.item} when={when} />;
+        return <MemoLoggedCard item={node.item} time={time} />;
       }
       if (node.kind === 'observation') {
-        return <MemoObservationCard observation={node.item} when={when} />;
+        return <MemoObservationCard observation={node.item} time={time} />;
       }
       return (
         <MemoEventCard
           event={node.item}
-          when={when}
+          time={time}
           onDocumentPress={goToDocument}
         />
       );
@@ -927,7 +948,8 @@ export default function TimelineScreen() {
     timeMs: number;
     day: string;
     category: EventCategory;
-    when: string;
+    /** Short clock time for compact rows, e.g. "8:42 AM". */
+    time: string;
   }
 
   function prepareItem(m: MergedItem): PreparedItem {
@@ -936,8 +958,8 @@ export default function TimelineScreen() {
     const timeMs = new Date(rawTime).getTime();
     const day = m.kind === 'local' ? m.item.dayKey : dateKey(m.item);
     const category = m.kind === 'local' ? localCategory(m.item) : classifyItem(m.item);
-    const when = `${displayDate(day)} · ${timeDisplay(typeof rawTime === 'string' ? rawTime : new Date(rawTime).toISOString())}`;
-    return { node: m, key, timeMs, day, category, when };
+    const time = timeDisplay(typeof rawTime === 'string' ? rawTime : new Date(rawTime).toISOString());
+    return { node: m, key, timeMs, day, category, time };
   }
 
   const merged: PreparedItem[] = useMemo(() => {
@@ -961,10 +983,10 @@ export default function TimelineScreen() {
     return merged.filter((i) => i.category === filter);
   }, [merged, filter]);
 
-  // Rising water, no index math: a SectionList pins each date deck
-  // natively (stickySectionHeadersEnabled) while cards flow beneath the
-  // translucent deck — every card visibly overlaps at the top as the water
-  // moves upward. Section headers need no sticky indices by construction.
+  // Each date is one white card: the section header caps the top, rows fill
+  // the middle, the section footer caps the bottom. SectionList pins each
+  // header natively (stickySectionHeadersEnabled). Section headers need no
+  // sticky indices by construction.
   const sections = useMemo(() => {
     const grouped: { date: string; count: number; data: PreparedItem[] }[] = [];
     let current: { date: string; count: number; data: PreparedItem[] } | null = null;
@@ -1009,35 +1031,24 @@ export default function TimelineScreen() {
       <View>
         <Pressable
           onPress={() => navigation.goBack()}
-          style={styles.backBtn}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           hitSlop={8}
         >
           <Text style={styles.backBtnText}>‹ Back</Text>
         </Pressable>
-        {/* Hero first… single animated title line. */}
+        {/* Hero — one static title line on stage. No entrance motion. */}
         <View style={styles.heroScroll}>
-          <View style={styles.heroCompact}>
-            <View style={styles.heroGlowA} pointerEvents="none" />
-            <Animated.View entering={reducedMotion ? undefined : FadeInDown.duration(350)}>
-              <Animated.Text style={[styles.title, !reducedMotion && beatStyle]}>
-                Health Timeline
-              </Animated.Text>
-            </Animated.View>
-            <Animated.View
-              entering={reducedMotion ? undefined : FadeInLeft.delay(150).duration(400)}
-              style={styles.titleRule}
-            />
-          </View>
+          <Text style={styles.title}>Health Timeline</Text>
         </View>
 
         {/* …metrics below it. Everything here scrolls away together. */}
         {(() => {
           const stats = [
-            { key: 'logged', n: loggedCount, label: loggedCount === 1 ? 'entry logged' : 'entries logged', color: '#0E9F8A' },
-            { key: 'records', n: serverRecCount, label: serverRecCount === 1 ? 'record' : 'records', color: '#2B6CB0' },
-            { key: 'observations', n: serverObsCount, label: serverObsCount === 1 ? 'observation' : 'observations', color: '#6741D9' },
+            { key: 'logged', n: loggedCount, label: loggedCount === 1 ? 'entry logged' : 'entries logged', color: GV.ink },
+            { key: 'records', n: serverRecCount, label: serverRecCount === 1 ? 'record' : 'records', color: GV.ink },
+            { key: 'observations', n: serverObsCount, label: serverObsCount === 1 ? 'observation' : 'observations', color: GV.ink },
           ];
           return (
             <View style={styles.statStrip}>
@@ -1048,7 +1059,12 @@ export default function TimelineScreen() {
                   <Pressable
                     key={s.key}
                     onPress={() => toggleFilter(target)}
-                    style={[styles.stat, i > 0 && styles.statDivided, active && styles.statActive]}
+                    style={({ pressed }) => [
+                      styles.stat,
+                      i > 0 && styles.statDivided,
+                      active && styles.statActive,
+                      pressed && { opacity: 0.7 },
+                    ]}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
                     accessibilityLabel={`Show only ${s.label}, ${s.n}`}
@@ -1074,7 +1090,7 @@ export default function TimelineScreen() {
                 key={f.key}
                 label={f.label}
                 selected={active}
-                color={COLORS.accentBlue}
+                color={GV.cta}
                 onPress={() => toggleFilter(f.key)}
               />
             );
@@ -1083,7 +1099,7 @@ export default function TimelineScreen() {
       </View>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filter, loggedCount, serverRecCount, serverObsCount, navigation, toggleFilter, reducedMotion],
+    [filter, loggedCount, serverRecCount, serverObsCount, navigation, toggleFilter],
   );
 
   // -----------------------------------------------------------------------
@@ -1094,7 +1110,7 @@ export default function TimelineScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={GV.teal} />
           <Text style={styles.centerText}>Loading your clinical timeline…</Text>
         </View>
       </SafeAreaView>
@@ -1118,7 +1134,6 @@ export default function TimelineScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <AmbientBackground tone="clinical" />
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.key}
@@ -1134,7 +1149,8 @@ export default function TimelineScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refresh}
-            colors={[COLORS.primary]}
+            tintColor={GV.fog}
+            colors={[GV.teal]}
           />
         }
         ListHeaderComponent={listHeader}
@@ -1161,6 +1177,7 @@ export default function TimelineScreen() {
             </View>
           </View>
         )}
+        renderSectionFooter={() => <View style={styles.sectionFoot} />}
         renderItem={renderTimelineItem}
       />
     </SafeAreaView>
@@ -1174,300 +1191,243 @@ export default function TimelineScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: CLIN.bg,
+    backgroundColor: GV.stage,
   },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: SPACING.xl,
-    gap: SPACING.md,
+    padding: 32,
+    gap: 16,
   },
   centerText: {
-    ...TYPOGRAPHY.body,
-    color: CLIN.muted,
+    ...TYPE.body,
+    color: GV.fog,
     textAlign: 'center',
   },
   content: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xxl,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 48,
   },
 
   // Header content lives in the list header (scrolls away together).
   backBtn: {
     alignSelf: 'flex-start',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: CLIN.card,
-    borderWidth: 1,
-    borderColor: CLIN.faint,
-    marginBottom: SPACING.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.card,
+    marginBottom: 16,
   },
   backBtnText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: CLIN.red,
+    ...TYPE.chip,
+    color: GV.ink,
   },
   heroScroll: {
-    marginBottom: SPACING.sm,
+    marginBottom: 16,
   },
-  // Header — white chart hero with red/blue glow
-  heroCompact: {
-    borderWidth: 1,
-    borderColor: CLIN.faint,
-    borderRadius: BORDER_RADIUS.lg,
-    backgroundColor: CLIN.card,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    overflow: 'hidden',
-    shadowColor: '#16212C',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  heroGlowA: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    top: -80,
-    right: -50,
-    backgroundColor: 'rgba(215, 38, 61, 0.07)',
-  },
+  // Screen title on stage — Poppins, centered.
   title: {
-    ...TYPOGRAPHY.h1,
-    color: CLIN.ink,
-  },
-  titleRule: {
-    width: 64,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: CLIN.red,
-    marginTop: SPACING.xs,
+    ...TYPE.display,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 
-  // Stat strip — one white surface, divided tappable stats
+  // Stat strip — one white card, divided tappable stats, dark numerals.
   statStrip: {
     flexDirection: 'row',
-    backgroundColor: CLIN.card,
-    borderWidth: 1,
-    borderColor: CLIN.faint,
-    borderRadius: BORDER_RADIUS.lg,
-    paddingVertical: SPACING.xs,
-    shadowColor: '#16212C',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 1,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    paddingVertical: 8,
+    marginBottom: SPACE.cardGap,
   },
   stat: {
     flex: 1,
     alignItems: 'center',
     gap: 2,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   statActive: {
-    backgroundColor: 'rgba(215, 38, 61, 0.06)',
+    backgroundColor: GV.wash,
   },
   statDivided: {
     borderLeftWidth: 1,
-    borderLeftColor: CLIN.faint,
+    borderLeftColor: GV.line,
   },
   statNum: {
-    ...TYPOGRAPHY.h2,
+    ...TYPE.title,
     fontVariant: ['tabular-nums'],
+    color: GV.ink,
   },
   statLabel: {
-    ...TYPOGRAPHY.caption,
-    color: CLIN.muted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   statLabelActive: {
-    color: CLIN.red,
-    fontWeight: '800',
+    color: GV.ink,
+    fontFamily: FONT.semi,
   },
 
-  // Filters — horizontal rail
+  // Filters — horizontal rail of shared Chips.
   filterRail: {
-    gap: SPACING.xs,
-    paddingRight: SPACING.md,
-    paddingBottom: SPACING.xs,
+    gap: 8,
+    paddingRight: SPACE.screenH,
+    paddingBottom: 8,
+    paddingTop: 4,
   },
 
-  // Pinned date deck — translucent so cards visibly flow beneath it,
-  // soft shadow so the overlap reads as floating, not clipped.
+  // Day section — a white card: header caps the top, rows fill the middle,
+  // sectionFoot caps the bottom. Radius 20, no shadow, dark text.
   dateDivider: {
-    backgroundColor: 'rgba(245, 247, 250, 0.94)',
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.xs,
-    marginBottom: SPACING.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: CLIN.faint,
-    shadowColor: '#16212C',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: GV.card,
+    borderTopLeftRadius: SPACE.rCard,
+    borderTopRightRadius: SPACE.rCard,
+    paddingHorizontal: SPACE.cardPad,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   dateHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: 8,
   },
   dateHeading: {
-    ...TYPOGRAPHY.overline,
-    color: CLIN.ink,
-    fontWeight: '800',
-    letterSpacing: 1,
+    ...TYPE.title,
+    color: GV.ink,
   },
   dateCountPill: {
     minWidth: 24,
     height: 20,
-    borderRadius: BORDER_RADIUS.full,
-    backgroundColor: CLIN.redSoft,
-    borderWidth: 1,
-    borderColor: 'rgba(215, 38, 61, 0.25)',
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.wash,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
   dateCountText: {
-    ...TYPOGRAPHY.label,
-    color: CLIN.red,
+    ...TYPE.chip,
+    color: GV.ink,
     fontSize: 11,
-    fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
   dateRule: {
     flex: 1,
     height: 1,
-    backgroundColor: CLIN.faint,
+    backgroundColor: GV.line,
+  },
+  // Bottom cap of the day card; the gap below separates day cards.
+  sectionFoot: {
+    backgroundColor: GV.card,
+    borderBottomLeftRadius: SPACE.rCard,
+    borderBottomRightRadius: SPACE.rCard,
+    height: 12,
+    marginBottom: SPACE.cardGap,
   },
 
-  // Event row — compact: real margins only, no decorative gaps.
+  // Event row — ledger rows inside the white day card. The glyph tile is
+  // the only hue: a small flat fx square, white glyph, hairline rail.
   eventRow: {
     flexDirection: 'row',
-    marginBottom: SPACING.sm,
+    backgroundColor: GV.card,
+    paddingRight: 8,
   },
 
-  // Timeline track (marker + vertical line)
+  // Timeline track (glyph tile + vertical line)
   timelineTrack: {
-    width: 26,
+    width: 44,
     alignItems: 'center',
   },
   marker: {
-    width: 20,
-    height: 20,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1.5,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
-    backgroundColor: CLIN.card,
+    backgroundColor: GV.wash,
   },
-  markerDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  markerGlyph: {
+    fontSize: 15,
+    fontFamily: FONT.bold,
   },
   timelineLine: {
     flex: 1,
     width: 2,
-    backgroundColor: CLIN.faint,
-    marginTop: 3,
-    marginBottom: -6,
+    backgroundColor: GV.line,
+    marginTop: 4,
+    marginBottom: -8,
   },
 
-  // Event content — compact white chart card with category rail
-  eventContent: {
+  // Compact row body — title left, value right, specs beneath.
+  rowBody: {
     flex: 1,
-    backgroundColor: CLIN.card,
-    borderWidth: 1,
-    borderColor: CLIN.faint,
-    borderLeftWidth: 3,
-    borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.sm,
-    marginLeft: SPACING.xs,
-    shadowColor: '#16212C',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 4,
   },
-  eventHeader: {
+  rowTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
   },
-  eventCategory: {
-    ...TYPOGRAPHY.label,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    fontSize: 10,
-  },
-  eventTime: {
-    ...TYPOGRAPHY.caption,
-    fontSize: 11,
-    color: CLIN.muted,
-    fontVariant: ['tabular-nums'],
-  },
-  eventTitle: {
-    ...TYPOGRAPHY.bodyStrong,
+  rowTitle: {
+    flex: 1,
+    ...TYPE.button,
     fontSize: 15,
-    color: CLIN.ink,
+    lineHeight: 20,
+    color: GV.ink,
   },
-
-  // Logged value — chart hero: big ink reading, specs beneath in muted
-  loggedValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: CLIN.ink,
+  rowValue: {
+    ...TYPE.button,
+    fontSize: 15,
+    color: GV.ink,
     fontVariant: ['tabular-nums'],
-    letterSpacing: -0.5,
   },
-  loggedSub: {
-    fontSize: 12,
-    color: CLIN.muted,
-    marginTop: 1,
+  rowChev: {
+    fontSize: 18,
+    fontFamily: FONT.semi,
+    color: GV.muted,
+    width: 16,
+    textAlign: 'center',
   },
-  heroUnit: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: CLIN.red,
+  rowSub: {
+    ...TYPE.caption,
+    color: GV.muted,
+    fontVariant: ['tabular-nums'],
   },
-  markerIcon: {
-    fontSize: 10,
+  rowDetails: {
+    marginTop: 12,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: GV.line,
+    gap: 0,
   },
 
-  // Badges — light pill on paper
+  // Badges — quiet pills on white
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    marginTop: SPACING.xs,
+    gap: 8,
+    marginTop: 8,
   },
   sourceBadge: {
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: BORDER_RADIUS.full,
-    backgroundColor: '#F1F4F7',
-    borderWidth: 1,
-    borderColor: CLIN.faint,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.wash,
   },
   sourceBadgeText: {
-    ...TYPOGRAPHY.label,
-    color: CLIN.muted,
+    ...TYPE.chip,
+    color: GV.muted,
     fontSize: 10,
-    fontWeight: '700',
   },
   docLink: {
     marginLeft: 'auto',
   },
   docLinkText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: CLIN.red,
+    ...TYPE.chip,
+    color: GV.ink,
   },
 
   // Data rows — hairline rules on white
@@ -1475,37 +1435,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.xs,
+    paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: CLIN.faint,
-    marginTop: SPACING.xs,
-    gap: SPACING.sm,
+    borderTopColor: GV.line,
+    marginTop: 8,
+    gap: 8,
   },
   dataLabel: {
-    ...TYPOGRAPHY.caption,
-    color: CLIN.muted,
+    ...TYPE.caption,
+    color: GV.muted,
     minWidth: 60,
   },
   dataValue: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: CLIN.ink,
+    ...TYPE.button,
+    fontSize: 15,
+    color: GV.ink,
     flex: 1,
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
   },
   dataUnit: {
-    ...TYPOGRAPHY.body,
-    color: CLIN.red,
-    fontWeight: '700',
+    ...TYPE.caption,
+    color: GV.muted,
   },
   dataRef: {
-    ...TYPOGRAPHY.caption,
-    color: CLIN.muted,
+    ...TYPE.caption,
+    color: GV.muted,
     marginTop: 2,
     textAlign: 'right',
   },
   dataFlag: {
-    ...TYPOGRAPHY.captionStrong,
+    ...TYPE.chip,
+    color: GV.danger,
     marginTop: 2,
     textAlign: 'right',
   },
@@ -1514,14 +1475,14 @@ const styles = StyleSheet.create({
   severityBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: 8,
     flex: 1,
     justifyContent: 'flex-end',
   },
   severityBarTrack: {
     width: 80,
     height: 6,
-    backgroundColor: '#EDF1F5',
+    backgroundColor: GV.line,
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -1530,54 +1491,52 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 
-  // Note block — paper note
+  // Note block
   noteBlock: {
-    marginTop: SPACING.xs,
-    paddingTop: SPACING.sm,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: CLIN.faint,
+    borderTopColor: GV.line,
   },
   noteText: {
-    ...TYPOGRAPHY.caption,
-    color: '#3E4C59',
+    ...TYPE.caption,
+    color: GV.body,
     lineHeight: 20,
   },
 
-  // Evidence — inset paper slip
+  // Evidence — flat wash slip on white
   evidenceBlock: {
-    marginTop: SPACING.xs,
-    borderTopWidth: 1,
-    borderTopColor: CLIN.faint,
-    backgroundColor: '#F7F9FB',
-    borderWidth: 1,
-    borderColor: CLIN.faint,
-    borderRadius: BORDER_RADIUS.sm,
-    padding: SPACING.sm,
+    marginTop: 8,
+    backgroundColor: GV.wash,
+    borderRadius: 8,
+    padding: 12,
   },
   evidenceTitle: {
-    ...TYPOGRAPHY.label,
-    color: CLIN.muted,
-    marginBottom: SPACING.xs,
+    ...TYPE.chip,
+    color: GV.muted,
+    letterSpacing: 0.8,
+    marginBottom: 8,
   },
   evidenceText: {
-    ...TYPOGRAPHY.caption,
-    color: '#3E4C59',
+    ...TYPE.caption,
+    color: GV.body,
     lineHeight: 18,
   },
 
   // Empty state
   empty: {
-    paddingVertical: SPACING.xxl,
+    paddingVertical: 48,
     alignItems: 'center',
   },
   emptyTitle: {
-    ...TYPOGRAPHY.h3,
-    color: CLIN.ink,
+    ...TYPE.title,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   emptyText: {
-    ...TYPOGRAPHY.body,
-    color: CLIN.muted,
+    ...TYPE.body,
+    color: GV.fog,
     textAlign: 'center',
-    marginTop: SPACING.xs,
+    marginTop: 8,
   },
 });

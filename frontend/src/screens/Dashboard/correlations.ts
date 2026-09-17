@@ -72,6 +72,18 @@ function pairKey(a: string, b: string): string {
   return `${x}|${y}`;
 }
 
+/** Canonical key for a user-picked pair (order-independent). Exported so the
+ * dashboard can persist custom correlations. */
+export function correlationPairKey(aId: string, bId: string): string {
+  return pairKey(aId, bId);
+}
+
+/** Find a computed pair for two stream ids (order-independent). */
+export function getPair(pairs: CorrelationPair[], aId: string, bId: string): CorrelationPair | null {
+  const k = pairKey(aId, bId);
+  return pairs.find((p) => pairKey(p.aId, p.bId) === k) ?? null;
+}
+
 /**
  * Clinically-favorable direction per unordered stream pair (+1 = higher-with-
  * higher is healthy, -1 = inverse is healthy). Only pairs we can defend are
@@ -376,6 +388,26 @@ export function computeCorrelationPairs(streams: StreamSeries[]): CorrelationPai
   return out;
 }
 
+/** Single source for scatter-card shaping — the feed and user-built
+ * correlations share it so custom cards read identically. */
+export function pairToFeedItem(p: CorrelationPair): CorrelationFeedItem {
+  return {
+    id: `x-${p.aId}-${p.bId}`,
+    title: `${p.aLabel} vs ${p.bLabel}`,
+    subtitle: `${p.paired} paired days · ${verdictLabel(p.verdict)}`,
+    data: {
+      kind: 'correlation',
+      points: p.points,
+      r: p.r,
+      verdict: p.verdict,
+      xLabel: `${p.aLabel} (${p.aAxis})`,
+      yLabel: `${p.bLabel} (${p.bAxis})`,
+    },
+    verdict: p.verdict,
+    source: 'live',
+  };
+}
+
 export function buildCorrelationFeed(
   trends: TrendsResponse | null,
   dailyMetrics: DailyMetrics | null,
@@ -418,21 +450,7 @@ export function buildCorrelationFeed(
   }
 
   // ── obs1 vs obs2: every pairing with ≥3 shared dates ──
-  const candidates: CorrelationFeedItem[] = computeCorrelationPairs(streams).map((p) => ({
-    id: `x-${p.aId}-${p.bId}`,
-    title: `${p.aLabel} vs ${p.bLabel}`,
-    subtitle: `${p.paired} paired days · ${verdictLabel(p.verdict)}`,
-    data: {
-      kind: 'correlation',
-      points: p.points,
-      r: p.r,
-      verdict: p.verdict,
-      xLabel: `${p.aLabel} (${p.aAxis})`,
-      yLabel: `${p.bLabel} (${p.bAxis})`,
-    },
-    verdict: p.verdict,
-    source: 'live',
-  }));
+  const candidates: CorrelationFeedItem[] = computeCorrelationPairs(streams).map(pairToFeedItem);
 
   // Verdict cards first (bad before good — attention first), then by |r|.
   const rank = (v: HealthVerdict) => (v === 'bad' ? 0 : v === 'good' ? 1 : 2);
@@ -470,6 +488,10 @@ export function useCorrelationFeed(
   refetchLocal: () => void;
   localDetails: DailyCheckInDetail[];
   takenEvents: MedicationTakenEvent[];
+  /** Live streams behind the feed (powers the custom-correlation builder). */
+  streams: StreamSeries[];
+  /** All valid pairs with ≥3 shared dates (powers the builder + pool). */
+  pairs: CorrelationPair[];
 } {
   const [localDetails, setLocalDetails] = useState<DailyCheckInDetail[]>([]);
   const [takenEvents, setTakenEvents] = useState<MedicationTakenEvent[]>([]);
@@ -519,5 +541,15 @@ export function useCorrelationFeed(
     return buildCorrelationFeed(trends, dailyMetrics, localDetails, vitalLabels);
   }, [trends, dailyMetrics, localDetails]);
 
-  return { items, isLocalLoading, refetchLocal: loadLocal, localDetails, takenEvents };
+  const streams = useMemo<StreamSeries[]>(() => {
+    const vitalLabels = vitalLabelMap(dailyMetrics);
+    return [
+      ...trendStreams(trends),
+      ...localStreams(localDetails, vitalLabels),
+    ];
+  }, [trends, dailyMetrics, localDetails]);
+
+  const pairs = useMemo(() => computeCorrelationPairs(streams), [streams]);
+
+  return { items, isLocalLoading, refetchLocal: loadLocal, localDetails, takenEvents, streams, pairs };
 }

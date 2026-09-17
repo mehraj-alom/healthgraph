@@ -14,7 +14,7 @@ import { GLView } from 'expo-gl';
 import { Asset } from 'expo-asset';
 import { File as ExpoFile } from 'expo-file-system';
 
-import { COLORS, SPACING, BORDER_RADIUS, SHADOWS, TYPOGRAPHY } from '@/constants';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { useBodyState } from '@/hooks/useBodyState';
 import {
   MVP_STRUCTURE_IDS,
@@ -718,6 +718,23 @@ const FEMALE_MVP_FILES = [
   'lymphatic_female.glb',
   'integumentary_female.glb',
 ];
+
+/**
+ * Bundled-model coverage: every MVP file for the gender shipped inside the
+ * app binary via require(). When complete, the 3D body renders with ZERO
+ * network — the scene already prefers bundled assets (setupScene +
+ * loadLayerOnDemand fall back to the nativeModule branch when no downloaded
+ * file URI exists). The download overlay must not block in that case.
+ *
+ * NOTE: the remote anatomy CDN is currently unconfigured in production
+ * (EXPO_PUBLIC_ANATOMY_CDN_URL unset; the derived host:8081 URL refuses
+ * connections), so without this gate the body screen is a dead end.
+ */
+function hasBundledModels(gender: Gender): boolean {
+  const files = gender === 'male' ? MALE_MVP_FILES : FEMALE_MVP_FILES;
+  const nativeAssets = gender === 'male' ? MALE_MVP_NATIVE : FEMALE_MVP_NATIVE;
+  return files.length > 0 && files.every((f) => nativeAssets[f] != null);
+}
 
 /** Systems that are available for each gender */
 const GENDER_SYSTEMS: Record<Gender, readonly string[]> = {
@@ -1477,7 +1494,7 @@ function NativeCanvas({ gender, onStructureSelected, sceneRef, localFiles }: Nat
         </View>
       ) : loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={GV.teal} />
           <Text style={styles.loadingText}>Loading 3D model…</Text>
         </View>
       )}
@@ -1631,7 +1648,7 @@ interface NativePlaceholderProps {
 function NativePlaceholder({ gender, onStructureSelected }: NativePlaceholderProps) {
   return (
     <View style={styles.nativePlaceholder}>
-      <Text style={styles.nativePlaceholderIcon}>🦴</Text>
+      <Text style={styles.nativePlaceholderIcon}>3D</Text>
       <Text style={styles.nativePlaceholderTitle}>3D Body View</Text>
       <Text style={styles.nativePlaceholderText}>
         The 3D anatomy viewer requires a development build with native modules.
@@ -1684,11 +1701,11 @@ function InfoPanel({ structureId, bodyStateData, onClose }: InfoPanelProps) {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'normal': return COLORS.statusNormal;
-      case 'mild_attention': return COLORS.statusAttention;
-      case 'warning': return COLORS.statusWarning;
-      case 'critical': return COLORS.statusCritical;
-      default: return COLORS.textMuted;
+      case 'normal': return GV.fx.green;
+      case 'mild_attention': return GV.fx.amber;
+      case 'warning': return GV.danger;
+      case 'critical': return GV.danger;
+      default: return GV.muted;
     }
   };
 
@@ -1896,10 +1913,13 @@ export default function BodyScreen() {
 
   const currentStatus = gender === 'male' ? maleStatus : femaleStatus;
   const isInstalled = currentStatus.state === 'INSTALLED';
+  // Bundled models render with no download — only block on the overlay when
+  // neither a download install NOR bundled assets can draw the scene.
+  const bundledReady = hasBundledModels(gender);
 
   // Show overlay if not installed OR currently downloading
   // This ensures the progress UI is visible during download
-  const showOverlay = !isInstalled || isDownloading;
+  const showOverlay = (!isInstalled && !bundledReady) || isDownloading;
 
   const handleStructureSelected = useCallback((structureId: string | null) => {
     setSelectedStructure(structureId);
@@ -1915,8 +1935,8 @@ export default function BodyScreen() {
     if (newGender === gender) return;
 
     const status = newGender === 'male' ? maleStatus : femaleStatus;
-    if (status.state === 'INSTALLED') {
-      // Both installed or target installed — switch directly
+    if (status.state === 'INSTALLED' || hasBundledModels(newGender)) {
+      // Installed, or bundled in the app binary — switch directly
       setGender(newGender);
       ctxSelectGender(newGender);
     } else {
@@ -2047,13 +2067,12 @@ export default function BodyScreen() {
               key={sysKey}
               style={[
                 styles.layerChip,
-                active && { backgroundColor: hexColor, borderColor: hexColor },
-                !active && styles.layerChipInactive,
+                active && styles.layerChipActive,
               ]}
               onPress={() => toggleLayer(sysKey)}
             >
-              <View style={[styles.layerDot, { backgroundColor: hexColor }]} />
-              <Text style={[styles.layerChipText, !active && styles.layerChipTextInactive]}>
+              <View style={[styles.layerDot, { backgroundColor: active ? '#FFFFFF' : hexColor }]} />
+              <Text style={[styles.layerChipText, active && styles.layerChipTextActive]}>
                 {SYSTEM_LABELS[sysKey] ?? sysKey}
               </Text>
             </TouchableOpacity>
@@ -2126,50 +2145,45 @@ export default function BodyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: GV.stage,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xxl + SPACING.xs,
-    paddingBottom: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderFaint,
+    paddingHorizontal: SPACE.screenH,
+    paddingTop: 40,
+    paddingBottom: 8,
   },
   headerTitle: {
-    ...TYPOGRAPHY.h1,
-    color: COLORS.textPrimary,
+    ...TYPE.display,
+    color: '#FFFFFF',
   },
   genderToggle: {
     flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rPill,
     padding: 2,
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
   genderButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs + 2,
-    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: SPACE.rPill,
   },
   genderButtonActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: GV.cta,
   },
   genderButtonText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textSecondary,
-    fontSize: 14,
+    ...TYPE.chip,
+    color: GV.body,
   },
   genderButtonTextActive: {
-    color: '#ffffff',
+    color: '#FFFFFF',
   },
   canvasContainer: {
     width: SCREEN_WIDTH,
     height: CANVAS_HEIGHT,
-    backgroundColor: COLORS.background,
+    backgroundColor: GV.stage,
     overflow: 'hidden',
   },
   webCanvas: {
@@ -2184,80 +2198,70 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(7, 17, 31, 0.82)',
-  } as any,
+    backgroundColor: GV.stage,
+  },
   loadingText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.sm,
+    ...TYPE.body,
+    color: GV.fog,
+    marginTop: 8,
   },
   nativePlaceholder: {
     width: SCREEN_WIDTH,
     height: CANVAS_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.xl,
-    gap: SPACING.sm,
+    backgroundColor: GV.card,
+    padding: SPACE.cardPad,
+    gap: SPACE.cardGap,
   },
   nativePlaceholderIcon: {
-    fontSize: 48,
-    marginBottom: SPACING.sm,
+    ...TYPE.display,
+    color: GV.muted,
+    marginBottom: 8,
   },
   nativePlaceholderTitle: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
+    ...TYPE.title,
+    color: GV.ink,
   },
   nativePlaceholderText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    ...TYPE.body,
+    color: GV.body,
     textAlign: 'center',
-    lineHeight: 22,
   },
   nativePlaceholderHint: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
     textAlign: 'center',
   },
   infoPanel: {
-    backgroundColor: COLORS.surfaceElevated,
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.sm,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.borderFaint,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.24,
-    shadowRadius: 10,
-    elevation: 4,
+    backgroundColor: GV.card,
+    marginHorizontal: SPACE.screenH,
+    marginTop: SPACE.cardGap,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
   infoPanelHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.sm,
+    marginBottom: 8,
   },
   infoPanelTitle: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
+    ...TYPE.title,
+    color: GV.ink,
     flex: 1,
   },
   closeButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: COLORS.surfaceSunken,
-    borderWidth: 1,
-    borderColor: COLORS.borderFaint,
+    backgroundColor: GV.wash,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeButtonText: {
     fontSize: 14,
-    color: COLORS.textSecondary,
+    color: GV.body,
   },
   infoRow: {
     flexDirection: 'row',
@@ -2265,85 +2269,87 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   infoLabel: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   infoValue: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.ink,
   },
   infoNotes: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-    fontStyle: 'italic',
+    ...TYPE.caption,
+    color: GV.body,
+    marginTop: 8,
   },
   statusCard: {
-    marginTop: SPACING.sm,
-    padding: SPACING.sm,
-    backgroundColor: COLORS.surfaceElevated,
-    borderRadius: BORDER_RADIUS.sm,
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: GV.wash,
+    borderRadius: 12,
   },
   statusHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: SPACING.xs,
+    marginBottom: 8,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginRight: SPACING.xs,
+    marginRight: 8,
   },
   statusText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.ink,
     flex: 1,
   },
   trendText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
+    ...TYPE.caption,
+    color: GV.body,
   },
   summaryText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-    lineHeight: 18,
+    ...TYPE.caption,
+    color: GV.body,
+    marginTop: 8,
   },
   noObservationCard: {
-    marginTop: SPACING.sm,
-    padding: SPACING.md,
-    backgroundColor: COLORS.surfaceElevated,
-    borderRadius: BORDER_RADIUS.sm,
+    marginTop: 8,
+    padding: 16,
+    backgroundColor: GV.wash,
+    borderRadius: 12,
     alignItems: 'center',
   },
   noObservationText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textMuted,
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.muted,
   },
   noObservationSubtext: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
     marginTop: 4,
   },
   layerList: {
-    maxHeight: 36,
-    marginTop: SPACING.xs - 1,
-    paddingHorizontal: SPACING.md,
+    maxHeight: 40,
+    marginTop: 8,
+    paddingHorizontal: SPACE.screenH,
   },
   layerChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.sm - 1,
-    paddingVertical: 3,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginRight: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rPill,
+    marginRight: 8,
+  },
+  layerChipActive: {
+    backgroundColor: GV.cta,
   },
   layerChipInactive: {
-    opacity: 0.4,
+    opacity: 1,
   },
   layerDot: {
     width: 8,
@@ -2352,120 +2358,114 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   layerChipText: {
-    fontSize: 11,
-    color: COLORS.textPrimary,
-    fontWeight: '600',
+    ...TYPE.chip,
+    color: GV.ink,
+  },
+  layerChipTextActive: {
+    color: '#FFFFFF',
   },
   layerChipTextInactive: {
-    color: COLORS.textMuted,
+    color: GV.muted,
   },
   structureList: {
     maxHeight: 40,
-    marginTop: SPACING.xs,
-    paddingHorizontal: SPACING.md,
+    marginTop: 8,
+    paddingHorizontal: SPACE.screenH,
   },
   structureChip: {
-    paddingHorizontal: SPACING.sm + 2,
-    paddingVertical: 3,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginRight: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rPill,
+    marginRight: 8,
     marginBottom: 2,
   },
   structureChipActive: {
-    backgroundColor: COLORS.primaryBg,
-    borderColor: COLORS.primary,
+    backgroundColor: GV.cta,
   },
   structureChipUnavailable: {
     opacity: 0.4,
   },
   structureChipText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
+    ...TYPE.caption,
+    color: GV.body,
   },
   structureChipTextActive: {
-    color: COLORS.primary,
+    color: '#FFFFFF',
   },
   disclaimer: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.fog,
     textAlign: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    fontStyle: 'italic',
+    paddingHorizontal: 24,
+    paddingVertical: 8,
   },
   // Storage management
   storageSection: {
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.sm,
-    backgroundColor: COLORS.surfaceElevated,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.borderFaint,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 3,
+    marginHorizontal: SPACE.screenH,
+    marginTop: 8,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
   storageSectionTitle: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.ink,
+    marginBottom: 8,
   },
   storageRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.xs,
+    paddingVertical: 8,
   },
   storageInfo: {
     flex: 1,
   },
   storageLabel: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
+    ...TYPE.body,
+    color: GV.ink,
   },
   storageStatus: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   storageDeleteBtn: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.error,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: GV.wash,
   },
   storageDeleteText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.error,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.danger,
   },
   storageConfirmRow: {
     flexDirection: 'row',
-    gap: SPACING.xs,
+    gap: 8,
   },
   storageConfirmBtn: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: COLORS.error,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: GV.danger,
   },
   storageConfirmText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: '#ffffff',
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: '#FFFFFF',
   },
   storageCancelBtn: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: COLORS.surfaceElevated,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: GV.wash,
   },
   storageCancelText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.body,
   },
 });

@@ -8,12 +8,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
-import { Skeleton } from '@/components';
+import { Skeleton, Card, Chip, SectionHeader } from '@/components';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { useTrends } from '@/hooks/useTrends';
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
-import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, CATEGORY_COLORS } from '@/constants';
 import type {
   TrendsResponse,
   DailyWellbeingPoint,
@@ -32,12 +31,12 @@ const SCORE_LABELS: Record<number, string> = {
 };
 
 const LINE_COLORS = {
-  wellbeing: COLORS.teal,
-  energy: COLORS.accent,
-  stress: COLORS.orange,
-  sleepDuration: COLORS.purple,
-  sleepQuality: COLORS.green,
-  symptom: COLORS.coral,
+  wellbeing: GV.teal,
+  energy: GV.cta,
+  stress: GV.fx.blue,
+  sleepDuration: GV.fx.sky,
+  sleepQuality: GV.fx.green,
+  symptom: GV.fx.blue,
 };
 
 // ---------------------------------------------------------------------------
@@ -53,9 +52,9 @@ function formatMinutes(minutes: number): string {
 }
 
 function trendColor(direction: string): string {
-  if (direction === 'improving') return COLORS.success;
-  if (direction === 'declining') return COLORS.error;
-  return COLORS.textMuted;
+  if (direction === 'improving') return GV.cta;
+  if (direction === 'declining') return GV.danger;
+  return GV.muted;
 }
 
 function trendIcon(direction: string): string {
@@ -316,7 +315,7 @@ function ActivityChart({ points }: { points: { date: string; event_count: number
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <SectionHeader title={title} />
       {children}
     </View>
   );
@@ -329,18 +328,20 @@ function StatCard({ label, value, sublabel, color }: {
   color?: string;
 }) {
   return (
-    <View style={styles.statCard}>
+    <Card style={styles.statCardInner}>
+      {color ? <View style={[styles.statDot, { backgroundColor: color }]} /> : null}
       <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, color ? { color } : null]}>{value}</Text>
+      <Text style={styles.statValue}>{value}</Text>
       {sublabel ? <Text style={styles.statSublabel}>{sublabel}</Text> : null}
-    </View>
+    </Card>
   );
 }
 
 function TrendBadge({ trend }: { trend: { direction: string; label: string } }) {
   return (
-    <View style={[styles.trendBadge, { backgroundColor: trendColor(trend.direction) + '15' }]}>
-      <Text style={[styles.trendText, { color: trendColor(trend.direction) }]}>
+    <View style={styles.trendBadge}>
+      <View style={[styles.trendDot, { backgroundColor: trendColor(trend.direction) }]} />
+      <Text style={styles.trendText}>
         {trendIcon(trend.direction)} {trend.label}
       </Text>
     </View>
@@ -349,10 +350,12 @@ function TrendBadge({ trend }: { trend: { direction: string; label: string } }) 
 
 function InsightCard({ text }: { text: string }) {
   return (
-    <View style={styles.insightCard}>
-      <Text style={styles.insightIcon}>💡</Text>
+    <Card style={styles.insightCardInner}>
+      <View style={styles.insightIconTile}>
+        <Text style={styles.insightIconText}>!</Text>
+      </View>
       <Text style={styles.insightText}>{text}</Text>
-    </View>
+    </Card>
   );
 }
 
@@ -401,24 +404,21 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
       {/* Range selector — global: one tap retunes every graph */}
       <View style={styles.rangeRow}>
         {TREND_RANGE_ORDER.map((key) => {
-          const selected = range === key;
           return (
-            <Pressable
+            <Chip
               key={key}
+              label={TREND_RANGES[key].label}
+              selected={range === key}
+              color={GV.cta}
               onPress={() => { setRange(key); setSelectedSymptom(null); }}
-              style={[styles.rangeChip, selected && styles.rangeChipSelected]}
-            >
-              <Text style={[styles.rangeChipText, selected && styles.rangeChipTextSelected]}>
-                {TREND_RANGES[key].label}
-              </Text>
-            </Pressable>
+            />
           );
         })}
       </View>
 
       {isLoading && !hasContent ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={GV.teal} />
           <Text style={styles.loadingText}>Loading trends…</Text>
         </View>
       ) : error && !hasContent ? (
@@ -439,15 +439,15 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             <View style={styles.summaryRow}>
               <StatCard label="Days logged" value={trend.logged_days} />
               {trend.avg_wellbeing !== null && (
-                <StatCard label="Avg wellbeing" value={`${trend.avg_wellbeing}`} sublabel={SCORE_LABELS[Math.round(trend.avg_wellbeing)]} color={COLORS.teal} />
+                <StatCard label="Avg wellbeing" value={`${trend.avg_wellbeing}`} sublabel={SCORE_LABELS[Math.round(trend.avg_wellbeing)]} color={GV.teal} />
               )}
             </View>
             <View style={styles.summaryRow}>
               {trend.avg_energy !== null && (
-                <StatCard label="Avg energy" value={`${trend.avg_energy}`} sublabel={SCORE_LABELS[Math.round(trend.avg_energy)]} color={COLORS.accent} />
+                <StatCard label="Avg energy" value={`${trend.avg_energy}`} sublabel={SCORE_LABELS[Math.round(trend.avg_energy)]} color={GV.cta} />
               )}
               {trend.avg_stress !== null && (
-                <StatCard label="Avg stress" value={`${trend.avg_stress}`} sublabel={SCORE_LABELS[Math.round(trend.avg_stress)]} color={COLORS.orange} />
+                <StatCard label="Avg stress" value={`${trend.avg_stress}`} sublabel={SCORE_LABELS[Math.round(trend.avg_stress)]} color={GV.fx.blue} />
               )}
             </View>
           </Section>
@@ -473,9 +473,9 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             <TrendBadge trend={trend.sleep_trend} />
             {trend.avg_sleep_minutes !== null && (
               <View style={styles.summaryRow}>
-                <StatCard label="Avg duration" value={formatMinutes(trend.avg_sleep_minutes)} color={COLORS.purple} />
+                <StatCard label="Avg duration" value={formatMinutes(trend.avg_sleep_minutes)} color={GV.fx.sky} />
                 {trend.avg_sleep_quality !== null && (
-                  <StatCard label="Avg quality" value={`${trend.avg_sleep_quality}/5`} color={COLORS.green} />
+                  <StatCard label="Avg quality" value={`${trend.avg_sleep_quality}/5`} color={GV.fx.green} />
                 )}
                 {trend.min_sleep_minutes !== null && trend.max_sleep_minutes !== null && (
                   <StatCard label="Range" value={`${formatMinutes(trend.min_sleep_minutes)}–${formatMinutes(trend.max_sleep_minutes)}`} />
@@ -531,7 +531,7 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
           {/* Symptom Frequency */}
           {trend.symptom_summaries.length > 0 && (
             <Section title="Most Frequent Symptoms">
-              <HorizontalBarChart items={trend.symptom_summaries.slice(0, 8).map((s) => ({ label: s.display_name, value: s.count }))} color={COLORS.coral} />
+              <HorizontalBarChart items={trend.symptom_summaries.slice(0, 8).map((s) => ({ label: s.display_name, value: s.count }))} color={GV.fx.blue} />
             </Section>
           )}
 
@@ -540,11 +540,8 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             <Section title="Symptom Severity">
               <View style={styles.symptomSelector}>
                 {trend.symptom_time_series.map((ts) => {
-                  const active = ts.concept_id === activeSymptomId;
                   return (
-                    <Pressable key={ts.concept_id} onPress={() => setSelectedSymptom(ts.concept_id)} style={[styles.symptomChip, active && styles.symptomChipActive]}>
-                      <Text style={[styles.symptomChipText, active && styles.symptomChipTextActive]}>{ts.display_name}</Text>
-                    </Pressable>
+                    <Chip key={ts.concept_id} label={ts.display_name} selected={ts.concept_id === activeSymptomId} color={GV.cta} onPress={() => setSelectedSymptom(ts.concept_id)} />
                   );
                 })}
               </View>
@@ -589,7 +586,7 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             </Section>
           )}
 
-          <View style={{ height: SPACING.xxl * 2 }} />
+          <View style={{ height: 48 }} />
         </TrendsScrollContainer>
         {transitioning && (
           <View
@@ -598,14 +595,9 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             accessibilityRole="progressbar"
             accessibilityLabel={`Updating trends to ${TREND_RANGES[range].label}`}
           >
-            <BlurView
-              intensity={60}
-              tint="default"
-              style={StyleSheet.absoluteFill}
-            />
             <View style={styles.transitionCard}>
               <View style={styles.transitionPill}>
-                <ActivityIndicator size="small" color={COLORS.primary} />
+                <ActivityIndicator size="small" color={GV.cta} />
                 <Text style={styles.transitionPillText}>
                   Updating to {TREND_RANGES[range].label}…
                 </Text>
@@ -711,50 +703,31 @@ function SymptomRow({ symptom }: { symptom: SymptomSummary }) {
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: GV.stage },
   embeddedContainer: { backgroundColor: 'transparent', overflow: 'visible' },
 
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    paddingHorizontal: SPACE.screenH,
+    paddingVertical: 8,
   },
-  headerTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary },
-  embeddedHeader: { paddingTop: SPACING.lg, paddingBottom: SPACING.sm },
-  embeddedSubtitle: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: SPACING.xs },
+  headerTitle: { ...TYPE.display, color: '#FFFFFF', textAlign: 'center' },
+  embeddedHeader: { paddingTop: 24, paddingBottom: 8 },
+  embeddedSubtitle: { ...TYPE.caption, color: GV.fog, marginTop: 8 },
 
   rangeRow: {
     flexDirection: 'row',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    gap: SPACING.sm,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingHorizontal: SPACE.screenH,
+    paddingVertical: 8,
+    gap: 8,
+    backgroundColor: GV.stage,
   },
-  rangeChip: {
-    flex: 1,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    backgroundColor: COLORS.surfaceSecondary,
-  },
-  rangeChipSelected: { backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary },
-  rangeChipText: { ...TYPOGRAPHY.label, color: COLORS.textMuted, fontSize: 12 },
-  rangeChipTextSelected: { color: COLORS.primary, fontWeight: '600' },
 
-  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md },
-  loadingText: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  loadingText: { ...TYPE.body, color: GV.fog },
   // Range-transition layer: stale charts stay mounted underneath while the
-  // new range loads; the blur + skeleton card sits on top and swallows
-  // touches so users can't act on stale numbers mid-flight.
+  // new range loads; the flat stage + white skeleton card sits on top and
+  // swallows touches so users can't act on stale numbers mid-flight.
   contentWrap: { flex: 1 },
   transitionOverlay: {
     position: 'absolute',
@@ -764,157 +737,143 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: SPACING.xl,
+    paddingHorizontal: SPACE.screenH,
+    backgroundColor: GV.stage,
+    opacity: 0.96,
   },
   transitionCard: {
     width: '100%',
     maxWidth: 340,
-    gap: SPACING.sm,
-    padding: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    gap: 8,
   },
   transitionPill: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 9999,
-    backgroundColor: COLORS.primaryBg,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.wash,
   },
-  transitionPillText: { ...TYPOGRAPHY.label, color: COLORS.primary, fontSize: 12, fontWeight: '600' },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xl },
-  emptyTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, marginBottom: SPACING.sm },
-  emptyText: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center', lineHeight: 22 },
+  transitionPillText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.cta, fontSize: 12 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.cardPad },
+  emptyTitle: { ...TYPE.title, color: '#FFFFFF', marginBottom: 8 },
+  emptyText: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
 
-  scrollContent: { padding: SPACING.md, paddingBottom: SPACING.xxl * 2 },
+  scrollContent: { paddingHorizontal: SPACE.screenH, paddingBottom: 48, gap: SPACE.sectionGap },
 
-  section: { marginTop: SPACING.lg },
-  sectionTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, marginBottom: SPACING.sm },
+  section: { marginTop: SPACE.sectionGap, gap: SPACE.cardGap },
+  sectionTitle: { ...TYPE.title, color: '#FFFFFF', marginBottom: 8 },
 
-  summaryRow: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },
-  statCard: {
+  summaryRow: { flexDirection: 'row', gap: SPACE.cardGap, flexWrap: 'wrap' },
+  statCardInner: {
     flex: 1,
     minWidth: 90,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.sm,
-    padding: SPACING.md,
     alignItems: 'center',
   },
-  statLabel: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginBottom: SPACING.xs },
-  statValue: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, fontSize: 20 },
-  statSublabel: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: 2 },
+  statDot: { width: 8, height: 8, borderRadius: 4, marginBottom: 8 },
+  statLabel: { ...TYPE.caption, color: GV.muted, marginBottom: 8 },
+  statValue: { ...TYPE.title, color: GV.ink, fontSize: 20 },
+  statSublabel: { ...TYPE.caption, color: GV.muted, marginTop: 2 },
 
   trendBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-    marginTop: SPACING.xs,
-    marginBottom: SPACING.sm,
+    gap: 8,
+    backgroundColor: GV.card,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: SPACE.rPill,
+    marginTop: 8,
+    marginBottom: 8,
   },
-  trendText: { ...TYPOGRAPHY.caption, fontWeight: '600' },
+  trendDot: { width: 8, height: 8, borderRadius: 4 },
+  trendText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink },
 
-  chartContainer: { marginTop: SPACING.xs },
+  chartContainer: { marginTop: 8, backgroundColor: GV.card, borderRadius: SPACE.rCard, padding: SPACE.cardPad },
   chartArea: {
     position: 'relative',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: GV.card,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   chartDot: { position: 'absolute', width: 8, height: 8, borderRadius: 4, marginLeft: -4, marginTop: -4, zIndex: 2 },
   chartLine: { position: 'absolute', zIndex: 1 },
-  gridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: COLORS.border, opacity: 0.3 },
-  gridLineVert: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: COLORS.border, opacity: 0.2 },
+  gridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: GV.line, opacity: 0.6 },
+  gridLineVert: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: GV.line, opacity: 0.6 },
 
   yAxis: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 30, justifyContent: 'space-between', paddingVertical: 4, zIndex: 3 },
-  axisLabel: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, fontSize: 10, textAlign: 'right' },
+  axisLabel: { ...TYPE.caption, color: GV.muted, fontSize: 10, textAlign: 'right' },
   xAxis: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginTop: 4 },
-  xAxisLabel: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, fontSize: 10 },
-  chartAxisUnit: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: 4 },
-  tooltip: { alignSelf: 'center', backgroundColor: COLORS.surfaceElevated, borderRadius: BORDER_RADIUS.sm, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, marginTop: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
-  tooltipText: { ...TYPOGRAPHY.caption, color: COLORS.textPrimary },
+  xAxisLabel: { ...TYPE.caption, color: GV.muted, fontSize: 10 },
+  chartAxisUnit: { ...TYPE.caption, color: GV.muted, marginTop: 4 },
+  tooltip: { alignSelf: 'center', backgroundColor: GV.ink, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginTop: 8 },
+  tooltipText: { ...TYPE.caption, color: '#FFFFFF' },
 
   scatterDot: { position: 'absolute', width: 10, height: 10, borderRadius: 5, marginLeft: -5, marginTop: -5, opacity: 0.8 },
   scatterAxis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  scatterAxisLabel: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, fontSize: 10 },
+  scatterAxisLabel: { ...TYPE.caption, color: GV.muted, fontSize: 10 },
 
   correlationBadge: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.sm,
-    padding: SPACING.md,
-    marginTop: SPACING.sm,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    marginTop: 8,
   },
-  correlationText: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, lineHeight: 22 },
-  correlationMeta: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: SPACING.xs },
+  correlationText: { ...TYPE.body, color: GV.ink },
+  correlationMeta: { ...TYPE.caption, color: GV.muted, marginTop: 8 },
 
-  barChart: { gap: SPACING.sm },
-  barRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  barLabel: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, width: 120, textAlign: 'right' },
-  barTrack: { flex: 1, height: 16, backgroundColor: COLORS.surfaceSecondary, borderRadius: 4, overflow: 'hidden' },
+  barChart: { gap: 8, backgroundColor: GV.card, borderRadius: SPACE.rCard, padding: SPACE.cardPad },
+  barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  barLabel: { ...TYPE.body, color: GV.ink, width: 120, textAlign: 'right' },
+  barTrack: { flex: 1, height: 16, backgroundColor: GV.wash, borderRadius: 4, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 4 },
-  barValue: { ...TYPOGRAPHY.captionStrong, color: COLORS.textPrimary, width: 24 },
+  barValue: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink, width: 24 },
 
-  activityChart: { height: 140, flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.xs, paddingTop: SPACING.md },
+  activityChart: { height: 140, flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingTop: 16, backgroundColor: GV.card, borderRadius: SPACE.rCard, padding: SPACE.cardPad },
   activityColumn: { flex: 1, alignItems: 'center', minWidth: 28 },
-  activityTrack: { height: 90, width: '70%', justifyContent: 'flex-end', backgroundColor: COLORS.surfaceSecondary },
-  activityFill: { width: '100%', backgroundColor: COLORS.accent, minHeight: 2 },
-  activityValue: { ...TYPOGRAPHY.captionStrong, color: COLORS.textPrimary, fontSize: 10, marginTop: 2 },
-  activityLabel: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, fontSize: 9, marginTop: 2 },
+  activityTrack: { height: 90, width: '70%', justifyContent: 'flex-end', backgroundColor: GV.wash },
+  activityFill: { width: '100%', backgroundColor: GV.cta, minHeight: 2 },
+  activityValue: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink, fontSize: 10, marginTop: 2 },
+  activityLabel: { ...TYPE.caption, color: GV.muted, fontSize: 9, marginTop: 2 },
 
   symptomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    paddingVertical: 12,
+    paddingHorizontal: SPACE.cardPad,
   },
   symptomInfo: { flex: 1 },
-  symptomName: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textPrimary },
-  symptomMeta: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: 2 },
-  symptomDate: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginLeft: SPACING.md },
+  symptomName: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink },
+  symptomMeta: { ...TYPE.caption, color: GV.muted, marginTop: 2 },
+  symptomDate: { ...TYPE.caption, color: GV.muted, marginLeft: 16 },
 
-  symptomSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginBottom: SPACING.sm },
-  symptomChip: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surfaceSecondary,
-  },
-  symptomChipActive: { backgroundColor: COLORS.primaryBg, borderColor: COLORS.primary },
-  symptomChipText: { ...TYPOGRAPHY.label, color: COLORS.textMuted },
-  symptomChipTextActive: { color: COLORS.primary, fontWeight: '600' },
+  symptomSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
 
-  insightCard: {
+  insightCardInner: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.sm,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
+    gap: 8,
+    marginBottom: 8,
   },
-  insightIcon: { fontSize: 16 },
-  insightText: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, flex: 1, lineHeight: 22 },
+  insightIconTile: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: GV.wash,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  insightIconText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.cta },
+  insightText: { ...TYPE.body, color: GV.ink, flex: 1 },
 
   noDataText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-    fontStyle: 'italic',
-    paddingVertical: SPACING.sm,
+    ...TYPE.body,
+    color: GV.fog,
+    paddingVertical: 8,
   },
 });

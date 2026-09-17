@@ -1,6 +1,6 @@
 import { StyleSheet, View, Text, type ViewStyle } from 'react-native';
-import { useTheme } from '@/theme';
 import { spacing } from '@/theme/tokens';
+import { GV, TYPE } from '@/theme/guava';
 
 interface SectionHeaderProps {
   title: string;
@@ -8,34 +8,37 @@ interface SectionHeaderProps {
   /** Small colored index dot (maps to category / graph accents). */
   accent?: string;
   right?: React.ReactNode;
+  /** Guava-style centered section titles ("Your tracked factors"). */
+  align?: 'left' | 'center';
   style?: ViewStyle;
 }
 
-/** HealthGraph section heading — title + optional muted subtitle + accent dot. */
+/** Guava-flat section heading — Poppins SemiBold, optional centered. */
 export const SectionHeader = ({
   title,
   subtitle,
   accent,
   right,
+  align = 'left',
   style,
 }: SectionHeaderProps) => {
-  const { colors, typography } = useTheme();
+  const centered = align === 'center';
   return (
-    <View style={[styles.row, style]}>
+    <View style={[styles.row, centered && styles.centered, style]}>
       {accent ? (
         <View style={[styles.dot, { backgroundColor: accent }]} />
       ) : null}
       <View style={styles.text}>
-        <Text style={[styles.title, typography.sectionHeading, { color: colors.textPrimary }]}>
+        <Text style={[styles.title, centered && styles.titleCentered]}>
           {title}
         </Text>
         {subtitle ? (
-          <Text style={[styles.subtitle, typography.bodySecondary, { color: colors.textMuted }]}>
+          <Text style={[styles.subtitle, centered && styles.titleCentered]}>
             {subtitle}
           </Text>
         ) : null}
       </View>
-      {right ? <View>{right}</View> : null}
+      {right && !centered ? <View>{right}</View> : null}
     </View>
   );
 };
@@ -47,6 +50,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
+  centered: {
+    justifyContent: 'center',
+  },
   dot: {
     width: 8,
     height: 8,
@@ -56,10 +62,16 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  titleCentered: {
+    textAlign: 'center',
+  },
   subtitle: {
-    fontSize: 13,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   title: {
+    ...TYPE.title,
     fontSize: 17,
+    color: GV.ink,
   },
 });

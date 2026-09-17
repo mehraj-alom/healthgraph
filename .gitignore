@@ -246,3 +246,5 @@ storage/documents/
 *.md
 # Bytecode caches stay out even where parent dirs are force-included above
 tests/__pycache__/
+.claude
+agent/skills/*

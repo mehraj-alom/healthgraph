@@ -11,9 +11,9 @@ import {
   Pressable,
   useWindowDimensions,
 } from 'react-native';
-import { memo, useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import { BottomSheet } from '@/components/BottomSheet';
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
@@ -23,29 +23,19 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withRepeat,
-  withSpring,
-  withDelay,
   Easing,
   type SharedValue,
 } from 'react-native-reanimated';
 import axios from 'axios';
-import Svg, { Rect, Circle, Defs, Pattern } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 import { api } from '@/services/api';
 import { BrandLogo } from '@/components/BrandLogo';
-import {
-  COLORS,
-  SPACING,
-  BORDER_RADIUS,
-  TYPOGRAPHY,
-  MEDICAL_DISCLAIMER,
-} from '@/constants';
+import { MEDICAL_DISCLAIMER } from '@/constants';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { useReducedMotion } from '@/theme/useReducedMotion';
-import { bezier, curves } from '@/theme/motion';
-import { useAuth } from '@/context/AuthContext';
 import { useDocuments, type ProcessingStage } from '@/context/DocumentsContext';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
-import { formatFirstName } from '@/utils/name';
 
 interface ChatMessage {
   id: string;
@@ -72,40 +62,22 @@ interface ChatResponse {
 }
 
 interface SuggestionDef {
-  icon: string;
   text: string;
   category: 'sleep' | 'symptom' | 'energy' | 'stress' | 'record' | 'general';
 }
 
 const ALL_SUGGESTIONS: SuggestionDef[] = [
-  { icon: '🌙', text: 'How has my sleep been this week?', category: 'sleep' },
-  { icon: '💊', text: 'What symptoms have I logged recently?', category: 'symptom' },
-  { icon: '⚡', text: 'How has my energy been lately?', category: 'energy' },
-  { icon: '🧘', text: 'Has my stress changed recently?', category: 'stress' },
-  { icon: '📋', text: 'What changed in my recent health records?', category: 'record' },
-  { icon: '📊', text: 'Show me my recent health trends.', category: 'general' },
-  { icon: '📝', text: 'What should I log today?', category: 'general' },
-  { icon: '🔬', text: 'Have I had any abnormal lab results?', category: 'record' },
-  { icon: '😴', text: 'How was my sleep last night?', category: 'sleep' },
-  { icon: '🩺', text: 'Summarize my recent medical records.', category: 'record' },
+  { text: 'How has my sleep been this week?', category: 'sleep' },
+  { text: 'What symptoms have I logged recently?', category: 'symptom' },
+  { text: 'How has my energy been lately?', category: 'energy' },
+  { text: 'Has my stress changed recently?', category: 'stress' },
+  { text: 'What changed in my recent health records?', category: 'record' },
+  { text: 'Show me my recent health trends.', category: 'general' },
+  { text: 'What should I log today?', category: 'general' },
+  { text: 'Have I had any abnormal lab results?', category: 'record' },
+  { text: 'How was my sleep last night?', category: 'sleep' },
+  { text: 'Summarize my recent medical records.', category: 'record' },
 ];
-
-// Suggestion tint per category — same accent family as the rest of Home.
-const SUGGESTION_TINT: Record<SuggestionDef['category'], string> = {
-  sleep: '#8A7BC8',
-  symptom: '#C2503E',
-  energy: '#E8862E',
-  stress: '#C96A1E',
-  record: '#8A7BC8',
-  general: '#4A90C2',
-};
-
-function getGreetingTime(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
 
 function useSmartSuggestions(): SuggestionDef[] {
   const metrics = useDailyMetrics();
@@ -150,32 +122,10 @@ function useSmartSuggestions(): SuggestionDef[] {
   return selected;
 }
 
-// ─── Motion primitives (Reanimated, UI thread; static under reduced motion) ──
-
-function Enter({
-  children,
-  index = 0,
-  style,
-}: {
-  children: React.ReactNode;
-  index?: number;
-  style?: object;
-}) {
-  const reduced = useReducedMotion();
-  const o = useSharedValue(reduced ? 1 : 0);
-  const y = useSharedValue(reduced ? 0 : 14);
-  useEffect(() => {
-    if (reduced) return;
-    const d = Math.min(index * 45, 320);
-    o.value = withDelay(d, withTiming(1, { duration: 260, easing: bezier(curves.standard) }));
-    y.value = withDelay(d, withSpring(0, { duration: 420, dampingRatio: 0.85 }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduced]);
-  const s = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ translateY: y.value }] }));
-  return <Animated.View style={[style, s]}>{children}</Animated.View>;
-}
-
-/** Three bouncing dots — the time-to-first-token bridge. */
+// ─── Typing signal (Reanimated, UI thread; static under reduced motion) ───
+// One honest indicator: dots breathe while the reply generates. No staged
+// activity theater — the backend is a single call, so the UI claims nothing
+// more than "working".
 function BounceDot({ offset, driver }: { offset: number; driver: SharedValue<number> }) {
   const reduced = useReducedMotion();
   const s = useAnimatedStyle(() => {
@@ -208,35 +158,6 @@ function TypingDots() {
       <BounceDot offset={0.33} driver={t} />
       <BounceDot offset={0.66} driver={t} />
     </View>
-  );
-}
-
-/**
- * ThinkingStatus — live activity line shown while a reply generates.
- * Rotates through what the assistant is actually doing behind the scenes
- * (reading logs → checking records → writing the answer) so a long wait
- * feels alive instead of stuck on one word. Timer-driven, cleaned up on
- * unmount; screen-reader announces changes politely.
- */
-const THINKING_STAGES = [
-  'Thinking…',
-  'Reading your health logs…',
-  'Checking your records…',
-  'Writing your answer…',
-];
-
-function ThinkingStatus() {
-  const [stage, setStage] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => {
-      setStage((s) => (s + 1) % THINKING_STAGES.length);
-    }, 2400);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <Text style={styles.typingText} accessibilityLiveRegion="polite">
-      {THINKING_STAGES[stage]}
-    </Text>
   );
 }
 
@@ -296,7 +217,7 @@ function StreamText({
       accessibilityLiveRegion="polite"
     >
       {words.slice(0, count).join('')}
-      {live && count < words.length ? <Text style={styles.caret}>▍</Text> : null}
+      {live && count < words.length ? <Text style={styles.caret}>▏</Text> : null}
     </Text>
   );
 }
@@ -310,20 +231,17 @@ function SuggestionRow({
   index: number;
   onPress: () => void;
 }) {
-  const tint = SUGGESTION_TINT[suggestion.category];
   return (
-    <Enter index={index}>
-      <Pressable
-        style={({ pressed }) => [styles.suggestionPlain, pressed && { opacity: 0.55 }]}
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={`Ask: ${suggestion.text}`}
-      >
-        <View style={[styles.suggestionDot, { backgroundColor: tint }]} />
-        <Text style={styles.suggestionPlainText}>{suggestion.text}</Text>
-        <Text style={styles.suggestionPlainArrow}>›</Text>
-      </Pressable>
-    </Enter>
+    <Pressable
+      style={({ pressed }) => [styles.suggestionPlain, pressed && { opacity: 0.55 }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Ask: ${suggestion.text}`}
+    >
+      <Text style={styles.suggestionIndex}>{String(index + 1).padStart(2, '0')}</Text>
+      <Text style={styles.suggestionPlainText}>{suggestion.text}</Text>
+      <Text style={styles.suggestionPlainArrow}>›</Text>
+    </Pressable>
   );
 }
 
@@ -364,6 +282,9 @@ function Composer({
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  // No dock on this screen (system back handles exit), so the composer
+  // sits on the safe-area inset — not on tab-clearing clearance.
+  const insets = useSafeAreaInsets();
 
   const submit = () => {
     const trimmed = text.trim();
@@ -380,10 +301,8 @@ function Composer({
     <View
       style={[
         styles.inputContainer,
-        // Keyboard open → tab bar is hidden, so drop the tall tab-clearing
-        // pad and hug the keyboard. Keyboard closed → keep the clearance
-        // that keeps the composer above the floating tab bar.
-        keyboardOpen && styles.inputContainerKeyboardOpen,
+        // Keyboard open → hug it. Closed → rest on the safe-area inset.
+        { paddingBottom: keyboardOpen ? 8 : insets.bottom + 8 },
       ]}
     >
       <View style={[styles.composerShell, focused && styles.composerShellFocused]}>
@@ -394,7 +313,7 @@ function Composer({
           hitSlop={8}
           style={({ pressed }) => [styles.attachButton, pressed && { opacity: 0.6 }]}
         >
-          <Text style={styles.attachGlyph}>📎</Text>
+          <AttachGlyph color={focused ? GV.cta : GV.muted} />
         </Pressable>
         <TextInput
           ref={inputRef}
@@ -404,19 +323,18 @@ function Composer({
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder={sending ? 'Waiting for reply…' : 'Ask about your health…'}
-          placeholderTextColor="#C9BBA9"
+          placeholderTextColor={GV.muted}
           multiline
           maxLength={2000}
           editable={!sending}
           returnKeyType="send"
           blurOnSubmit={false}
           onSubmitEditing={submit}
-          keyboardAppearance="light"
+          keyboardAppearance="dark"
           underlineColorAndroid="transparent"
           accessibilityLabel="Message input"
         />
         <View style={styles.composerAction}>
-          <SendSparkles />
           {busy ? (
             <Pressable
               onPress={onStop}
@@ -434,11 +352,11 @@ function Composer({
               accessibilityLabel="Send message"
               style={({ pressed }) => [
                 styles.sendButton,
-                !text.trim() && styles.sendButtonDisabled,
+                !text.trim() && styles.sendButtonGhost,
                 pressed && text.trim() && styles.sendButtonPressed,
               ]}
             >
-              <Text style={styles.sendButtonText}>↑</Text>
+              <Text style={!text.trim() ? styles.sendButtonGhostText : styles.sendButtonText}>↑</Text>
             </Pressable>
           )}
         </View>
@@ -448,90 +366,22 @@ function Composer({
 }
 
 /**
- * SendSparkles — light-green bubbles and "+" motes drifting up from the send
- * button. One shared UI-thread loop; each mote reads a phase-shifted window
- * of it, so eight particles cost one animation. Static when reduced motion.
- */const SPARK_SEEDS = [
-  { dx: -15, size: 7, delay: 0, plus: false },
-  { dx: -8, size: 5, delay: 0.22, plus: true },
-  { dx: -2, size: 8, delay: 0.4, plus: false },
-  { dx: 5, size: 5, delay: 0.58, plus: false },
-  { dx: 12, size: 6, delay: 0.72, plus: true },
-  { dx: 16, size: 4, delay: 0.86, plus: false },
-];
-
-function Spark({
-  driver,
-  dx,
-  size,
-  delay,
-  plus,
-}: {
-  driver: SharedValue<number>;
-  dx: number;
-  size: number;
-  delay: number;
-  plus: boolean;
-}) {
-  const s = useAnimatedStyle(() => {
-    const p = (((driver.value + delay) % 1) + 1) % 1;
-    const fade = Math.sin(p * Math.PI);
-    return {
-      opacity: fade * 0.95,
-      transform: [{ translateY: -(4 + p * (plus ? 74 : 60)) }, { scale: 1 - p * 0.45 }],
-    };
-  });
-  if (plus) {
-    return (
-      <Animated.Text style={[styles.sparkPlus, { left: 22 + dx - 7 }, s]}>
-        +
-      </Animated.Text>
-    );
-  }
+ * AttachGlyph — a plain paperclip drawn in strokes, not an emoji. Tints via
+ * the composer so it quiets when idle and sharpens on focus.
+ */
+function AttachGlyph({ color }: { color: string }) {
   return (
-    <Animated.View
-      style={[styles.sparkDot, { width: size, height: size, borderRadius: size / 2, left: 22 + dx - size / 2 }, s]}
-    />
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21 11.5 12.3 20.2a5.5 5.5 0 0 1-7.78-7.78l8.16-8.16a3.67 3.67 0 0 1 5.19 5.19l-8.16 8.16a1.83 1.83 0 0 1-2.6-2.59L14.5 7.6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
   );
 }
-
-function SendSparkles() {
-  const reduced = useReducedMotion();
-  const t = useSharedValue(0);
-  useEffect(() => {
-    if (reduced) return;
-    t.value = withRepeat(withTiming(2, { duration: 5200, easing: Easing.linear }), -1, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduced]);
-  if (reduced) return null;
-  return (
-    <View pointerEvents="none" style={styles.sparkField}>
-      {SPARK_SEEDS.map((c, i) => (
-        <Spark key={i} driver={t} dx={c.dx} size={c.size} delay={c.delay} plus={c.plus} />
-      ))}
-    </View>
-  );
-}
-
-/** Midnight-garden wash behind the conversation — lime aura, teal depth,
- * faint dot grid. Pure decoration, never intercepts touches. Memoized: the
- * parent re-renders on every keystroke/tick, the backdrop must not. */
-const ChatBackdrop = memo(function ChatBackdrop() {
-  return (
-    <View pointerEvents="none" style={styles.chatBg}>
-      <View style={styles.chatAuraPeach} />
-      <View style={styles.chatAuraCream} />
-      <Svg width="100%" height="100%" style={styles.chatTexture}>
-        <Defs>
-          <Pattern id="chatDots" width={22} height={22} patternUnits="userSpaceOnUse">
-            <Circle cx={1.5} cy={1.5} r={1.2} fill="rgba(154,52,18,0.07)" />
-          </Pattern>
-        </Defs>
-        <Rect x={0} y={0} width="100%" height="100%" fill="url(#chatDots)" />
-      </Svg>
-    </View>
-  );
-});
 
 /**
  * Quiet disclaimer — a one-line footnote that expands to the full medical
@@ -688,7 +538,7 @@ function DocSheet({
                   <Text style={[styles.sheetStageLabel, (done || current) && styles.sheetStageLabelOn]}>
                     {s.label}
                   </Text>
-                  {current ? <ActivityIndicator size="small" color={EMBER} /> : null}
+                  {current ? <ActivityIndicator size="small" color={GV.cta} /> : null}
                 </View>
               );
             })}
@@ -730,7 +580,11 @@ function DocSheet({
         ) : file ? (
           <>
             <View style={styles.sheetPreview}>
-              <Text style={styles.sheetPreviewIcon}>{file.type.includes('pdf') ? '📑' : '🖼'}</Text>
+              <View style={styles.sheetExtTag}>
+                <Text style={styles.sheetExtText}>
+                  {file.type.includes('pdf') ? 'PDF' : 'IMG'}
+                </Text>
+              </View>
               <View style={styles.sheetPreviewInfo}>
                 <Text style={styles.sheetFileName} numberOfLines={1}>{file.name}</Text>
                 <Text style={styles.sheetMeta}>{formatFileSize(file.size)}</Text>
@@ -766,8 +620,10 @@ function DocSheet({
               accessibilityRole="button"
               accessibilityLabel="Choose a medical document to upload"
             >
-              <Text style={styles.sheetDropIcon}>📄</Text>
-              <Text style={styles.sheetDropTitle}>Tap to choose a file</Text>
+              <View style={styles.sheetDropIconWrap}>
+                <Text style={styles.sheetDropIcon}>↑</Text>
+              </View>
+              <Text style={styles.sheetDropTitle}>Choose a file to upload</Text>
               <Text style={styles.sheetMeta}>PDF, PNG, JPG · max {formatFileSize(DOC_MAX_BYTES)}</Text>
             </Pressable>
             {error ? <Text style={styles.sheetError}>{error}</Text> : null}
@@ -780,7 +636,6 @@ function DocSheet({
 
 export default function ChatScreen() {
   const navigation = useNavigation<any>();
-  const { userProfile } = useAuth();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
@@ -1010,8 +865,6 @@ export default function ChatScreen() {
 
   const busy = sending || revealingId != null;
   const isEmpty = messages.length === 0;
-  const firstName = formatFirstName(userProfile?.displayName) || null;
-  const greeting = getGreetingTime();
 
   const lastAssistantId =
     messages.length > 0 && messages[messages.length - 1].role === 'assistant'
@@ -1033,7 +886,7 @@ export default function ChatScreen() {
             accessibilityLabel={`View ${a.mesh_node_name ?? 'area'} in 3D body`}
           >
             <Text style={styles.actionChipText}>
-              🦴 View {prettyStructure(a.structure_id)} in 3D
+              View {prettyStructure(a.structure_id)} in 3D ›
             </Text>
           </Pressable>
         ))}
@@ -1060,15 +913,12 @@ export default function ChatScreen() {
         enabled={Platform.OS === 'ios'}
       >
         <View style={styles.container}>
-          {/* Header */}
+          {/* Header — tinted lockup on dark, one quiet capability line. */}
           <View style={styles.header}>
-            <BrandLogo height={22} />
+            <BrandLogo height={20} tint={GV.teal} />
             <View style={styles.headerText}>
-              <View style={styles.headerTitleRow}>
-                <Text style={styles.headerTitle}>healthgraph AI</Text>
-                <View style={styles.headerDot} />
-              </View>
-              <Text style={styles.headerSub}>Online · reads your logs & records</Text>
+              <Text style={styles.headerTitle}>Assistant</Text>
+              <Text style={styles.headerSub}>Can read your logs and records</Text>
             </View>
           </View>
 
@@ -1085,7 +935,7 @@ export default function ChatScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Track processing document ${firstActive.fileName}`}
             >
-              <ActivityIndicator size="small" color={EMBER} />
+              <ActivityIndicator size="small" color={GV.cta} />
               <Text style={styles.processingChipText} numberOfLines={1}>
                 {firstActive.fileName} · {firstActive.stage}
               </Text>
@@ -1093,7 +943,6 @@ export default function ChatScreen() {
           ) : null}
 
           <View style={styles.messagesContainer}>
-            <ChatBackdrop />
             {isEmpty ? (
               <FlatList
                 data={[]}
@@ -1101,21 +950,15 @@ export default function ChatScreen() {
                 renderItem={null}
                 ListHeaderComponent={
                   <View style={styles.emptyContainer}>
-                    <Enter index={0}>
-                      <Text style={styles.emptyGreeting}>
-                        {greeting}{firstName ? `, ${firstName}` : ''}.
-                      </Text>
-                    </Enter>
-                    <Enter index={1}>
-                      <Text style={styles.emptyPersona}>
-                        I read your <Text style={styles.emptyPersonaAccent}>sleep, symptoms and records</Text> — ask me anything about your health.
-                      </Text>
-                    </Enter>
+                    <Text style={styles.emptyOverline}>Healthgraph Assistant</Text>
+                    <Text style={styles.emptyPersona}>
+                      I read your <Text style={styles.emptyPersonaAccent}>sleep, symptoms and records</Text>. Ask in plain words.
+                    </Text>
 
                     <View style={styles.suggestionsContainer}>
                       <Text style={styles.suggestionsLabel}>Try asking</Text>
                       {suggestions.map((s, i) => (
-                        <SuggestionRow key={s.text} suggestion={s} index={2 + i} onPress={() => sendMessage(s.text)} />
+                        <SuggestionRow key={s.text} suggestion={s} index={i} onPress={() => sendMessage(s.text)} />
                       ))}
                     </View>
 
@@ -1145,46 +988,37 @@ export default function ChatScreen() {
                     // forth of 6 bubbles shows 2 times, not 6.
                     const next = messages[index + 1];
                     const showTime = isLast || next == null || next.role !== item.role;
+                    const isUser = item.role === 'user';
                     return (
-                      <Enter index={0} style={item.role === 'user' ? styles.userRow : styles.aiRow}>
-                        <View
-                          style={[
-                            styles.messageBubble,
-                            item.role === 'user' ? styles.userBubble : styles.assistantBubble,
-                          ]}
-                        >
-                          {item.role === 'assistant' && (
-                            <View style={styles.assistantAvatar}>
-                              <View style={styles.aiDot} />
-                            </View>
-                          )}
-                          <View style={styles.messageContent}>
-                            {item.role === 'user' ? (
-                              <Text style={[styles.messageText, styles.userText]} selectable>
-                                {item.content}
-                              </Text>
-                            ) : (
-                              <StreamText
-                                text={item.content}
-                                live={live}
-                                onTick={scrollToBottom}
-                                onDone={() => setRevealingId((cur) => (cur === item.id ? null : cur))}
-                              />
-                            )}
+                      <View style={isUser ? styles.userRow : styles.aiRow}>
+                        {isUser ? (
+                          <View style={[styles.messageBubble, styles.userBubble]}>
+                            <Text style={[styles.messageText, styles.userText]} selectable>
+                              {item.content}
+                            </Text>
                             {showTime ? (
-                              <Text
-                                style={[
-                                  styles.messageTime,
-                                  item.role === 'user' ? styles.userTime : styles.assistantTime,
-                                ]}
-                              >
+                              <Text style={[styles.messageTime, styles.userTime]}>
                                 {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </Text>
                             ) : null}
                           </View>
-                        </View>
+                        ) : (
+                          <View style={styles.assistantBlock}>
+                            <StreamText
+                              text={item.content}
+                              live={live}
+                              onTick={scrollToBottom}
+                              onDone={() => setRevealingId((cur) => (cur === item.id ? null : cur))}
+                            />
+                            {showTime ? (
+                              <Text style={[styles.messageTime, styles.assistantTime]}>
+                                {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </Text>
+                            ) : null}
+                          </View>
+                        )}
                         {renderMessageActions(item, isLast && !live)}
-                      </Enter>
+                      </View>
                     );
                   }}
                 />
@@ -1202,7 +1036,9 @@ export default function ChatScreen() {
             {sending && (
               <View style={styles.typingContainer}>
                 <TypingDots />
-                <ThinkingStatus />
+                <Text style={styles.typingText} accessibilityLiveRegion="polite">
+                  Thinking
+                </Text>
               </View>
             )}
           </View>
@@ -1238,99 +1074,66 @@ function prettyStructure(structureId: string | null): string {
   return structureId.replace(/_/g, ' ').toLowerCase();
 }
 
-// Warm cream palette — matches the app-wide Dribbble reference.
-const PAPER = '#EAE4D6';
-const CARD = '#FFFBF3';
-const INK = '#1D1B17';
-const EMBER = '#E8862E';
-const TITLE_RED = '#1D1B17';
-const WARM = '#797166';
-const WARM_LINE = '#E6DBC6';
-const TEAL_DEEP = '#1D1B17';
+// Guava-flat: every color below is GV. Stage is the only background;
+// cards are flat white, the CTA is the one green, caret rides GV.teal.
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: PAPER },
+  container: { flex: 1, backgroundColor: GV.stage },
   keyboardAvoiding: { flex: 1 },
 
+  // Header — lockup + one quiet capability line, hairline rule.
+  // No presence theater ("Online ·"), no status dots.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: WARM_LINE,
-    backgroundColor: PAPER,
-    gap: SPACING.sm,
+    paddingHorizontal: SPACE.screenH,
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: GV.stageline,
+    backgroundColor: GV.stage,
+    gap: 8,
   },
-  aiDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: EMBER },
-  headerText: { flex: 1, gap: 1 },
-  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  headerTitle: { ...TYPOGRAPHY.bodyStrong, color: INK, fontSize: 16 },
-  headerDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#2F9E44' },
-  headerSub: { ...TYPOGRAPHY.caption, color: WARM, fontSize: 12 },
-
-  // Warm wash behind the conversation.
-  chatBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  chatAuraPeach: {
-    position: 'absolute',
-    top: -80,
-    right: -70,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(232,89,12,0.07)',
-  },
-  chatAuraCream: {
-    position: 'absolute',
-    top: '45%',
-    left: -90,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: 'rgba(214,178,132,0.18)',
-  },
-  chatTexture: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  headerText: { flex: 1, gap: 0 },
+  headerTitle: { ...TYPE.button, color: '#FFFFFF', fontSize: 16 },
+  headerSub: { ...TYPE.caption, color: GV.fog, fontSize: 12 },
 
   messagesContainer: { flex: 1 },
   messagesContent: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    gap: 14,
+    paddingHorizontal: SPACE.screenH,
+    paddingVertical: 16,
+    gap: SPACE.cardGap,
     flexGrow: 1,
   },
 
-  // ── Teaching empty state ──
-  emptyContainer: { paddingTop: SPACING.sm, gap: SPACING.md },
-  emptyGreeting: {
-    ...TYPOGRAPHY.h2,
-    color: TITLE_RED,
-    textAlign: 'center',
-    fontSize: 25,
-    fontWeight: '800',
-    letterSpacing: -0.3,
+  // ── Empty state: overline + one editorial line, left-aligned. ──
+  emptyContainer: { paddingTop: 24, gap: SPACE.cardGap },
+  emptyOverline: {
+    ...TYPE.chip,
+    color: GV.teal,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    fontSize: 11,
   },
   emptyPersona: {
-    ...TYPOGRAPHY.body,
-    color: WARM,
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: SPACING.lg,
+    ...TYPE.display,
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
   },
-  emptyPersonaAccent: { color: EMBER, fontWeight: '700' },
+  emptyPersonaAccent: { color: GV.teal },
 
   // Quiet disclaimer footnote — present, never in the way.
   dnWrap: { gap: 6 },
-  dnFoot: { paddingHorizontal: SPACING.md, paddingTop: 4, paddingBottom: 12 },
+  dnFoot: { paddingHorizontal: SPACE.screenH, paddingTop: 4, paddingBottom: 12 },
   dnHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 },
-  dnHeadText: { ...TYPOGRAPHY.caption, color: WARM, fontSize: 11 },
-  dnChevron: { color: WARM, fontSize: 11, fontWeight: '700' },
-  disclaimerText: { ...TYPOGRAPHY.caption, color: WARM, lineHeight: 18, textAlign: 'center' },
+  dnHeadText: { ...TYPE.caption, color: GV.fog, fontSize: 11 },
+  dnChevron: { color: GV.fog, fontSize: 11, fontFamily: FONT.semi },
+  disclaimerText: { ...TYPE.caption, color: GV.fog, lineHeight: 18, textAlign: 'center' },
 
-  // Clean list — no cards, just breathable type. Feels like Gemini/ChatGPT starters.
-  suggestionsContainer: { paddingBottom: SPACING.md, gap: 0 },
+  // Starters — hairline ledger rows with editorial numerals. One hue.
+  suggestionsContainer: { paddingBottom: SPACE.screenH, gap: 0 },
   suggestionsLabel: {
-    ...TYPOGRAPHY.label,
-    color: WARM,
+    ...TYPE.chip,
+    color: GV.fog,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     fontSize: 11,
@@ -1341,141 +1144,99 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(154,52,18,0.10)',
+    borderBottomColor: GV.stageline,
   },
-  suggestionDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    opacity: 0.95,
-    marginTop: 1,
+  suggestionIndex: {
+    ...TYPE.chip,
+    fontSize: 12,
+    color: GV.teal,
+    fontVariant: ['tabular-nums'],
+    width: 20,
+    opacity: 0.9,
   },
   suggestionPlainText: {
-    ...TYPOGRAPHY.body,
-    color: INK,
+    ...TYPE.body,
+    color: '#FFFFFF',
     flex: 1,
     lineHeight: 20,
     fontSize: 15,
-    fontWeight: '500',
   },
   suggestionPlainArrow: {
-    color: WARM,
+    color: GV.fog,
     fontSize: 20,
-    fontWeight: '400',
-    opacity: 0.45,
+    fontFamily: FONT.regular,
+    opacity: 0.6,
     marginLeft: 4,
     marginTop: -1,
   },
-  // kept for backward compat if anything still references old names
-  suggestionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: WARM_LINE,
-    borderRadius: BORDER_RADIUS.lg,
-    borderCurve: 'continuous',
-    padding: SPACING.md,
-    gap: SPACING.sm,
-  },
-  suggestionIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  suggestionIcon: { fontSize: 17 },
-  suggestionText: { ...TYPOGRAPHY.body, color: INK, flex: 1, lineHeight: 20, fontSize: 14.5 },
-  suggestionArrow: { fontSize: 17, fontWeight: '700' },
 
-  // ── Messages ──
+  // ── Messages: two voices, never twin bubbles. ──
+  // You: solid CTA pill, right, white type. Assistant: flat full-width
+  // prose on stage, no chrome — the serious-tool framing, not SMS.
   userRow: { alignItems: 'flex-end' },
   aiRow: { alignItems: 'flex-start' },
   messageBubble: {
     maxWidth: '86%',
-    paddingVertical: SPACING.sm + 2,
-    paddingHorizontal: SPACING.md,
-    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: SPACE.rCard,
     borderCurve: 'continuous',
-    flexDirection: 'row',
-    gap: SPACING.sm,
   },
   userBubble: {
-    backgroundColor: '#431407',
+    backgroundColor: GV.cta,
     alignSelf: 'flex-end',
     borderBottomRightRadius: 6,
-    boxShadow: '0 4px 14px rgba(67,20,7,0.30)',
   },
-  assistantBubble: {
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: WARM_LINE,
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 6,
-    borderLeftWidth: 3,
-    borderLeftColor: EMBER,
-    boxShadow: '0 4px 14px rgba(124,45,18,0.10)',
+  assistantBlock: {
+    alignSelf: 'stretch',
+    paddingRight: 8,
   },
-  assistantAvatar: {
-    width: 26,
-    height: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  messageContent: { flex: 1, flexShrink: 1 },
-  messageText: { ...TYPOGRAPHY.body, color: INK, lineHeight: 22, fontSize: 15 },
-  userText: { color: '#FFF7ED' },
-  caret: { color: EMBER, fontWeight: '800' },
-  messageTime: { ...TYPOGRAPHY.caption, marginTop: 6, opacity: 0.6, alignSelf: 'flex-end', fontSize: 11 },
-  userTime: { color: 'rgba(255,247,237,0.7)' },
-  assistantTime: { color: WARM },
+  messageText: { ...TYPE.body, color: '#FFFFFF', lineHeight: 24, fontSize: 15 },
+  userText: { color: '#FFFFFF' },
+  caret: { color: GV.teal, fontFamily: FONT.regular },
+  messageTime: { ...TYPE.caption, marginTop: 6, opacity: 0.6, alignSelf: 'flex-end', fontSize: 11 },
+  userTime: { color: '#FFFFFF', opacity: 0.75 },
+  assistantTime: { color: GV.fog, alignSelf: 'flex-start' },
 
-  msgActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, maxWidth: '86%' },
+  msgActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, maxWidth: '100%' },
   actionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(11,104,82,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(11,104,82,0.4)',
-    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rPill,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 8,
   },
-  actionChipText: { ...TYPOGRAPHY.captionStrong, color: TEAL_DEEP, fontSize: 12.5 },
+  actionChipText: { ...TYPE.chip, color: GV.ink, fontSize: 13 },
   regenBtn: {
-    borderRadius: BORDER_RADIUS.full,
+    borderRadius: SPACE.rPill,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: WARM_LINE,
-    backgroundColor: CARD,
+    borderColor: GV.stageline,
+    backgroundColor: 'transparent',
   },
-  regenText: { ...TYPOGRAPHY.captionStrong, color: WARM, fontSize: 12.5 },
+  regenText: { ...TYPE.chip, color: GV.fog, fontSize: 13 },
 
-  followRow: { flexDirection: 'row', gap: 8, paddingHorizontal: SPACING.md, paddingBottom: 10 },
+  followRow: { flexDirection: 'row', gap: 8, paddingHorizontal: SPACE.screenH, paddingBottom: 8 },
   followChip: {
     flex: 1,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1,
-    borderColor: 'rgba(232,89,12,0.45)',
-    backgroundColor: '#FFF1E2',
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.card,
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
-  followChipText: { ...TYPOGRAPHY.captionStrong, color: '#9A3412', fontSize: 12 },
+  followChipText: { ...TYPE.chip, color: GV.ink, fontSize: 12 },
 
-  typingContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm, paddingTop: 2, gap: SPACING.sm },
+  typingContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.screenH, paddingBottom: 8, paddingTop: 2, gap: 8 },
   typingDots: { flexDirection: 'row', gap: 5 },
-  typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: EMBER },
-  typingText: { ...TYPOGRAPHY.caption, color: WARM, fontStyle: 'italic', fontSize: 12.5 },
+  typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: GV.teal },
+  typingText: { ...TYPE.caption, color: GV.fog, fontSize: 13 },
 
-  // ── Composer — Gemini-style: one pill, send lives inside ────────────────
+  // ── Composer: one white pill, send lives inside ────────────────────────
   attachButton: {
     width: 40,
     height: 40,
@@ -1484,82 +1245,87 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'flex-end',
   },
-  attachGlyph: {
-    fontSize: 20,
-  },
   // ── Live processing chip ──────────────────────────────────────────────
   processingChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 6,
-    borderRadius: BORDER_RADIUS.full,
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: WARM_LINE,
+    gap: 8,
+    marginHorizontal: SPACE.screenH,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.card,
     alignSelf: 'flex-start',
     maxWidth: '90%',
   },
   processingChipText: {
-    ...TYPOGRAPHY.caption,
-    color: INK,
+    ...TYPE.caption,
+    color: GV.ink,
     fontSize: 12,
     flexShrink: 1,
   },
   // ── Records sheet ─────────────────────────────────────────────────────
   sheetBody: {
-    gap: SPACING.md,
-    paddingBottom: SPACING.md,
+    gap: SPACE.cardGap,
+    paddingBottom: 16,
   },
   sheetDrop: {
-    borderWidth: 2,
-    borderColor: WARM_LINE,
-    borderStyle: 'dashed',
-    borderRadius: BORDER_RADIUS.lg,
-    paddingVertical: SPACING.xl,
+    borderRadius: 12,
+    backgroundColor: GV.wash,
+    paddingVertical: 32,
     alignItems: 'center',
-    gap: SPACING.xs,
+    gap: 8,
   },
-  sheetDropIcon: { fontSize: 40 },
-  sheetDropTitle: { ...TYPOGRAPHY.bodyStrong, color: INK },
+  sheetDropIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: GV.cta,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetDropIcon: { color: '#FFFFFF', fontSize: 20, fontFamily: FONT.bold, marginTop: -2 },
+  sheetDropTitle: { ...TYPE.button, fontSize: 15, color: GV.ink },
   sheetPreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    padding: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: PAPER,
-    borderWidth: 1,
-    borderColor: WARM_LINE,
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: GV.wash,
   },
-  sheetPreviewIcon: { fontSize: 28 },
+  sheetExtTag: {
+    borderRadius: 8,
+    backgroundColor: GV.cta,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  sheetExtText: { ...TYPE.chip, color: '#FFFFFF', fontSize: 11, letterSpacing: 0.6 },
   sheetPreviewInfo: { flex: 1, gap: 2 },
-  sheetFileName: { ...TYPOGRAPHY.bodyStrong, color: INK },
-  sheetMeta: { ...TYPOGRAPHY.caption, color: WARM },
-  sheetError: { ...TYPOGRAPHY.caption, color: TITLE_RED },
-  sheetHint: { ...TYPOGRAPHY.caption, color: WARM, textAlign: 'center' },
+  sheetFileName: { ...TYPE.button, fontSize: 15, color: GV.ink },
+  sheetMeta: { ...TYPE.caption, color: GV.muted },
+  sheetError: { ...TYPE.caption, color: GV.danger },
+  sheetHint: { ...TYPE.caption, color: GV.muted, textAlign: 'center' },
   sheetPrimary: {
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: EMBER,
+    paddingVertical: 12,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.cta,
     alignItems: 'center',
   },
-  sheetPrimaryText: { ...TYPOGRAPHY.bodyStrong, color: '#fff' },
+  sheetPrimaryText: { ...TYPE.button, color: '#FFFFFF' },
   sheetGhost: {
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 12,
+    borderRadius: SPACE.rPill,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: WARM_LINE,
+    borderColor: GV.line,
   },
-  sheetGhostText: { ...TYPOGRAPHY.bodyStrong, color: INK },
+  sheetGhostText: { ...TYPE.button, color: GV.ink },
   sheetStageRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: 8,
     paddingVertical: 4,
   },
   sheetDot: {
@@ -1567,59 +1333,52 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: WARM_LINE,
+    borderColor: GV.line,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: CARD,
+    backgroundColor: GV.wash,
   },
-  sheetDotDone: { backgroundColor: TEAL_DEEP, borderColor: TEAL_DEEP },
-  sheetDotCurrent: { borderColor: EMBER },
-  sheetCheck: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  sheetStageLabel: { ...TYPOGRAPHY.body, color: WARM, flex: 1 },
-  sheetStageLabelOn: { color: INK, fontWeight: '600' },
+  sheetDotDone: { backgroundColor: GV.cta, borderColor: GV.cta },
+  sheetDotCurrent: { borderColor: GV.cta },
+  sheetCheck: { color: '#FFFFFF', fontSize: 13, fontFamily: FONT.bold },
+  sheetStageLabel: { ...TYPE.body, color: GV.muted, flex: 1 },
+  sheetStageLabelOn: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink, flex: 1 },
   inputContainer: {
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.sm,
-    paddingBottom: Platform.OS === 'ios' ? SPACING.sm + 84 : SPACING.md + 84,
-    backgroundColor: PAPER,
+    paddingHorizontal: SPACE.screenH,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: GV.stage,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(154,52,18,0.10)',
-  },
-  // Soft keyboard open: tab bar hidden, so hug the keyboard instead of
-  // holding the (now empty) tab-clearing gap.
-  inputContainerKeyboardOpen: {
-    paddingBottom: SPACING.md,
+    borderTopColor: GV.stageline,
   },
   composerShell: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: CARD,
-    borderWidth: 1.5,
-    borderColor: WARM_LINE,
+    backgroundColor: GV.card,
+    borderWidth: 2,
+    borderColor: GV.card,
     borderRadius: 28,
     borderCurve: 'continuous',
     paddingLeft: 6,
     paddingRight: 6,
     paddingVertical: 6,
-    gap: 8,
+    gap: 4,
     minHeight: 56,
-    boxShadow: '0 2px 14px rgba(124,45,18,0.08)',
   },
   composerShellFocused: {
-    borderColor: 'rgba(232,89,12,0.45)',
-    backgroundColor: CARD,
-    boxShadow: '0 4px 20px rgba(232,89,12,0.16)',
+    borderColor: GV.cta,
   },
   inputInner: {
     flex: 1,
-    ...TYPOGRAPHY.body,
-    fontSize: 15.5,
+    ...TYPE.body,
+    fontSize: 15,
     lineHeight: 21,
-    color: INK,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    color: GV.ink,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    textAlignVertical: 'center',
     maxHeight: 120,
-    minHeight: 36,
+    minHeight: 40,
     backgroundColor: 'transparent',
   },
   composerAction: {
@@ -1629,77 +1388,36 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     paddingBottom: 2,
   },
-  // legacy aliases (no longer used by JSX but keep to avoid dead-style confusion)
-  inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.sm },
-  input: {
-    flex: 1,
-    ...TYPOGRAPHY.body,
-    fontSize: 15,
-    color: INK,
-    backgroundColor: CARD,
-    borderWidth: 1.5,
-    borderColor: WARM_LINE,
-    borderRadius: 24,
-    borderCurve: 'continuous',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 12,
-    maxHeight: 120,
-    minHeight: 50,
-  },
-  inputFocused: {
-    borderColor: EMBER,
-    backgroundColor: CARD,
-  },
-  sendWrap: { width: 52, alignItems: 'center', justifyContent: 'flex-end' },
-  sparkField: {
-    position: 'absolute',
-    bottom: 42,
-    left: -6,
-    width: 56,
-    height: 88,
-  },
-  sparkDot: {
-    position: 'absolute',
-    bottom: 0,
-    backgroundColor: '#84CC16',
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    shadowColor: '#65A30D',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-  },
-  sparkPlus: {
-    position: 'absolute',
-    bottom: 0,
-    color: '#65A30D',
-    fontSize: 14,
-    fontWeight: '900',
-    backgroundColor: 'transparent',
-  },
-  // Gemini send — compact ink pill tucked inside the composer, not floating outside.
+  // Send — ghost ring when empty, floods solid CTA green the moment there's
+  // text. The affordance flip is the feedback; no muddy gray state.
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#1A0F0A',
+    backgroundColor: GV.cta,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 4px 14px rgba(26,15,10,0.28)',
+  },
+  sendButtonGhost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: GV.line,
   },
   sendButtonPressed: {
     transform: [{ scale: 0.92 }],
     opacity: 0.92,
   },
-  sendButtonDisabled: {
-    opacity: 0.32,
-    backgroundColor: '#B9A99A',
-    boxShadow: '0 0 0 rgba(0,0,0,0)',
-  },
   sendButtonText: {
-    color: '#FFF7ED',
+    color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '900',
+    fontFamily: FONT.bold,
+    marginTop: -1,
+    letterSpacing: 0.2,
+  },
+  sendButtonGhostText: {
+    color: GV.muted,
+    fontSize: 18,
+    fontFamily: FONT.bold,
     marginTop: -1,
     letterSpacing: 0.2,
   },
@@ -1707,10 +1425,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#E03131',
+    backgroundColor: GV.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 4px 14px rgba(224,49,49,0.35)',
   },
-  stopButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  stopButtonText: { color: '#FFFFFF', fontSize: 13, fontFamily: FONT.bold },
 });

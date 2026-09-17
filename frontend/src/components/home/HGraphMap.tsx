@@ -2,47 +2,53 @@
  * HGraphMap — At-a-glance health picture in the style of the hGraph banner
  * (hgraph.org): one radial picture, every logged metric on its own spoke.
  *
- * Each spoke plots the metric's multi-day AVERAGE (not a single day). Dots
- * are CONNECTED into a closed contour whose segments and zonal fills read
- * green or red per spoke verdict: red when a metric slid the wrong way for
- * 3+ days or its average sits outside the healthy band, green otherwise.
- * Only metrics with real history are passed in (missing = no spoke).
- * No composite score is computed; the hub names the averaging window.
+ * Rebuilt on the evidence for what makes radial health visuals actually
+ * readable (hFigures usability work + radar-chart research):
+ * - Category SECTORS stay visible so you always know which family a spoke
+ *   belongs to (the #1 hFigures finding).
+ * - Every spoke prints its VALUE directly — no tap-to-read basics.
+ * - The healthy zone is a band segment per spoke (the original hGraph "green
+ *   circle" idea); dots inside read fine at a glance.
+ * - Direction chevrons answer "which way is good?" per spoke.
+ * - NO connected polygon: joining discrete metrics implies relationships
+ *   that don't exist, and its area exaggerates differences quadratically.
  *
- * Motion (all UI-thread, reduced-motion gated): wrapper fades + settles in,
- * dots pop along a single shared progress value with per-dot windows, then a
- * faint ambient breath loop. Values are touched only in effects/worklets.
+ * Each spoke plots the metric's multi-day AVERAGE (not a single day).
+ * Missing = no spoke (never a zero dot).
+ *
+ * Guava-flat: the dial lives on a white card — ink dots and hairlines on a
+ * soft wash well, green reserved for healthy-zone bands, danger reserved
+ * strictly for off-track flags. Geometry and data encoding are unchanged.
+ *
+ * Motion (functional only, reduced-motion gated): data changes morph
+ * dots/bands from their on-screen presentation values via a
+ * critically-damped spring — never a jump. New spokes fade in. Press-down
+ * swells the dot the instant the finger lands; selection halo grows outward
+ * from the dot. No entrance cascades, no ambient loops — the dial rests.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 import Svg, {
   Rect,
   Line,
   Circle,
-  Ellipse,
   Path,
   Text as SvgText,
   G,
-  Defs,
-  RadialGradient,
-  LinearGradient,
-  Stop,
 } from 'react-native-svg';
 import Animated, {
   useSharedValue,
-  useAnimatedStyle,
   useAnimatedProps,
   withTiming,
-  withDelay,
-  withRepeat,
   withSpring,
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
 
 import { useReducedMotion } from '@/theme/useReducedMotion';
-import { bezier, curves } from '@/theme/motion';
+import { spring } from '@/theme/motion';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { BottomSheet } from '@/components/BottomSheet';
 import type { MetricTrend } from '@/screens/Dashboard/correlations';
 
@@ -68,18 +74,49 @@ export interface HMetric {
   avgDays: number;
 }
 
-const VB = 320;
+const VB = 360;
 const C = VB / 2;
-const R = 130; // plot radius
-const LABEL_R = R + 24;
-const PAPER = '#FFF8F0';
-const INK = '#191919';
-const GRID = 'rgba(20,20,20,0.10)';
-const GOOD = '#3F9B4E';
-const GOOD_BAND = 'rgba(63,155,78,0.38)';
-const BAD = '#D64545';
-const SUB = '#6E5F52';
-const DOT_R = 8;
+const R = 124; // plot radius
+const LABEL_R = R + 26;
+const SECTOR_R = R + 46;
+// Guava-flat dial tokens: monochrome ink on white, green bands, red flags.
+const WELL = GV.wash;
+const GRID = GV.line;
+const BAND = GV.fx.green;
+const BAD = GV.danger;
+const SUB = GV.muted;
+const DOT_R = 7;
+
+/** Fixed sector order — spokes group by family so the dial reads in zones. */
+const SECTOR_ORDER = ['rest', 'vitality', 'body', 'fuel', 'mind', 'care', 'more'] as const;
+const SECTOR_LABEL: Record<string, string> = {
+  rest: 'REST',
+  vitality: 'VITALITY',
+  body: 'BODY',
+  fuel: 'FUEL',
+  mind: 'MIND',
+  care: 'CARE',
+  more: 'MORE',
+};
+
+function sectorOf(m: HMetric): string {
+  const base = m.id.includes(':') ? m.id.slice(0, m.id.indexOf(':')) : m.id;
+  if (['sleepDur', 'sleepQual', 'awakenings', 'sleep'].includes(base)) return 'rest';
+  if (['energy', 'wellbeing'].includes(base)) return 'vitality';
+  if (['activity', 'heart', 'hr'].includes(base)) return 'body';
+  if (['water', 'meals', 'appetite'].includes(base)) return 'fuel';
+  if (['stress', 'pain', 'symptom'].includes(base)) return 'mind';
+  if (['doses', 'medication'].includes(base)) return 'care';
+  return 'more';
+}
+
+/** Which radial direction is healthy: +1 outward, -1 inward, 0 steady. */
+function goodDirection(m: HMetric): 1 | -1 | 0 {
+  const base = m.id.includes(':') ? m.id.slice(0, m.id.indexOf(':')) : m.id;
+  if (['sleepDur', 'sleepQual', 'energy', 'water', 'activity', 'wellbeing', 'meals', 'appetite', 'doses'].includes(base)) return 1;
+  if (['stress', 'pain', 'symptom', 'awakenings'].includes(base)) return -1;
+  return 0;
+}
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedLine = Animated.createAnimatedComponent(Line);
@@ -190,29 +227,50 @@ interface Spoke {
   labelY: number;
   anchor: 'start' | 'middle' | 'end';
   good: boolean;
+  /** Healthy radial direction: +1 outward, -1 inward, 0 steady. */
+  dir: 1 | -1 | 0;
+  sector: string;
 }
 
 function HDot({
   spoke,
+  from,
   index,
   progress,
+  morph,
+  pressedId,
+  pressT,
 }: {
   spoke: Spoke;
+  /** On-screen position before the latest data change (null = new spoke). */
+  from: { x: number; y: number } | null;
   index: number;
   progress: ReturnType<typeof useSharedValue<number>>;
+  /** 0→1 spring driving data-change morphs. */
+  morph: ReturnType<typeof useSharedValue<number>>;
+  pressedId: ReturnType<typeof useSharedValue<string | null>>;
+  /** 0→1 press-down swell (100ms timing). */
+  pressT: ReturnType<typeof useSharedValue<number>>;
 }) {
+  const fx = from?.x;
+  const fy = from?.y;
   const props = useAnimatedProps(() => {
     const t0 = index * 0.07;
     const t = interpolate(progress.value, [t0, t0 + 0.3], [0, 1], Extrapolation.CLAMP);
-    return { r: 2 + t * (DOT_R - 2), opacity: t };
-  });
+    const m = morph.value;
+    const px = fx != null ? fx + (spoke.dotX - fx) * m : spoke.dotX;
+    const py = fy != null ? fy + (spoke.dotY - fy) * m : spoke.dotY;
+    const pressed = pressedId.value === spoke.m.id;
+    const r = (2 + t * (DOT_R - 2)) * (pressed ? 1 + 0.4 * pressT.value : 1);
+    return { cx: px, cy: py, r, opacity: t * (fx != null ? 1 : m) };
+  }, [spoke.dotX, spoke.dotY, spoke.m.id, fx, fy, index]);
   return (
     <AnimatedCircle
       cx={spoke.dotX}
       cy={spoke.dotY}
-      fill={spoke.good ? 'url(#dotGood)' : 'url(#dotBad)'}
+      fill={spoke.good ? GV.ink : GV.danger}
       stroke="#FFFFFF"
-      strokeWidth={1.5}
+      strokeWidth={2}
       animatedProps={props}
     />
   );
@@ -220,26 +278,46 @@ function HDot({
 
 function HBand({
   spoke,
+  from,
   index,
   progress,
+  morph,
+  color,
 }: {
   spoke: Spoke;
+  /** On-screen band endpoints before the latest data change (null = new). */
+  from: { x1: number; y1: number; x2: number; y2: number } | null;
   index: number;
   progress: ReturnType<typeof useSharedValue<number>>;
+  morph: ReturnType<typeof useSharedValue<number>>;
+  color: string;
 }) {
+  const fx1 = from?.x1;
+  const fy1 = from?.y1;
+  const fx2 = from?.x2;
+  const fy2 = from?.y2;
   const props = useAnimatedProps(() => {
     const t0 = index * 0.07;
     const t = interpolate(progress.value, [t0, t0 + 0.3], [0, 1], Extrapolation.CLAMP);
-    return { opacity: 0.45 + t * 0.55 };
-  });
+    const m = morph.value;
+    const has = fx1 != null && fy1 != null && fx2 != null && fy2 != null;
+    return {
+      x1: has ? fx1 + (spoke.bandX1 - fx1) * m : spoke.bandX1,
+      y1: has ? fy1 + (spoke.bandY1 - fy1) * m : spoke.bandY1,
+      x2: has ? fx2 + (spoke.bandX2 - fx2) * m : spoke.bandX2,
+      y2: has ? fy2 + (spoke.bandY2 - fy2) * m : spoke.bandY2,
+      opacity: (0.45 + t * 0.55) * (has ? 1 : m),
+    };
+  }, [spoke.bandX1, spoke.bandY1, spoke.bandX2, spoke.bandY2, fx1, fy1, fx2, fy2, index]);
   return (
     <AnimatedLine
       x1={spoke.bandX1}
       y1={spoke.bandY1}
       x2={spoke.bandX2}
       y2={spoke.bandY2}
-      stroke={GOOD_BAND}
-      strokeWidth={12}
+      stroke={color}
+      strokeOpacity={0.4}
+      strokeWidth={14}
       strokeLinecap="round"
       animatedProps={props}
     />
@@ -249,78 +327,117 @@ function HBand({
 export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; width: number }) {
   const reduced = useReducedMotion();
 
+  // Spokes group by family sector (fixed order) so the dial reads in zones
+  // instead of an arbitrary ring — axis order stops being a shape artifact.
   const spokes = useMemo<Spoke[]>(() => {
-    const n = metrics.length;
-    return metrics.map((m, i) => {
+    const ordered = [...metrics].sort(
+      (a, b) => SECTOR_ORDER.indexOf(sectorOf(a) as (typeof SECTOR_ORDER)[number]) - SECTOR_ORDER.indexOf(sectorOf(b) as (typeof SECTOR_ORDER)[number]),
+    );
+    const n = ordered.length;
+    return ordered.map((m, i) => {
       const angle = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(n, 1);
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
       const span = m.max - m.min || 1;
       const rr = (v: number) => R * (0.05 + 0.95 * clamp01((v - m.min) / span));
-      const rv = rr(m.value);
+      const rv = rr(Math.max(m.min, Math.min(m.max, m.value)));
       const rawLabelX = C + LABEL_R * cos;
       const rawLabelY = C + LABEL_R * sin;
-      const labelX = Math.max(44, Math.min(VB - 44, rawLabelX));
+      const labelX = Math.max(30, Math.min(VB - 30, rawLabelX));
       const anchor: 'start' | 'middle' | 'end' =
         Math.abs(cos) < 0.35 ? 'middle' : cos > 0 ? 'start' : 'end';
       return {
         m, angle, cos, sin,
         dotX: C + rv * cos,
         dotY: C + rv * sin,
-        bandX1: C + rr(m.bandLo) * cos,
-        bandY1: C + rr(m.bandLo) * sin,
-        bandX2: C + rr(m.bandHi) * cos,
-        bandY2: C + rr(m.bandHi) * sin,
-        labelX, labelY: Math.max(16, Math.min(VB - 8, rawLabelY)),
+        bandX1: C + rr(Math.max(m.min, Math.min(m.max, m.bandLo))) * cos,
+        bandY1: C + rr(Math.max(m.min, Math.min(m.max, m.bandLo))) * sin,
+        bandX2: C + rr(Math.max(m.min, Math.min(m.max, m.bandHi))) * cos,
+        bandY2: C + rr(Math.max(m.min, Math.min(m.max, m.bandHi))) * sin,
+        labelX, labelY: Math.max(18, Math.min(VB - 16, rawLabelY)),
         anchor, good: m.good,
+        dir: goodDirection(m),
+        sector: sectorOf(m),
       };
     });
   }, [metrics]);
 
-  const enter = useSharedValue(reduced ? 1 : 0);
-  const enterScale = useSharedValue(reduced ? 1 : 0.96);
-  const progress = useSharedValue(reduced ? 1 : 0);
-  const breath = useSharedValue(1);
+  // No entrance cascade: dots rest at full size. `progress` stays pinned at 1
+  // so the shared dot/band math is untouched; only functional motion
+  // (morph, press swell, halo) still animates, and never under reduced motion.
+  const progress = useSharedValue(1);
+  // Fluid-interaction state: morph springs dots/bands from presentation
+  // values on data change; pressedId/pressT give instant press-down swell.
+  const morph = useSharedValue(1);
+  const pressedId = useSharedValue<string | null>(null);
+  const pressT = useSharedValue(0);
+  const haloT = useSharedValue(0);
+  const prevLayout = useRef<Map<
+    string,
+    { x: number; y: number; b1x: number; b1y: number; b2x: number; b2y: number }
+  > | null>(null);
+  /** Spoke-id signature driving the scrub gate above. */
+  const sigRef = useRef<string | null>(null);
+  const prevSelectedId = useRef<string | null>(null);
 
+  // Data-change morph: re-target from live on-screen positions with a
+  // critically-damped spring (no bounce — this morph carries no momentum).
+  // Re-assigning withSpring mid-flight blends from the presentation value,
+  // so rapid refreshes never jump. Reduced motion: static cut.
+  // Scrub-gate: when only VALUES change (same spoke set — e.g. the day
+  // scrubber gliding), morph stays pinned at 1 so dots track the new
+  // positions frame-by-frame instead of rubber-banding. The spring fires
+  // only when spokes appear/disappear.
   useEffect(() => {
-    if (reduced) {
-      enter.value = 1;
-      enterScale.value = 1;
-      progress.value = 1;
-      breath.value = 1;
+    const snap = new Map(
+      spokes.map((s) => [
+        s.m.id,
+        { x: s.dotX, y: s.dotY, b1x: s.bandX1, b1y: s.bandY1, b2x: s.bandX2, b2y: s.bandY2 },
+      ]),
+    );
+    const prev = prevLayout.current;
+    prevLayout.current = snap;
+    const sig = spokes.map((s) => s.m.id).join(',');
+    const prevSig = sigRef.current;
+    sigRef.current = sig;
+    if (reduced || prevSig === sig) {
+      morph.value = 1;
       return;
     }
-    enter.value = withTiming(1, { duration: 350, easing: bezier(curves.standard) });
-    enterScale.value = withSpring(1, { duration: 450, dampingRatio: 0.85 });
-    progress.value = withDelay(150, withTiming(1, { duration: 900, easing: bezier(curves.standard) }));
-    breath.value = withDelay(
-      1500,
-      withRepeat(withTiming(1.012, { duration: 2800, easing: bezier(curves.standard) }), -1, true),
-    );
+    if (prev != null && spokes.some((s) => prev.has(s.m.id))) {
+      morph.value = 0;
+      morph.value = withSpring(1, spring);
+    } else {
+      morph.value = 1;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduced]);
+  }, [spokes, reduced]);
 
-  const enterStyle = useAnimatedStyle(() => ({
-    opacity: enter.value,
-    transform: [{ scale: enterScale.value }],
-  }));
-  const breathStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: breath.value }],
-  }));
-
-  // Closed contour segments: red when either endpoint verdict is bad —
-  // the map reads as green and red territory, not isolated dots.
-  const segs = useMemo(() => {
-    if (spokes.length < 2) return [];
-    return spokes.map((s, i) => {
-      const t = spokes[(i + 1) % spokes.length];
-      return { a: s, b: t, bad: !s.good || !t.good };
+  // Sector rim labels only — families stay visible without background
+  // washes. One tracked word per family, always in the same place.
+  const sectorArcs = useMemo(() => {
+    if (spokes.length === 0) return [];
+    const step = (2 * Math.PI) / spokes.length;
+    const groups: { sector: string; start: number; end: number; mid: number }[] = [];
+    for (const s of spokes) {
+      const g = groups[groups.length - 1];
+      if (g && g.sector === s.sector) {
+        g.end = s.angle + step / 2;
+      } else {
+        groups.push({ sector: s.sector, start: s.angle - step / 2, end: s.angle + step / 2, mid: s.angle });
+      }
+    }
+    return groups.map((g) => {
+      const span = g.end - g.start;
+      const mid = g.start + span / 2;
+      const lx = C + SECTOR_R * Math.cos(mid);
+      const ly = C + SECTOR_R * Math.sin(mid);
+      return {
+        sector: g.sector,
+        labelX: Math.max(36, Math.min(VB - 36, lx)),
+        labelY: Math.max(18, Math.min(VB - 12, ly)),
+      };
     });
-  }, [spokes]);
-
-  const basePoly = useMemo(() => {
-    if (spokes.length < 3) return '';
-    return `M ${spokes.map((s) => `${s.dotX.toFixed(1)} ${s.dotY.toFixed(1)}`).join(' L ')} Z`;
   }, [spokes]);
 
   const trendArrow = (t: MetricTrend) => (t === 'up' ? '▲' : t === 'down' ? '▼' : '●');
@@ -333,6 +450,42 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = selectedId != null ? (spokes.find((s) => s.m.id === selectedId) ?? null) : null;
   const selectedGuide = selected ? (SPOKE_GUIDANCE[selected.m.id] ?? GUIDANCE_FALLBACK) : null;
+
+  // Selection halo grows outward from the dot — the in-between frames point
+  // at the outcome. Only on fresh selections (moving between spokes just
+  // re-anchors at full size); static under reduced motion.
+  useEffect(() => {
+    const had = prevSelectedId.current != null;
+    prevSelectedId.current = selectedId;
+    if (selectedId == null) return;
+    if (reduced) {
+      haloT.value = 1;
+      return;
+    }
+    if (!had) {
+      haloT.value = 0;
+      haloT.value = withSpring(1, spring);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, reduced]);
+
+  const haloProps = useAnimatedProps(() => ({ r: 9 + haloT.value * 6 }));
+
+  // Commit on release; feedback starts on press-down (see hit discs below).
+  // Haptic fires on the same frame as halo + sheet for one causal moment.
+  const commitSpoke = useCallback(
+    (id: string) => {
+      try {
+        Vibration.vibrate(10);
+      } catch {
+        /* best-effort haptics */
+      }
+      pressT.value = withTiming(0, { duration: 100 });
+      pressedId.value = null;
+      setSelectedId(id);
+    },
+    [pressT, pressedId],
+  );
 
   const trendLine = (m: HMetric): string => {
     const days = `${m.avgDays}d avg`;
@@ -350,12 +503,12 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
   if (spokes.length === 0) {
     return (
       <Svg width={width} height={width * 0.6}>
-        <Rect x={0} y={0} width={width} height={width * 0.6} rx={18} fill={PAPER} />
+        <Rect x={0.5} y={0.5} width={width - 1} height={width * 0.6 - 1} rx={20} fill={GV.card} strokeWidth={0} />
         <SvgText
           x={width / 2}
           y={width * 0.3}
-          fontSize={12}
-          fontWeight="600"
+          fontSize={13}
+          fontFamily={FONT.regular}
           fill={SUB}
           textAnchor="middle"
         >
@@ -367,190 +520,195 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
 
   return (
     <>
-      <Animated.View style={enterStyle}>
-        <Animated.View style={breathStyle}>
-          <Svg width={width} height={width} viewBox={`0 0 ${VB} ${VB}`}>
-            <Defs>
-              {/* plinth shading: lit center, soft rim */}
-              <RadialGradient id="hgDisc" cx="50%" cy="42%" r="65%">
-                <Stop offset="0" stopColor="#FFFFFF" stopOpacity={1} />
-                <Stop offset="0.72" stopColor="#F4F6F8" stopOpacity={1} />
-                <Stop offset="1" stopColor="#E2E7EC" stopOpacity={1} />
-              </RadialGradient>
-              {/* hub sphere: highlight upper-left */}
-              <RadialGradient id="hgHub" cx="36%" cy="30%" r="75%">
-                <Stop offset="0" stopColor="#FFFFFF" stopOpacity={1} />
-                <Stop offset="0.55" stopColor="#EDF0F3" stopOpacity={1} />
-                <Stop offset="1" stopColor="#B7C0C9" stopOpacity={1} />
-              </RadialGradient>
-              {/* value-dot spheres */}
-              <RadialGradient id="dotGood" cx="36%" cy="30%" r="75%">
-                <Stop offset="0" stopColor="#8FE39A" stopOpacity={1} />
-                <Stop offset="0.6" stopColor="#3F9B4E" stopOpacity={1} />
-                <Stop offset="1" stopColor="#2E7D3A" stopOpacity={1} />
-              </RadialGradient>
-              <RadialGradient id="dotBad" cx="36%" cy="30%" r="75%">
-                <Stop offset="0" stopColor="#F69A9A" stopOpacity={1} />
-                <Stop offset="0.6" stopColor="#D64545" stopOpacity={1} />
-                <Stop offset="1" stopColor="#A81F1F" stopOpacity={1} />
-              </RadialGradient>
-              {/* dome gloss sweeping the plinth */}
-              <LinearGradient id="hgGloss" x1="0" y1="0" x2="0.7" y2="1">
-                <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.55} />
-                <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
-              </LinearGradient>
-            </Defs>
+      <View>
+        <Svg width={width} height={width} viewBox={`0 0 ${VB} ${VB}`}>
+          {/* flat stage: white disc, soft wash well, hairline rim */}
+          <Rect x={0} y={0} width={VB} height={VB} rx={20} fill={GV.card} />
+          <Circle cx={C} cy={C} r={R + 22} fill={WELL} />
+          <Circle cx={C} cy={C} r={R + 22} fill="none" stroke={GV.line} strokeWidth={1} />
 
-            {/* paper */}
-            <Rect x={0} y={0} width={VB} height={VB} rx={20} fill={PAPER} />
+          {/* concentric reference rings + thin rim */}
+          {[0.25, 0.5, 0.75].map((f) => (
+            <Circle key={f} cx={C} cy={C} r={R * f} fill="none" stroke={GRID} strokeWidth={1} />
+          ))}
+          <Circle cx={C} cy={C} r={R} fill="none" stroke={GV.line} strokeWidth={1.5} />
 
-            {/* 3D plinth: drop shadow, shaded disc, dome gloss */}
-            <Ellipse cx={C} cy={C + R + 20} rx={R - 16} ry={8} fill="#16212C" opacity={0.1} />
-            <Circle cx={C} cy={C} r={R + 22} fill="url(#hgDisc)" />
-            <Ellipse
-              cx={C - 18}
-              cy={C - 62}
-              rx={72}
-              ry={20}
-              fill="url(#hgGloss)"
-              opacity={0.5}
-              rotation={-16}
-              originX={C - 18}
-              originY={C - 62}
+          {/* spokes */}
+          {spokes.map((s) => (
+            <Line
+              key={`sp-${s.m.id}`}
+              x1={C}
+              y1={C}
+              x2={C + R * s.cos}
+              y2={C + R * s.sin}
+              stroke={GRID}
+              strokeWidth={1}
             />
+          ))}
 
-            {/* concentric reference rings */}
-            {[0.25, 0.5, 0.75].map((f) => (
-              <Circle key={f} cx={C} cy={C} r={R * f} fill="none" stroke={GRID} strokeWidth={1} />
-            ))}
-            <Circle cx={C} cy={C} r={R} fill="none" stroke={INK} strokeWidth={2.5} />
-
-            {/* spokes */}
-            {spokes.map((s) => (
-              <Line
-                key={`sp-${s.m.id}`}
-                x1={C}
-                y1={C}
-                x2={C + R * s.cos}
-                y2={C + R * s.sin}
-                stroke={GRID}
-                strokeWidth={1}
+          {/* healthy-zone bands — one quiet green segment per spoke */}
+          {spokes.map((s, i) => {
+            const p = prevLayout.current?.get(s.m.id) ?? null;
+            return (
+              <HBand
+                key={`bd-${s.m.id}`}
+                spoke={s}
+                from={
+                  p
+                    ? { x1: p.b1x, y1: p.b1y, x2: p.b2x, y2: p.b2y }
+                    : null
+                }
+                index={i}
+                progress={progress}
+                morph={morph}
+                color={BAND}
               />
-            ))}
+            );
+          })}
 
-            {/* healthy bands */}
-            {spokes.map((s, i) => (
-              <HBand key={`bd-${s.m.id}`} spoke={s} index={i} progress={progress} />
-            ))}
-
-            {/* connected territory: green wash + red danger wedges */}
-            {basePoly ? (
-              <Path d={basePoly} fill="rgba(63,155,78,0.08)" stroke="none" />
-            ) : null}
-            {segs
-              .filter((sg) => sg.bad)
-              .map((sg, i) => (
-                <Path
-                  key={`rz-${i}`}
-                  d={`M ${C} ${C} L ${sg.a.dotX.toFixed(1)} ${sg.a.dotY.toFixed(1)} L ${sg.b.dotX.toFixed(1)} ${sg.b.dotY.toFixed(1)} Z`}
-                  fill="rgba(214,69,69,0.13)"
-                  stroke="none"
-                />
-              ))}
-            {segs.map((sg, i) => (
-              <Line
-                key={`sg-${i}`}
-                x1={sg.a.dotX}
-                y1={sg.a.dotY}
-                x2={sg.b.dotX}
-                y2={sg.b.dotY}
-                stroke={sg.bad ? BAD : GOOD}
-                strokeWidth={sg.bad ? 3.5 : 2.5}
-                strokeLinecap="round"
-                opacity={0.9}
+          {/* value dots — ink on-track, red off-track. No connecting
+              polygon: discrete metrics joined by lines imply relationships
+              that don't exist, and fills exaggerate differences. */}
+          {spokes.map((s, i) => {
+            const p = prevLayout.current?.get(s.m.id) ?? null;
+            return (
+              <HDot
+                key={`dt-${s.m.id}`}
+                spoke={s}
+                from={p ? { x: p.x, y: p.y } : null}
+                index={i}
+                progress={progress}
+                morph={morph}
+                pressedId={pressedId}
+                pressT={pressT}
               />
-            ))}
+            );
+          })}
 
-            {/* value dots */}
-            {spokes.map((s, i) => (
-              <HDot key={`dt-${s.m.id}`} spoke={s} index={i} progress={progress} />
-            ))}
+          {/* direction chevrons: which radial way is healthy, per spoke */}
+          {spokes.map((s) => {
+            if (s.dir === 0) return null;
+            const bx = C + (R + 8) * s.cos;
+            const by = C + (R + 8) * s.sin;
+            const px = -s.sin;
+            const py = s.cos;
+            const t = 6 * s.dir;
+            const b = -3 * s.dir;
+            const d =
+              `M ${(bx + t * s.cos).toFixed(1)} ${(by + t * s.sin).toFixed(1)} ` +
+              `L ${(bx + b * s.cos + 4 * px).toFixed(1)} ${(by + b * s.sin + 4 * py).toFixed(1)} ` +
+              `L ${(bx + b * s.cos - 4 * px).toFixed(1)} ${(by + b * s.sin - 4 * py).toFixed(1)} Z`;
+            return <Path key={`ch-${s.m.id}`} d={d} fill={GV.muted} opacity={0.9} stroke="none" />;
+          })}
 
-            {/* tap targets: generous invisible discs over every dot */}
-            {spokes.map((s) => (
+          {/* off-track verdict: persistent red halo (dots turn red too) */}
+          {spokes
+            .filter((s) => !s.good)
+            .map((s) => (
               <Circle
-                key={`hit-${s.m.id}`}
+                key={`bad-${s.m.id}`}
                 cx={s.dotX}
                 cy={s.dotY}
-                r={20}
-                fill="#FFFFFF"
-                opacity={0}
-                onPress={() => setSelectedId(s.m.id)}
+                r={12}
+                fill="none"
+                stroke={BAD}
+                strokeWidth={2}
+                opacity={0.85}
+                pointerEvents="none"
               />
             ))}
 
-            {/* selection halo */}
-            {selected ? (
-              <G pointerEvents="none">
-                <Circle
-                  cx={selected.dotX}
-                  cy={selected.dotY}
-                  r={15}
-                  fill="none"
-                  stroke={selected.good ? GOOD : BAD}
-                  strokeWidth={3}
-                  opacity={0.35}
-                />
-                <Circle
-                  cx={selected.dotX}
-                  cy={selected.dotY}
-                  r={10.5}
-                  fill="none"
-                  stroke="#FFFFFF"
-                  strokeWidth={2.5}
-                />
-              </G>
-            ) : null}
+          {/* tap targets: 44px invisible discs over every dot.
+              Press-down swells the dot instantly; release commits. */}
+          {spokes.map((s) => (
+            <Circle
+              key={`hit-${s.m.id}`}
+              cx={s.dotX}
+              cy={s.dotY}
+              r={22}
+              fill="#FFFFFF"
+              opacity={0}
+              onPressIn={() => {
+                pressedId.value = s.m.id;
+                if (!reduced) pressT.value = withTiming(1, { duration: 100 });
+              }}
+              onPressOut={() => {
+                if (pressedId.value === s.m.id) pressedId.value = null;
+                if (!reduced) pressT.value = withTiming(0, { duration: 100 });
+              }}
+              onPress={() => commitSpoke(s.m.id)}
+            />
+          ))}
 
-            {/* 3D hub: shadow, sphere, specular tick, labels */}
-            <Ellipse cx={C + 2} cy={C + 4} rx={30} ry={30} fill="#16212C" opacity={0.14} />
-            <Circle cx={C} cy={C} r={30} fill="url(#hgHub)" stroke="#8A94A0" strokeWidth={1} />
-            <Circle cx={C - 9} cy={C - 10} r={5} fill="#FFFFFF" opacity={0.8} />
-            <SvgText x={C} y={C + 1} textAnchor="middle" fontSize={13} fontWeight="800" fill={INK}>
-              {`${windowDays}d avg`}
-            </SvgText>
-            <SvgText x={C} y={C + 17} textAnchor="middle" fontSize={10} fontWeight="600" fill={SUB}>
-              {`${spokes.length} signal${spokes.length === 1 ? '' : 's'}`}
-            </SvgText>
+          {/* selection halo grows outward from the dot on fresh selects */}
+          {selected ? (
+            <G pointerEvents="none">
+              <AnimatedCircle
+                cx={selected.dotX}
+                cy={selected.dotY}
+                r={15}
+                fill="none"
+                stroke={selected.good ? GV.ink : BAD}
+                strokeWidth={3}
+                opacity={selected.good ? 0.5 : 0.9}
+                animatedProps={haloProps}
+              />
+            </G>
+          ) : null}
 
-            {/* perimeter labels */}
-            {spokes.map((s) => (
-              <G key={`lb-${s.m.id}`}>
-                <SvgText
-                  x={s.labelX}
-                  y={s.labelY - 1}
-                  textAnchor={s.anchor}
-                  fontSize={11.5}
-                  fontWeight="800"
-                  fill={s.good ? INK : BAD}
-                >
-                  {s.m.label}
-                </SvgText>
-                <SvgText
-                  x={s.labelX}
-                  y={s.labelY + 12}
-                  textAnchor={s.anchor}
-                  fontSize={12.5}
-                  fontWeight="700"
-                  fill={s.good ? '#3E4C59' : '#A81F1F'}
-                >
-                  {`${s.m.valueText} ${trendArrow(s.m.trend)}`}
-                </SvgText>
-              </G>
-            ))}
-          </Svg>
-        </Animated.View>
-      </Animated.View>
+          {/* flat hub: averaging window + signal count */}
+          <Circle cx={C} cy={C} r={32} fill={GV.card} stroke={GV.line} strokeWidth={1.5} />
+          <SvgText x={C} y={C + 1} textAnchor="middle" fontSize={13} fontFamily={FONT.semi} fill={GV.ink}>
+            {`${windowDays}d avg`}
+          </SvgText>
+          <SvgText x={C} y={C + 17} textAnchor="middle" fontSize={10} fontFamily={FONT.semi} fill={SUB} letterSpacing={1}>
+            {`${spokes.length} SIGNAL${spokes.length === 1 ? '' : 'S'}`}
+          </SvgText>
+
+          {/* rim: value printed directly (no tap needed) + short name */}
+          {spokes.map((s) => (
+            <G key={`lb-${s.m.id}`}>
+              <SvgText
+                x={s.labelX}
+                y={s.labelY - 1}
+                textAnchor={s.anchor}
+                fontSize={12.5}
+                fontFamily={FONT.semi}
+                fill={s.good ? GV.ink : BAD}
+              >
+                {`${s.m.valueText} ${trendArrow(s.m.trend)}`}
+              </SvgText>
+              <SvgText
+                x={s.labelX}
+                y={s.labelY + 13}
+                textAnchor={s.anchor}
+                fontSize={10}
+                fontFamily={FONT.semi}
+                fill={SUB}
+                letterSpacing={0.5}
+              >
+                {s.m.label.toUpperCase().slice(0, 14)}
+              </SvgText>
+            </G>
+          ))}
+
+          {/* sector rim labels: one per family, always visible */}
+          {sectorArcs.map((g) => (
+            <SvgText
+              key={`sl-${g.sector}`}
+              x={g.labelX}
+              y={g.labelY}
+              textAnchor="middle"
+              fontSize={10}
+              fontFamily={FONT.semi}
+              fill={GV.muted}
+              letterSpacing={1.5}
+            >
+              {SECTOR_LABEL[g.sector] ?? g.sector.toUpperCase()}
+            </SvgText>
+          ))}
+        </Svg>
+      </View>
 
       {/* Tap-a-spoke interpretation */}
       {selected && selectedGuide ? (
@@ -598,66 +756,71 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
 }
 
 const guideStyles = StyleSheet.create({
+  // Flat white block inside the sheet (sheet chrome stays system).
   body: {
-    gap: 10,
+    gap: 12,
     paddingBottom: 8,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
   status: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#141414',
+    ...TYPE.title,
+    color: GV.ink,
   },
   trend: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#5C6B7A',
+    ...TYPE.body,
+    color: GV.body,
   },
   flag: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#C2503E',
-    backgroundColor: 'rgba(194,80,62,0.08)',
-    borderRadius: 10,
-    paddingHorizontal: 10,
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: '#FFFFFF',
+    backgroundColor: GV.danger,
+    borderRadius: 12,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     overflow: 'hidden',
   },
   row: {
     gap: 4,
     borderTopWidth: 1,
-    borderTopColor: '#E6DBC6',
-    paddingTop: 10,
+    borderTopColor: GV.line,
+    paddingTop: 12,
   },
   up: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#4E9B5F',
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: GV.fx.green,
   },
   down: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#C2255C',
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: GV.danger,
   },
   tip: {
-    fontSize: 14,
-    color: '#2B333C',
-    lineHeight: 20,
+    ...TYPE.body,
+    color: GV.ink,
   },
   foot: {
-    fontSize: 11,
-    color: '#8A94A0',
-    marginTop: 2,
+    ...TYPE.caption,
+    color: GV.muted,
+    marginTop: 4,
   },
   done: {
-    marginTop: 4,
+    marginTop: 8,
     paddingVertical: 12,
-    borderRadius: 999,
-    backgroundColor: '#1D1B17',
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.cta,
     alignItems: 'center',
   },
   doneText: {
+    ...TYPE.button,
     fontSize: 15,
-    fontWeight: '800',
     color: '#FFFFFF',
   },
 });

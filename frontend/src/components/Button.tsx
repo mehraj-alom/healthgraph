@@ -7,8 +7,8 @@ import {
   type ViewStyle,
   type TextStyle,
 } from 'react-native';
-import { useTheme } from '@/theme';
 import { spacing, radius, type ControlSize } from '@/theme/tokens';
+import { GV, TYPE } from '@/theme/guava';
 
 type ButtonVariant =
   | 'primary'
@@ -40,9 +40,9 @@ const HEIGHT: Record<ControlSize, number> = {
 };
 
 /**
- * HealthGraph button — shared variants with pressed / disabled / loading /
- * focus states. Pressed fill steps one tone toward the surface for tactile
- * feedback; a single shared scale handles the press gesture.
+ * Guava-flat button — deep-green pill (primary), white pill (secondary),
+ * hairline pill (outline), quiet text (ghost). Flat fills, no shadows.
+ * API unchanged so existing call sites keep working.
  */
 export const Button = ({
   title,
@@ -58,66 +58,49 @@ export const Button = ({
   textStyle,
   accessibilityLabel,
 }: ButtonProps) => {
-  const { colors, isDark } = useTheme();
   const height = HEIGHT[size];
   const isDisabled = disabled || loading;
 
   const surfaceMap: Record<ButtonVariant, ViewStyle> = {
     primary: {
-      // Ink pill (like "All Doctors" filter)
-      backgroundColor: colors.brand,
-      shadowColor: '#7C5A2E',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.22,
-      shadowRadius: 12,
-      elevation: 4,
+      backgroundColor: GV.cta,
     },
     secondary: {
-      backgroundColor: colors.surface,
+      backgroundColor: GV.card,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: GV.line,
     },
     outline: {
       backgroundColor: 'transparent',
       borderWidth: 1.5,
-      borderColor: colors.borderStrong,
+      borderColor: GV.line,
     },
     ghost: {
       backgroundColor: 'transparent',
       borderWidth: 0,
     },
     danger: {
-      backgroundColor: colors.error,
-      shadowColor: colors.error,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
-      elevation: 4,
+      backgroundColor: GV.danger,
     },
     success: {
-      backgroundColor: colors.success,
-      shadowColor: colors.success,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
-      elevation: 4,
+      backgroundColor: GV.cta,
     },
   };
 
   const pressedMap: Record<ButtonVariant, ViewStyle> = {
-    primary: { backgroundColor: colors.brandLight },
-    secondary: { backgroundColor: colors.surfacePressed },
-    outline: { backgroundColor: colors.accentBlueSoft },
-    ghost: { backgroundColor: colors.glassHighlight },
-    danger: { backgroundColor: colors.error, opacity: 0.85 },
-    success: { backgroundColor: colors.success, opacity: 0.85 },
+    primary: { backgroundColor: GV.ctaPressed },
+    secondary: { backgroundColor: GV.wash },
+    outline: { backgroundColor: GV.wash },
+    ghost: { backgroundColor: GV.wash },
+    danger: { backgroundColor: GV.danger, opacity: 0.85 },
+    success: { backgroundColor: GV.ctaPressed },
   };
 
   const textMap: Record<ButtonVariant, TextStyle> = {
-    primary: { color: colors.textOnBrand },
-    secondary: { color: colors.textPrimary },
-    outline: { color: colors.textPrimary },
-    ghost: { color: colors.textSecondary },
+    primary: { color: '#FFFFFF' },
+    secondary: { color: GV.ink },
+    outline: { color: GV.ink },
+    ghost: { color: GV.body },
     danger: { color: '#FFFFFF' },
     success: { color: '#FFFFFF' },
   };
@@ -170,13 +153,10 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.45,
-    shadowOpacity: 0,
-    elevation: 0,
   },
   text: {
+    ...TYPE.button,
     fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
     letterSpacing: 0.2,
   },
   textDisabled: {

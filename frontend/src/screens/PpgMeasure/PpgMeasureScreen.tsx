@@ -28,17 +28,15 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, {
   Easing,
-  FadeInUp,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { Badge, Button, ErrorState, ProgressBar } from '@/components';
+import { Button, ErrorState, ProgressBar } from '@/components';
 import { usePpgMeasurement } from '@/hooks/usePpgMeasurement';
-import { useReducedMotion, useTheme } from '@/theme';
-import { healthIcon } from '@/theme/icons';
-import { spacing, radius, layout } from '@/theme/tokens';
+import { useReducedMotion } from '@/theme';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import type { MainTabParamList, RootStackParamList } from '@/types';
 import { PpgCameraPreview } from 'healthgraph-ppg';
 import type { CompositeNavigationProp } from '@react-navigation/native';
@@ -82,10 +80,22 @@ const QUALITY_COPY: Record<QualityBand, { label: string; guidance: string }> = {
   },
 };
 
+const QUALITY_DOT: Record<QualityBand, string> = {
+  good: GV.cta,
+  weak: GV.fx.amber,
+  poor: GV.danger,
+};
+
 function resultQualityLabel(quality: number): string {
   if (quality >= 0.75) return 'Good';
   if (quality >= 0.5) return 'Fair';
   return 'Poor';
+}
+
+function resultQualityDot(quality: number): string {
+  if (quality >= 0.75) return GV.cta;
+  if (quality >= 0.5) return GV.fx.amber;
+  return GV.danger;
 }
 
 const DISCLAIMER =
@@ -97,7 +107,6 @@ const DISCLAIMER =
  * drawn. Static when reduced motion is requested.
  */
 function SensingPulse({ band }: { band: QualityBand | null }) {
-  const { colors, health } = useTheme();
   const reducedMotion = useReducedMotion();
   const pulse = useSharedValue(0);
 
@@ -126,22 +135,10 @@ function SensingPulse({ band }: { band: QualityBand | null }) {
       accessible
       accessibilityRole="image"
       accessibilityLabel="Measuring. Sensing indicator."
-      style={[
-        styles.pulseRing,
-        {
-          backgroundColor: colors.surfaceSunken,
-          borderColor: colors.border,
-        },
-      ]}
+      style={styles.pulseRing}
     >
-      <Animated.View
-        style={[
-          styles.pulseCore,
-          { backgroundColor: health.vitals },
-          animatedStyle,
-        ]}
-      >
-        <Text style={styles.pulseGlyph}>{healthIcon.heartRate}</Text>
+      <Animated.View style={[styles.pulseCore, animatedStyle]}>
+        <Text style={styles.pulseGlyph}>♥</Text>
       </Animated.View>
     </View>
   );
@@ -149,7 +146,6 @@ function SensingPulse({ band }: { band: QualityBand | null }) {
 
 export default function PpgMeasureScreen() {
   const navigation = useNavigation<Nav>();
-  const { colors, typography, animation } = useTheme();
   const reducedMotion = useReducedMotion();
   const {
     state,
@@ -244,15 +240,8 @@ export default function PpgMeasureScreen() {
     return () => sub.remove();
   }, [cancel]);
 
-  const entering = reducedMotion
-    ? undefined
-    : FadeInUp.duration(animation.emphasized);
-
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      edges={['top', 'bottom']}
-    >
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header: back affordance + simulation badge. */}
       <View style={styles.header}>
         <Pressable
@@ -262,17 +251,16 @@ export default function PpgMeasureScreen() {
           hitSlop={12}
           style={styles.backBtn}
         >
-          <Text style={[styles.backBtnText, { color: colors.textSecondary }]}>
-            ‹ Back
-          </Text>
+          <Text style={styles.backBtnText}>‹ Back</Text>
         </Pressable>
         <View style={styles.headerSpacer} />
         {simulated ? (
           <View
             accessible
             accessibilityLabel="Simulation mode. Not a real measurement."
+            style={styles.simBadge}
           >
-            <Badge label="SIMULATED" tone="blue" />
+            <Text style={styles.simBadgeText}>SIMULATED</Text>
           </View>
         ) : null}
       </View>
@@ -282,13 +270,7 @@ export default function PpgMeasureScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {simulated ? (
-          <Text
-            style={[
-              styles.simNote,
-              typography.caption,
-              { color: colors.textMuted },
-            ]}
-          >
+          <Text style={styles.simNote}>
             Simulation mode — synthetic numbers for preview only. Never saved,
             never synced, never health data.
           </Text>
@@ -296,52 +278,21 @@ export default function PpgMeasureScreen() {
 
         {/* ── READY ─────────────────────────────────────────── */}
         {!busy && !hasResult && !failed ? (
-          <Animated.View entering={entering} style={styles.phase}>
-            <Text
-              style={[typography.overline, { color: colors.textMuted }]}
-            >
-              Heart Rate
-            </Text>
-            <Text
-              style={[typography.largeHeading, { color: colors.textPrimary }]}
-            >
-              Heart Rate
-            </Text>
-            <Text style={[typography.body, { color: colors.textSecondary }]}>
+          <View style={styles.phase}>
+            <Text style={styles.overline}>Heart Rate</Text>
+            <Text style={styles.screenTitle}>Heart Rate</Text>
+            <Text style={styles.screenSubtitle}>
               Measure your pulse using your phone&apos;s camera.
             </Text>
 
-            <View
-              style={[
-                styles.instruction,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderRadius: radius.xxl,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.instructionIcon,
-                  {
-                    backgroundColor: colors.surfaceSunken,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <Text style={styles.instructionGlyph}>
-                  {healthIcon.heartRate}
-                </Text>
+            <View style={styles.card}>
+              <View style={styles.instructionIcon}>
+                <Text style={styles.instructionGlyph}>♥</Text>
               </View>
-              <Text
-                style={[typography.body, { color: colors.textPrimary }]}
-              >
+              <Text style={styles.cardBody}>
                 Place your fingertip gently over the camera and flash.
               </Text>
-              <Text
-                style={[typography.caption, { color: colors.textMuted }]}
-              >
+              <Text style={styles.cardCaption}>
                 About a minute · stay still · on this device only
               </Text>
             </View>
@@ -357,7 +308,7 @@ export default function PpgMeasureScreen() {
                   : 'Start 60 second heart rate measurement'
               }
             />
-          </Animated.View>
+          </View>
         ) : null}
 
         {/* ── LIVE SESSION ────────────────────────────────────
@@ -371,20 +322,13 @@ export default function PpgMeasureScreen() {
             SIGNAL_WEAK: finger present, no confident BPM — guidance only.
             FINGER_REMOVED: live BPM invalidated — resume automatically. */}
         {busy ? (
-          <Animated.View entering={entering} style={styles.phase}>
+          <View style={styles.phase}>
             {!simulated ? (
               <View
                 accessible
                 accessibilityRole="image"
                 accessibilityLabel="Live camera preview. Cover the camera and flash with your fingertip."
-                style={[
-                  styles.previewFrame,
-                  {
-                    borderColor: colors.border,
-                    borderRadius: radius.xxl,
-                    backgroundColor: '#000',
-                  },
-                ]}
+                style={styles.previewFrame}
               >
                 <PpgCameraPreview style={styles.preview} />
                 <View style={styles.previewOverlay} pointerEvents="none">
@@ -397,10 +341,10 @@ export default function PpgMeasureScreen() {
                       accessibilityLabel={`Live heart rate ${Math.round(liveBpm)} beats per minute.`}
                       style={styles.previewBpmBadge}
                     >
-                      <Text style={[typography.metricValue, styles.previewBpmText]}>
+                      <Text style={styles.previewBpmText}>
                         {Math.round(liveBpm)}
                       </Text>
-                      <Text style={[typography.metricUnit, styles.previewBpmUnit]}>
+                      <Text style={styles.previewBpmUnit}>
                         BPM · Live
                       </Text>
                     </View>
@@ -428,36 +372,15 @@ export default function PpgMeasureScreen() {
                 accessible
                 accessibilityLiveRegion="polite"
                 accessibilityLabel="Waiting for finger. Place your finger over the camera."
-                style={[
-                  styles.instruction,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: radius.xxl,
-                  },
-                ]}
+                style={styles.card}
               >
-                <View
-                  style={[
-                    styles.instructionIcon,
-                    {
-                      backgroundColor: colors.surfaceSunken,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <Text style={styles.instructionGlyph}>
-                    {healthIcon.heartRate}
-                  </Text>
+                <View style={styles.instructionIcon}>
+                  <Text style={styles.instructionGlyph}>♥</Text>
                 </View>
-                <Text
-                  style={[typography.sectionHeading, { color: colors.textPrimary }]}
-                >
+                <Text style={styles.cardTitle}>
                   Place your finger over the camera
                 </Text>
-                <Text
-                  style={[typography.caption, { color: colors.textMuted }]}
-                >
+                <Text style={styles.cardCaption}>
                   Cover the camera and flash fully. Measurement starts automatically.
                 </Text>
               </View>
@@ -478,17 +401,13 @@ export default function PpgMeasureScreen() {
             ) : null}
             {state === 'ACQUIRING' ||
             (state === 'MEASURING' && liveBpm == null) ? (
-              <Text
-                style={[typography.sectionHeading, { color: colors.textPrimary }]}
-              >
+              <Text style={styles.statusTitle}>
                 Detecting pulse…
               </Text>
             ) : null}
             {state === 'ACQUIRING' ||
             (state === 'MEASURING' && liveBpm == null) ? (
-              <Text
-                style={[typography.bodySecondary, { color: colors.textSecondary }]}
-              >
+              <Text style={styles.statusBody}>
                 Keep your fingertip over the camera and flash.
               </Text>
             ) : null}
@@ -500,14 +419,10 @@ export default function PpgMeasureScreen() {
                 accessibilityLabel={`Live heart rate ${Math.round(liveBpm)} beats per minute.`}
                 style={styles.resultHero}
               >
-                <Text
-                  style={[typography.metricValue, { color: colors.textPrimary }]}
-                >
+                <Text style={styles.heroBpm}>
                   {Math.round(liveBpm)}
                 </Text>
-                <Text
-                  style={[typography.metricUnit, { color: colors.textSecondary }]}
-                >
+                <Text style={styles.heroUnit}>
                   BPM · Live
                 </Text>
               </View>
@@ -523,16 +438,12 @@ export default function PpgMeasureScreen() {
               </View>
             ) : null}
             {state === 'SIGNAL_WEAK' ? (
-              <Text
-                style={[typography.sectionHeading, { color: colors.textPrimary }]}
-              >
+              <Text style={styles.statusTitle}>
                 Keep your finger still
               </Text>
             ) : null}
             {state === 'SIGNAL_WEAK' ? (
-              <Text
-                style={[typography.bodySecondary, { color: colors.textSecondary }]}
-              >
+              <Text style={styles.statusBody}>
                 The pulse signal is unclear. Hold still with the camera and
                 flash fully covered.
               </Text>
@@ -543,28 +454,15 @@ export default function PpgMeasureScreen() {
                 accessible
                 accessibilityLiveRegion="polite"
                 accessibilityLabel="Finger removed. Place your finger over the camera to continue."
-                style={[
-                  styles.instruction,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: radius.xxl,
-                  },
-                ]}
+                style={styles.card}
               >
-                <Text
-                  style={[typography.sectionHeading, { color: colors.textPrimary }]}
-                >
+                <Text style={styles.cardTitle}>
                   Finger removed
                 </Text>
-                <Text
-                  style={[typography.body, { color: colors.textPrimary }]}
-                >
+                <Text style={styles.cardBody}>
                   Place your finger over the camera to continue.
                 </Text>
-                <Text
-                  style={[typography.caption, { color: colors.textMuted }]}
-                >
+                <Text style={styles.cardCaption}>
                   The live reading was cleared and will resume automatically.
                 </Text>
               </View>
@@ -588,9 +486,7 @@ export default function PpgMeasureScreen() {
             {state === 'STARTING' ||
             state === 'QUALITY_WARNING' ||
             state === 'COMPLETING' ? (
-              <Text
-                style={[typography.sectionHeading, { color: colors.textPrimary }]}
-              >
+              <Text style={styles.statusTitle}>
                 Measuring…
               </Text>
             ) : null}
@@ -600,51 +496,23 @@ export default function PpgMeasureScreen() {
               label={`Measurement progress, ${progress} percent`}
               animate={!reducedMotion}
             />
-            <Text
-              style={[typography.caption, { color: colors.textMuted }]}
-            >
+            <Text style={styles.elapsed}>
               {elapsed}s of about {MEASURE_DURATION_SECONDS}s
             </Text>
 
             {band ? (
-              <View
-                style={[
-                  styles.qualityRow,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: radius.lg,
-                  },
-                ]}
-              >
+              <View style={styles.qualityCard}>
                 <View
                   style={[
                     styles.qualityDot,
-                    {
-                      backgroundColor:
-                        band === 'good'
-                          ? colors.success
-                          : band === 'weak'
-                            ? colors.warning
-                            : colors.error,
-                    },
+                    { backgroundColor: QUALITY_DOT[band] },
                   ]}
                 />
                 <View style={styles.qualityText}>
-                  <Text
-                    style={[
-                      typography.bodyStrong,
-                      { color: colors.textPrimary },
-                    ]}
-                  >
+                  <Text style={styles.qualityLabel}>
                     {QUALITY_COPY[band].label}
                   </Text>
-                  <Text
-                    style={[
-                      typography.caption,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
+                  <Text style={styles.qualityGuidance}>
                     {QUALITY_COPY[band].guidance}
                   </Text>
                 </View>
@@ -658,15 +526,13 @@ export default function PpgMeasureScreen() {
               fullWidth
               accessibilityLabel="Cancel measurement"
             />
-          </Animated.View>
+          </View>
         ) : null}
 
         {/* ── RESULT ────────────────────────────────────────── */}
         {hasResult && result ? (
-          <Animated.View entering={entering} style={styles.phase}>
-            <Text
-              style={[typography.overline, { color: colors.textMuted }]}
-            >
+          <View style={styles.phase}>
+            <Text style={styles.overline}>
               Your measurement
             </Text>
             <View
@@ -675,40 +541,20 @@ export default function PpgMeasureScreen() {
               accessibilityLabel={`Your heart rate measurement: ${Math.round(hr)} beats per minute.`}
               style={styles.resultHero}
             >
-              <Text
-                style={[typography.metricValue, { color: colors.textPrimary }]}
-              >
+              <Text style={styles.heroBpm}>
                 {Math.round(hr)}
               </Text>
-              <Text
-                style={[typography.metricUnit, { color: colors.textSecondary }]}
-              >
+              <Text style={styles.heroUnit}>
                 BPM · Heart rate
               </Text>
             </View>
 
             {result.rmssdMs != null || result.sdnnMs != null ? (
-              <View
-                style={[
-                  styles.hrvRow,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: radius.lg,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    typography.captionStrong,
-                    { color: colors.textSecondary },
-                  ]}
-                >
+              <View style={styles.hrvCard}>
+                <Text style={styles.hrvLabel}>
                   HEART RATE VARIABILITY
                 </Text>
-                <Text
-                  style={[typography.body, { color: colors.textPrimary }]}
-                >
+                <Text style={styles.hrvValue}>
                   {result.rmssdMs != null
                     ? `RMSSD ${result.rmssdMs.toFixed(0)} ms`
                     : null}
@@ -721,29 +567,25 @@ export default function PpgMeasureScreen() {
                 </Text>
               </View>
             ) : (
-              <Text
-                style={[typography.caption, { color: colors.textMuted }]}
-              >
+              <Text style={styles.elapsed}>
                 HRV not available for this measurement.
               </Text>
             )}
 
-            <View style={styles.metaRow}>
-              <Badge
-                label={`Signal quality: ${resultQualityLabel(result.signalQuality)}`}
-                health={
-                  result.signalQuality >= 0.75
-                    ? 'positive'
-                    : result.signalQuality >= 0.5
-                      ? 'neutral'
-                      : 'attention'
-                }
-                dot
+            <View style={styles.qualityCard}>
+              <View
+                style={[
+                  styles.qualityDot,
+                  { backgroundColor: resultQualityDot(result.signalQuality) },
+                ]}
               />
+              <View style={styles.qualityText}>
+                <Text style={styles.qualityLabel}>
+                  {`Signal quality: ${resultQualityLabel(result.signalQuality)}`}
+                </Text>
+              </View>
             </View>
-            <Text
-              style={[typography.caption, { color: colors.textMuted }]}
-            >
+            <Text style={styles.elapsed}>
               {completedAt
                 ? new Date(completedAt).toLocaleString(undefined, {
                     dateStyle: 'medium',
@@ -756,15 +598,11 @@ export default function PpgMeasureScreen() {
                 : 'Real device measurement'}
             </Text>
             {result.simulated === true ? (
-              <Text
-                style={[typography.caption, { color: colors.textMuted }]}
-              >
+              <Text style={styles.elapsed}>
                 Simulation — not saved, not synced.
               </Text>
             ) : (
-              <Text
-                style={[typography.caption, { color: colors.textMuted }]}
-              >
+              <Text style={styles.elapsed}>
                 {synced === true
                   ? 'Saved · synced to HealthGraph.'
                   : synced === false
@@ -773,12 +611,14 @@ export default function PpgMeasureScreen() {
               </Text>
             )}
             {error && result.simulated !== true ? (
-              <Text
-                style={[typography.caption, { color: colors.warning }]}
-              >
-                Couldn&apos;t save this measurement yet — it will retry
-                automatically.
-              </Text>
+              <View style={styles.qualityCard}>
+                <View style={styles.qualityText}>
+                  <Text style={styles.saveError}>
+                    Couldn&apos;t save this measurement yet — it will retry
+                    automatically.
+                  </Text>
+                </View>
+              </View>
             ) : null}
 
             <Button
@@ -797,12 +637,12 @@ export default function PpgMeasureScreen() {
               fullWidth
               accessibilityLabel="Measure again"
             />
-          </Animated.View>
+          </View>
         ) : null}
 
         {/* ── FAILED ────────────────────────────────────────── */}
         {failed ? (
-          <Animated.View entering={entering} style={styles.phase}>
+          <View style={styles.phase}>
             <ErrorState
               title="Measurement couldn't be completed"
               message={
@@ -832,16 +672,10 @@ export default function PpgMeasureScreen() {
               fullWidth
               accessibilityLabel="Done, back to HealthGraph"
             />
-          </Animated.View>
+          </View>
         ) : null}
 
-        <Text
-          style={[
-            styles.disclaimer,
-            typography.caption,
-            { color: colors.textMuted },
-          ]}
-        >
+        <Text style={styles.disclaimer}>
           {DISCLAIMER}
         </Text>
       </ScrollView>
@@ -852,60 +686,110 @@ export default function PpgMeasureScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: GV.stage,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    minHeight: layout.minTouchTarget,
+    paddingHorizontal: SPACE.screenH,
+    paddingTop: 8,
+    minHeight: 44,
   },
   backBtn: {
-    minWidth: layout.minTouchTarget,
-    minHeight: layout.minTouchTarget,
+    minWidth: 44,
+    minHeight: 44,
     justifyContent: 'center',
   },
   backBtnText: {
+    ...TYPE.button,
     fontSize: 16,
-    fontWeight: '600',
+    color: GV.fog,
   },
   headerSpacer: {
     flex: 1,
   },
+  simBadge: {
+    borderWidth: 1,
+    borderColor: GV.stageline,
+    borderRadius: SPACE.rPill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  simBadgeText: {
+    ...TYPE.chip,
+    color: GV.teal,
+  },
   content: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: 112,
-    gap: spacing.xl,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 32,
+    gap: SPACE.cardGap,
   },
   phase: {
-    gap: spacing.lg,
+    gap: SPACE.cardGap,
     alignItems: 'stretch',
   },
-  simNote: {
+  overline: {
+    ...TYPE.caption,
+    color: GV.fog,
     textAlign: 'center',
   },
-  instruction: {
-    borderWidth: 1,
-    padding: spacing.xl,
-    gap: spacing.sm,
+  screenTitle: {
+    ...TYPE.display,
+    color: GV.card,
+    textAlign: 'center',
+  },
+  screenSubtitle: {
+    ...TYPE.body,
+    color: GV.fog,
+    textAlign: 'center',
+  },
+  simNote: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+  },
+  card: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    gap: 8,
     alignItems: 'center',
+  },
+  cardTitle: {
+    ...TYPE.title,
+    color: GV.ink,
+    textAlign: 'center',
+  },
+  cardBody: {
+    ...TYPE.body,
+    color: GV.ink,
+    textAlign: 'center',
+  },
+  cardCaption: {
+    ...TYPE.caption,
+    color: GV.muted,
+    textAlign: 'center',
   },
   instructionIcon: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    borderWidth: 1,
+    backgroundColor: GV.wash,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xs,
+    marginBottom: 8,
   },
   instructionGlyph: {
+    fontFamily: FONT.semi,
     fontSize: 32,
+    lineHeight: 36,
+    color: GV.fx.pink,
   },
   previewFrame: {
-    borderWidth: 1,
+    borderRadius: SPACE.rCard,
     overflow: 'hidden',
     height: 300,
+    backgroundColor: '#000',
   },
   preview: {
     ...StyleSheet.absoluteFill,
@@ -914,38 +798,45 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     justifyContent: 'flex-end',
     alignItems: 'center',
-    padding: spacing.lg,
+    padding: SPACE.screenH,
   },
   previewBpmBadge: {
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: radius.xl,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 22,
   },
   previewBpmText: {
+    fontFamily: FONT.semi,
+    fontSize: 40,
+    lineHeight: 44,
     color: '#fff',
+    fontVariant: ['tabular-nums'],
   },
   previewBpmUnit: {
+    ...TYPE.caption,
     color: 'rgba(255,255,255,0.8)',
   },
   previewStatePill: {
     backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
+    paddingHorizontal: SPACE.screenH,
+    paddingVertical: 8,
+    borderRadius: SPACE.rPill,
   },
   previewStateText: {
-    color: '#fff',
+    ...TYPE.button,
     fontSize: 15,
-    fontWeight: '600',
+    color: '#fff',
     textAlign: 'center',
   },
   pulseRing: {
     width: 168,
     height: 168,
     borderRadius: 84,
+    backgroundColor: 'transparent',
     borderWidth: 1,
+    borderColor: GV.stageline,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
@@ -954,18 +845,23 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
+    backgroundColor: GV.fx.pink,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pulseGlyph: {
+    fontFamily: FONT.semi,
     fontSize: 40,
+    lineHeight: 44,
+    color: '#FFFFFF',
   },
-  qualityRow: {
+  qualityCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.md,
-    borderWidth: 1,
-    padding: spacing.lg,
+    gap: 12,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
   qualityDot: {
     width: 10,
@@ -975,24 +871,76 @@ const styles = StyleSheet.create({
   },
   qualityText: {
     flex: 1,
-    gap: spacing.xs,
+    gap: 8,
+  },
+  qualityLabel: {
+    fontFamily: FONT.semi,
+    fontSize: 15,
+    lineHeight: 22,
+    color: GV.ink,
+  },
+  qualityGuidance: {
+    ...TYPE.caption,
+    color: GV.body,
+  },
+  saveError: {
+    ...TYPE.caption,
+    color: GV.danger,
+  },
+  statusTitle: {
+    ...TYPE.title,
+    color: GV.card,
+    textAlign: 'center',
+  },
+  statusBody: {
+    ...TYPE.body,
+    color: GV.fog,
+    textAlign: 'center',
+  },
+  elapsed: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
   },
   resultHero: {
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.md,
+    gap: 8,
+    paddingVertical: 12,
   },
-  hrvRow: {
-    borderWidth: 1,
-    padding: spacing.lg,
-    gap: spacing.xs,
+  heroBpm: {
+    fontFamily: FONT.semi,
+    fontSize: 64,
+    lineHeight: 72,
+    color: GV.card,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+  },
+  heroUnit: {
+    ...TYPE.body,
+    color: GV.fog,
+    textAlign: 'center',
+  },
+  hrvCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    gap: 8,
     alignItems: 'center',
   },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  hrvLabel: {
+    ...TYPE.caption,
+    color: GV.muted,
+    letterSpacing: 1,
+  },
+  hrvValue: {
+    ...TYPE.body,
+    color: GV.ink,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
   },
   disclaimer: {
+    ...TYPE.caption,
+    color: GV.fog,
     textAlign: 'center',
   },
 });

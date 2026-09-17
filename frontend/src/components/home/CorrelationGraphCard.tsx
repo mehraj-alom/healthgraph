@@ -2,38 +2,33 @@
  * CorrelationGraphCard — the dashboard "correlations feed" chart card.
  *
  * Two visual types:
- *  - timeSeries: gradient area + smooth line, grid + y ticks, average guide,
- *    last-value halo, tap-to-inspect crosshair with value bubble.
+ *  - timeSeries: flat smooth line, grid + y ticks, average guide,
+ *    last-value dot, tap-to-inspect crosshair with value bubble.
  *  - correlation: gridded scatter + dashed least-squares fit, color-coded
  *    r badge, axis extrema labels.
  *
  * Pure `react-native-svg`. Card chrome (eyebrow, hero stat, delta chip,
  * legend, footer) is internal so the feed mounts the same card shape
- * everywhere. This card owns the warm sunset scheme (paper, ember, verdict
- * green/red) — deliberately distinct from the teal/lime home cards.
- *
- * Health verdicts color the correlation curve: green when the observed link
- * matches a clinically-favorable direction, red when it contradicts one,
- * white (cased) + "Normal" when weak or directionless.
+ * everywhere. Guava-flat: white card on the dark stage, Poppins throughout,
+ * CTA-green actions. Curve / fit colors are DATA ENCODING (kept):
+ * green when the observed link matches a clinically-favorable direction,
+ * red when it contradicts one, muted + "Normal" when weak or directionless.
  *
  * Interaction is discrete taps (tap-to-inspect), never per-frame setState —
  * one state update per tap keeps scrubbing off the JS-thread hot path.
  */
 
-import React, { useId, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import Svg, {
   Path,
   Line,
   Circle,
-  Defs,
-  LinearGradient,
-  Stop,
   Text as SvgText,
   G,
 } from 'react-native-svg';
 
-import { mv, mvType } from '@/theme/movements';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 
 export interface TimeSeriesPoint {
   date: string;
@@ -60,11 +55,11 @@ export type CorrelationGraphData =
 /** Health verdict for a correlation curve (computed in correlations.ts). */
 export type HealthVerdict = 'good' | 'bad' | 'neutral';
 
-/** Curve color per verdict — neutral draws white (over a warm casing). */
+/** Curve color per verdict — data encoding, GV tokens only. */
 export const VERDICT_CURVE: Record<HealthVerdict, string> = {
-  good: '#2F9E44',
-  bad: '#E03131',
-  neutral: '#FFFFFF',
+  good: GV.fx.green,
+  bad: GV.danger,
+  neutral: GV.muted,
 };
 
 export function verdictLabel(v: HealthVerdict): string {
@@ -176,7 +171,6 @@ function TimeSeriesPlot({
   width,
   height,
   color,
-  gradientId,
   selected,
   onSelect,
 }: {
@@ -185,7 +179,6 @@ function TimeSeriesPlot({
   width: number;
   height: number;
   color: string;
-  gradientId: string;
   selected: number | null;
   onSelect: (index: number) => void;
 }) {
@@ -211,10 +204,9 @@ function TimeSeriesPlot({
     const ys = points.map((v) => top + innerH - ((v.value - min) / span) * innerH);
     const yFor = (v: number) => top + innerH - ((v - min) / span) * innerH;
     const path = points.length === 1 ? '' : smoothPath(xs.map((x, i) => ({ x, y: ys[i] })));
-    const area = path ? `${path} L ${xs[xs.length - 1].toFixed(2)} ${bottom.toFixed(2)} L ${xs[0].toFixed(2)} ${bottom.toFixed(2)} Z` : '';
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
     const ticks = niceTicks(min + pad * 0.4, max - pad * 0.4, GRID_ROWS);
-    return { path, area, xs, ys, yFor, min, max, avg, ticks, top, bottom, left, right };
+    return { path, xs, ys, yFor, min, max, avg, ticks, top, bottom, left, right };
   }, [points, width, height]);
 
   if (!g) return null;
@@ -238,21 +230,13 @@ function TimeSeriesPlot({
         onSelect(best);
       }}
     >
-      <Defs>
-        <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={color} stopOpacity={0.28} />
-          <Stop offset="0.55" stopColor={color} stopOpacity={0.10} />
-          <Stop offset="1" stopColor={color} stopOpacity={0.02} />
-        </LinearGradient>
-      </Defs>
-
       {/* gridlines + y ticks */}
       {g.ticks.map((t, i) => {
         const y = g.yFor(t);
         return (
           <G key={i}>
-            <Line x1={g.left} y1={y} x2={g.right} y2={y} stroke="rgba(154,52,18,0.10)" strokeWidth={1} />
-            <SvgText x={g.left - 6} y={y + 3.5} fontSize={10} fontWeight="500" fill="#A8907A" textAnchor="end">
+            <Line x1={g.left} y1={y} x2={g.right} y2={y} stroke={GV.line} strokeWidth={1} />
+            <SvgText x={g.left - 6} y={y + 3.5} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="end">
               {compactNum(t)}
             </SvgText>
           </G>
@@ -269,24 +253,20 @@ function TimeSeriesPlot({
         strokeWidth={1.25}
         strokeDasharray="4 5"
       />
-      <SvgText x={g.right - 2} y={g.yFor(g.avg) - 5} fontSize={9.5} fontWeight="700" fill={withAlpha(color, 0.9)} textAnchor="end">
+      <SvgText x={g.right - 2} y={g.yFor(g.avg) - 5} fontSize={10} fontFamily={FONT.semi} fill={withAlpha(color, 0.9)} textAnchor="end">
         {`avg ${compactNum(g.avg)}${unit ?? ''}`}
       </SvgText>
 
-      {/* area + line */}
-      {g.area ? <Path d={g.area} fill={`url(#${gradientId})`} stroke="none" /> : null}
+      {/* flat line (no area fill — Guava-flat, no gradients) */}
       {g.path ? (
         <Path d={g.path} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
       ) : (
         <Circle cx={g.xs[0]} cy={g.ys[0]} r={4} fill={color} />
       )}
 
-      {/* last-value halo */}
+      {/* last-value dot */}
       {g.path ? (
-        <>
-          <Circle cx={lastX} cy={lastY} r={8} fill={color} opacity={0.18} />
-          <Circle cx={lastX} cy={lastY} r={4} fill={color} stroke="#FFFFFF" strokeWidth={2} />
-        </>
+        <Circle cx={lastX} cy={lastY} r={4} fill={color} stroke="#FFFFFF" strokeWidth={2} />
       ) : null}
 
       {/* data points on the curve */}
@@ -300,7 +280,6 @@ function TimeSeriesPlot({
       {sel != null && (
         <G>
           <Line x1={g.xs[sel]} y1={g.top} x2={g.xs[sel]} y2={g.bottom} stroke={color} strokeWidth={1.25} strokeDasharray="3 4" opacity={0.8} />
-          <Circle cx={g.xs[sel]} cy={g.ys[sel]} r={9} fill={color} opacity={0.2} />
           <Circle cx={g.xs[sel]} cy={g.ys[sel]} r={4.5} fill={color} stroke="#FFFFFF" strokeWidth={2} />
         </G>
       )}
@@ -308,15 +287,15 @@ function TimeSeriesPlot({
       {/* x labels: first / mid / last */}
       {points.length > 1 && (
         <G>
-          <SvgText x={g.left} y={height - 6} fontSize={10} fontWeight="500" fill="#A8907A" textAnchor="start">
+          <SvgText x={g.left} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="start">
             {shortDate(points[0].date)}
           </SvgText>
           {points.length > 4 && (
-            <SvgText x={(g.left + g.right) / 2} y={height - 6} fontSize={10} fontWeight="500" fill="#A8907A" textAnchor="middle">
+            <SvgText x={(g.left + g.right) / 2} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="middle">
               {shortDate(points[Math.floor(points.length / 2)].date)}
             </SvgText>
           )}
-          <SvgText x={g.right} y={height - 6} fontSize={10} fontWeight="500" fill="#A8907A" textAnchor="end">
+          <SvgText x={g.right} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="end">
             {shortDate(points[points.length - 1].date)}
           </SvgText>
         </G>
@@ -371,35 +350,35 @@ function CorrelationPlot({ points, width, height, verdict }: {
 
   if (!g) return null;
   const curve = VERDICT_CURVE[verdict];
-  const dotFill = verdict === 'neutral' ? '#C9BBA9' : curve;
+  const dotFill = verdict === 'neutral' ? GV.muted : curve;
 
   return (
     <Svg width={width} height={height}>
       {/* grid */}
       {g.yTicks.map((t, i) => (
         <G key={`y${i}`}>
-          <Line x1={g.left} y1={g.yFor(t)} x2={g.right} y2={g.yFor(t)} stroke="rgba(154,52,18,0.10)" strokeWidth={1} />
-          <SvgText x={g.left - 6} y={g.yFor(t) + 3.5} fontSize={10} fontWeight="500" fill="#A8907A" textAnchor="end">
+          <Line x1={g.left} y1={g.yFor(t)} x2={g.right} y2={g.yFor(t)} stroke={GV.line} strokeWidth={1} />
+          <SvgText x={g.left - 6} y={g.yFor(t) + 3.5} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="end">
             {compactNum(t)}
           </SvgText>
         </G>
       ))}
       {g.xTicks.map((t, i) => (
         <G key={`x${i}`}>
-          <Line x1={g.xFor(t)} y1={g.top} x2={g.xFor(t)} y2={g.bottom} stroke="rgba(154,52,18,0.06)" strokeWidth={1} />
-          <SvgText x={g.xFor(t)} y={height - 6} fontSize={10} fontWeight="500" fill="#A8907A" textAnchor="middle">
+          <Line x1={g.xFor(t)} y1={g.top} x2={g.xFor(t)} y2={g.bottom} stroke={GV.line} strokeWidth={1} />
+          <SvgText x={g.xFor(t)} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="middle">
             {compactNum(t)}
           </SvgText>
         </G>
       ))}
 
-      {/* fit line: verdict color; neutral draws white over a warm casing */}
+      {/* fit line: verdict color (data encoding); neutral draws over a light casing */}
       {g.linePath ? (
         <>
           {verdict === 'neutral' ? (
             <Line
               x1={g.linePath.x1} y1={g.linePath.y1} x2={g.linePath.x2} y2={g.linePath.y2}
-              stroke="#C9BBA9" strokeWidth={5} strokeLinecap="round"
+              stroke="#FFFFFF" strokeWidth={5} strokeLinecap="round"
             />
           ) : (
             <Line
@@ -428,26 +407,23 @@ function CorrelationPlot({ points, width, height, verdict }: {
 // ─── verdict pill ───────────────────────────────────────────────────────────
 
 function verdictStyle(v: HealthVerdict): { bg: string; fg: string } {
-  if (v === 'good') return { bg: '#2F9E44', fg: '#FFFFFF' };
-  if (v === 'bad') return { bg: '#E03131', fg: '#FFFFFF' };
-  return { bg: 'rgba(120,84,60,0.14)', fg: '#7C5A44' };
+  if (v === 'good') return { bg: GV.fx.green, fg: '#FFFFFF' };
+  if (v === 'bad') return { bg: GV.danger, fg: '#FFFFFF' };
+  return { bg: GV.wash, fg: GV.body };
 }
 
 // ─── Card ───────────────────────────────────────────────────────────────────
-
-const SUNSET_LINE = '#E8590C';
 
 export default function CorrelationGraphCard({
   title,
   subtitle,
   data,
   chartHeight = 168,
-  lineColor = SUNSET_LINE,
+  lineColor = GV.ink,
   style,
 }: CorrelationGraphCardProps) {
   const [plotWidth, setPlotWidth] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
-  const gradientId = useId().replace(/[^a-zA-Z0-9]/g, '');
 
   const r = data.kind === 'correlation' ? data.r : null;
   const verdict: HealthVerdict = data.kind === 'correlation' ? data.verdict : 'neutral';
@@ -513,7 +489,7 @@ export default function CorrelationGraphCard({
             {compactNum(selectedPoint ? selectedPoint.value : stats.last)}
             <Text style={styles.heroUnit}>{unit}</Text>
           </Text>
-          <View style={[styles.deltaChip, stats.flat ? styles.deltaFlat : stats.up ? styles.deltaUp : styles.deltaDown]}>
+          <View style={styles.deltaChip}>
             <Text style={[styles.deltaText, stats.flat ? styles.deltaTextFlat : stats.up ? styles.deltaTextUp : styles.deltaTextDown]}>
               {stats.flat ? '● steady' : `${stats.up ? '▲' : '▼'} ${stats.deltaPct != null ? `${Math.abs(stats.deltaPct) >= 0.05 ? Math.abs(stats.deltaPct).toFixed(1) : '<0.1'}%` : compactNum(Math.abs(stats.delta))}`}
             </Text>
@@ -533,7 +509,6 @@ export default function CorrelationGraphCard({
             width={plotWidth}
             height={chartHeight}
             color={lineColor}
-            gradientId={`g${gradientId}`}
             selected={selected}
             onSelect={(i) => setSelected((prev) => (prev === i ? null : i))}
           />
@@ -544,7 +519,7 @@ export default function CorrelationGraphCard({
         {data.points.length === 0 ? (
           <View style={styles.empty}>
             <Svg width={28} height={28} viewBox="0 0 24 24">
-              <Path d="M2 12.4h4l2.5-6 4 11 2.5-5.2H22" fill="none" stroke="#C9A27E" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              <Path d="M2 12.4h4l2.5-6 4 11 2.5-5.2H22" fill="none" stroke={GV.muted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
             <Text style={styles.emptyTitle}>No data yet</Text>
             <Text style={styles.emptyText}>Log a few more days to unlock this graph</Text>
@@ -569,11 +544,11 @@ export default function CorrelationGraphCard({
           ) : (
             <>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: verdict === 'neutral' ? '#C9BBA9' : VERDICT_CURVE[verdict] }]} />
+                <View style={[styles.legendDot, { backgroundColor: VERDICT_CURVE[verdict] }]} />
                 <Text style={styles.legendText}>Paired days</Text>
               </View>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDash, verdict === 'neutral' && styles.legendDashLight]} />
+                <View style={styles.legendDash} />
                 <Text style={styles.legendText}>Best fit</Text>
               </View>
             </>
@@ -605,120 +580,113 @@ export default function CorrelationGraphCard({
 }
 
 const styles = StyleSheet.create({
-  // Sunset paper scheme — one-off warm hexes (the Movements+ tokens carry no
-  // warm family); all type/spacing/radii still come from mv/mvType.
+  // Guava-flat: white card, radius 20, padding 20, no border, no shadow.
   card: {
-    backgroundColor: '#FFF8F0',
-    borderRadius: mv.radiusCard,
-    borderCurve: 'continuous',
-    padding: mv.spaceCard,
-    borderWidth: 1,
-    borderColor: 'rgba(154,52,18,0.14)',
-    boxShadow: '0 1px 2px rgba(124,45,18,0.08), 0 10px 28px rgba(124,45,18,0.10)',
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: mv.spaceSideBySide,
+    gap: SPACE.cardGap,
   },
   headerText: { flex: 1, gap: 4 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#E8590C' },
+  // Small flat icon dot — the only hue outside data encoding.
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GV.fx.green },
   eyebrow: {
-    ...mvType.pill,
-    color: '#8A6D5B',
+    ...TYPE.chip,
+    color: GV.muted,
     letterSpacing: 1.2,
-    fontSize: 11,
   },
-  title: { fontSize: 17, fontWeight: '800', lineHeight: 22, letterSpacing: -0.2, color: '#C1121F' },
+  title: { ...TYPE.title, color: GV.ink },
   pillCol: { gap: 6, alignItems: 'flex-end', marginTop: 2 },
   badge: {
-    backgroundColor: '#431407',
-    borderRadius: mv.radiusPill,
+    backgroundColor: GV.ink,
+    borderRadius: SPACE.rPill,
     paddingHorizontal: 10,
     paddingVertical: 5,
     minWidth: 76,
     alignItems: 'center',
   },
-  badgeText: { ...mvType.pill, color: '#FFEDD5', fontVariant: ['tabular-nums'] },
+  badgeText: { ...TYPE.chip, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
   verdict: {
-    borderRadius: mv.radiusPill,
+    borderRadius: SPACE.rPill,
     paddingHorizontal: 10,
     paddingVertical: 4,
     alignItems: 'center',
   },
-  verdictText: { ...mvType.pill, fontSize: 11 },
+  verdictText: { ...TYPE.chip },
   heroRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    marginTop: 10,
-    gap: mv.spaceSideBySide,
+    marginTop: 8,
+    gap: SPACE.cardGap,
   },
   heroValue: {
-    ...mvType.statGiantSm,
-    color: '#3F1D0B',
+    ...TYPE.display,
+    color: GV.ink,
     fontVariant: ['tabular-nums'],
-    letterSpacing: -0.7,
   },
-  heroUnit: { fontSize: 14, fontWeight: '600', color: '#8A6D5B', letterSpacing: 0 },
-  deltaChip: { borderRadius: mv.radiusPill, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 4 },
-  deltaUp: { backgroundColor: '#FFE3B3' },
-  deltaDown: { backgroundColor: '#FFD9D9' },
-  deltaFlat: { backgroundColor: 'rgba(120,84,60,0.12)' },
-  deltaText: { ...mvType.pill, fontVariant: ['tabular-nums'] },
-  deltaTextUp: { color: '#7C2D12' },
-  deltaTextDown: { color: '#8F1D1D' },
-  deltaTextFlat: { color: '#8A6D5B' },
+  heroUnit: { ...TYPE.body, color: GV.muted },
+  deltaChip: {
+    borderRadius: SPACE.rPill,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 4,
+    backgroundColor: GV.wash,
+  },
+  deltaText: { ...TYPE.chip, fontVariant: ['tabular-nums'] },
+  deltaTextUp: { color: GV.fx.green },
+  deltaTextDown: { color: GV.danger },
+  deltaTextFlat: { color: GV.muted },
   plot: {
     marginTop: 8,
-    borderRadius: 18,
-    borderCurve: 'continuous',
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(154,52,18,0.10)',
+    backgroundColor: GV.wash,
   },
   legend: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginTop: 10,
+    gap: 16,
+    marginTop: 8,
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendDash: {
-    width: 18,
+    width: 16,
     borderTopWidth: 2,
-    borderTopColor: '#A8907A',
+    borderTopColor: GV.muted,
     borderStyle: 'dashed',
   },
-  legendDashLight: { borderTopColor: '#FFFFFF', backgroundColor: '#C9BBA9', paddingTop: 0 },
-  legendText: { ...mvType.caption, color: '#8A6D5B', fontSize: 12 },
+  legendText: { ...TYPE.caption, color: GV.muted },
   inspector: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 10,
-    backgroundColor: '#431407',
-    borderRadius: mv.radiusPill,
-    paddingHorizontal: 14,
+    marginTop: 8,
+    backgroundColor: GV.ink,
+    borderRadius: SPACE.rPill,
+    paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  inspectorDate: { ...mvType.pill, color: 'rgba(255,237,213,0.75)' },
-  inspectorValue: { ...mvType.pill, color: '#FFF7ED', fontSize: 13, fontVariant: ['tabular-nums'] },
+  inspectorDate: { ...TYPE.chip, color: 'rgba(255,255,255,0.75)' },
+  inspectorValue: { ...TYPE.chip, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
   footer: { marginTop: 8 },
-  footerText: { ...mvType.caption, color: '#8A6D5B', fontSize: 12 },
+  footerText: { ...TYPE.caption, color: GV.muted },
   empty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFF1E2',
-    borderRadius: 18,
+    backgroundColor: GV.wash,
+    borderRadius: 16,
     gap: 4,
     paddingVertical: 20,
   },
-  emptyTitle: { fontSize: 14, fontWeight: '800', color: '#C1121F', marginTop: 6 },
-  emptyText: { ...mvType.caption, color: '#8A6D5B' },
+  emptyTitle: { ...TYPE.title, fontSize: 14, lineHeight: 20, color: GV.ink, marginTop: 8 },
+  emptyText: { ...TYPE.caption, color: GV.muted },
 });

@@ -3,20 +3,18 @@
  *
  * Shows the most recent ON-DEVICE camera-PPG measurement (real stored data
  * only — never invented) or an empty state, and navigates to the
- * measurement screen. Styled with the dashboard Movements+ tokens via the
- * shared LiftCard primitive. No medical claims.
+ * measurement screen. Guava-flat white card, Poppins numerals.
+ * No medical claims.
  */
 
 import React, { useCallback, useState } from 'react';
-import { Text, View, StyleSheet } from 'react-native';
+import { Pressable, Text, View, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation, type CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import LiftCard from '@/components/home/LiftCard';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getCachedPatientId } from '@/services/patientIdentity';
-import { healthIcon } from '@/theme/icons';
-import { mv, mvType } from '@/theme/movements';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import type { MainTabParamList, RootStackParamList } from '@/types';
 
 type Nav = CompositeNavigationProp<
@@ -86,95 +84,95 @@ export default function PpgHeartRateCard() {
 
   return (
     <View style={styles.section}>
-      <LiftCard
-        style={styles.card}
-        contentContainerStyle={styles.content}
-        accessibilityLabel={recent ? `Heart rate, ${recent.bpm} beats per minute. Measure again.` : 'Heart rate. No recent measurement. Measure now.'}
+      <Pressable
         onPress={goToMeasure}
-        pressedBg="rgba(20,20,20,0.06)"
+        accessibilityRole="button"
+        accessibilityLabel={recent ? `Heart rate, ${recent.bpm} beats per minute. Measure again.` : 'Heart rate. No recent measurement. Measure now.'}
+        style={({ pressed }) => [
+          styles.card,
+          pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
+        ]}
       >
         <View style={styles.top}>
-          <Text style={styles.eyebrow}>{healthIcon.heartRate}  HEART RATE</Text>
-          <Text style={styles.cta}>Measure  →</Text>
+          <View style={styles.eyebrowRow}>
+            <View
+              accessible
+              accessibilityRole="image"
+              accessibilityLabel="Heart rate icon"
+              style={styles.iconTile}
+            >
+              <Text style={styles.iconGlyph}>♥</Text>
+            </View>
+            <Text style={styles.eyebrow}>HEART RATE</Text>
+          </View>
+          <Text style={styles.cta}>Measure →</Text>
         </View>
         <Text style={styles.value} numberOfLines={1}>
           {recent ? `${recent.bpm} BPM` : 'No recent measurement'}
         </Text>
-        <Text style={styles.sub} numberOfLines={1}>
+        <Text style={styles.sub} numberOfLines={1} accessibilityLabel={label}>
           {recent ? `${relativeTime(recent.measuredAt)} · fingertip camera` : 'Fingertip camera · about a minute'}
         </Text>
-        <View style={styles.track} accessible accessibilityLabel={label}>
-          <View style={[styles.fill, recent ? null : styles.fillEmpty]} />
-        </View>
-      </LiftCard>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   section: {
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACE.screenH,
     paddingTop: 8,
   },
   card: {
-    backgroundColor: mv.surfaceWhite,
-    borderRadius: 20,
-    borderCurve: 'continuous',
-    borderWidth: 1,
-    borderColor: 'rgba(20,20,20,0.06)',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
-  },
-  content: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    gap: 2,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    gap: 8,
   },
   top: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  eyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconTile: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: GV.wash,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconGlyph: {
+    fontFamily: FONT.semi,
+    fontSize: 16,
+    lineHeight: 20,
+    color: GV.fx.pink,
+  },
   eyebrow: {
-    ...mvType.pill,
-    color: mv.textOnLightSecondary,
+    ...TYPE.caption,
+    color: GV.muted,
     letterSpacing: 1.1,
-    fontSize: 10,
-    fontWeight: '800',
   },
   cta: {
-    ...mvType.pill,
-    color: mv.textOnLightPrimary,
-    fontSize: 12,
-    fontWeight: '800',
+    ...TYPE.button,
+    fontSize: 14,
+    color: GV.cta,
   },
   value: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontFamily: FONT.semi,
+    fontSize: 24,
+    lineHeight: 30,
     letterSpacing: -0.3,
-    lineHeight: 26,
-    color: mv.textOnLightPrimary,
+    color: GV.ink,
     fontVariant: ['tabular-nums'],
   },
   sub: {
-    ...mvType.caption,
-    color: mv.textOnLightSecondary,
-    fontSize: 12,
-  },
-  track: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: 'rgba(20,20,20,0.08)',
-    marginTop: 6,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: 5,
-    borderRadius: 3,
-    width: '100%',
-    backgroundColor: '#E8862E',
-  },
-  fillEmpty: {
-    width: '12%',
-    backgroundColor: 'rgba(20,20,20,0.18)',
+    ...TYPE.caption,
+    color: GV.muted,
   },
 });

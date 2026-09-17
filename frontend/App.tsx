@@ -22,6 +22,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useFonts } from 'expo-font';
+import { FONT } from '@/theme/guava';
 
 import {
   QueryClient,
@@ -46,6 +48,7 @@ import DocumentDetailScreen from '@/screens/Documents/DocumentDetailScreen';
 import SettingsScreen from '@/screens/Settings/SettingsScreen';
 import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
+import SymptomMapScreen from '@/screens/Body/SymptomMapScreen';
 import PpgMeasureScreen from '@/screens/PpgMeasure/PpgMeasureScreen';
 import PulseMethodScreen from '@/screens/PpgMeasure/PulseMethodScreen';
 import RppgMeasureScreen from '@/screens/PpgMeasure/RppgMeasureScreen';
@@ -111,13 +114,11 @@ function MainTabs() {
       {/* Pulse entry: method selector (fingertip PPG vs face rPPG). The
           red tab button lands here; each method pushes its own flow. */}
       <Tab.Screen name="PpgMeasure" component={PulseMethodScreen} />
-      {/* Chat hides the floating tab bar while typing so the keyboard never
-          fights it for bottom space (the composer clears the bar only when
-          the bar is actually visible). */}
+      {/* Chat is a full-screen surface: the dock never mounts there and
+          the system back button handles exit. */}
       <Tab.Screen
         name="Chat"
         component={ChatScreen}
-        options={{ tabBarHideOnKeyboard: true }}
       />
     </Tab.Navigator>
   );
@@ -334,6 +335,14 @@ function AppNavigator() {
                 headerShown: false,
               }}
             />
+            {/* Symptom body map — stack route (no tab), local state only. */}
+            <RootStack.Screen
+              name="SymptomMap"
+              component={SymptomMapScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
           </>
         )}
       </RootStack.Navigator>
@@ -346,6 +355,14 @@ function AppNavigator() {
  * ========================================================================== */
 
 export default function App() {
+  // Poppins loads under the boot video — first paint is already covered,
+  // so there is no font-flash and no splash coordination needed.
+  useFonts({
+    [FONT.regular]: require('./assets/fonts/Poppins-Regular.ttf'),
+    [FONT.medium]: require('./assets/fonts/Poppins-Medium.ttf'),
+    [FONT.semi]: require('./assets/fonts/Poppins-SemiBold.ttf'),
+    [FONT.bold]: require('./assets/fonts/Poppins-Bold.ttf'),
+  });
   return (
     <SafeAreaProvider>
       <QueryClientProvider

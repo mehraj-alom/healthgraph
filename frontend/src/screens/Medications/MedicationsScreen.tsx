@@ -19,7 +19,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
-  TextInput,
   Modal,
   Platform,
   KeyboardAvoidingView,
@@ -32,7 +31,9 @@ import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useAuth } from '@/context/AuthContext';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { api } from '@/services/api';
-import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+void FONT;
+import { Button, Card, Chip, Input, SectionHeader } from '@/components';
 import type { Medication, MedicationFrequency, MedicationRoute, MedicationStatus, DailyMedicationSchedule, MedicationTakenEvent } from '@/types';
 import type { RootStackParamList } from '@/types';
 
@@ -54,13 +55,13 @@ const FREQUENCY_LABELS: Record<MedicationFrequency, string> = {
   CUSTOM: 'Custom',
 };
 
-// ── Status colors ──
-const STATUS_COLORS: Record<MedicationStatus, string> = {
-  ACTIVE: COLORS.green,
-  SCHEDULED: COLORS.accent,
-  COMPLETED: COLORS.textMuted,
-  PAUSED: COLORS.warning,
-  DISCONTINUED: COLORS.error,
+// ── Status dot hues — small flat icons inside white cards only ──
+const STATUS_DOTS: Record<MedicationStatus, string> = {
+  ACTIVE: GV.fx.green,
+  SCHEDULED: GV.fx.blue,
+  COMPLETED: GV.muted,
+  PAUSED: GV.fx.amber,
+  DISCONTINUED: GV.muted,
 };
 
 // ── Helper functions ──
@@ -85,7 +86,9 @@ function getStatusLabel(status: MedicationStatus): string {
 
 export default function MedicationsScreen() {
   const navigation = useNavigation<Nav>();
+  void navigation;
   const { user } = useAuth();
+  void user;
   const [selectedTab, setSelectedTab] = useState<'active' | 'schedule' | 'history'>('active');
   // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
   const onTabScroll = useHideTabBarOnScroll();
@@ -188,47 +191,45 @@ export default function MedicationsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Medications</Text>
-        <Pressable
-          style={styles.addButton}
+      <Text style={styles.title}>Medications</Text>
+      <Text style={styles.subtitle}>Track doses and daily schedules.</Text>
+
+      <View style={styles.addWrap}>
+        <Button
+          title="+ Add"
           onPress={() => {
             setEditingMedication(null);
             setShowAddModal(true);
           }}
-        >
-          <Text style={styles.addButtonText}>+ Add</Text>
-        </Pressable>
+          accessibilityLabel="Add medication"
+        />
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabBar}>
-        <Pressable
-          style={[styles.tab, selectedTab === 'active' && styles.tabActive]}
-          onPress={() => setSelectedTab('active')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'active' && styles.tabTextActive]}>
-            Active ({activeMedications.length})
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, selectedTab === 'schedule' && styles.tabActive]}
-          onPress={() => setSelectedTab('schedule')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'schedule' && styles.tabTextActive]}>
-            Today's Schedule
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, selectedTab === 'history' && styles.tabActive]}
-          onPress={() => setSelectedTab('history')}
-        >
-          <Text style={[styles.tabText, selectedTab === 'history' && styles.tabTextActive]}>
-            History
-          </Text>
-        </Pressable>
-      </View>
+      <Card style={styles.tabCard}>
+        <View style={styles.tabRow}>
+          <Chip
+            label={`Active (${activeMedications.length})`}
+            size="large"
+            selected={selectedTab === 'active'}
+            onPress={() => setSelectedTab('active')}
+            accessibilityLabel="Show active medications"
+          />
+          <Chip
+            label="Today's Schedule"
+            size="large"
+            selected={selectedTab === 'schedule'}
+            onPress={() => setSelectedTab('schedule')}
+            accessibilityLabel="Show today's schedule"
+          />
+          <Chip
+            label="History"
+            size="large"
+            selected={selectedTab === 'history'}
+            onPress={() => setSelectedTab('history')}
+            accessibilityLabel="Show medication history"
+          />
+        </View>
+      </Card>
 
       {/* Content */}
       <ScrollView
@@ -243,7 +244,7 @@ export default function MedicationsScreen() {
               refetchMedications();
               refetchSchedule();
             }}
-            tintColor={COLORS.primary}
+            tintColor={GV.cta}
           />
         }
       >
@@ -313,20 +314,19 @@ function ActiveMedicationsTab({
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={GV.cta} />
       </View>
     );
   }
 
   if (medications.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>💊</Text>
+      <Card style={styles.emptyCard}>
         <Text style={styles.emptyTitle}>No Active Medications</Text>
         <Text style={styles.emptyText}>
           Add your medications to track doses and schedules.
         </Text>
-      </View>
+      </Card>
     );
   }
 
@@ -363,25 +363,27 @@ function MedicationCard({
 }) {
   const [showActions, setShowActions] = useState(false);
 
-  const statusColor = STATUS_COLORS[medication.status];
+  const statusDot = STATUS_DOTS[medication.status];
   const frequencyLabel = FREQUENCY_LABELS[medication.frequency] || medication.frequency;
 
   return (
-    <View style={styles.medicationCard}>
+    <Card style={styles.medicationCard}>
       <Pressable
         style={styles.medicationHeader}
         onPress={() => setShowActions(!showActions)}
+        accessibilityRole="button"
+        accessibilityLabel={`${medication.name} details`}
+        accessibilityState={{ expanded: showActions }}
       >
         <View style={styles.medicationInfo}>
           <View style={styles.medicationNameRow}>
+            <View style={[styles.statusDot, { backgroundColor: statusDot }]} />
             <Text style={styles.medicationName}>{medication.name}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {getStatusLabel(medication.status)}
-              </Text>
-            </View>
+            <Text style={styles.statusText}>
+              {getStatusLabel(medication.status)}
+            </Text>
           </View>
-          
+
           <View style={styles.medicationDetails}>
             {medication.strength && (
               <Text style={styles.medicationDetail}>
@@ -419,31 +421,23 @@ function MedicationCard({
           )}
         </View>
 
-        <Text style={styles.chevron}>{showActions ? '▲' : '▼'}</Text>
+        <Text style={styles.chevron}>{showActions ? '‹' : '›'}</Text>
       </Pressable>
 
       {showActions && (
         <View style={styles.medicationActions}>
-          <Pressable style={styles.actionButton} onPress={onEdit}>
-            <Text style={styles.actionButtonText}>Edit</Text>
-          </Pressable>
-          
+          <Chip label="Edit" size="large" selected={false} onPress={onEdit} accessibilityLabel={`Edit ${medication.name}`} />
+
           {medication.status === 'ACTIVE' ? (
-            <Pressable style={[styles.actionButton, styles.pauseButton]} onPress={onPause}>
-              <Text style={styles.actionButtonText}>Pause</Text>
-            </Pressable>
+            <Chip label="Pause" size="large" selected={false} onPress={onPause} accessibilityLabel={`Pause ${medication.name}`} />
           ) : medication.status === 'PAUSED' ? (
-            <Pressable style={[styles.actionButton, styles.resumeButton]} onPress={onResume}>
-              <Text style={styles.actionButtonText}>Resume</Text>
-            </Pressable>
+            <Chip label="Resume" size="large" selected={false} onPress={onResume} accessibilityLabel={`Resume ${medication.name}`} />
           ) : null}
-          
-          <Pressable style={[styles.actionButton, styles.stopButton]} onPress={onStop}>
-            <Text style={[styles.actionButtonText, styles.stopButtonText]}>Stop</Text>
-          </Pressable>
+
+          <Chip label="Stop" size="large" selected={false} onPress={onStop} accessibilityLabel={`Stop ${medication.name}`} />
         </View>
       )}
-    </View>
+    </Card>
   );
 }
 
@@ -461,20 +455,19 @@ function ScheduleTab({
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={GV.cta} />
       </View>
     );
   }
 
   if (schedule.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>📅</Text>
+      <Card style={styles.emptyCard}>
         <Text style={styles.emptyTitle}>No Medications Scheduled</Text>
         <Text style={styles.emptyText}>
           Add medications to see your daily schedule.
         </Text>
-      </View>
+      </Card>
     );
   }
 
@@ -489,8 +482,8 @@ function ScheduleTab({
   return (
     <View style={styles.scheduleContainer}>
       {Object.entries(groupedByTime).map(([time, items]) => (
-        <View key={time} style={styles.timeGroup}>
-          <Text style={styles.timeGroupHeader}>{formatTime(time)}</Text>
+        <Card key={time} style={styles.timeGroupCard}>
+          <SectionHeader title={formatTime(time)} />
           {items.map((item) => (
             <ScheduleItem
               key={`${item.medication.medication_id}-${item.scheduled_time}`}
@@ -498,7 +491,7 @@ function ScheduleTab({
               onTakeDose={() => onTakeDose(item.medication as any, item.scheduled_time)}
             />
           ))}
-        </View>
+        </Card>
       ))}
     </View>
   );
@@ -516,7 +509,7 @@ function ScheduleItem({
   const { medication, taken, taken_at } = item;
 
   return (
-    <View style={[styles.scheduleItem, taken && styles.scheduleItemTaken]}>
+    <View style={styles.scheduleItem}>
       <View style={styles.scheduleItemInfo}>
         <Text style={styles.scheduleItemName}>{medication.name}</Text>
         <Text style={styles.scheduleItemDetails}>
@@ -524,20 +517,23 @@ function ScheduleItem({
           {medication.dose_amount ? ` • ${medication.dose_amount}${medication.dose_unit ? ` ${medication.dose_unit}` : ''}` : ''}
         </Text>
       </View>
-      
+
       {taken ? (
         <View style={styles.takenBadge}>
-          <Text style={styles.takenText}>✓ Taken</Text>
-          {taken_at && (
-            <Text style={styles.takenTime}>
-              {new Date(taken_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-            </Text>
-          )}
+          <View style={styles.takenIcon}>
+            <Text style={styles.takenGlyph}>✓</Text>
+          </View>
+          <View style={styles.takenTexts}>
+            <Text style={styles.takenText}>Taken</Text>
+            {taken_at && (
+              <Text style={styles.takenTime}>
+                {new Date(taken_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+              </Text>
+            )}
+          </View>
         </View>
       ) : (
-        <Pressable style={styles.takeButton} onPress={onTakeDose}>
-          <Text style={styles.takeButtonText}>Take</Text>
-        </Pressable>
+        <Button title="Take" onPress={onTakeDose} size="small" accessibilityLabel={`Take ${medication.name}`} />
       )}
     </View>
   );
@@ -551,54 +547,55 @@ function HistoryTab({ medications }: { medications: Medication[] }) {
 
   if (medications.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>📋</Text>
+      <Card style={styles.emptyCard}>
         <Text style={styles.emptyTitle}>No Medication History</Text>
         <Text style={styles.emptyText}>
           Add medications to track your history.
         </Text>
-      </View>
+      </Card>
     );
   }
 
   return (
     <View style={styles.historyContainer}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.medicationPicker}>
-        <Pressable
-          style={[styles.pickerItem, !selectedMedication && styles.pickerItemActive]}
-          onPress={() => setSelectedMedication(null)}
-        >
-          <Text style={[styles.pickerText, !selectedMedication && styles.pickerTextActive]}>
-            All
-          </Text>
-        </Pressable>
-        {medications.map((med) => (
-          <Pressable
-            key={med.medication_id}
-            style={[styles.pickerItem, selectedMedication === med.medication_id && styles.pickerItemActive]}
-            onPress={() => setSelectedMedication(med.medication_id)}
-          >
-            <Text style={[styles.pickerText, selectedMedication === med.medication_id && styles.pickerTextActive]}>
-              {med.name}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <Card style={styles.pickerCard}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.pickerRow}>
+            <Chip
+              label="All"
+              size="large"
+              selected={!selectedMedication}
+              onPress={() => setSelectedMedication(null)}
+              accessibilityLabel="Show all medication history"
+            />
+            {medications.map((med) => (
+              <Chip
+                key={med.medication_id}
+                label={med.name}
+                size="large"
+                selected={selectedMedication === med.medication_id}
+                onPress={() => setSelectedMedication(med.medication_id)}
+                accessibilityLabel={`Show history for ${med.name}`}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      </Card>
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={GV.cta} />
         </View>
       ) : history.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <Card style={styles.emptyCard}>
           <Text style={styles.emptyText}>No dose history recorded.</Text>
-        </View>
+        </Card>
       ) : (
-        <View style={styles.historyList}>
+        <Card style={styles.historyCard}>
           {history.map((event) => (
             <HistoryItem key={event.event_id} event={event} medications={medications} />
           ))}
-        </View>
+        </Card>
       )}
     </View>
   );
@@ -614,8 +611,8 @@ function HistoryItem({
   medications: Medication[];
 }) {
   const medication = medications.find(m => m.medication_id === event.medication_id);
-  const statusColor = event.status === 'TAKEN' ? COLORS.green : 
-                     event.status === 'MISSED' ? COLORS.error : COLORS.warning;
+  const statusDot = event.status === 'TAKEN' ? GV.fx.green :
+    event.status === 'MISSED' ? GV.muted : GV.fx.amber;
 
   return (
     <View style={styles.historyItem}>
@@ -627,8 +624,9 @@ function HistoryItem({
           {new Date(event.taken_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
         </Text>
       </View>
-      <View style={[styles.historyStatusBadge, { backgroundColor: statusColor + '20' }]}>
-        <Text style={[styles.historyStatusText, { color: statusColor }]}>
+      <View style={styles.historyStatus}>
+        <View style={[styles.statusDot, { backgroundColor: statusDot }]} />
+        <Text style={styles.historyStatusText}>
           {event.status}
         </Text>
       </View>
@@ -657,6 +655,8 @@ function AddMedicationModal({
   const [doseAmount, setDoseAmount] = useState(medication?.dose_amount?.toString() || '');
   const [doseUnit, setDoseUnit] = useState(medication?.dose_unit || '');
   const [route, setRoute] = useState<MedicationRoute | ''>(medication?.route || '');
+  void route;
+  void setRoute;
   const [frequency, setFrequency] = useState<MedicationFrequency>(medication?.frequency || 'ONCE_DAILY');
   const [scheduledTimes, setScheduledTimes] = useState(medication?.scheduled_times?.join(', ') || '');
   const [startDate, setStartDate] = useState(medication?.start_date || '');
@@ -719,229 +719,198 @@ function AddMedicationModal({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.modalHeader}>
-          <Pressable onPress={onClose}>
+          <Pressable onPress={onClose} style={styles.modalCancelBtn} accessibilityRole="button" accessibilityLabel="Cancel">
             <Text style={styles.modalCancel}>Cancel</Text>
           </Pressable>
           <Text style={styles.modalTitle}>{medication ? 'Edit Medication' : 'Add Medication'}</Text>
-          <Pressable onPress={handleSave} disabled={saving}>
-            <Text style={[styles.modalSave, saving && styles.modalSaveDisabled]}>
-              {saving ? 'Saving...' : 'Save'}
-            </Text>
-          </Pressable>
+          <Button
+            title={saving ? 'Saving...' : 'Save'}
+            onPress={() => void handleSave()}
+            size="small"
+            disabled={saving}
+            accessibilityLabel="Save medication"
+          />
         </View>
 
         <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentContainer}>
-          {/* Required: Name */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Medication Name *</Text>
-            <TextInput
-              style={styles.textInput}
+          <Card style={styles.fieldCard}>
+            <Input
+              label="Medication Name *"
               value={name}
               onChangeText={setName}
               placeholder="e.g., AMTIVA"
-              placeholderTextColor={COLORS.textMuted}
             />
-          </View>
+          </Card>
 
-          {/* Optional: Generic/Brand */}
-          <View style={styles.fieldRow}>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>Generic Name</Text>
-              <TextInput
-                style={styles.textInput}
-                value={genericName}
-                onChangeText={setGenericName}
-                placeholder="e.g., amlodipine"
-                placeholderTextColor={COLORS.textMuted}
-              />
+          <Card style={styles.fieldCard}>
+            <View style={styles.fieldRow}>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="Generic Name"
+                  value={genericName}
+                  onChangeText={setGenericName}
+                  placeholder="e.g., amlodipine"
+                />
+              </View>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="Brand Name"
+                  value={brandName}
+                  onChangeText={setBrandName}
+                  placeholder="e.g., Norvasc"
+                />
+              </View>
             </View>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>Brand Name</Text>
-              <TextInput
-                style={styles.textInput}
-                value={brandName}
-                onChangeText={setBrandName}
-                placeholder="e.g., Norvasc"
-                placeholderTextColor={COLORS.textMuted}
-              />
-            </View>
-          </View>
+          </Card>
 
-          {/* Strength */}
-          <View style={styles.fieldRow}>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>Strength</Text>
-              <TextInput
-                style={styles.textInput}
-                value={strength}
-                onChangeText={setStrength}
-                placeholder="e.g., 5"
-                placeholderTextColor={COLORS.textMuted}
-                keyboardType="numeric"
-              />
+          <Card style={styles.fieldCard}>
+            <View style={styles.fieldRow}>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="Strength"
+                  value={strength}
+                  onChangeText={setStrength}
+                  placeholder="e.g., 5"
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="Strength Unit"
+                  value={strengthUnit}
+                  onChangeText={setStrengthUnit}
+                  placeholder="e.g., mg"
+                />
+              </View>
             </View>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>Strength Unit</Text>
-              <TextInput
-                style={styles.textInput}
-                value={strengthUnit}
-                onChangeText={setStrengthUnit}
-                placeholder="e.g., mg"
-                placeholderTextColor={COLORS.textMuted}
-              />
-            </View>
-          </View>
+          </Card>
 
-          {/* Dose */}
-          <View style={styles.fieldRow}>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>Dose Amount</Text>
-              <TextInput
-                style={styles.textInput}
-                value={doseAmount}
-                onChangeText={setDoseAmount}
-                placeholder="e.g., 1"
-                placeholderTextColor={COLORS.textMuted}
-                keyboardType="numeric"
-              />
+          <Card style={styles.fieldCard}>
+            <View style={styles.fieldRow}>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="Dose Amount"
+                  value={doseAmount}
+                  onChangeText={setDoseAmount}
+                  placeholder="e.g., 1"
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="Dose Unit"
+                  value={doseUnit}
+                  onChangeText={setDoseUnit}
+                  placeholder="e.g., tablet"
+                />
+              </View>
             </View>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>Dose Unit</Text>
-              <TextInput
-                style={styles.textInput}
-                value={doseUnit}
-                onChangeText={setDoseUnit}
-                placeholder="e.g., tablet"
-                placeholderTextColor={COLORS.textMuted}
-              />
-            </View>
-          </View>
+          </Card>
 
-          {/* Frequency */}
-          <View style={styles.fieldGroup}>
+          <Card style={styles.fieldCard}>
             <Text style={styles.fieldLabel}>Frequency</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.frequencyPicker}>
+            <View style={styles.frequencyWrap}>
               {(Object.keys(FREQUENCY_LABELS) as MedicationFrequency[]).map((freq) => (
-                <Pressable
+                <Chip
                   key={freq}
-                  style={[styles.frequencyOption, frequency === freq && styles.frequencyOptionActive]}
+                  label={FREQUENCY_LABELS[freq]}
+                  size="large"
+                  selected={frequency === freq}
                   onPress={() => setFrequency(freq)}
-                >
-                  <Text style={[styles.frequencyText, frequency === freq && styles.frequencyTextActive]}>
-                    {FREQUENCY_LABELS[freq]}
-                  </Text>
-                </Pressable>
+                  accessibilityLabel={`Frequency ${FREQUENCY_LABELS[freq]}`}
+                />
               ))}
-            </ScrollView>
-          </View>
+            </View>
+          </Card>
 
-          {/* Scheduled Times */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Scheduled Times (comma-separated)</Text>
-            <TextInput
-              style={styles.textInput}
+          <Card style={styles.fieldCard}>
+            <Input
+              label="Scheduled Times (comma-separated)"
               value={scheduledTimes}
               onChangeText={setScheduledTimes}
               placeholder="e.g., 08:00, 20:00"
-              placeholderTextColor={COLORS.textMuted}
             />
-          </View>
+          </Card>
 
-          {/* Dates */}
-          <View style={styles.fieldRow}>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>Start Date</Text>
-              <TextInput
-                style={styles.textInput}
-                value={startDate}
-                onChangeText={setStartDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={COLORS.textMuted}
-              />
+          <Card style={styles.fieldCard}>
+            <View style={styles.fieldRow}>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="Start Date"
+                  value={startDate}
+                  onChangeText={setStartDate}
+                  placeholder="YYYY-MM-DD"
+                />
+              </View>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="End Date"
+                  value={endDate}
+                  onChangeText={setEndDate}
+                  placeholder="YYYY-MM-DD"
+                />
+              </View>
             </View>
-            <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.fieldLabel}>End Date</Text>
-              <TextInput
-                style={styles.textInput}
-                value={endDate}
-                onChangeText={setEndDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={COLORS.textMuted}
-              />
-            </View>
-          </View>
+          </Card>
 
-          {/* Purpose */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Purpose</Text>
-            <TextInput
-              style={styles.textInput}
+          <Card style={styles.fieldCard}>
+            <Input
+              label="Purpose"
               value={purpose}
               onChangeText={setPurpose}
               placeholder="e.g., Blood pressure control"
-              placeholderTextColor={COLORS.textMuted}
             />
-          </View>
+          </Card>
 
-          {/* Instructions */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Instructions</Text>
-            <TextInput
-              style={[styles.textInput, styles.textArea]}
+          <Card style={styles.fieldCard}>
+            <Input
+              label="Instructions"
               value={instructions}
               onChangeText={setInstructions}
               placeholder="e.g., Take with food"
-              placeholderTextColor={COLORS.textMuted}
               multiline
               numberOfLines={3}
             />
-          </View>
+          </Card>
 
-          {/* Prescriber */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Prescriber</Text>
-            <TextInput
-              style={styles.textInput}
+          <Card style={styles.fieldCard}>
+            <Input
+              label="Prescriber"
               value={prescriber}
               onChangeText={setPrescriber}
               placeholder="e.g., Dr. Smith"
-              placeholderTextColor={COLORS.textMuted}
             />
-          </View>
+          </Card>
 
-          {/* Toggles */}
-          <View style={styles.toggleRow}>
-            <Pressable
-              style={[styles.toggle, prn && styles.toggleActive]}
-              onPress={() => setPrn(!prn)}
-            >
-              <Text style={[styles.toggleText, prn && styles.toggleTextActive]}>
-                PRN (As needed)
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.toggle, reminderEnabled && styles.toggleActive]}
-              onPress={() => setReminderEnabled(!reminderEnabled)}
-            >
-              <Text style={[styles.toggleText, reminderEnabled && styles.toggleTextActive]}>
-                Enable Reminders
-              </Text>
-            </Pressable>
-          </View>
+          <Card style={styles.fieldCard}>
+            <View style={styles.toggleRow}>
+              <Chip
+                label="PRN (As needed)"
+                size="large"
+                selected={prn}
+                onPress={() => setPrn(!prn)}
+                accessibilityLabel="Toggle as needed"
+              />
+              <Chip
+                label="Enable Reminders"
+                size="large"
+                selected={reminderEnabled}
+                onPress={() => setReminderEnabled(!reminderEnabled)}
+                accessibilityLabel="Toggle reminders"
+              />
+            </View>
+          </Card>
 
-          {/* Notes */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Notes</Text>
-            <TextInput
-              style={[styles.textInput, styles.textArea]}
+          <Card style={styles.fieldCard}>
+            <Input
+              label="Notes"
               value={notes}
               onChangeText={setNotes}
               placeholder="Additional notes..."
-              placeholderTextColor={COLORS.textMuted}
               multiline
               numberOfLines={3}
             />
-          </View>
+          </Card>
         </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
@@ -953,97 +922,79 @@ function AddMedicationModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    backgroundColor: GV.stage,
   },
   title: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.textPrimary,
+    ...TYPE.display,
+    color: GV.card,
+    textAlign: 'center',
+    marginTop: 8,
   },
-  addButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
+  subtitle: {
+    ...TYPE.body,
+    color: GV.fog,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  addButtonText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: '#FFFFFF',
+  addWrap: {
+    paddingHorizontal: SPACE.screenH,
+    marginBottom: SPACE.cardGap,
   },
-  tabBar: {
+  tabCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    marginHorizontal: SPACE.screenH,
+    marginBottom: SPACE.cardGap,
+  },
+  tabRow: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: SPACING.md,
-    alignItems: 'center',
-  },
-  tabActive: {
-    borderBottomWidth: 2,
-    borderBottomColor: COLORS.primary,
-  },
-  tabText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-  },
-  tabTextActive: {
-    color: COLORS.primary,
-    fontWeight: '600',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    padding: SPACING.md,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 40,
+    gap: SPACE.cardGap,
   },
   loadingContainer: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.xxl,
+    paddingVertical: 40,
+    minHeight: 120,
   },
-  emptyContainer: {
+  emptyCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.xxl,
-    gap: SPACING.md,
-  },
-  emptyIcon: {
-    fontSize: 48,
+    gap: 8,
   },
   emptyTitle: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
+    ...TYPE.title,
+    color: GV.ink,
+    textAlign: 'center',
   },
   emptyText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
+    ...TYPE.body,
+    color: GV.body,
     textAlign: 'center',
   },
   medicationsList: {
-    gap: SPACING.md,
+    gap: SPACE.cardGap,
   },
   medicationCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
   medicationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.md,
+    minHeight: 44,
   },
   medicationInfo: {
     flex: 1,
@@ -1051,332 +1002,251 @@ const styles = StyleSheet.create({
   medicationNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.xs,
+    gap: 8,
+    marginBottom: 4,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   medicationName: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-  },
-  statusBadge: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.full,
+    ...TYPE.title,
+    color: GV.ink,
+    flex: 1,
   },
   statusText: {
-    ...TYPOGRAPHY.captionStrong,
-    fontSize: 10,
+    ...TYPE.chip,
+    color: GV.muted,
     textTransform: 'uppercase',
   },
   medicationDetails: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.xs,
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
   },
   medicationDetail: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    fontSize: 13,
+    ...TYPE.body,
+    color: GV.body,
   },
   scheduleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
+    gap: 4,
   },
   scheduleLabel: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   scheduleTimes: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    fontSize: 13,
+    ...TYPE.body,
+    color: GV.body,
   },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    marginTop: SPACING.xs,
+    gap: 4,
+    marginTop: 4,
   },
   dateLabel: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   dateValue: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    fontSize: 13,
+    ...TYPE.body,
+    color: GV.body,
   },
   dateSeparator: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-    marginHorizontal: SPACING.xs,
+    ...TYPE.body,
+    color: GV.muted,
   },
   chevron: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-    fontSize: 12,
+    ...TYPE.title,
+    color: GV.muted,
+    minWidth: 44,
+    textAlign: 'center',
   },
   medicationActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.md,
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingTop: 12,
+    marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
-    paddingTop: SPACING.sm,
-  },
-  actionButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surfaceSecondary,
-  },
-  actionButtonText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
-  },
-  pauseButton: {
-    backgroundColor: COLORS.warning + '20',
-  },
-  resumeButton: {
-    backgroundColor: COLORS.green + '20',
-  },
-  stopButton: {
-    backgroundColor: COLORS.error + '20',
-  },
-  stopButtonText: {
-    color: COLORS.error,
+    borderTopColor: GV.line,
   },
   scheduleContainer: {
-    gap: SPACING.lg,
+    gap: SPACE.cardGap,
   },
-  timeGroup: {
-    gap: SPACING.sm,
-  },
-  timeGroupHeader: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
+  timeGroupCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    gap: 0,
   },
   scheduleItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  scheduleItemTaken: {
-    opacity: 0.7,
+    gap: 8,
+    paddingVertical: 12,
+    minHeight: 44,
+    borderBottomWidth: 1,
+    borderBottomColor: GV.line,
   },
   scheduleItemInfo: {
     flex: 1,
   },
   scheduleItemName: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.button,
+    color: GV.ink,
   },
   scheduleItemDetails: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    fontSize: 13,
+    ...TYPE.caption,
+    color: GV.body,
+    marginTop: 2,
   },
   takenBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    minHeight: 44,
+  },
+  takenIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: GV.fx.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  takenGlyph: {
+    ...TYPE.chip,
+    color: GV.card,
+  },
+  takenTexts: {
+    alignItems: 'flex-start',
   },
   takenText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.green,
+    ...TYPE.chip,
+    color: GV.body,
   },
   takenTime: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    fontSize: 10,
-  },
-  takeButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-  },
-  takeButtonText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: '#FFFFFF',
+    ...TYPE.caption,
+    color: GV.muted,
   },
   historyContainer: {
-    gap: SPACING.md,
+    gap: SPACE.cardGap,
   },
-  medicationPicker: {
-    flexGrow: 0,
+  pickerCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
-  pickerItem: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surfaceSecondary,
-    marginRight: SPACING.sm,
+  pickerRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 8,
   },
-  pickerItemActive: {
-    backgroundColor: COLORS.primary,
-  },
-  pickerText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-  },
-  pickerTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  historyList: {
-    gap: SPACING.sm,
+  historyCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
   historyItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    gap: 8,
+    paddingVertical: 12,
+    minHeight: 44,
+    borderBottomWidth: 1,
+    borderBottomColor: GV.line,
   },
   historyItemInfo: {
     flex: 1,
   },
   historyItemName: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.button,
+    color: GV.ink,
   },
   historyItemDate: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
     marginTop: 2,
   },
-  historyStatusBadge: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.full,
+  historyStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   historyStatusText: {
-    ...TYPOGRAPHY.captionStrong,
-    fontSize: 10,
+    ...TYPE.chip,
+    color: GV.body,
     textTransform: 'uppercase',
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: GV.stage,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    gap: 8,
+    paddingHorizontal: SPACE.screenH,
+    paddingVertical: 8,
+    minHeight: 56,
+  },
+  modalCancelBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   modalCancel: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
+    ...TYPE.body,
+    color: GV.fog,
   },
   modalTitle: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-  },
-  modalSave: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.primary,
-  },
-  modalSaveDisabled: {
-    color: COLORS.textMuted,
+    ...TYPE.title,
+    color: GV.card,
+    flex: 1,
+    textAlign: 'center',
   },
   modalContent: {
     flex: 1,
   },
   modalContentContainer: {
-    padding: SPACING.md,
-    gap: SPACING.md,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 40,
+    gap: SPACE.cardGap,
   },
-  fieldGroup: {
-    gap: SPACING.xs,
+  fieldCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+  },
+  fieldLabel: {
+    ...TYPE.caption,
+    color: GV.muted,
+    marginBottom: 8,
   },
   fieldRow: {
     flexDirection: 'row',
-    gap: SPACING.md,
+    gap: 8,
   },
-  fieldLabel: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    textTransform: 'uppercase',
+  fieldHalf: {
+    flex: 1,
   },
-  textInput: {
-    backgroundColor: COLORS.surfaceSecondary,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    color: COLORS.textPrimary,
-    ...TYPOGRAPHY.body,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  frequencyPicker: {
-    flexGrow: 0,
-  },
-  frequencyOption: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surfaceSecondary,
-    marginRight: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  frequencyOptionActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  frequencyText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    fontSize: 13,
-  },
-  frequencyTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+  frequencyWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   toggleRow: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  toggle: {
-    flex: 1,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surfaceSecondary,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  toggleActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  toggleText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    fontSize: 13,
-  },
-  toggleTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });

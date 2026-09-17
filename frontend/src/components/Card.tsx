@@ -1,6 +1,6 @@
 import { StyleSheet, View, Pressable, type ViewStyle } from 'react-native';
-import { useTheme } from '@/theme';
 import { spacing, radius } from '@/theme/tokens';
+import { GV } from '@/theme/guava';
 
 export type CardKind =
   | 'standard' // normal content card
@@ -31,11 +31,12 @@ interface CardProps {
 }
 
 /**
- * HealthGraph card — layered surface, hairline border, soft depth.
+ * Guava-flat card — pure white, radius 20, no shadow, no border, no accent
+ * lanes. Separation comes from the dark stage behind it.
  *
- * `kind` is the canonical selector. Backward-compatible props (`level`,
- * `elevated`, `variant`) map onto the same renders so existing screens keep
- * working unchanged.
+ * All legacy selectors (`kind`, `level`, `elevated`, `variant`, `tone`,
+ * `accentColor`) are accepted and intentionally render the SAME flat card
+ * so existing screens converge without rewrites breaking.
  */
 export const Card = ({
   children,
@@ -50,8 +51,6 @@ export const Card = ({
   accentColor,
   accessibilityLabel,
 }: CardProps) => {
-  const { colors, elevation, isDark } = useTheme();
-
   const paddingMap = {
     none: 0,
     sm: spacing.sm,
@@ -74,40 +73,20 @@ export const Card = ({
               ? 'elevated'
               : 'standard');
 
-  const surface = ((): ViewStyle => {
-    switch (resolvedKind) {
-      case 'elevated':
-        return {
-          backgroundColor: colors.surfaceElevated,
-          borderColor: colors.border,
-          ...elevation.medium,
-        };
-      case 'highlighted':
-        // Peach feature card (like "Smart Doctor Match")
-        return {
-          backgroundColor: isDark ? '#2E2A23' : '#FBEEDC',
-          borderColor: isDark ? 'rgba(232, 134, 46, 0.4)' : '#F0D3AC',
-          ...elevation.medium,
-        };
-      default:
-        return {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          ...elevation.soft,
-        };
-    }
-  })();
-
-  const hasAccentLane =
-    resolvedKind === 'metric' || resolvedKind === 'highlighted' || Boolean(accentColor);
-  const laneColor = accentColor ?? colors.teal;
+  // Every legacy kind converges on the same flat white card.
+  const surface: ViewStyle = {
+    backgroundColor: GV.card,
+  };
+  void resolvedKind;
+  void tone;
+  void accentColor;
 
   const Container = onPress ? Pressable : View;
 
   const pressStyle = onPress
     ? ({ pressed }: { pressed: boolean }) => [
         pressed && {
-          backgroundColor: colors.surfacePressed,
+          opacity: 0.92,
           transform: [{ scale: 0.985 }],
         },
       ]
@@ -122,14 +101,9 @@ export const Card = ({
         styles.container,
         surface,
         {
-          borderRadius: resolvedKind === 'compact' ? radius.lg : radius.xl,
+          borderRadius: resolvedKind === 'compact' ? radius.lg : 20,
           padding: paddingMap[padding],
         },
-        hasAccentLane && {
-          borderTopWidth: 3,
-          borderTopColor: laneColor,
-        },
-        tone && { borderColor: tone },
         pressStyle as any,
         style,
       ]}
@@ -141,6 +115,6 @@ export const Card = ({
 
 const styles = StyleSheet.create({
   container: {
-    borderWidth: 1,
+    borderWidth: 0,
   },
 });

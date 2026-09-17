@@ -19,12 +19,12 @@ import { useFocusEffect, useNavigation, type CompositeNavigationProp } from '@re
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { mv, mvType } from '@/theme/movements';
+import { AM, amType, amShadow } from '@/theme/dashboardApple';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { useMedications } from '@/hooks/useMedications';
 import { useTrends } from '@/hooks/useTrends';
 import { useCachedQuery } from '@/hooks/useCachedQuery';
 import { useSyncStatus, getSyncStatusMessage } from '@/hooks/useSyncStatus';
-import { useAuth } from '@/context/AuthContext';
 import { useDocuments } from '@/context/DocumentsContext';
 import { isOnline, subscribe as subscribeNetwork } from '@/services/networkMonitor';
 import { consumeDataRefreshRequest } from '@/services/dataRefresh';
@@ -67,20 +67,21 @@ type Nav = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-// ─── Movements+ OverallHealth palette ────────────────────────────────────────
-
+// ─── Apple Minimal OverallHealth palette (light card, ink hub) ───────────────
+// Same data, same interaction — the dark lime hub becomes a quiet white card
+// with an ink hub so both dashboards share one voice.
 const OVERALL_PALETTE: OverallPalette = {
-  petal: 'rgba(255,255,255,0.16)',
-  petalSelected: mv.accentLime,
-  hubFill: mv.surfaceDarkCard,
-  hubStroke: 'rgba(255,255,255,0.14)',
-  hubStrokeFocused: mv.accentLime,
-  hubText: mv.textOnDarkPrimary,
-  hubSub: mv.textOnDarkSecondary,
-  label: 'rgba(255,255,255,0.45)',
-  labelSelected: mv.accentLime,
-  emptyBg: mv.surfaceDarkCard,
-  emptyText: mv.textOnDarkPrimary,
+  petal: 'rgba(17,20,24,0.10)',
+  petalSelected: AM.ink,
+  hubFill: AM.card,
+  hubStroke: AM.hairline,
+  hubStrokeFocused: AM.ink,
+  hubText: AM.ink,
+  hubSub: AM.secondary,
+  label: AM.muted,
+  labelSelected: AM.ink,
+  emptyBg: AM.cardSunken,
+  emptyText: AM.secondary,
 };
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
@@ -107,15 +108,6 @@ function shortDate(isoOrDate: string): string {
   });
 }
 
-function initialsOf(name: string | null | undefined): string {
-  if (!name) return 'You';
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return 'You';
-  const first = parts[0][0] ?? '';
-  const last = parts.length > 1 ? parts[parts.length - 1][0] ?? '' : '';
-  return `${first}${last}`.toUpperCase();
-}
-
 // ─── Story row (timeline preview + important events) ─────────────────────────
 
 interface StoryRowProps {
@@ -140,18 +132,18 @@ function StoryRow({ item, onPress, index, dividerBetween }: StoryRowProps) {
         <Text style={storyStyles.iconText}>{item.icon}</Text>
       </View>
       <View style={storyStyles.body}>
-        <Text style={[mvType.caption, { color: mv.textOnLightPrimary, fontWeight: '600' }]} numberOfLines={1}>
+        <Text style={[amType.bodyStrong, { color: AM.ink }]} numberOfLines={1}>
           {item.title}
         </Text>
-        <Text style={[mvType.caption, { color: mv.textOnLightSecondary }]} numberOfLines={1}>
+        <Text style={[amType.body, { color: AM.secondary }]} numberOfLines={1}>
           {item.detail}
         </Text>
       </View>
       <View style={storyStyles.time}>
-        <Text style={[mvType.pill, { color: mv.textOnLightSecondary }]}>
+        <Text style={[amType.overline, { color: AM.secondary, fontSize: 11 }]}>
           {dayLabel(item.dayKey)}
         </Text>
-        <Text style={[mvType.pill, { color: mv.textOnLightSecondary, fontSize: 11 }]}>
+        <Text style={[amType.overline, { color: AM.muted, fontSize: 11 }]}>
           {formatClock(item.time)}
         </Text>
       </View>
@@ -164,14 +156,14 @@ const storyStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: mv.spaceIconLabel + 5,
-    paddingVertical: 11,
+    gap: 12,
+    paddingVertical: 12,
   },
   icon: {
-    width: 38,
-    height: 38,
-    borderRadius: mv.radiusPill,
-    backgroundColor: 'rgba(20,20,20,0.06)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(17,20,24,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -180,19 +172,19 @@ const storyStyles = StyleSheet.create({
   },
   body: {
     flex: 1,
-    gap: 1,
+    gap: 2,
   },
   time: {
     alignItems: 'flex-end',
-    gap: 1,
+    gap: 2,
   },
   divider: {
     position: 'absolute',
-    left: 46,
+    left: 48,
     right: 0,
     bottom: 0,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(20,20,20,0.08)',
+    backgroundColor: AM.hairline,
   },
 });
 
@@ -202,7 +194,6 @@ type RangeKey = 'day' | 'week' | 'month';
 
 export default function DashboardScreen() {
   const navigation = useNavigation<Nav>();
-  const { userProfile } = useAuth();
   const metrics = useDailyMetrics();
   const medications = useMedications();
   const trends = useTrends(30);
@@ -214,7 +205,6 @@ export default function DashboardScreen() {
     cacheKey: 'profile',
     queryFn: useCallback(() => api.get<PatientProfile>('/api/v1/profile'), []),
   });
-  const profileName = profileQuery.data?.display_name ?? userProfile?.displayName ?? null;
 
   const [online, setOnline] = useState<boolean>(isOnline());
   useEffect(() => subscribeNetwork(() => setOnline(isOnline())), []);
@@ -403,7 +393,7 @@ export default function DashboardScreen() {
       ? { text: `${getSyncStatusMessage(syncStatus.status)} — retrying in the background.` }
       : null;
 
-  const avatarList: Avatar[] = profileName ? [{ initials: initialsOf(profileName) }] : [];
+  const avatarList: Avatar[] = [];
 
   // ── Render ──
   let content;
@@ -424,9 +414,9 @@ export default function DashboardScreen() {
   } else {
     content = (
       <>
-        <MovementsCard kind="dark">
+        <MovementsCard kind="white" style={styles.appleCard}>
           <View style={cardHeaderRow}>
-            <Text style={[mvType.labelCard, { color: mv.textOnDarkPrimary }]}>Overall health</Text>
+            <Text style={[amType.bodyStrong, { color: AM.secondary }]}>Overall health</Text>
             <IconButton
               onPress={goToHealthGraph}
               kind="white"
@@ -443,7 +433,7 @@ export default function DashboardScreen() {
             palette={OVERALL_PALETTE}
           />
           <StatusPill
-            variant="limeOnDark"
+            variant="lime"
             text={
               selectedDim
                 ? `${selectedDim.label} · ${selectedDim.valueText}`
@@ -521,9 +511,9 @@ export default function DashboardScreen() {
         ) : null}
 
         {importantEvents.length > 0 ? (
-          <MovementsCard kind="white">
+          <MovementsCard kind="white" style={styles.appleCard}>
             <View style={styles.cardHeader}>
-              <Text style={[mvType.labelCard, { color: mv.textOnLightPrimary }]}>Important today</Text>
+              <Text style={[amType.hero, { fontSize: 20, lineHeight: 26, color: AM.ink }]}>Important today</Text>
               <IconButton
                 onPress={goToTimeline}
                 kind="solid"
@@ -537,9 +527,9 @@ export default function DashboardScreen() {
           </MovementsCard>
         ) : null}
 
-        <MovementsCard kind="white">
+        <MovementsCard kind="white" style={styles.appleCard}>
           <View style={styles.cardHeader}>
-            <Text style={[mvType.labelCard, { color: mv.textOnLightPrimary }]}>
+            <Text style={[amType.hero, { fontSize: 20, lineHeight: 26, color: AM.ink }]}>
               {range === 'day' ? 'Today' : range === 'week' ? 'Recent' : 'This month'}
             </Text>
             <IconButton
@@ -561,18 +551,18 @@ export default function DashboardScreen() {
         </MovementsCard>
 
         {recentVitals.length > 0 ? (
-          <MovementsCard kind="white">
+          <MovementsCard kind="white" style={styles.appleCard}>
             <View style={styles.cardHeader}>
-              <Text style={[mvType.labelCard, { color: mv.textOnLightPrimary }]}>Recent vitals</Text>
+              <Text style={[amType.hero, { fontSize: 20, lineHeight: 26, color: AM.ink }]}>Recent vitals</Text>
               <IconButton onPress={goToTimeline} kind="solid" size={32} accessibilityLabel="View vitals" />
             </View>
             <View style={styles.vitalsGrid}>
               {recentVitals.map((v) => (
                 <View key={v.name} style={styles.vitalCell}>
-                  <Text style={[mvType.caption, { color: mv.textOnLightSecondary }]} numberOfLines={1}>
+                  <Text style={[amType.overline, { color: AM.secondary }]} numberOfLines={1}>
                     {v.name}
                   </Text>
-                  <Text style={[mvType.statGiantSm, styles.statNums, { color: mv.textOnLightPrimary }]}>
+                  <Text style={[amType.metric, { fontSize: 20, lineHeight: 26, color: AM.ink }]}>
                     {v.value}
                   </Text>
                 </View>
@@ -581,11 +571,11 @@ export default function DashboardScreen() {
           </MovementsCard>
         ) : null}
 
-        <MovementsCard kind="white">
+        <MovementsCard kind="white" style={styles.appleCard}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
-              <Text style={[mvType.labelCard, { color: mv.textOnLightPrimary }]}>Records</Text>
-              <Text style={[mvType.caption, { color: mv.textOnLightSecondary }]}>
+              <Text style={[amType.hero, { fontSize: 20, lineHeight: 26, color: AM.ink }]}>Records</Text>
+              <Text style={[amType.body, { color: AM.secondary }]}>
                 {docs.documents.length === 0
                   ? 'Upload a document to extract health data'
                   : `${docs.documents.length} document${docs.documents.length > 1 ? 's' : ''} synced`}
@@ -599,7 +589,7 @@ export default function DashboardScreen() {
   }
 
   return (
-    <SafeAreaView style={[screen.safe, { backgroundColor: mv.surfaceOffwhite }]} edges={['top']}>
+    <SafeAreaView style={[screen.safe, { backgroundColor: AM.bg }]} edges={['top']}>
       <ScrollView
         contentContainerStyle={screen.scroll}
         showsVerticalScrollIndicator={false}
@@ -639,10 +629,10 @@ export default function DashboardScreen() {
         </View>
 
         <View style={screen.hero}>
-          <Text style={[mvType.hero, { color: mv.textOnLightPrimary }]}>
-            Today,{profileName ? ` ${profileName.split(' ')[0]}` : ''}
+          <Text style={[amType.hero, { color: AM.ink }]}>
+            Today
           </Text>
-          <Text style={[mvType.caption, { color: mv.textOnLightSecondary, marginTop: 2 }]}>
+          <Text style={[amType.body, { color: AM.secondary, marginTop: 4 }]}>
             Your health at a glance
           </Text>
         </View>
@@ -674,8 +664,8 @@ function DateBadge() {
     .toLowerCase();
   return (
     <View style={dateStyles.pill}>
-      <Text style={[mvType.navTitle, { color: mv.textOnLightPrimary }]}>{label}</Text>
-      <Text style={[mvType.pill, { color: mv.textOnLightSecondary }]}>
+      <Text style={[amType.title, { color: AM.ink }]}>{label}</Text>
+      <Text style={[amType.overline, { color: AM.secondary }]}>
         {now.toLocaleDateString('en-US', { month: 'long' })}
       </Text>
     </View>
@@ -687,10 +677,12 @@ const dateStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 8,
-    backgroundColor: mv.surfaceWhite,
-    borderRadius: mv.radiusPill,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    backgroundColor: AM.card,
+    borderWidth: 1,
+    borderColor: AM.hairline,
+    borderRadius: AM.radiusPill,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
 });
 
@@ -706,8 +698,8 @@ function CenteredNotice({ icon, title, message, onRetry, actionLabel = 'Try agai
   return (
     <MovementsCard kind="white" style={noticeStyles.card}>
       <Text style={noticeStyles.icon}>{icon}</Text>
-      <Text style={[mvType.labelCard, { color: mv.textOnLightPrimary, textAlign: 'center' }]}>{title}</Text>
-      <Text style={[mvType.caption, { color: mv.textOnLightSecondary, textAlign: 'center' }]}>{message}</Text>
+      <Text style={[amType.hero, { fontSize: 22, lineHeight: 28, color: AM.ink, textAlign: 'center' }]}>{title}</Text>
+      <Text style={[amType.body, { color: AM.secondary, textAlign: 'center' }]}>{message}</Text>
       <Pressable
         onPress={onRetry}
         accessibilityRole="button"
@@ -734,9 +726,9 @@ const noticeStyles = StyleSheet.create({
   },
   button: {
     marginTop: 8,
-    backgroundColor: mv.textOnLightPrimary,
-    borderRadius: mv.radiusPill,
-    paddingHorizontal: 28,
+    backgroundColor: AM.ink,
+    borderRadius: AM.radiusPill,
+    paddingHorizontal: 24,
     paddingVertical: 12,
   },
 });
@@ -744,17 +736,18 @@ const noticeStyles = StyleSheet.create({
 // ─── Loading skeleton ────────────────────────────────────────────────────────
 
 function HomeSkeleton() {
+  const bone = 'rgba(17,20,24,0.06)';
   return (
     <>
-      <View style={{ aspectRatio: 1, width: '100%', borderRadius: mv.radiusCard, overflow: 'hidden' }}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(20,20,20,0.05)' }} />
+      <View style={{ aspectRatio: 1, width: '100%', borderRadius: AM.radiusCard, overflow: 'hidden' }}>
+        <View style={{ flex: 1, backgroundColor: bone }} />
       </View>
       <View style={styles.progressRow}>
-        <View style={{ flex: 1, height: 200, borderRadius: mv.radiusCard, backgroundColor: 'rgba(20,20,20,0.05)' }} />
-        <View style={{ flex: 1, height: 200, borderRadius: mv.radiusCard, backgroundColor: 'rgba(20,20,20,0.05)' }} />
+        <View style={{ flex: 1, height: 200, borderRadius: AM.radiusCard, backgroundColor: bone }} />
+        <View style={{ flex: 1, height: 200, borderRadius: AM.radiusCard, backgroundColor: bone }} />
       </View>
-      <View style={{ height: 120, borderRadius: mv.radiusCard, backgroundColor: 'rgba(20,20,20,0.05)' }} />
-      <View style={{ height: 120, borderRadius: mv.radiusCard, backgroundColor: 'rgba(20,20,20,0.05)' }} />
+      <View style={{ height: 120, borderRadius: AM.radiusCard, backgroundColor: bone }} />
+      <View style={{ height: 120, borderRadius: AM.radiusCard, backgroundColor: bone }} />
     </>
   );
 }
@@ -768,9 +761,16 @@ const cardHeaderRow = {
 };
 
 const styles = StyleSheet.create({
+  // Apple Minimal card override: white surface, hairline border, soft shadow.
+  appleCard: {
+    backgroundColor: AM.card,
+    borderWidth: 1,
+    borderColor: AM.hairline,
+    ...amShadow,
+  },
   progressRow: {
     flexDirection: 'row',
-    gap: mv.spaceSideBySide,
+    gap: 12,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -784,13 +784,13 @@ const styles = StyleSheet.create({
   },
   vitalsGrid: {
     flexDirection: 'row',
-    gap: mv.spaceSideBySide,
+    gap: 12,
   },
   vitalCell: {
     flex: 1,
-    backgroundColor: mv.surfaceOffwhite,
-    borderRadius: 20,
-    paddingHorizontal: 14,
+    backgroundColor: AM.bg,
+    borderRadius: 16,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 4,
   },
@@ -804,15 +804,15 @@ const screen = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingHorizontal: mv.spaceScreen,
-    gap: mv.spaceStack,
+    paddingHorizontal: 16,
+    gap: 16,
     paddingBottom: 24,
   },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    marginTop: 4,
+    marginTop: 8,
   },
   navRow: {
     flexDirection: 'row',

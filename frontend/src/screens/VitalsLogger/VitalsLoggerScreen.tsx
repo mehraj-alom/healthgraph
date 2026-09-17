@@ -13,11 +13,11 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import Animated, { FadeInDown, FadeInUp, FadeOut, Layout } from 'react-native-reanimated';
-import { Button, AmbientBackground, DialInput, Input, LogCelebration, Slider, feverTint, severityTint } from '@/components';
+import { Button, Card, Chip, DialInput, Input, LogCelebration, SectionHeader, Slider } from '@/components';
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useReducedMotion } from '@/theme';
-import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, SHADOWS } from '@/constants';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+void FONT;
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { requestDataRefresh } from '@/services/dataRefresh';
@@ -136,9 +136,6 @@ const BODY_REGION_OPTIONS = [
 /** Quick unit picks for vitals — tap beats typing ("mm or whatever"). */
 const VITAL_UNIT_OPTIONS = ['bpm', 'mmHg', 'mg/dL', '°F', '°C', 'kg', '%'] as const;
 
-/** Card tint from a 6-digit hex category color (alpha-suffixed wash). */
-const tint = (c: string) => ({ backgroundColor: `${c}14`, borderColor: `${c}38` });
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -215,21 +212,20 @@ function apiMessage(error: unknown): string {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-// Per-category accents — same restrained palette as the Health Graph nodes.
-// Text and dots only; no emoji anywhere in the log form.
+// Per-category dots — small flat icons inside white cards only (Guava).
 const SECTION_ACCENTS: Record<string, { color: string }> = {
-  sleep: { color: COLORS.catSleep },
-  symptomsPain: { color: COLORS.catPain },
-  activity: { color: COLORS.catActivity },
-  nutrition: { color: COLORS.catNutrition },
-  medication: { color: COLORS.catMedication },
-  vitals: { color: COLORS.catVitals },
-  wellbeing: { color: COLORS.catMood },
-  symptoms: { color: COLORS.catSymptom },
-  notes: { color: COLORS.textMuted },
+  sleep: { color: GV.fx.purple },
+  symptomsPain: { color: GV.fx.pink },
+  activity: { color: GV.fx.blue },
+  nutrition: { color: GV.fx.green },
+  medication: { color: GV.fx.brown },
+  vitals: { color: GV.fx.sky },
+  wellbeing: { color: GV.fx.amber },
+  symptoms: { color: GV.fx.brown },
+  notes: { color: GV.muted },
 };
 
-/** Section wrapper with optional heading, accent icon and category color. */
+/** Section wrapper — white Guava card per log group, no entrance motion. */
 function Section({
   title,
   subtitle,
@@ -241,38 +237,25 @@ function Section({
   title: string;
   subtitle?: string;
   category?: keyof typeof SECTION_ACCENTS;
-  /** Order on screen — drives the staggered entrance. */
+  /** Order on screen — kept for call-site compatibility; no stagger. */
   index?: number;
   animate?: boolean;
   children: React.ReactNode;
 }) {
+  void index;
+  void animate;
   const accent = category ? SECTION_ACCENTS[category] : null;
-  const reduced = useReducedMotion();
-  const entering =
-    animate && !reduced ? FadeInUp.duration(300).delay(Math.min(index * 60, 360)) : undefined;
   return (
-    <Animated.View entering={entering} style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionHeading}>
-          {accent ? (
-            <View style={[styles.sectionTitleChip, { backgroundColor: `${accent.color}1A` }]}>
-              <View style={[styles.sectionTitleDot, { backgroundColor: accent.color }]} />
-              <Text style={[styles.sectionTitle, { color: accent.color }]}>{title}</Text>
-            </View>
-          ) : (
-            <Text style={styles.sectionTitle}>{title}</Text>
-          )}
-          {subtitle ? (
-            <Text style={styles.sectionSubtitle}>{subtitle}</Text>
-          ) : null}
-        </View>
-      </View>
-      {children}
-    </Animated.View>
+    <View style={styles.section}>
+      <Card style={styles.sectionCard}>
+        <SectionHeader title={title} subtitle={subtitle} accent={accent?.color} />
+        <View style={styles.sectionBody}>{children}</View>
+      </Card>
+    </View>
   );
 }
 
-/** Horizontal divider */
+/** Horizontal divider — hairline on stage */
 function Divider() {
   return <View style={styles.divider} />;
 }
@@ -478,11 +461,12 @@ function OptionChips({
     <View style={styles.optRow}>
       {options.map((opt) => {
         const selected = value === opt;
+        void color;
         return (
           <Pressable
             key={opt}
             onPress={() => onChange(selected && allowClear ? '' : opt)}
-            style={[styles.optChip, selected && { backgroundColor: color, borderColor: color }]}
+            style={[styles.optChip, selected && styles.optChipSelected]}
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             accessibilityLabel={`${opt}${selected ? ', selected' : ''}`}
@@ -582,6 +566,7 @@ function FeverTempDial({
   onNotes: (next: string) => void;
   color: string;
 }) {
+  void color;
   const [unit, setUnit] = useState<'°F' | '°C'>('°F');
   const stored = readTempToken(notes);
   // Internal value is always °F; display converts.
@@ -599,7 +584,7 @@ function FeverTempDial({
             <Pressable
               key={u}
               onPress={() => setUnit(u)}
-              style={[styles.unitToggleBtn, unit === u && { backgroundColor: color, borderColor: color }]}
+              style={[styles.unitToggleBtn, unit === u && styles.unitToggleBtnSelected]}
               accessibilityRole="radio"
               accessibilityState={{ selected: unit === u }}
               accessibilityLabel={`Degrees ${u === '°F' ? 'Fahrenheit' : 'Celsius'}`}
@@ -619,8 +604,7 @@ function FeverTempDial({
         max={range.max}
         step={0.1}
         unit={unit}
-        color={color}
-        tint={feverTint}
+        color={GV.cta}
         accessibilityLabel="Fever temperature"
       />
       <Text style={styles.dialHint}>Saved into your symptom notes — visible on your timeline.</Text>
@@ -1247,7 +1231,6 @@ export default function VitalsLoggerScreen() {
   // =========================================================================
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <AmbientBackground />
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -1265,25 +1248,21 @@ export default function VitalsLoggerScreen() {
           >
             <Text style={styles.backBtnText}>‹ Back</Text>
           </Pressable>
-          <View style={styles.hero}>
-            <View style={styles.heroGlowA} pointerEvents="none" />
-            <View style={styles.heroGlowB} pointerEvents="none" />
-            <View style={styles.headerRow}>
-              <View style={styles.headerText}>
-                <Text style={styles.title}>Daily Log</Text>
-                <Text style={styles.subtitle}>
-                  {!todayCheckinQuery.isLoading && editingGroupId != null
-                    ? 'This day is logged — change anything below to update it.'
-                    : 'How are you feeling today?'}
-                </Text>
-                {!todayCheckinQuery.isLoading && editingGroupId != null ? (
-                  <View style={styles.editingPill}>
-                    <Text style={styles.editingPillText}>
-                      {selectedDate === dateToday() ? "●  VIEWING · EDIT TODAY'S LOG" : '●  VIEWING · EDIT THIS LOG'}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
+          <Text style={styles.title}>Daily Log</Text>
+          <Text style={styles.subtitle}>
+            {!todayCheckinQuery.isLoading && editingGroupId != null
+              ? 'This day is logged — change anything below to update it.'
+              : 'How are you feeling today?'}
+          </Text>
+          {!todayCheckinQuery.isLoading && editingGroupId != null ? (
+            <View style={styles.editingPill}>
+              <Text style={styles.editingPillText}>
+                {selectedDate === dateToday() ? "●  VIEWING · EDIT TODAY'S LOG" : '●  VIEWING · EDIT THIS LOG'}
+              </Text>
+            </View>
+          ) : null}
+          <Card style={styles.dateCard}>
+            <View style={styles.dateBadgeRow}>
               <View style={styles.dateBadge}>
                 <Text style={styles.dateBadgeDay}>
                   {dateBadge.day}
@@ -1292,40 +1271,30 @@ export default function VitalsLoggerScreen() {
                   {dateBadge.month}
                 </Text>
               </View>
+              <Text style={styles.selectedDateText}>{dateBadge.long}</Text>
             </View>
-          </View>
-          <View style={styles.dateControls}>
-            <Pressable onPress={() => setSelectedDate((value) => shiftDate(value, -1))} style={styles.dateControl}>
-              <Text style={styles.dateControlText}>Previous</Text>
-            </Pressable>
-            <Text style={styles.selectedDateText}>{dateBadge.long}</Text>
-            <Pressable onPress={() => setSelectedDate(dateToday())} style={styles.dateControl}>
-              <Text style={styles.dateControlText}>Today</Text>
-            </Pressable>
-            <Pressable onPress={() => setSelectedDate((value) => shiftDate(value, 1))} style={styles.dateControl}>
-              <Text style={styles.dateControlText}>Next</Text>
-            </Pressable>
-          </View>
+            <View style={styles.dateControls}>
+              <Chip label="Previous" size="large" selected={false} onPress={() => setSelectedDate((value) => shiftDate(value, -1))} accessibilityLabel="Previous day" />
+              <Chip label="Today" size="large" selected={selectedDate === dateToday()} onPress={() => setSelectedDate(dateToday())} accessibilityLabel="Go to today" />
+              <Chip label="Next" size="large" selected={false} onPress={() => setSelectedDate((value) => shiftDate(value, 1))} accessibilityLabel="Next day" />
+            </View>
+          </Card>
         </View>
 
         {/* ── Feedback banner ── */}
         {feedback ? (
-          <View
-            style={[
-              styles.banner,
-              feedback.type === 'success' ? styles.bannerSuccess : styles.bannerError,
-            ]}
-          >
+          <Card style={styles.bannerCard}>
+            <View style={[styles.bannerDot, { backgroundColor: feedback.type === 'success' ? GV.cta : GV.danger }]} />
             <Text style={styles.bannerText}>{feedback.message}</Text>
-            <Pressable onPress={() => setFeedback(null)} accessibilityLabel="Dismiss">
-              <Text style={styles.bannerDismiss}>✕</Text>
+            <Pressable onPress={() => setFeedback(null)} accessibilityLabel="Dismiss" style={styles.bannerDismissBtn} hitSlop={8}>
+              <Text style={styles.bannerDismiss}>Dismiss</Text>
             </Pressable>
-          </View>
+          </Card>
         ) : null}
 
         {/* ── Today's logged data (read-only summary) ── */}
         {selectedDate === dateToday() && todayWellbeing && (
-          <View style={styles.todaySummary}>
+          <Card style={styles.todayCard}>
             <Text style={styles.todaySummaryTitle}>Today's log</Text>
             <View style={styles.todayGrid}>
               {todayWellbeing.overall_wellbeing != null && <View style={styles.todayItem}>
@@ -1355,43 +1324,41 @@ export default function VitalsLoggerScreen() {
             <Text style={styles.todayNote}>
               Saving again updates this day's log when one exists.
             </Text>
-          </View>
+          </Card>
         )}
 
         {/* ── Form error ── */}
         {errors.form ? <Text style={styles.formError}>{errors.form}</Text> : null}
 
         {/* ── Log mode: Quick essentials vs full log ── */}
-        <View
-          style={styles.modeRow}
-          accessibilityRole="radiogroup"
-          accessibilityLabel="Log mode"
-        >
-          {(['quick', 'normal'] as const).map((m) => {
-            const selected = logMode === m;
-            return (
-              <Pressable
-                key={m}
-                onPress={() => setLogMode(m)}
-                style={[styles.modeBtn, selected && styles.modeBtnSelected]}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                accessibilityLabel={m === 'quick' ? 'Quick essentials log' : 'Normal full log'}
-                hitSlop={6}
-              >
-                <Text style={[styles.modeBtnText, selected && styles.modeBtnTextSelected]}>
-                  {m === 'quick' ? 'Quick' : 'Normal'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Card style={styles.modeCard}>
+          <View
+            style={styles.modeRow}
+            accessibilityRole="radiogroup"
+            accessibilityLabel="Log mode"
+          >
+            <Chip
+              label="Quick"
+              size="large"
+              selected={logMode === 'quick'}
+              onPress={() => setLogMode('quick')}
+              accessibilityLabel="Quick essentials log"
+            />
+            <Chip
+              label="Normal"
+              size="large"
+              selected={logMode === 'normal'}
+              onPress={() => setLogMode('normal')}
+              accessibilityLabel="Normal full log"
+            />
+          </View>
+        </Card>
 
         {/* Quick mode: essentials only (all rows share the main form's
             state, so switching modes never loses input). */}
         {logMode === 'quick' && (
           <Section index={0} category="wellbeing" title="Essentials" subtitle="Only what turns today green — customize below.">
-            <View style={[styles.card, tint(COLORS.catMood)]}>
+            <View style={styles.fieldWrap}>
               {showEssential('mood') && (
                 <>
                   <Text style={styles.fieldLabel}>Mood</Text>
@@ -1408,7 +1375,7 @@ export default function VitalsLoggerScreen() {
                     min={0}
                     max={3000}
                     step={50}
-                    color={COLORS.catNutrition}
+                    color={GV.cta}
                     showValue
                     displayValue={waterMl ? `${Number(waterMl).toLocaleString('en-US')} ml` : 'Not set'}
                   />
@@ -1416,7 +1383,7 @@ export default function VitalsLoggerScreen() {
                     options={WATER_QUICK}
                     value={waterMl}
                     onChange={setWaterMl}
-                    color={COLORS.catNutrition}
+                    color={GV.cta}
                     allowClear
                     label="Quick water amounts"
                   />
@@ -1537,7 +1504,7 @@ export default function VitalsLoggerScreen() {
         {/* SLEEP                                                             */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <Section index={0} category="sleep" title="Sleep" subtitle="How much did you sleep last night?">
-          <View style={[styles.card, tint(COLORS.catSleep)]}>
+          <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Duration</Text>
             <SleepDurationPicker
               totalMinutes={sleepMinutes}
@@ -1587,22 +1554,19 @@ export default function VitalsLoggerScreen() {
         <Divider />
 
         <Section index={1} category="symptomsPain" title="Symptoms & pain" subtitle="Record symptoms and pain only when present.">
-          <View style={[styles.card, tint(COLORS.catPain)]}>
+          <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Pain entries</Text>
             {pain.map((item) => (
-              <Animated.View
+              <View
                 key={item.id}
-                entering={reducedMotion ? undefined : FadeInDown.duration(260)}
-                exiting={reducedMotion ? undefined : FadeOut.duration(180)}
-                layout={reducedMotion ? undefined : Layout.springify()}
+                style={styles.entryBlock}
               >
-              <View style={styles.entryBlock}>
                 <Text style={styles.fieldLabel}>Where does it hurt?</Text>
                 <OptionChips
                   options={BODY_REGION_OPTIONS}
                   value={item.structureId}
                   onChange={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, structureId: value } : painItem))}
-                  color={COLORS.catPain}
+                  color={GV.cta}
                   allowClear
                   label="Pain body region"
                 />
@@ -1631,14 +1595,13 @@ export default function VitalsLoggerScreen() {
                   options={PAIN_TYPE_OPTIONS}
                   value={item.painType}
                   onChange={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, painType: value } : painItem))}
-                  color={COLORS.catPain}
+                  color={GV.cta}
                   allowClear
                   label="Pain type"
                 />
                 <Input label="Or describe your own" value={item.painType} onChangeText={(value) => setPain((items) => items.map((painItem) => painItem.id === item.id ? { ...painItem, painType: value } : painItem))} placeholder="Sharp, dull, throbbing" />
                 <Pressable onPress={() => setPain((items) => items.filter((painItem) => painItem.id !== item.id))}><Text style={styles.removeBtn}>Remove pain</Text></Pressable>
               </View>
-              </Animated.View>
             ))}
             <Pressable onPress={addPain} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add pain</Text></Pressable>
           </View>
@@ -1647,7 +1610,7 @@ export default function VitalsLoggerScreen() {
         <Divider />
 
         <Section index={2} category="symptomsPain" title="Body map" subtitle="Log pain on a real anatomical structure — saved to your body state and timeline.">
-          <View style={[styles.card, tint(COLORS.catPain)]}>
+          <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Where does it hurt?</Text>
             <View style={styles.chipGrid}>
               {bodySites.map((site) => {
@@ -1656,7 +1619,7 @@ export default function VitalsLoggerScreen() {
                   <Pressable
                     key={site.structure_id}
                     onPress={() => setBodySite(selected ? '' : site.structure_id)}
-                    style={[styles.chip, selected && { backgroundColor: COLORS.catPain, borderColor: COLORS.catPain }]}
+                    style={[styles.chip, selected && styles.chipSelected]}
                     accessibilityRole="radio"
                     accessibilityState={{ selected }}
                     accessibilityLabel={`${site.display_name}${selected ? ', selected' : ''}`}
@@ -1679,8 +1642,7 @@ export default function VitalsLoggerScreen() {
                   step={1}
                   unit="/10"
                   label="Pain severity"
-                  color={COLORS.catPain}
-                  tint={severityTint}
+                  color={GV.cta}
                   accessibilityLabel="Body map pain severity"
                 />
                 <Input
@@ -1709,21 +1671,18 @@ export default function VitalsLoggerScreen() {
         <Divider />
 
         <Section index={2} category="activity" title="Activity" subtitle="Exercise type, duration, and calories.">
-          <View style={[styles.card, tint(COLORS.catActivity)]}>
+          <View style={styles.fieldWrap}>
             {activities.map((item) => (
-              <Animated.View
+              <View
                 key={item.id}
-                entering={reducedMotion ? undefined : FadeInDown.duration(260)}
-                exiting={reducedMotion ? undefined : FadeOut.duration(180)}
-                layout={reducedMotion ? undefined : Layout.springify()}
+                style={styles.entryBlock}
               >
-              <View style={styles.entryBlock}>
                 <Text style={styles.fieldLabel}>Activity type</Text>
                 <OptionChips
                   options={ACTIVITY_OPTIONS}
                   value={item.activityType}
                   onChange={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, activityType: value } : activity))}
-                  color={COLORS.catActivity}
+                  color={GV.cta}
                   label="Activity type"
                 />
                 <Input label="Or type your own" value={item.activityType} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, activityType: value } : activity))} placeholder="Walking, yoga, running" error={errors[`activity-${item.id}`]} />
@@ -1732,7 +1691,7 @@ export default function VitalsLoggerScreen() {
                   options={DURATION_QUICK}
                   value={item.duration}
                   onChange={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, duration: value } : activity))}
-                  color={COLORS.catActivity}
+                  color={GV.cta}
                   allowClear
                   label="Duration minutes"
                 />
@@ -1740,7 +1699,6 @@ export default function VitalsLoggerScreen() {
                 <Input label="Calories (optional)" value={item.calories} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, calories: value } : activity))} keyboardType="decimal-pad" />
                 <Pressable onPress={() => setActivities((items) => items.filter((activity) => activity.id !== item.id))}><Text style={styles.removeBtn}>Remove activity</Text></Pressable>
               </View>
-              </Animated.View>
             ))}
             <Pressable onPress={addActivity} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add activity</Text></Pressable>
           </View>
@@ -1749,7 +1707,7 @@ export default function VitalsLoggerScreen() {
         <Divider />
 
         <Section index={3} category="nutrition" title="Hydration & nutrition" subtitle="Use the fields recorded by HealthGraph.">
-          <View style={[styles.card, tint(COLORS.catNutrition)]}>
+          <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Water</Text>
             <Slider
               value={waterMl ? Number(waterMl) : 0}
@@ -1757,7 +1715,7 @@ export default function VitalsLoggerScreen() {
               min={0}
               max={3000}
               step={50}
-              color={COLORS.catNutrition}
+              color={GV.cta}
               showValue
               displayValue={waterMl ? `${Number(waterMl).toLocaleString('en-US')} ml` : 'Not set'}
             />
@@ -1765,7 +1723,7 @@ export default function VitalsLoggerScreen() {
               options={WATER_QUICK}
               value={waterMl}
               onChange={setWaterMl}
-              color={COLORS.catNutrition}
+              color={GV.cta}
               allowClear
               label="Quick water amounts"
             />
@@ -1790,7 +1748,7 @@ export default function VitalsLoggerScreen() {
         <Divider />
 
         <Section index={6} category="vitals" title="Vitals" subtitle="Pick a vital — the right device-style input appears.">
-          <View style={[styles.card, tint(COLORS.catVitals)]}>
+          <View style={styles.fieldWrap}>
             <View style={styles.quickRow}>
               <Pressable
                 onPress={() => quickAddVital('LOINC', '8867-4', 'bpm')}
@@ -1820,13 +1778,10 @@ export default function VitalsLoggerScreen() {
               const preset = presetKind ? VITAL_DIALS[presetKind] : null;
               const dialValue = item.value.trim() === '' ? null : Number(item.value);
               return (
-                <Animated.View
+                <View
                   key={item.id}
-                  entering={reducedMotion ? undefined : FadeInDown.duration(260)}
-                  exiting={reducedMotion ? undefined : FadeOut.duration(180)}
-                  layout={reducedMotion ? undefined : Layout.springify()}
+                  style={styles.entryBlock}
                 >
-                <View style={styles.entryBlock}>
                   {selectedConcept ? (
                     <View style={styles.selectedVitalRow}>
                       <View style={styles.selectedVitalInfo}>
@@ -1873,7 +1828,7 @@ export default function VitalsLoggerScreen() {
                         step={preset.step}
                         unit={preset.unit}
                         label={preset.label}
-                        color={COLORS.catVitals}
+                        color={GV.cta}
                         accessibilityLabel={`${preset.label} dial`}
                       />
                       <Input label="Or type the exact value" value={item.value} onChangeText={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, value } : vital))} keyboardType="decimal-pad" />
@@ -1889,7 +1844,7 @@ export default function VitalsLoggerScreen() {
                         options={VITAL_UNIT_OPTIONS}
                         value={item.unit}
                         onChange={(value) => setVitals((items) => items.map((vital) => vital.id === item.id ? { ...vital, unit: value } : vital))}
-                        color={COLORS.catVitals}
+                        color={GV.cta}
                         allowClear
                         label="Vital unit"
                       />
@@ -1898,7 +1853,6 @@ export default function VitalsLoggerScreen() {
                   {errors[`vital-${item.id}`] ? <Text style={styles.fieldError}>{errors[`vital-${item.id}`]}</Text> : null}
                   <Pressable onPress={() => setVitals((items) => items.filter((vital) => vital.id !== item.id))}><Text style={styles.removeBtn}>Remove vital</Text></Pressable>
                 </View>
-                </Animated.View>
               );
             })}
             <Pressable onPress={addVital} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add vital</Text></Pressable>
@@ -1916,7 +1870,7 @@ export default function VitalsLoggerScreen() {
           title="How you feel"
           subtitle="Rate your mood, energy, and stress today."
         >
-          <View style={[styles.card, tint(COLORS.catMood)]}>
+          <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Mood</Text>
             <MoodSelector value={mood} onChange={setMood} />
 
@@ -1945,13 +1899,10 @@ export default function VitalsLoggerScreen() {
             const selectedSymptom = symptomConcepts.find((c) => c.id === item.conceptId);
             const showFeverDial = isFeverConcept(selectedSymptom);
             return (
-            <Animated.View
+            <View
               key={item.id}
-              entering={reducedMotion ? undefined : FadeInDown.duration(260)}
-              exiting={reducedMotion ? undefined : FadeOut.duration(180)}
-              layout={reducedMotion ? undefined : Layout.springify()}
+              style={styles.entryBlock}
             >
-            <View style={[styles.symptomCard, tint(COLORS.catSymptom)]}>
               <View style={styles.symptomHeader}>
                 <Text style={styles.symptomIndex}>Symptom</Text>
                 <Pressable
@@ -2041,7 +1992,7 @@ export default function VitalsLoggerScreen() {
                 options={DURATION_QUICK}
                 value={item.duration}
                 onChange={(duration) => updateSymptom(item.id, { duration })}
-                color={COLORS.catSymptom}
+                color={GV.cta}
                 allowClear
                 label="Symptom duration minutes"
               />
@@ -2069,12 +2020,11 @@ export default function VitalsLoggerScreen() {
                   <FeverTempDial
                     notes={item.notes}
                     onNotes={(text) => updateSymptom(item.id, { notes: text })}
-                    color={COLORS.catSymptom}
+                    color={GV.cta}
                   />
                 </>
               ) : null}
             </View>
-            </Animated.View>
             );
           })}
 
@@ -2110,7 +2060,7 @@ export default function VitalsLoggerScreen() {
           title="Notes"
           subtitle="Optional. Anything else you want to record."
         >
-          <View style={styles.card}>
+          <View style={styles.fieldWrap}>
             <Input
               value={notes}
               onChangeText={setNotes}
@@ -2177,7 +2127,7 @@ export default function VitalsLoggerScreen() {
         ) : null}
 
         {/* Spacer */}
-        <View style={{ height: SPACING.xxl }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
 
       {/* Celebration overlay — one-shot delight on save */}
@@ -2193,951 +2143,680 @@ export default function VitalsLoggerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: GV.stage,
   },
   content: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xxl,
-  },
-
-  // ── Header ──
-  backBtn: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: SPACING.sm,
-  },
-  backBtnText: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary },
-  // Hero header card — deep gradient illusion via layered glows.
-  hero: {
-    borderWidth: 1,
-    borderColor: 'rgba(77, 141, 255, 0.35)',
-    borderRadius: BORDER_RADIUS.xl,
-    backgroundColor: '#101F38',
-    padding: SPACING.lg,
-    overflow: 'hidden',
-    marginBottom: SPACING.sm,
-  },
-  heroGlowA: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    top: -90,
-    right: -60,
-    backgroundColor: 'rgba(77, 141, 255, 0.35)',
-  },
-  heroGlowB: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    bottom: -100,
-    left: -50,
-    backgroundColor: 'rgba(49, 183, 165, 0.28)',
+    paddingHorizontal: SPACE.screenH,
+    paddingTop: 8,
+    paddingBottom: 40,
+    gap: SPACE.cardGap,
   },
   header: {
-    paddingVertical: SPACING.lg,
+    gap: 8,
+    marginBottom: 12,
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  backBtn: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingRight: 8,
   },
-  headerText: {
-    flex: 1,
+  backBtnText: {
+    ...TYPE.caption,
+    color: GV.fog,
   },
   title: {
-    ...TYPOGRAPHY.h1,
-    color: COLORS.textPrimary,
+    ...TYPE.display,
+    color: GV.card,
+    textAlign: 'center',
   },
   subtitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+    ...TYPE.body,
+    color: GV.fog,
+    textAlign: 'center',
   },
   editingPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.primaryBg,
-    borderRadius: BORDER_RADIUS.full,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    marginTop: SPACING.sm,
+    alignSelf: 'center',
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rPill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 8,
   },
   editingPillText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.primary,
-    fontSize: 11,
-    letterSpacing: 1.1,
+    ...TYPE.chip,
+    color: GV.ink,
+  },
+  dateCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    marginTop: 12,
+  },
+  dateBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
   },
   dateBadge: {
     width: 52,
     height: 52,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.primaryBg,
+    borderRadius: 12,
+    backgroundColor: GV.wash,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dateBadgeDay: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.primary,
-    lineHeight: 26,
+    ...TYPE.title,
+    color: GV.ink,
+    textAlign: 'center',
   },
   dateBadgeMonth: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.primaryLight,
-    fontSize: 10,
-    lineHeight: 14,
+    ...TYPE.caption,
+    color: GV.body,
+    textAlign: 'center',
+  },
+  selectedDateText: {
+    ...TYPE.caption,
+    color: GV.body,
+    flex: 1,
+    textAlign: 'center',
   },
   dateControls: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: SPACING.xs,
-    marginTop: SPACING.md,
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  dateControl: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: COLORS.surface,
-  },
-  dateControlText: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary },
-  selectedDateText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, flex: 1, textAlign: 'center' },
-
-  // ── Banner ──
-  banner: {
+  bannerCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
-    marginBottom: SPACING.md,
+    gap: 8,
   },
-  bannerSuccess: {
-    backgroundColor: COLORS.successBg,
-  },
-  bannerError: {
-    backgroundColor: COLORS.errorBg,
+  bannerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   bannerText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
+    ...TYPE.body,
+    color: GV.ink,
     flex: 1,
   },
-  bannerDismiss: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textMuted,
-    marginLeft: SPACING.sm,
+  bannerDismissBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
-
-  // ── Today's summary ──
-  todaySummary: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
+  bannerDismiss: {
+    ...TYPE.caption,
+    color: GV.body,
+  },
+  todayCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
   todaySummaryTitle: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: SPACING.sm,
+    ...TYPE.title,
+    color: GV.ink,
+    marginBottom: 8,
   },
   todayGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.md,
+    gap: 12,
   },
   todayItem: {
     minWidth: 72,
     flexGrow: 1,
   },
   todayLabel: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   todayValue: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.button,
+    color: GV.ink,
     marginTop: 2,
   },
   todayNote: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    marginTop: SPACING.sm,
-    fontStyle: 'italic',
+    ...TYPE.caption,
+    color: GV.muted,
+    marginTop: 8,
   },
-
-  // ── Form error ──
   formError: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.error,
-    marginBottom: SPACING.md,
+    ...TYPE.caption,
+    color: GV.danger,
+    textAlign: 'center',
+    marginBottom: 4,
   },
-
-  // ── Sections ──
+  modeCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   section: {
-    marginBottom: SPACING.lg,
+    marginBottom: SPACE.sectionGap,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
+  sectionCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
-  // Category-tinted title chip + dot (replaces the old emoji badge).
-  sectionTitleChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 9999,
-  },
-  sectionTitleDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 9999,
-  },
-  sectionHeading: {
-    flex: 1,
-  },
-  sectionTitle: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-  },
-  sectionSubtitle: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    marginTop: 2,
+  sectionBody: {
+    marginTop: 12,
+    gap: 8,
   },
   divider: {
     height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: SPACING.sm,
+    backgroundColor: GV.stageline,
+    marginVertical: 8,
   },
-
-  // ── Card (section surface) ──
-  card: {
-    backgroundColor: COLORS.surfaceElevated,
-    borderWidth: 1,
-    borderColor: COLORS.borderFaint,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 2,
+  fieldWrap: {
+    gap: 8,
   },
-
-  // ── Field labels ──
   fieldLabel: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    ...TYPE.caption,
+    color: GV.muted,
+    marginBottom: 4,
   },
   fieldSpacer: {
-    height: SPACING.md,
+    height: 16,
   },
   fieldError: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.error,
-    marginTop: SPACING.xs,
+    ...TYPE.caption,
+    color: GV.danger,
+    marginTop: 4,
   },
-  entryBlock: { gap: SPACING.sm, marginBottom: SPACING.md, paddingBottom: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  inlineFields: { flexDirection: 'row', gap: SPACING.sm },
-  inlineInput: { flex: 1 },
-  selectedVitalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: SPACING.sm },
-  selectedVitalInfo: { flex: 1 },
-  selectedVitalName: { ...TYPOGRAPHY.bodyStrong, color: COLORS.primary },
-  selectedVitalSub: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: 2 },
-
-  // ── Mood selector ──
+  entryBlock: {
+    gap: 8,
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: GV.line,
+  },
+  inlineFields: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  inlineInput: {
+    flex: 1,
+  },
+  selectedVitalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingVertical: 8,
+    minHeight: 44,
+  },
+  selectedVitalInfo: {
+    flex: 1,
+  },
+  selectedVitalName: {
+    ...TYPE.button,
+    color: GV.ink,
+  },
+  selectedVitalSub: {
+    ...TYPE.caption,
+    color: GV.muted,
+    marginTop: 2,
+  },
   moodRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.xs,
+    gap: 8,
   },
   moodPill: {
     flex: 1,
     minWidth: 56,
-    paddingVertical: SPACING.sm + 2,
-    paddingHorizontal: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: SPACE.rPill,
+    borderWidth: 1,
+    borderColor: GV.line,
+    backgroundColor: GV.card,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   moodPillSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
   },
   moodPillText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
+    ...TYPE.chip,
+    color: GV.body,
     textAlign: 'center',
-    fontSize: 12,
   },
   moodPillTextSelected: {
-    color: COLORS.textOnAccent,
-    fontWeight: '700',
+    color: GV.card,
   },
-
-  // ── Scale selector (energy / stress) ──
   scaleRow: {
     flexDirection: 'row',
-    gap: SPACING.sm,
+    gap: 8,
   },
   scaleDot: {
     width: 44,
     height: 44,
-    borderRadius: BORDER_RADIUS.sm,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    borderRadius: SPACE.rPill,
+    borderWidth: 1,
+    borderColor: GV.line,
+    backgroundColor: GV.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
   scaleDotSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
   },
   scaleDotText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textSecondary,
+    ...TYPE.button,
+    color: GV.body,
   },
   scaleDotTextSelected: {
-    color: '#FFFFFF',
+    color: GV.card,
   },
   scaleLabel: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.primary,
+    ...TYPE.caption,
+    color: GV.body,
     textAlign: 'center',
-    marginTop: SPACING.xs,
+    marginTop: 4,
   },
   scaleLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: SPACING.xs,
+    marginTop: 4,
   },
   scaleHint: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
-
-  // ── Sleep duration stepper ──
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
+    gap: 8,
   },
   stepperBtn: {
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.sm + 2,
-    borderRadius: BORDER_RADIUS.sm,
+    minWidth: 44,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surfaceElevated,
+    borderColor: GV.line,
+    backgroundColor: GV.card,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stepperBtnText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
+    ...TYPE.button,
+    color: GV.ink,
   },
   stepperDisplay: {
     flex: 1,
     alignItems: 'center',
   },
   stepperValue: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
+    ...TYPE.title,
+    color: GV.ink,
   },
-
-  // ── Sleep quality ──
   qualityRow: {
     flexDirection: 'row',
-    gap: SPACING.sm,
+    gap: 8,
   },
   qualityDot: {
-    width: 40,
-    height: 40,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    width: 44,
+    height: 44,
+    borderRadius: SPACE.rPill,
+    borderWidth: 1,
+    borderColor: GV.line,
+    backgroundColor: GV.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
   qualityDotSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
   },
   qualityDotText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textSecondary,
+    ...TYPE.button,
+    color: GV.body,
   },
   qualityDotTextSelected: {
-    color: '#FFFFFF',
+    color: GV.card,
   },
   qualityHint: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.primary,
+    ...TYPE.caption,
+    color: GV.body,
     textAlign: 'center',
-    marginTop: SPACING.xs,
-  },
-
-  // ── Symptoms ──
-  symptomCard: {
-    backgroundColor: COLORS.surfaceElevated,
-    borderWidth: 1,
-    borderColor: COLORS.borderFaint,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 5,
-    elevation: 2,
+    marginTop: 4,
   },
   symptomHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.sm,
+    minHeight: 44,
+    marginBottom: 8,
   },
   symptomIndex: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.button,
+    color: GV.ink,
   },
   removeBtn: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.error,
+    ...TYPE.caption,
+    color: GV.body,
+    minHeight: 44,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
   chipGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.xs,
-    marginTop: SPACING.xs,
+    gap: 8,
+    marginTop: 8,
   },
-  // ── Quick-pick option chips (one tap instead of typing) ──
+  chip: {
+    minHeight: 44,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: GV.line,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipSelected: {
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
+  },
+  chipText: {
+    ...TYPE.chip,
+    color: GV.body,
+  },
+  chipTextSelected: {
+    color: GV.card,
+  },
   optRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.xs,
-    marginBottom: SPACING.sm,
+    gap: 8,
+    marginBottom: 8,
   },
   optChip: {
-    paddingVertical: SPACING.xs + 2,
-    paddingHorizontal: SPACING.sm + 2,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: SPACE.rPill,
+    borderWidth: 1,
+    borderColor: GV.line,
+    backgroundColor: GV.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optChipSelected: {
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
   },
   optChipText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
+    ...TYPE.chip,
+    color: GV.body,
   },
   optChipTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: GV.card,
   },
-  chip: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs + 2,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.full,
-    backgroundColor: COLORS.surfaceSunken,
-  },
-  chipSelected: {
-    backgroundColor: COLORS.primaryBg,
-    borderColor: COLORS.primary,
-  },
-  chipText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
-  },
-  chipTextSelected: {
-    color: COLORS.primary,
-  },
-  // 10 fixed dots overflow narrow screens (10×32 + 9×6 = 374px > ~300px
-  // usable), so the row wraps into a clean grid instead of spilling past
-  // the card edge. Dots keep fixed size for stable tap targets.
   severityRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    rowGap: 8,
   },
   severityDot: {
-    width: 32,
-    height: 32,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    width: 44,
+    height: 44,
+    borderRadius: SPACE.rPill,
+    borderWidth: 1,
+    borderColor: GV.line,
+    backgroundColor: GV.card,
     alignItems: 'center',
     justifyContent: 'center',
   },
   severityDotSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
   },
   severityDotText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
+    ...TYPE.chip,
+    color: GV.body,
   },
   severityDotTextSelected: {
-    color: COLORS.textOnAccent,
-    fontWeight: '700',
+    color: GV.card,
   },
   addBtn: {
-    paddingVertical: SPACING.sm + 2,
-    paddingHorizontal: SPACING.md,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    borderStyle: 'dashed',
-    borderRadius: BORDER_RADIUS.md,
+    minHeight: 44,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: GV.line,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.card,
     alignItems: 'center',
-    marginTop: SPACING.xs,
+    justifyContent: 'center',
+    marginTop: 8,
   },
   addBtnText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.primary,
+    ...TYPE.button,
+    color: GV.ink,
   },
-
-  // ── Quick-log + unit toggles ──
   quickRow: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
+    gap: 8,
+    marginBottom: 8,
   },
   quickBtn: {
     flex: 1,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
+    minHeight: 44,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surface,
+    borderColor: GV.line,
+    borderRadius: 12,
+    backgroundColor: GV.card,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   quickBtnText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.chip,
+    color: GV.ink,
+    textAlign: 'center',
   },
   unitToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: SPACING.xs,
+    gap: 8,
+    marginBottom: 8,
+    minHeight: 44,
   },
   unitToggle: {
     flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.full,
-    overflow: 'hidden',
+    gap: 8,
   },
   unitToggleBtn: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: 'transparent',
-    borderRadius: BORDER_RADIUS.full,
+    borderColor: GV.line,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unitToggleBtnSelected: {
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
   },
   unitToggleText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
+    ...TYPE.chip,
+    color: GV.body,
   },
   unitToggleTextSelected: {
-    color: COLORS.textOnAccent,
+    color: GV.card,
   },
   dialHint: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
     textAlign: 'center',
-    marginTop: SPACING.xs,
+    marginTop: 8,
   },
-
-  // ── Active medicines (tap-to-log) ──
-  activeMedRow: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-    paddingVertical: SPACING.xs,
-  },
-  activeMedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    minHeight: 44,
-  },
-  activeMedIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: `${COLORS.catMedication}1A`,
-    borderWidth: 1,
-    borderColor: `${COLORS.catMedication}55`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  activeMedDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 9999,
-    backgroundColor: COLORS.catMedication,
-  },
-  activeMedInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  activeMedName: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
-  },
-  activeMedDetail: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-  },
-  activeMedTimes: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.primary,
-    fontVariant: ['tabular-nums'],
-  },
-  prnBadge: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.full,
-    backgroundColor: `${COLORS.catMedication}1A`,
-    borderWidth: 1,
-    borderColor: `${COLORS.catMedication}55`,
-  },
-  prnText: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.catMedication,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  expandGlyph: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-  },
-  activeMedBody: {
-    gap: SPACING.sm,
-    paddingTop: SPACING.xs,
-    paddingBottom: SPACING.sm,
-  },
-  logDoseBtn: {
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.catMedication,
-    alignItems: 'center',
-    marginTop: SPACING.xs,
-  },
-  logDoseBtnDone: {
-    backgroundColor: COLORS.successBg,
-    borderWidth: 1,
-    borderColor: COLORS.success,
-  },
-  logDoseText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textOnAccent,
-  },
-  logDoseTextDone: {
-    color: COLORS.success,
-  },
-
-  // ── Today's Medications ──
-  medScheduleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
-  medScheduleInfo: {
-    flex: 1,
-  },
-  medScheduleName: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
-  },
-  medScheduleDetail: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  medTakenBadge: {
-    alignItems: 'center',
-  },
-  medTakenText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.green,
-  },
-  medTakenTime: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    fontSize: 10,
-  },
-  // Read-only schedule state (dose toggling lives on the active rows).
-  medPendingText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-  },
-  // Tick/cross dose toggle, right of the medicine name.
-  medTakenToggle: {
-    width: 34,
-    height: 34,
-    borderRadius: 9999,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  medTakenToggleOn: {
-    backgroundColor: COLORS.green,
-    borderColor: COLORS.green,
-  },
-  medTakenToggleOff: {
-    backgroundColor: 'transparent',
-    borderColor: COLORS.error,
-  },
-  medTakenToggleGlyph: {
-    fontSize: 16,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  medTakenToggleGlyphOn: {
-    color: '#FFFFFF',
-  },
-  medTakenToggleGlyphOff: {
-    color: COLORS.error,
-  },
-  medTakeButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-  },
-  medTakeButtonText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: '#FFFFFF',
-  },
-
-  // ── Notes ──
-  textArea: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    minHeight: 100,
-    textAlignVertical: 'top',
-    paddingTop: SPACING.sm,
-  },
-  notesFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: SPACING.xs,
-  },
-  charCount: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-  },
-
-  // ── Save ──
-  saveButton: {
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  // Log-mode segmented switch: compact pills, Normal selected by default.
-  modeRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.md,
-  },
-  modeBtn: {
-    flex: 1,
-    paddingVertical: SPACING.sm,
-    borderRadius: 9999,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-  },
-  modeBtnSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  modeBtnText: {
-    ...TYPOGRAPHY.bodyStrong,
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
-  modeBtnTextSelected: {
-    color: '#FFFFFF',
-  },
-  // Essentials rows (quick mode): compact medicine tick rows + customize UI.
   essMedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    gap: 8,
+    paddingVertical: 8,
+    minHeight: 44,
+    borderBottomWidth: 1,
+    borderBottomColor: GV.line,
   },
   essMedInfo: {
     flex: 1,
-    gap: 1,
   },
   essMedName: {
-    ...TYPOGRAPHY.bodyStrong,
-    fontSize: 14,
-    color: COLORS.textPrimary,
+    ...TYPE.button,
+    color: GV.ink,
   },
   essMedDetail: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
+    ...TYPE.caption,
+    color: GV.body,
   },
   essMedToggle: {
-    width: 32,
-    height: 32,
-    borderRadius: 9999,
+    width: 44,
+    height: 44,
+    borderRadius: SPACE.rPill,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   essMedToggleOn: {
-    backgroundColor: COLORS.green,
-    borderColor: COLORS.green,
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
   },
   essMedToggleOff: {
-    backgroundColor: 'transparent',
-    borderColor: COLORS.error,
+    backgroundColor: GV.card,
+    borderColor: GV.line,
   },
   essMedToggleGlyph: {
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 20,
+    ...TYPE.chip,
+    color: GV.body,
   },
   essMedToggleGlyphOn: {
-    color: '#FFFFFF',
+    color: GV.card,
   },
   essMedToggleGlyphOff: {
-    color: COLORS.error,
+    color: GV.body,
   },
   essCustomizeBtn: {
     alignSelf: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    justifyContent: 'center',
   },
   essCustomizeText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textSecondary,
+    ...TYPE.caption,
+    color: GV.body,
+    textAlign: 'center',
   },
   essCustomizeList: {
-    gap: SPACING.xs,
-    marginTop: SPACING.xs,
-    padding: SPACING.sm,
-    borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    gap: 8,
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: GV.wash,
   },
   essCustomizeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    gap: 8,
+    minHeight: 44,
+    paddingVertical: 4,
   },
   essCheck: {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: COLORS.border,
+    borderColor: GV.line,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.surface,
+    backgroundColor: GV.card,
   },
   essCheckOn: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
   },
   essCheckGlyph: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 16,
+    color: GV.card,
+    ...TYPE.chip,
   },
   essCheckLabel: {
-    ...TYPOGRAPHY.body,
-    fontSize: 14,
-    color: COLORS.textPrimary,
+    ...TYPE.body,
+    color: GV.ink,
   },
   essCustomizeHint: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    marginTop: 2,
+    ...TYPE.caption,
+    color: GV.muted,
+    marginTop: 4,
   },
-  // Essentials fast-path sits under the big save, deliberately smaller and
-  // centered so the full log reads as the primary action.
-  essentialsWrap: {
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-  },
-  essentialsButton: {
-    paddingHorizontal: SPACING.lg,
-  },
-
-  // ── History ──
   historyRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.sm,
+    gap: 8,
+    paddingVertical: 12,
+    minHeight: 44,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: GV.line,
   },
   historyLeft: {
     flex: 1,
   },
   historyDate: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.button,
+    color: GV.ink,
   },
   historyCats: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
     marginTop: 2,
   },
   historyCount: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.primary,
-    marginLeft: SPACING.sm,
+    ...TYPE.chip,
+    color: GV.body,
+    marginLeft: 8,
   },
-
-  // ── Muted text ──
   muted: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
-
-  // ── Global error ──
   globalError: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.error,
+    ...TYPE.caption,
+    color: GV.danger,
     textAlign: 'center',
-    marginTop: SPACING.md,
+    marginTop: 12,
+  },
+  saveButton: {
+    marginTop: 8,
+    marginBottom: 8,
   },
 });
+

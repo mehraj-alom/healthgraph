@@ -1,23 +1,19 @@
 /**
  * HealthDashboardScreen — the "Health Dashboard" home tab.
  *
- * Layout (per the wireframe): fixed header (greeting + centered wordmark +
- * alerts bell) with the rest of the page scrolling underneath. Below the header
- * sit a two-up action row ("Enter Daily Logs", "Active medication"), the dark
- * insights panel (radar ⇄ embedded 3D graph via an animated segmented toggle),
- * and the "correlations feed" of chart cards with a staggered entrance.
+ * Guava-flat: dark stage, white cards (radius 20, padding 20, no border, no
+ * shadow), Poppins via TYPE, one CTA green, fx hues as small icons only.
+ * Centered screen title, simple rows, one green CTA. Motion is functional
+ * only (press feedback, modal transition); no entrance cascades, no loops.
  *
- * Pure UI build: reuses the movements theme tokens + IconButton, existing hooks
- * (useDailyMetrics, useMedications, useTrends, useHomeStory) and the existing
- * 3D HealthGraphScreen mounted in an additive `embedded` mode. No backend
- * changes. All colors/radii/spacing come from the movements tokens.
+ * Pure UI build: reuses existing hooks (useDailyMetrics, useMedications,
+ * useTrends, useHomeStory). No backend changes.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Modal,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -42,40 +38,40 @@ import Animated, {
   useAnimatedScrollHandler,
   withTiming,
   withSpring,
-  withRepeat,
-  withSequence,
-  withDelay,
   interpolate,
   Extrapolation,
-  Easing,
 } from 'react-native-reanimated';
-import Svg, { Path, Rect, Circle, Defs, Pattern } from 'react-native-svg';
+import Svg, { Path, Rect, Circle, G, Line } from 'react-native-svg';
 
-import { mv, mvType } from '@/theme/movements';
-import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { domainHueForStream } from '@/theme/dashboardApple';
+
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
-import { timingConfig, springSnappy, durations, curves } from '@/theme/motion';
+import { timingConfig, springSnappy } from '@/theme/motion';
 import { useReducedMotion } from '@/theme';
 import { IconButton } from '@/components/movements/IconButton';
-import { PressScale } from '@/components/PressScale';
-import Entrance from '@/components/home/Entrance';
+import { Slider } from '@/components/Slider';
+import { Button } from '@/components/Button';
+import { Card } from '@/components/Card';
+import { Chip } from '@/components/Chip';
+import { SectionHeader } from '@/components/SectionHeader';
 import HGraphMap, { type HMetric } from '@/components/home/HGraphMap';
 import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
 
-import LiftCard from '@/components/home/LiftCard';
 import { BrandLogo } from '@/components/BrandLogo';
 import { consumeDataRefreshRequest } from '@/services/dataRefresh';
 import { reportTabScroll } from '@/components/tabBarVisibility';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
-import { formatFirstName } from '@/utils/name';
-import { useAuth } from '@/context/AuthContext';
 import { useProfilePhoto } from '@/hooks/useProfilePhoto';
 import { recordMedicationTaken, useMedications } from '@/hooks/useMedications';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { useTrends } from '@/hooks/useTrends';
-import { buildHealthDimensions, detectHeartRate, formatSleepMinutes, formatWaterMl, formatDurationMinutes, localDateString } from '@/screens/Dashboard/homeData';
+import { detectHeartRate, formatSleepMinutes, formatWaterMl, formatDurationMinutes, localDateString } from '@/screens/Dashboard/homeData';
 import { useHomeStory } from '@/screens/Dashboard/useHomeStory';
-import { useCorrelationFeed, trendStreams, localStreams, vitalLabelMap, assessMetric, assessSeries, type CorrelationFeedItem } from '@/screens/Dashboard/correlations';
+import { useCorrelationFeed, trendStreams, localStreams, vitalLabelMap, assessMetric, assessSeries, pairToFeedItem, correlationPairKey, getPair, type CorrelationFeedItem, type CorrelationPair, type StreamSeries } from '@/screens/Dashboard/correlations';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BottomSheet } from '@/components/BottomSheet';
+import { ProfileSheet } from '@/components/ProfileSheet';
 import type { MainTabParamList, RootStackParamList } from '@/types';
 
 type Nav = CompositeNavigationProp<
@@ -83,15 +79,14 @@ type Nav = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-function greetingForHour(hour: number): string {
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
+// ─── Line-glyph icons (inline svg, Guava colors — no icon lib) ────────────────
+
+/** Shift a YYYY-MM-DD day-key by whole days ( noon-anchored, DST-safe ). */
+function shiftDay(dateStr: string, delta: number): string {
+  return localDateString(new Date(new Date(`${dateStr}T12:00:00`).getTime() + delta * 86400000));
 }
 
-// ─── Line-glyph icons (inline svg, theme colors — no icon lib) ────────────────
-
-function BellGlyph({ size = 18, color = mv.textOnLightPrimary }) {
+function BellGlyph({ size = 18, color = GV.ink }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path
@@ -112,7 +107,7 @@ function BellGlyph({ size = 18, color = mv.textOnLightPrimary }) {
   );
 }
 
-function CheckGlyph({ size = 14, color = mv.textOnLightPrimary }: { size?: number; color?: string }) {
+function CheckGlyph({ size = 14, color = GV.ink }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path
@@ -127,30 +122,60 @@ function CheckGlyph({ size = 14, color = mv.textOnLightPrimary }: { size?: numbe
   );
 }
 
+function BodyGlyph({ size = 18, color = GV.ink }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle
+        cx={12}
+        cy={5}
+        r={2.4}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.8}
+      />
+      <Path
+        d="M12 8.5v5m0 0-3.2 6.5m3.2-6.5 3.2 6.5M7.5 10.5 12 9l4.5 1.5"
+        fill="none"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function PillGlyph({ size = 20, color = GV.ink }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <G transform="rotate(-45 12 12)">
+        <Rect x="5" y="9" width="14" height="6" rx="3" fill="none" stroke={color} strokeWidth={1.8} />
+        <Line x1="12" y1="9" x2="12" y2="15" stroke={color} strokeWidth={1.8} />
+      </G>
+    </Svg>
+  );
+}
+
 // ─── Fixed header ──────────────────────────────────────────────────────────────
 
 function HeaderBlock({
-  greeting,
-  name,
-  initial,
   photoUri,
   hasActivity,
   onAvatarPress,
   onBellPress,
+  onBodyPress,
 }: {
-  greeting: string;
-  name: string;
-  initial: string;
   photoUri: string | null;
   hasActivity: boolean;
   onAvatarPress: () => void;
   onBellPress: () => void;
+  onBodyPress: () => void;
 }) {
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
         <Pressable
-          style={styles.avatar}
+          style={({ pressed }) => [styles.avatar, pressed && { opacity: 0.7 }]}
           onPress={onAvatarPress}
           accessibilityRole="button"
           accessibilityLabel="Open profile and settings"
@@ -158,83 +183,55 @@ function HeaderBlock({
           {photoUri ? (
             <Image source={{ uri: photoUri }} style={styles.avatarPhoto} />
           ) : (
-            <Text style={styles.avatarText}>{initial}</Text>
+            <View style={styles.avatarEmpty} />
           )}
         </Pressable>
-        <View style={styles.headerGreeting}>
-          <Text style={styles.greetingSmall}>{greeting},</Text>
-          <Text style={styles.greetingName} numberOfLines={1}>{name}</Text>
+        <View style={styles.headerWordmark}>
+          <BrandLogo height={23} tint={GV.card} />
         </View>
       </View>
 
-      <View style={styles.headerWordmark}>
-        <BrandLogo height={23} />
+      <View style={styles.headerRight}>
+        <Pressable
+          style={({ pressed }) => [styles.headerBell, pressed && { opacity: 0.7 }]}
+          onPress={onBodyPress}
+          accessibilityRole="button"
+          accessibilityLabel="Open 3D body"
+        >
+          <BodyGlyph />
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.headerBell, pressed && { opacity: 0.7 }]}
+          onPress={onBellPress}
+          accessibilityRole="button"
+          accessibilityLabel="Open timeline"
+        >
+          <BellGlyph />
+          {hasActivity ? <View style={styles.bellDot} /> : null}
+        </Pressable>
       </View>
-
-      <Pressable
-        style={styles.headerBell}
-        onPress={onBellPress}
-        accessibilityRole="button"
-        accessibilityLabel="Open timeline"
-      >
-        <BellGlyph />
-        {hasActivity ? <View style={styles.bellDot} /> : null}
-      </Pressable>
     </View>
   );
 }
 
 // ─── Today stack ───────────────────────────────────────────────────────────────
-// One calm vertical stack instead of a cramped two-up row: a full-width daily
-// check-in hero (status → title → one CTA, honest progress ring) above a slim
-// medication "up next" row in the reference's Upcoming-schedule language.
-// One tap target per card, one type voice (grotesk), no ambient glow/sheen —
-// the cards rest until pressed (LiftCard still gives tactile feedback).
+// One calm vertical stack: a full-width daily check-in hero (status → title
+// → one CTA, honest progress ring) above a medication "up next" row. One tap
+// target per card, one type voice, flat white cards on the stage.
 
-const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia, serif' });
-
-/** Ambient glow blob: slow opacity breath, static when reduced-motion is on. */
-function BreathingGlow({ style }: { style?: object }) {
-  const reduced = useReducedMotion();
-  const breath = useSharedValue(0.22);
-  useEffect(() => {
-    if (reduced) {
-      breath.value = 0.22;
-      return;
-    }
-    breath.value = withRepeat(
-      withTiming(0.34, { duration: 2400, easing: Easing.bezier(...curves.standard) }),
-      -1,
-      true,
-    );
-  }, [reduced, breath]);
-  const glowStyle = useAnimatedStyle(() => ({ opacity: breath.value }));
-  return <Animated.View pointerEvents="none" style={[style, glowStyle]} />;
-}
-
-/** Dose progress fill: springs from 0 → pct on mount / change. */
+/** Dose progress fill: static honest fraction — no arrival motion. */
 function DoseBar({ pct }: { pct: number }) {
-  const reduced = useReducedMotion();
-  const p = useSharedValue(0);
-  useEffect(() => {
-    if (reduced) {
-      p.value = pct;
-      return;
-    }
-    p.value = withDelay(350, withSpring(pct, { duration: 600, dampingRatio: 0.85 }));
-  }, [pct, reduced, p]);
-  const barStyle = useAnimatedStyle(() => ({ width: `${Math.max(0, Math.min(1, p.value)) * 100}%` as never }));
+  const w = `${Math.max(0, Math.min(1, pct)) * 100}` as `${number}`;
   return (
     <View style={styles.doseTrack}>
-      <Animated.View style={[styles.doseFill, barStyle]} />
+      <View style={[styles.doseFill, { width: `${w}%` as `${number}%` }]} />
     </View>
   );
 }
 
 /**
- * DupDup — lub-dub heartbeat badge: two quick pulses, then rest, on loop.
- * Green tick when the day is done, red cross when it isn't. Static under
- * reduced motion.
+ * Day-status badge: CTA-green tick when the day is done, quiet wash cross
+ * when it isn't. Static by design — a status badge is read, not watched.
  */
 function DupDup({
   done,
@@ -243,65 +240,50 @@ function DupDup({
   done: boolean;
   size?: number;
 }) {
-  const reduced = useReducedMotion();
-  const beat = useSharedValue(1);
-  const color = done ? '#4E9B5F' : '#C2503E';
-  useEffect(() => {
-    if (reduced) return;
-    beat.value = withRepeat(
-      withSequence(
-        withTiming(1.22, { duration: 170 }),
-        withTiming(1, { duration: 150 }),
-        withTiming(1.22, { duration: 170 }),
-        withTiming(1, { duration: 150 }),
-        withTiming(1, { duration: 1300 }),
-      ),
-      -1,
-      false,
-    );
-  }, [beat, reduced]);
-  const beatStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: beat.value }],
-  }));
   return (
-    <Animated.View
+    <View
       style={[
         styles.dupBadge,
-        { width: size, height: size, borderRadius: size / 2, backgroundColor: color + '1A', borderColor: color },
-        beatStyle,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: done ? GV.cta : GV.wash,
+        },
       ]}
       accessible
       accessibilityLabel={done ? "Today's log complete" : "Today's log not done"}
     >
       {done ? (
-        <CheckGlyph size={Math.round(size * 0.55)} color={color} />
+        <CheckGlyph size={Math.round(size * 0.55)} color="#FFFFFF" />
       ) : (
-        <Text style={[styles.dupCross, { color, fontSize: Math.round(size * 0.55) }]}>✕</Text>
+        <Text style={[styles.dupCross, { fontSize: Math.round(size * 0.55) }]}>✕</Text>
       )}
-    </Animated.View>
+    </View>
   );
 }
 
-/** Honest today-progress ring: mood + water + doses, nothing invented. */
-function ProgressRing({ pct, size = 84 }: { pct: number; size?: number }) {
-  const stroke = 6;
+/** Today-readiness ring: the hero instrument. Static honest fraction. */
+function ProgressRing({ pct, size = 120 }: { pct: number; size?: number }) {
+  const stroke = 12;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const clamped = Math.max(0, Math.min(1, pct));
-  const complete = clamped >= 1;
+
   return (
     <View style={{ width: size, height: size }} accessible accessibilityLabel={`${Math.round(clamped * 100)} percent of today's routine complete`}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <Circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E9E0CE" strokeWidth={stroke} />
+        <Circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={GV.line} strokeWidth={stroke} />
         <Circle
           cx={size / 2}
           cy={size / 2}
           r={r}
           fill="none"
-          stroke={complete ? '#4E9B5F' : '#E8862E'}
+          stroke={GV.cta}
           strokeWidth={stroke}
           strokeLinecap="round"
-          strokeDasharray={`${clamped * c} ${c}`}
+          strokeDasharray={`${c}`}
+          strokeDashoffset={c * (1 - clamped)}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
@@ -309,29 +291,6 @@ function ProgressRing({ pct, size = 84 }: { pct: number; size?: number }) {
         <Text style={styles.ringText}>{`${Math.round(clamped * 100)}%`}</Text>
       </View>
     </View>
-  );
-}
-
-/** Clinical-red wash backdrop for the Insights panel.
- * White card base (style), pale red aurora with a slow breath, one slate
- * wash, one rose kiss, and a faint ink dot-grid for texture. Pure views +
- * one static Svg — no new dependencies, clipped by the card's overflow. */
-function PanelBackdrop() {
-  return (
-    <>
-      <BreathingGlow style={styles.auraRed} />
-      <View style={styles.auraSlate} pointerEvents="none" />
-      <View style={styles.auraRose} pointerEvents="none" />
-      <Svg width="100%" height="100%" style={styles.panelTexture}>
-        <Defs>
-          <Pattern id="panelDots" width={18} height={18} patternUnits="userSpaceOnUse">
-            <Circle cx={1.5} cy={1.5} r={1.2} fill="rgba(22,33,44,0.05)" />
-          </Pattern>
-        </Defs>
-        <Rect x={0} y={0} width="100%" height="100%" fill="url(#panelDots)" />
-      </Svg>
-      <View style={styles.panelTopLight} pointerEvents="none" />
-    </>
   );
 }
 
@@ -377,154 +336,171 @@ function ActionRowBlock({
   // "Caught up" means 100% — every today-signal done — not merely that a
   // log row exists. A partial day keeps the working state (cross, CTA).
   const fullyDone = signals.length > 0 && doneCount >= signals.length;
-  const statusColor = loggedToday ? '#4E9B5F' : '#C96A1E';
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, styles.sectionHero]}>
       {/* ── Daily check-in hero ── */}
-      <Entrance index={0} staggerMs={70}>
-        <LiftCard
-          style={[styles.todayCard, fullyDone && styles.todayCardLit]}
-          contentContainerStyle={styles.todayCardContent}
-          accessibilityLabel={loggedToday ? "View or edit today's daily log" : "Enter today's daily log"}
-          onPress={onDailyLog}
-          pressedBg="rgba(29,27,23,0.04)"
-        >
-          <View style={styles.todayRow}>
-            <View style={styles.todayText}>
-              <View style={styles.statusRow}>
-                <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-                <Text style={[styles.statusText, { color: statusColor }]}>
-                  {loggedToday ? 'TODAY' : "TODAY'S CHECK-IN"}
-                </Text>
-                <Text style={styles.statusCount}>{`${doneCount}/${signals.length}`}</Text>
-              </View>
-              <View style={styles.titleRow}>
-                <Text style={[styles.todayTitle, fullyDone && styles.todayTitleCaughtUp]}>
-                  {fullyDone
-                    ? "You're all caught up"
-                    : doneCount > 0
-                      ? 'Almost there'
-                      : "Time to check in"}
-                </Text>
-                <DupDup done={fullyDone} />
-              </View>
-              {!fullyDone ? (
-                <View style={[styles.todayCta, styles.todayCtaPrimary]}>
-                  <Text style={styles.todayCtaPrimaryText}>Check in</Text>
-                </View>
-              ) : null}
+      <Card
+        style={styles.todayCard}
+        accessibilityLabel={loggedToday ? "View or edit today's daily log" : "Enter today's daily log"}
+        onPress={onDailyLog}
+      >
+        <View style={styles.todayRow}>
+          <View style={styles.todayText}>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusDot, { backgroundColor: fullyDone ? GV.cta : GV.muted }]} />
+              <Text style={styles.statusText}>
+                {loggedToday ? 'TODAY' : "TODAY'S CHECK-IN"}
+              </Text>
+              <Text style={styles.statusCount}>{`${doneCount}/${signals.length}`}</Text>
             </View>
-            <ProgressRing pct={completion} />
+            <View style={styles.titleRow}>
+              <Text style={styles.todayTitle}>
+                {fullyDone
+                  ? "You're all caught up"
+                  : doneCount > 0
+                    ? 'Almost there'
+                    : "Time to check in"}
+              </Text>
+              <DupDup done={fullyDone} />
+            </View>
+            {!fullyDone ? (
+              <View style={styles.todayCta}>
+                <Text style={styles.todayCtaText}>Check in</Text>
+              </View>
+            ) : null}
           </View>
-        </LiftCard>
-      </Entrance>
+          <ProgressRing pct={completion} />
+        </View>
+      </Card>
 
-      {/* ── Medication up next ── */}
-      <Entrance index={1} staggerMs={70}>
-        <LiftCard
-          style={styles.medRowCard}
-          contentContainerStyle={styles.medRowContent}
-          accessibilityLabel={medActive ? `Medications, ${medTaken} of ${medExpected} doses taken` : 'No medications scheduled. Add one.'}
-          onPress={onMedications}
-          pressedBg="rgba(29,27,23,0.04)"
-        >
-          <View style={styles.medIconTile}>
-            <Text style={styles.medIcon}>💊</Text>
-          </View>
-          <View style={styles.medRowText}>
-            <Text style={styles.medRowEyebrow}>
-              {medActive ? 'MEDICATION · UP NEXT' : 'MEDICATION'}
+      {/* ── Medication up next: a quiet white-card row. The whole row opens
+           medications; the toggle records today's dose inline. */}
+      <Card
+        style={styles.medCard}
+        accessibilityLabel={medActive ? `Medications, ${medTaken} of ${medExpected} doses taken` : 'No medications scheduled. Add one.'}
+        onPress={onMedications}
+      >
+        <View style={styles.medIconTile}>
+          <PillGlyph size={20} color={GV.fx.blue} />
+        </View>
+        <View style={styles.medRowText}>
+          <Text style={styles.medRowEyebrow}>
+            {medActive ? 'MEDICATION · UP NEXT' : 'MEDICATION'}
+          </Text>
+          <Text style={styles.medRowName} numberOfLines={1}>
+            {medActive ? medNames[0] : 'Nothing scheduled'}
+          </Text>
+          {medActive ? (
+            <Text style={styles.medRowSub} numberOfLines={1}>
+              {medExpected > 0
+                ? `${medTaken} of ${medExpected} doses${medCount > 1 ? ` · +${medCount - 1} more` : ''}`
+                : `${medCount} active`}
             </Text>
-            <Text style={styles.medRowName} numberOfLines={1}>
-              {medActive ? medNames[0] : 'Nothing scheduled'}
-            </Text>
-            {medActive ? (
-              <Text style={styles.medRowSub} numberOfLines={1}>
-                {medExpected > 0
-                  ? `${medTaken} of ${medExpected} doses${medCount > 1 ? ` · +${medCount - 1} more` : ''}`
-                  : `${medCount} active`}
-              </Text>
-            ) : (
-              <Text style={styles.medRowSub} numberOfLines={1}>Add one to start tracking</Text>
-            )}
-            {medActive && medExpected > 0 ? <DoseBar pct={dosePct} /> : null}
-          </View>
-          {medActive && upNextMedId ? (
-            <Pressable
-              onPress={onToggleUpNextTaken}
-              style={[
-                styles.medTakenToggle,
-                upNextTaken ? styles.medTakenToggleOn : styles.medTakenToggleOff,
-              ]}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: upNextTaken }}
-              accessibilityLabel={
-                upNextTaken
-                  ? `${medNames[0]} taken — already recorded`
-                  : `Mark ${medNames[0]} taken`
-              }
-              hitSlop={8}
-            >
-              <Text
-                style={[
-                  styles.medTakenToggleGlyph,
-                  upNextTaken ? styles.medTakenToggleGlyphOn : styles.medTakenToggleGlyphOff,
-                ]}
-              >
-                {upNextTaken ? '✓' : '✕'}
-              </Text>
-            </Pressable>
-          ) : null}
-          {medActive && medExpected > 0 ? (
-            <View style={styles.dosePill}>
-              <Text style={styles.dosePillText}>{`${medTaken}/${medExpected}`}</Text>
-            </View>
           ) : (
-            <Text style={styles.medChevron}>›</Text>
+            <Text style={styles.medRowSub} numberOfLines={1}>Add one to start tracking</Text>
           )}
-        </LiftCard>
-      </Entrance>
+          {medActive && medExpected > 0 ? <DoseBar pct={dosePct} /> : null}
+        </View>
+        {medActive && upNextMedId ? (
+          <Pressable
+            onPress={onToggleUpNextTaken}
+            style={({ pressed }) => [
+              styles.medTakenToggle,
+              upNextTaken ? styles.medTakenToggleOn : styles.medTakenToggleOff,
+              pressed && { opacity: 0.7 },
+            ]}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: upNextTaken }}
+            accessibilityLabel={
+              upNextTaken
+                ? `${medNames[0]} taken — already recorded`
+                : `Mark ${medNames[0]} taken`
+            }
+            hitSlop={8}
+          >
+            <Text
+              style={[
+                styles.medTakenToggleGlyph,
+                upNextTaken ? styles.medTakenToggleGlyphOn : styles.medTakenToggleGlyphOff,
+              ]}
+            >
+              {upNextTaken ? '✓' : '✕'}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.medChevron}>›</Text>
+        )}
+      </Card>
     </View>
   );
 }
 
 // ─── Insights panel (health overview map + actions) ─────────────────────────
 
+function ImproveKeepDuo({
+  onImprove,
+}: {
+  /** Improve / Keep duo → parent navigates to the actions window. */
+  onImprove: (focus: 'improve' | 'keep') => void;
+}) {
+  return (
+    <View style={styles.actionDuo}>
+      <Button
+        title="Improve"
+        onPress={() => {
+          try { Vibration.vibrate(12); } catch { /* best-effort */ }
+          onImprove('improve');
+        }}
+        accessibilityLabel="Improve — see actions based on your dial"
+        style={styles.duoBtn}
+      />
+      <Button
+        title="Keep"
+        variant="secondary"
+        onPress={() => {
+          try { Vibration.vibrate(12); } catch { /* best-effort */ }
+          onImprove('keep');
+        }}
+        accessibilityLabel="Keep — see what is holding steady"
+        style={styles.duoBtn}
+      />
+    </View>
+  );
+}
+
 function InsightPanelBlock({
   hMetrics,
-  mapHint,
+  day,
   onOpenFullGraph,
   onImprove,
 }: {
   hMetrics: HMetric[];
-  mapHint: string;
+  /** Day scrubber state from the parent — the dial shows this day. */
+  day: { off: number; max: number; label: string; range: number; onChange: (n: number) => void; onRange: (n: number) => void };
   onOpenFullGraph: () => void;
   /** Improve / Keep duo → parent navigates to the actions window. */
   onImprove: (focus: 'improve' | 'keep') => void;
 }) {
   const [mapOpen, setMapOpen] = useState(false);
   const [mapWidth, setMapWidth] = useState(0);
+  // Honest verdict counts straight from the dial values — no scoring.
+  const steadyCount = hMetrics.filter((m) => m.good).length;
+  const nudgeCount = hMetrics.length - steadyCount;
 
   return (
-    <Entrance index={1} style={styles.section}>
+    <View style={styles.section}>
       <View style={styles.insightHead}>
-        <View>
-          <Text style={styles.insightEyebrow}>Insights</Text>
-          <Text style={styles.insightTitle}>Your health at a glance</Text>
-        </View>
-        <Pressable
-          style={styles.insightExpand}
-          onPress={() => setMapOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Expand health overview"
-        >
-          <Text style={styles.insightExpandText}>Expand</Text>
-          <Text style={styles.insightExpandGlyph}>↗</Text>
-        </Pressable>
+        <Text style={styles.insightEyebrow}>INSIGHT</Text>
       </View>
 
-      <View style={styles.panel}>
+      {hMetrics.length > 0 ? (
+        <Text style={styles.verdictLine}>
+          {`${steadyCount} steady${nudgeCount > 0 ? ` · ${nudgeCount} to nudge` : ''}`}
+        </Text>
+      ) : null}
+
+      <Card style={styles.panel}>
         <Pressable
           style={styles.panelMap}
           onLayout={(e) => setMapWidth(e.nativeEvent.layout.width)}
@@ -535,52 +511,57 @@ function InsightPanelBlock({
           {mapWidth > 0 ? (
             <HGraphMap metrics={hMetrics} width={mapWidth} />
           ) : null}
+          {/* Day scrubber: pick 7 / 14 / 30 days back, slide through them,
+              the dial follows. The static average-chips line it replaces
+              is gone for good. */}
           {mapWidth > 0 ? (
-            <Text style={styles.panelHint} numberOfLines={2}>{mapHint}</Text>
+            <View style={styles.dayScrub}>
+              <View style={styles.dayTopRow}>
+                <Text style={styles.dayLabel}>{day.label}</Text>
+                <View style={styles.rangeChips}>
+                  {[7, 14, 30].map((n) => (
+                    <Chip
+                      key={n}
+                      label={`${n}D`}
+                      selected={day.range === n}
+                      onPress={() => day.onRange(n)}
+                      accessibilityLabel={`Show past ${n} days`}
+                    />
+                  ))}
+                </View>
+              </View>
+              {day.max > 0 ? (
+                <Slider
+                  value={day.off}
+                  onValueChange={(v) => day.onChange(v)}
+                  onLiveChange={(v) => day.onChange(v)}
+                  min={0}
+                  max={day.max}
+                  step={0.1}
+                  color={GV.cta}
+                  showValue={false}
+                />
+              ) : null}
+            </View>
           ) : null}
         </Pressable>
 
         {/* Improve / Keep duo lives inside the card, below the dial. */}
-        <View style={styles.actionDuo}>
-          <PressScale
-            onPress={() => {
-              try { Vibration.vibrate(12); } catch { /* best-effort */ }
-              onImprove('improve');
-            }}
-            accessibilityLabel="Improve — see actions based on your dial"
-            scaleTo={0.95}
-            hitSlop={12}
-            style={[styles.duoBtn, styles.duoImprove]}
-          >
-            <Text style={styles.duoImproveText}>Improve</Text>
-          </PressScale>
-          <PressScale
-            onPress={() => {
-              try { Vibration.vibrate(12); } catch { /* best-effort */ }
-              onImprove('keep');
-            }}
-            accessibilityLabel="Keep — see what is holding steady"
-            scaleTo={0.95}
-            hitSlop={12}
-            style={[styles.duoBtn, styles.duoKeep]}
-          >
-            <Text style={styles.duoKeepText}>Keep</Text>
-          </PressScale>
-        </View>
+        <ImproveKeepDuo onImprove={onImprove} />
 
         <Pressable
-          style={styles.graphLink}
+          style={({ pressed }) => [styles.graphLink, pressed && { opacity: 0.6 }]}
           onPress={onOpenFullGraph}
           accessibilityRole="button"
           accessibilityLabel="Explore your health in 3D"
         >
           <Text style={styles.graphLinkText}>Explore in 3D</Text>
-          <Text style={styles.graphLinkArrow}>→</Text>
+          <Text style={styles.graphLinkArrow}>›</Text>
         </Pressable>
-      </View>
+      </Card>
 
       <MapFullscreen visible={mapOpen} hMetrics={hMetrics} onClose={() => setMapOpen(false)} onImprove={(focus) => { setMapOpen(false); onImprove(focus); }} />
-    </Entrance>
+    </View>
   );
 }
 
@@ -628,19 +609,17 @@ function MapFullscreen({
   }));
 
   // Keep the square hGraph small enough to leave room for the hint.
-  const mapSizeW = Math.min(windowWidth - mv.spaceScreen * 2 - mv.spaceCard * 2, Math.floor(height * 0.36));
+  const mapSizeW = Math.min(windowWidth - SPACE.screenH * 2 - SPACE.cardPad * 2, Math.floor(height * 0.36));
 
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
       <Animated.View style={[styles.modalScrim, scrimStyle]}>
         <Animated.View style={[styles.modalCard, cardStyle]}>
-          <PanelBackdrop />
           <View style={styles.modalHeader}>
             <View style={styles.modalTitleBlock}>
-              <Text style={styles.eyebrowClinical}>Insights</Text>
               <Text style={styles.modalTitle}>Your health at a glance</Text>
             </View>
-            <IconButton kind="white" glyph="✕" accessibilityLabel="Close insights" onPress={onClose} />
+            <IconButton kind="solid" glyph="✕" accessibilityLabel="Close insights" onPress={onClose} />
           </View>
           <ScrollView
             style={styles.modalScroll}
@@ -648,32 +627,7 @@ function MapFullscreen({
             showsVerticalScrollIndicator={false}
           >
             <HGraphMap metrics={hMetrics} width={mapSizeW} />
-            <View style={styles.actionDuo}>
-              <PressScale
-                onPress={() => {
-                  try { Vibration.vibrate(12); } catch { /* best-effort */ }
-                  onImprove('improve');
-                }}
-                accessibilityLabel="Improve — see actions based on your dial"
-                scaleTo={0.95}
-                hitSlop={12}
-                style={[styles.duoBtn, styles.duoImprove]}
-              >
-                <Text style={styles.duoImproveText}>Improve</Text>
-              </PressScale>
-              <PressScale
-                onPress={() => {
-                  try { Vibration.vibrate(12); } catch { /* best-effort */ }
-                  onImprove('keep');
-                }}
-                accessibilityLabel="Keep — see what is holding steady"
-                scaleTo={0.95}
-                hitSlop={12}
-                style={[styles.duoBtn, styles.duoKeep]}
-              >
-                <Text style={styles.duoKeepText}>Keep</Text>
-              </PressScale>
-            </View>
+            <ImproveKeepDuo onImprove={onImprove} />
           </ScrollView>
         </Animated.View>
       </Animated.View>
@@ -686,39 +640,399 @@ function MapFullscreen({
 function CorrelationHeading({ count }: { count: number }) {
   const { range, setRange } = useTrendRange();
   return (
-    <Entrance index={2} style={[styles.section, styles.corrHeadingWrap]}>
-      <View style={styles.corrHeader}>
-        <View>
-          <Text style={styles.corrEyebrow}>Correlations</Text>
-          <Text style={styles.corrTitle}>How your health connects</Text>
-        </View>
-        <View style={styles.corrSeeAll}>
-          <Text style={styles.corrSeeAllText}>{count} graphs</Text>
-          <Text style={styles.corrSeeAllText}>→</Text>
-        </View>
-      </View>
+    <View style={[styles.section, styles.corrHeadingWrap]}>
+      <SectionHeader title="How your health connects" subtitle={`${count} graphs`} />
       <View style={styles.rangeRow}>
-        {TREND_RANGE_ORDER.map((key) => {
-          const active = range === key;
-          return (
-            <Pressable
-              key={key}
-              onPress={() => setRange(key)}
-              style={[styles.rangeChip, active && styles.rangeChipSelected]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`Show ${TREND_RANGES[key].label} range`}
-            >
-              <Text style={[styles.rangeChipText, active && styles.rangeChipTextSelected]}>
-                {TREND_RANGES[key].label}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {TREND_RANGE_ORDER.map((key) => (
+          <Chip
+            key={key}
+            label={TREND_RANGES[key].label}
+            selected={range === key}
+            onPress={() => setRange(key)}
+            accessibilityLabel={`Show ${TREND_RANGES[key].label} range`}
+            style={styles.rangeChipFlex}
+          />
+        ))}
       </View>
-    </Entrance>
+    </View>
   );
 }
+
+// ─── Correlations curation ───────────────────────────────────────────────────
+// Unusual/system streams never reach the feed: records processed, logging
+// rhythm, calories (a pure derivative of active minutes), and unlabeled
+// generic vitals ("Vital (mg)" with no concept name).
+const DROPPED_ITEM_IDS = new Set(['series-records', 'series-rhythm', 'series-calories']);
+
+function isUnusualItem(item: CorrelationFeedItem): boolean {
+  if (DROPPED_ITEM_IDS.has(item.id)) return true;
+  if (item.id.startsWith('series-vital:') && /^Vital(\s|\(|$)/i.test(item.title)) return true;
+  return false;
+}
+
+// Core daily signals in display order — the default 6–8 cards.
+const CORE_STREAM_ORDER = [
+  'sleepDur',
+  'wellbeing',
+  'energy',
+  'stress',
+  'water',
+  'activity',
+  'pain',
+  'hr',
+];
+const MAX_CORE_SERIES = 5;
+const MAX_TOP_SCATTERS = 3;
+
+const FEED_PREFS_KEY = 'hg:feed-custom:v1';
+
+interface FeedPrefs {
+  series: string[];
+  pairs: string[];
+}
+
+/**
+ * useCuratedFeed — curated correlations: unusual cards dropped, 6–8 core
+ * cards by default, user-added series + custom-built pairs persisted.
+ * Pure derivation over the live feed; no fetching of its own.
+ */
+function useCuratedFeed(
+  liveItems: CorrelationFeedItem[],
+  streams: StreamSeries[],
+  pairs: CorrelationPair[],
+): {
+  visibleFeed: CorrelationFeedItem[];
+  poolItems: CorrelationFeedItem[];
+  addedSeries: string[];
+  addedPairs: string[];
+  toggleSeries: (streamId: string) => void;
+  togglePair: (pairKey: string) => void;
+} {
+  const [addedSeries, setAddedSeries] = useState<string[]>([]);
+  const [addedPairs, setAddedPairs] = useState<string[]>([]);
+  const loadedRef = useRef(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(FEED_PREFS_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw) as FeedPrefs;
+          if (Array.isArray(parsed.series)) setAddedSeries(parsed.series.filter((s) => typeof s === 'string'));
+          if (Array.isArray(parsed.pairs)) setAddedPairs(parsed.pairs.filter((s) => typeof s === 'string'));
+        } catch {
+          // Corrupt prefs — fall back to defaults.
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        loadedRef.current = true;
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    AsyncStorage.setItem(FEED_PREFS_KEY, JSON.stringify({ series: addedSeries, pairs: addedPairs } satisfies FeedPrefs)).catch(
+      () => {},
+    );
+  }, [addedSeries, addedPairs]);
+
+  const toggleSeries = useCallback((streamId: string) => {
+    setAddedSeries((prev) => (prev.includes(streamId) ? prev.filter((s) => s !== streamId) : [...prev, streamId]));
+  }, []);
+
+  const togglePair = useCallback((pairKey: string) => {
+    setAddedPairs((prev) => (prev.includes(pairKey) ? prev.filter((s) => s !== pairKey) : [...prev, pairKey]));
+  }, []);
+
+  const curated = useMemo(() => {
+    const live = liveItems.filter((i) => !isUnusualItem(i));
+    const series = live.filter((i) => i.data.kind === 'timeSeries');
+    const scatters = live.filter((i) => i.data.kind === 'correlation');
+    const seriesById = new Map(series.map((s) => [s.id, s]));
+
+    // Default core: first present core streams (≤5) + top verdict scatters (≤3).
+    const core: CorrelationFeedItem[] = [];
+    for (const sid of CORE_STREAM_ORDER) {
+      if (core.length >= MAX_CORE_SERIES) break;
+      const it = seriesById.get(`series-${sid}`);
+      if (it) core.push(it);
+    }
+    const top = scatters.slice(0, MAX_TOP_SCATTERS);
+
+    // User additions, resolved against live data (stale ids drop out).
+    const added: CorrelationFeedItem[] = [];
+    for (const sid of addedSeries) {
+      const it = seriesById.get(`series-${sid}`);
+      if (it) added.push(it);
+    }
+    for (const key of addedPairs) {
+      const p = pairs.find((q) => correlationPairKey(q.aId, q.bId) === key) ?? null;
+      if (p) added.push(pairToFeedItem(p));
+    }
+
+    const seen = new Set<string>();
+    const visibleFeed: CorrelationFeedItem[] = [];
+    for (const it of [...core, ...top, ...added]) {
+      if (seen.has(it.id)) continue;
+      seen.add(it.id);
+      visibleFeed.push(it);
+    }
+    const poolItems = live.filter((i) => !seen.has(i.id));
+    return { visibleFeed, poolItems };
+  }, [liveItems, pairs, addedSeries, addedPairs]);
+
+  return {
+    visibleFeed: curated.visibleFeed,
+    poolItems: curated.poolItems,
+    addedSeries,
+    addedPairs,
+    toggleSeries,
+    togglePair,
+  };
+}
+
+// ─── Build-your-own correlation sheet ────────────────────────────────────────
+// Two metric pickers (A + B) backed by live streams. A pair only becomes
+// addable when it has ≥3 shared dates — otherwise an honest note explains
+// what to log next. Saved picks persist via the parent hook.
+function FeedCustomSheet({
+  visible,
+  onClose,
+  streams,
+  pairs,
+  poolItems,
+  addedSeries,
+  addedPairs,
+  onToggleSeries,
+  onTogglePair,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  streams: StreamSeries[];
+  pairs: CorrelationPair[];
+  poolItems: CorrelationFeedItem[];
+  addedSeries: string[];
+  addedPairs: string[];
+  onToggleSeries: (streamId: string) => void;
+  onTogglePair: (pairKey: string) => void;
+}) {
+  const pickable = useMemo(
+    () =>
+      streams.filter(
+        (s) =>
+          s.def.id !== 'records' &&
+          s.def.id !== 'calories' &&
+          !/^Vital(\s|\(|$)/i.test(s.def.label),
+      ),
+    [streams],
+  );
+  const [pickA, setPickA] = useState<string | null>(null);
+  const [pickB, setPickB] = useState<string | null>(null);
+
+  const activeA = pickA != null && pickable.some((s) => s.def.id === pickA) ? pickA : null;
+  const activeB = pickB != null && pickable.some((s) => s.def.id === pickB) ? pickB : null;
+  const preview = activeA != null && activeB != null && activeA !== activeB
+    ? getPair(pairs, activeA, activeB)
+    : null;
+  const previewKey = preview ? correlationPairKey(preview.aId, preview.bId) : null;
+  const previewAdded = previewKey != null && addedPairs.includes(previewKey);
+
+  const labelOf = (id: string) => pickable.find((s) => s.def.id === id)?.def.label ?? id;
+
+  // Scatter items resolve to canonical pair keys via the live pairs (robust
+  // against dashes inside stream ids — never parsed from strings).
+  const scatterKeyById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const q of pairs) m.set(pairToFeedItem(q).id, correlationPairKey(q.aId, q.bId));
+    return m;
+  }, [pairs]);
+  const scatterKey = (itemId: string) => scatterKeyById.get(itemId) ?? itemId;
+
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title="Build your correlation">
+      <View style={feedSheet.body}>
+        <Text style={feedSheet.sectionTitle}>Pick two metrics</Text>
+        <Text style={feedSheet.sectionSub}>A · first metric</Text>
+        <View style={feedSheet.chips}>
+          {pickable.map((s) => {
+            const on = activeA === s.def.id;
+            return (
+              <Pressable
+                key={`a-${s.def.id}`}
+                onPress={() => setPickA(on ? null : s.def.id)}
+                style={({ pressed }) => [
+                  feedSheet.chip,
+                  on && feedSheet.chipOn,
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={`Use ${s.def.label} as first metric`}
+              >
+                <Text style={[feedSheet.chipText, on && feedSheet.chipTextOn]}>{s.def.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={feedSheet.sectionSub}>B · second metric</Text>
+        <View style={feedSheet.chips}>
+          {pickable.map((s) => {
+            const on = activeB === s.def.id;
+            return (
+              <Pressable
+                key={`b-${s.def.id}`}
+                onPress={() => setPickB(on ? null : s.def.id)}
+                style={({ pressed }) => [
+                  feedSheet.chip,
+                  on && feedSheet.chipOn,
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={`Use ${s.def.label} as second metric`}
+              >
+                <Text style={[feedSheet.chipText, on && feedSheet.chipTextOn]}>{s.def.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {activeA != null && activeB != null ? (
+          preview ? (
+            <View style={feedSheet.preview}>
+              <Text style={feedSheet.previewTitle}>
+                {labelOf(preview.aId)} vs {labelOf(preview.bId)}
+              </Text>
+              <Text style={feedSheet.previewSub}>
+                {preview.paired} paired days
+                {preview.r != null ? ` · r = ${preview.r >= 0 ? '+' : ''}${preview.r.toFixed(2)}` : ''}
+              </Text>
+              <Pressable
+                onPress={() => previewKey != null && onTogglePair(previewKey)}
+                style={({ pressed }) => [
+                  feedSheet.previewBtn,
+                  previewAdded && feedSheet.previewBtnAdded,
+                  pressed && { opacity: 0.75 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={previewAdded ? 'Remove this correlation' : 'Add this correlation to your feed'}
+              >
+                <Text style={[feedSheet.previewBtnText, previewAdded && feedSheet.previewBtnTextAdded]}>
+                  {previewAdded ? 'Added ✓ — tap to remove' : 'Add to my feed'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text style={feedSheet.hint}>
+              {activeA === activeB
+                ? 'Pick two different metrics to compare them.'
+                : 'Not enough shared days yet — log both metrics together and this unlocks at 3 paired days.'}
+            </Text>
+          )
+        ) : pickable.length === 0 ? (
+          <Text style={feedSheet.hint}>Log a few days first — metrics you track show up here as pickable options.</Text>
+        ) : null}
+
+        {poolItems.length > 0 ? (
+          <>
+            <Text style={feedSheet.sectionTitle}>Or add one of these</Text>
+            {poolItems.map((item) => {
+              const isSeries = item.data.kind === 'timeSeries';
+              const seriesKey = item.id.replace(/^series-/, '');
+              const pairKey = !isSeries ? scatterKey(item.id) : '';
+              const added = isSeries ? addedSeries.includes(seriesKey) : addedPairs.includes(pairKey);
+              return (
+                <View key={item.id} style={feedSheet.row}>
+                  <View style={feedSheet.rowText}>
+                    <Text style={feedSheet.rowTitle} numberOfLines={1}>{item.title}</Text>
+                    {item.subtitle ? (
+                      <Text style={feedSheet.rowSub} numberOfLines={1}>{item.subtitle}</Text>
+                    ) : null}
+                  </View>
+                  <Pressable
+                    onPress={() => (isSeries ? onToggleSeries(seriesKey) : onTogglePair(pairKey))}
+                    style={({ pressed }) => [
+                      feedSheet.rowBtn,
+                      added && feedSheet.rowBtnAdded,
+                      pressed && { opacity: 0.75 },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={added ? `Remove ${item.title}` : `Add ${item.title} to your feed`}
+                  >
+                    <Text style={[feedSheet.rowBtnText, added && feedSheet.rowBtnTextAdded]}>
+                      {added ? 'Added ✓' : 'Add'}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </>
+        ) : null}
+      </View>
+    </BottomSheet>
+  );
+}
+
+const feedSheet = StyleSheet.create({
+  // Flat white block inside the sheet.
+  body: { gap: 12, paddingBottom: 16, backgroundColor: GV.card, borderRadius: SPACE.rCard, padding: SPACE.cardPad },
+  sectionTitle: { ...TYPE.title, color: GV.ink, marginTop: 8 },
+  sectionSub: { ...TYPE.caption, color: GV.muted, marginTop: 4 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: SPACE.rPill,
+    borderWidth: 1,
+    borderColor: GV.line,
+    backgroundColor: GV.card,
+  },
+  chipOn: { backgroundColor: GV.cta, borderColor: GV.cta },
+  chipText: { ...TYPE.chip, color: GV.body },
+  chipTextOn: { color: '#FFFFFF' },
+  preview: {
+    backgroundColor: GV.wash,
+    borderRadius: 16,
+    padding: 16,
+    gap: 4,
+  },
+  previewTitle: { ...TYPE.title, color: GV.ink },
+  previewSub: { ...TYPE.body, color: GV.body, fontVariant: ['tabular-nums'] },
+  previewBtn: {
+    marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.cta,
+    alignItems: 'center',
+  },
+  previewBtnAdded: { backgroundColor: GV.card, borderWidth: 1, borderColor: GV.line },
+  previewBtnText: { ...TYPE.button, color: '#FFFFFF' },
+  previewBtnTextAdded: { color: GV.ink },
+  hint: { ...TYPE.body, color: GV.body, backgroundColor: GV.wash, borderRadius: 12, padding: 12, overflow: 'hidden' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: GV.line,
+  },
+  rowText: { flex: 1, gap: 4 },
+  rowTitle: { ...TYPE.button, color: GV.ink },
+  rowSub: { ...TYPE.caption, color: GV.muted },
+  rowBtn: {
+    minWidth: 88,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.cta,
+    alignItems: 'center',
+  },
+  rowBtnAdded: { backgroundColor: GV.card, borderWidth: 1, borderColor: GV.line },
+  rowBtnText: { ...TYPE.chip, color: '#FFFFFF' },
+  rowBtnTextAdded: { color: GV.ink },
+});
 
 // ─── Screen ──────────────────────────────────────────────────────────────────────
 
@@ -735,9 +1049,23 @@ export default function HealthDashboardScreen() {
   const story = useHomeStory();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [feedSheetOpen, setFeedSheetOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const feedQuery = useCorrelationFeed(trends.data, metrics.data, Math.min(trendDays, 60));
-  const feed = feedQuery.items;
+
+  // ── Correlations curation: unusual system streams are dropped, the feed
+  // shows 6–8 core cards by default, and the user can build custom
+  // correlations + add more (persisted in AsyncStorage).
+  const {
+    visibleFeed,
+    poolItems,
+    addedSeries,
+    addedPairs,
+    toggleSeries,
+    togglePair,
+  } = useCuratedFeed(feedQuery.items, feedQuery.streams, feedQuery.pairs);
+  const feed = visibleFeed;
 
   // Focus refetch is time-gated: tab-hopping must not refetch 4 sources
   // every time (refetch storms = scroll jank + spinner blink). A pending
@@ -770,22 +1098,63 @@ export default function HealthDashboardScreen() {
   }, [metrics.refetch, medications.refetch, trends.refetch, story.refetch, feedQuery.refetchLocal]);
 
   // ── Derived data ──
-  const dims = useMemo(
-    () => buildHealthDimensions(metrics.data, story.water, story.medSummary),
-    [metrics.data, story.water, story.medSummary],
-  );
 
-  // hGraph spokes: MULTI-DAY averages with trend verdicts — never a single
-  // day. Each spoke averages its last ≤7 real points; red when the metric
-  // slid the wrong way for 3+ days or its average left the healthy band.
-  // Missing = no spoke (never a zero dot).
-  const hMetrics = useMemo<HMetric[]>(() => {
-    const out: HMetric[] = [];
-    const byId = new Map<string, number[]>();
+  // Day scrubber: the dial shows ONE day at a time. dayOffset 0 = latest
+  // day with data, up to 6 back. Spoke values are that day's log
+  // (carried forward when a day was skipped); verdicts use the window
+  // ENDING on that day, so the past reads exactly as it did. No static
+  // multi-day averages anywhere on this screen.
+  const [dayOffset, setDayOffset] = useState(0);
+  /** How many days back the scrubber reaches — user picks 7 / 14 / 30. */
+  const [dayRange, setDayRange] = useState(7);
+
+  const dialDay = useMemo(() => {
+    const byId = new Map<string, { date: string; value: number }[]>();
     for (const s of [...trendStreams(trends.data), ...localStreams(feedQuery.localDetails, vitalLabelMap(metrics.data))]) {
-      byId.set(s.def.id, s.points.map((p) => p.value));
+      // Day-keys only: an ISO datetime would poison string comparison.
+      byId.set(
+        s.def.id,
+        [...s.points]
+          .map((p) => ({ date: p.date.slice(0, 10), value: p.value }))
+          .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+      );
     }
-    const vals = (id: string) => byId.get(id) ?? [];
+    let latest = '';
+    let earliest = '';
+    for (const pts of byId.values()) {
+      for (const p of pts) {
+        if (!latest || p.date > latest) latest = p.date;
+        if (!earliest || p.date < earliest) earliest = p.date;
+      }
+    }
+    const span = latest && earliest
+      ? Math.max(0, Math.round((new Date(`${latest}T12:00:00`).getTime() - new Date(`${earliest}T12:00:00`).getTime()) / 86400000))
+      : 0;
+    const max = Math.min(Math.max(dayRange - 1, 0), span);
+    // Fractional scrub position: lo/hi are the bracketing whole days, f the
+    // blend between them. Spoke VALUES interpolate (the dial glides); the
+    // good/bad verdict rides the nearest whole day (verdicts don't blend).
+    const pos = Math.min(Math.max(dayOffset, 0), max);
+    const lo = Math.min(Math.floor(pos + 1e-6), max);
+    const hi = Math.min(lo + 1, max);
+    const f = Math.min(1, Math.max(0, pos - lo));
+    const dateLo = latest ? shiftDay(latest, -lo) : '';
+    const dateHi = latest ? shiftDay(latest, -hi) : '';
+    const dateNear = f < 0.5 ? dateLo : dateHi;
+    const out: HMetric[] = [];
+    const uptoNear = (id: string) => (byId.get(id) ?? []).filter((p) => p.date <= dateNear).map((p) => p.value);
+    const atDate = (id: string, dateStr: string) => {
+      const pts = (byId.get(id) ?? []).filter((p) => p.date <= dateStr);
+      return pts.length > 0 ? pts[pts.length - 1].value : null;
+    };
+    const dayVal = (id: string) => {
+      const a = atDate(id, dateLo);
+      if (f === 0 || dateHi === dateLo) return a;
+      const b = atDate(id, dateHi);
+      if (a == null) return b;
+      if (b == null) return a;
+      return a + (b - a) * f;
+    };
     const round1 = (v: number) => Math.round(v * 10) / 10;
 
     const push = (
@@ -799,12 +1168,13 @@ export default function HealthDashboardScreen() {
       eps: number,
       fmt: (avg: number) => string,
     ) => {
-      const a = assessMetric(vals(id), higherBetter, eps, bandLo, bandHi);
-      if (a.days === 0) return;
+      const day = dayVal(id);
+      if (day == null) return;
+      const a = assessMetric(uptoNear(id), higherBetter, eps, bandLo, bandHi);
       out.push({
         id, label,
-        valueText: fmt(a.avg),
-        value: Math.max(min, Math.min(max, a.avg)),
+        valueText: fmt(day),
+        value: Math.max(min, Math.min(max, day)),
         min, max, bandLo, bandHi,
         good: !a.bad, trend: a.trend, avgDays: a.days,
       });
@@ -821,17 +1191,18 @@ export default function HealthDashboardScreen() {
 
     // Heart: red when the average leaves the resting band or the trend walks
     // away from it (distance from 80bpm growing).
-    const hrVals = vals('hr');
-    if (hrVals.length > 0) {
-      const a = assessSeries(hrVals, 1);
-      const inBand = a.avg >= 60 && a.avg <= 100;
-      const walkingAway = a.enough && Math.abs(hrVals[hrVals.length - 1] - 80) > Math.abs(hrVals[0] - 80) + 2;
+    const hrPts = uptoNear('hr');
+    if (hrPts.length > 0) {
+      const day = dayVal('hr') ?? hrPts[hrPts.length - 1];
+      const a = assessSeries(hrPts, 1);
+      const inBand = day >= 60 && day <= 100;
+      const walkingAway = a.enough && Math.abs(hrPts[hrPts.length - 1] - 80) > Math.abs(hrPts[0] - 80) + 2;
       out.push({
-        id: 'heart', label: 'Heart', valueText: `${Math.round(a.avg)} bpm`,
-        value: Math.max(40, Math.min(120, a.avg)), min: 40, max: 120, bandLo: 60, bandHi: 100,
+        id: 'heart', label: 'Heart', valueText: `${Math.round(day)} bpm`,
+        value: Math.max(40, Math.min(120, day)), min: 40, max: 120, bandLo: 60, bandHi: 100,
         good: inBand && !walkingAway, trend: a.trend, avgDays: a.days,
       });
-    } else {
+    } else if (dateNear === latest) {
       const hr = detectHeartRate(metrics.data ?? null);
       if (hr) {
         out.push({
@@ -845,9 +1216,14 @@ export default function HealthDashboardScreen() {
     // Doses: 7-day adherence — taken (TAKEN) per local day vs the expected
     // schedule; today blends local counts with the server-aware summary.
     const med = story.medSummary;
-    if (med?.hasSchedule && med.dosesExpected > 0) {
-      const dayKeys: string[] = [];
-      for (let i = 6; i >= 0; i--) dayKeys.push(localDateString(new Date(Date.now() - i * 86400000)));
+    if (med?.hasSchedule && med.dosesExpected > 0 && dateNear) {
+      // Adherence windows end on the scrubbed days; the shown pct blends
+      // between the bracketing days so scrubbing never steps.
+      const pctsFor = (endDate: string) => {
+        const dayKeys: string[] = [];
+        for (let i = 6; i >= 0; i--) dayKeys.push(shiftDay(endDate, -i));
+        return dayKeys.map((d) => Math.min(100, ((takenByDay.get(d) ?? 0) / med.dosesExpected) * 100));
+      };
       const todayK = localDateString();
       const takenByDay = new Map<string, number>();
       for (const e of feedQuery.takenEvents) {
@@ -855,29 +1231,32 @@ export default function HealthDashboardScreen() {
         const k = localDateString(new Date(e.taken_at));
         takenByDay.set(k, (takenByDay.get(k) ?? 0) + 1);
       }
-      takenByDay.set(todayK, Math.max(takenByDay.get(todayK) ?? 0, med.dosesTaken));
-      const pcts = dayKeys.map((d) => Math.min(100, ((takenByDay.get(d) ?? 0) / med.dosesExpected) * 100));
-      const a = assessMetric(pcts, true, 2, 80, 100);
+      if (dateNear === todayK) takenByDay.set(todayK, Math.max(takenByDay.get(todayK) ?? 0, med.dosesTaken));
+      const pctsLo = pctsFor(dateLo);
+      const pctsHi = dateHi === dateLo ? pctsLo : pctsFor(dateHi);
+      const pctsNear = f < 0.5 ? pctsLo : pctsHi;
+      const a = assessMetric(pctsNear, true, 2, 80, 100);
+      const dayPct = pctsLo[pctsLo.length - 1] + (pctsHi[pctsHi.length - 1] - pctsLo[pctsLo.length - 1]) * f;
       out.push({
-        id: 'doses', label: 'Doses', valueText: `${Math.round(a.avg)}%`,
-        value: Math.max(0, Math.min(100, a.avg)), min: 0, max: 100, bandLo: 80, bandHi: 100,
+        id: 'doses', label: 'Doses', valueText: `${Math.round(dayPct)}%`,
+        value: Math.max(0, Math.min(100, dayPct)), min: 0, max: 100, bandLo: 80, bandHi: 100,
         good: !a.bad, trend: a.trend, avgDays: a.days,
       });
     }
-    return out.slice(0, 10);
-  }, [trends.data, metrics.data, feedQuery.localDetails, feedQuery.takenEvents, story.medSummary]);
+    const todayK = localDateString();
+    const label = !dateNear
+      ? 'Log your first day'
+      : dateNear === todayK
+        ? 'Today'
+        : shiftDay(todayK, -1) === dateNear
+          ? 'Yesterday'
+          : new Date(`${dateNear}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return { metrics: out.slice(0, 10), off: pos, max, label, range: dayRange };
+  }, [trends.data, metrics.data, feedQuery.localDetails, feedQuery.takenEvents, story.medSummary, dayOffset, dayRange]);
 
-  const mapHint = useMemo(() => {
-    if (dims.length === 0) return 'No health data yet — log your first day to fill this in.';
-    return [...dims]
-      .sort((a, b) => b.magnitude - a.magnitude)
-      .slice(0, 3)
-      .map((d) => `${d.icon} ${d.detail}`)
-      .join('   ·   ');
-  }, [dims]);
+  const hMetrics = dialDay.metrics;
 
-  // Primitive projections keep the memoized header stable across focus refetches
-  // (so the staggered entrance only plays on first mount, not on every refetch).
+  // Primitive projections keep the memoized header stable across focus refetches.
   // loggedToday trusts local SQLite AND server state: a log that exists on the
   // server but hasn't hydrated locally (fresh install, cleared storage, another
   // device) must still flip the card to View / Edit.
@@ -904,7 +1283,7 @@ export default function HealthDashboardScreen() {
   const medActive = activeMeds.length > 0;
 
   // Up-next dose toggle: green tick = taken today (status only — taken
-  // events are permanent), red cross = tap to record it now.
+  // events are permanent), outlined cross = tap to record it now.
   const upNextMed = medActive ? activeMeds[0] : null;
   const upNextTaken = upNextMed
     ? story.takenToday.some((e) => e.medication_id === upNextMed.medication_id)
@@ -933,6 +1312,7 @@ export default function HealthDashboardScreen() {
   const goToDailyLog = useCallback(() => navigation.navigate('DailyLog'), [navigation]);
   const goToMedications = useCallback(() => navigation.navigate('Medications'), [navigation]);
   const goToTimeline = useCallback(() => navigation.navigate('Timeline'), [navigation]);
+  const goToBody = useCallback(() => navigation.navigate('Body'), [navigation]);
   const goToSettings = useCallback(() => navigation.navigate('Settings'), [navigation]);
   const { photoUri } = useProfilePhoto();
   const goToFullGraph = useCallback(
@@ -940,23 +1320,28 @@ export default function HealthDashboardScreen() {
     [navigation],
   );
 
-  // ── Parallax deco — the background drifts slower than the cards ──
-  const scrollY = useSharedValue(0);
+  // Scroll reporting drives the side-tab auto-hide (JS side, on flips only).
   const onScroll = useAnimatedScrollHandler((e) => {
-    scrollY.value = e.contentOffset.y;
-    // Side-tab auto-hide runs on the JS side (notified only on flips).
     runOnJS(reportTabScroll)(e.contentOffset.y);
   });
-  const decoStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -scrollY.value * 0.32 }],
-  }));
 
-  const { userProfile } = useAuth();
-  const firstName = formatFirstName(userProfile?.displayName) || 'there';
-  const greeting = greetingForHour(new Date().getHours());
+  // ── Centered Guava screen title on the stage — static, no parallax.
+  const todayLine = useMemo(
+    () =>
+      new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+    [],
+  );
 
   const listHeader = useMemo(() => (
     <View>
+      <View style={styles.titleBlock}>
+        <Text style={styles.titleEyebrow}>{todayLine}</Text>
+        <Text style={styles.titleDisplay}>Health</Text>
+      </View>
       <ActionRowBlock
         loggedToday={loggedToday}
         moodLogged={metrics.data?.today_wellbeing != null}
@@ -972,42 +1357,79 @@ export default function HealthDashboardScreen() {
         onMedications={goToMedications}
         onToggleUpNextTaken={() => void toggleUpNextTaken()}
       />
-      <InsightPanelBlock hMetrics={hMetrics} mapHint={mapHint} onOpenFullGraph={goToFullGraph} onImprove={(focus) => navigation.navigate('Improve', { focus, metrics: hMetrics })} />
+      <InsightPanelBlock hMetrics={hMetrics} day={{ off: dialDay.off, max: dialDay.max, label: dialDay.label, range: dialDay.range, onChange: setDayOffset, onRange: setDayRange }} onOpenFullGraph={goToFullGraph} onImprove={(focus) => navigation.navigate('Improve', { focus, metrics: hMetrics })} />
       <CorrelationHeading count={feed.length} />
     </View>
   ), [
     loggedToday, metrics.data?.today_wellbeing, waterMl, medNames, activeMeds.length, medTaken, medExpected, medActive,
     upNextMed, upNextTaken, toggleUpNextTaken,
-    hMetrics, mapHint, feed.length, goToDailyLog, goToMedications, goToFullGraph,
+    hMetrics, dialDay, feed.length, goToDailyLog, goToMedications, goToFullGraph,
+    todayLine, navigation,
   ]);
 
-  const renderItem = useCallback(({ item, index }: { item: CorrelationFeedItem; index: number }) => (
-    <Entrance index={3 + index} style={styles.section}>
+  const renderItem = useCallback(({ item }: { item: CorrelationFeedItem }) => (
+    <View style={styles.section}>
       <CorrelationGraphCard
         title={item.title}
         subtitle={item.subtitle}
         data={item.data}
+        lineColor={
+          item.data.kind === 'timeSeries'
+            ? domainHueForStream(item.id.replace(/^series-/, ''))
+            : undefined
+        }
       />
-    </Entrance>
+    </View>
   ), []);
 
   // Four states for the feed (data-fetching rules): skeleton on first load,
   // designed empty once resolved, stale content kept across refetches.
   const feedLoading = feed.length === 0 && (feedQuery.isLocalLoading || trends.data == null);
+  const feedFooter = feedLoading ? null : (
+    <View style={styles.section}>
+      <Card
+        onPress={() => setFeedSheetOpen(true)}
+        style={styles.addCard}
+        accessibilityLabel="Build your own correlation or add more graphs"
+      >
+        <Text style={styles.addGlyph}>+</Text>
+        <View style={styles.addText}>
+          <Text style={styles.addTitle}>Build your own correlation</Text>
+          <Text style={styles.addSub}>
+            {poolItems.length > 0
+              ? `Pick two metrics — or add from ${poolItems.length} more`
+              : 'Pick any two metrics you track'}
+          </Text>
+        </View>
+        <Text style={styles.addArrow}>›</Text>
+      </Card>
+      <FeedCustomSheet
+        visible={feedSheetOpen}
+        onClose={() => setFeedSheetOpen(false)}
+        streams={feedQuery.streams}
+        pairs={feedQuery.pairs}
+        poolItems={poolItems}
+        addedSeries={addedSeries}
+        addedPairs={addedPairs}
+        onToggleSeries={toggleSeries}
+        onTogglePair={togglePair}
+      />
+    </View>
+  );
   const listEmpty = (
     <View style={styles.section}>
       {feedLoading ? (
-        <View style={styles.feedSkeleton} accessible accessibilityLabel="Loading health graphs">
+        <Card style={styles.feedSkeleton} accessibilityLabel="Loading health graphs">
           <View style={styles.feedSkeletonBar} />
           <View style={styles.feedSkeletonPlot} />
-        </View>
+        </Card>
       ) : (
-        <View style={styles.feedEmpty} accessible accessibilityLabel="No health graphs yet">
+        <Card style={styles.feedEmpty} accessibilityLabel="No health graphs yet">
           <Text style={styles.feedEmptyTitle}>Not enough history yet</Text>
           <Text style={styles.feedEmptyText}>
             Log a few more days — daily curves unlock with 1 day, comparisons with 3 paired days.
           </Text>
-        </View>
+        </Card>
       )}
     </View>
   );
@@ -1015,16 +1437,12 @@ export default function HealthDashboardScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <HeaderBlock
-        greeting={greeting}
-        name={firstName}
-        initial={firstName.charAt(0).toUpperCase()}
         photoUri={photoUri}
         hasActivity={story.story.length > 0}
-        onAvatarPress={goToSettings}
+        onAvatarPress={() => setProfileOpen(true)}
         onBellPress={goToTimeline}
+        onBodyPress={goToBody}
       />
-
-      <Animated.View pointerEvents="none" style={[styles.deco, decoStyle]} />
 
       <Animated.FlatList
         data={feed}
@@ -1032,6 +1450,7 @@ export default function HealthDashboardScreen() {
         renderItem={renderItem}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={listEmpty}
+        ListFooterComponent={feedFooter}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
@@ -1044,68 +1463,81 @@ export default function HealthDashboardScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={mv.textOnLightSecondary}
-            colors={[mv.textOnLightPrimary]}
-            progressBackgroundColor={mv.surfaceWhite}
+            tintColor={GV.fog}
+            colors={[GV.cta]}
+            progressBackgroundColor={GV.card}
           />
         }
+      />
+      {/* Avatar opens the profile drawer: features, records, premium, legal. */}
+      <ProfileSheet
+        visible={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        photoUri={photoUri}
+        onOpen={(route, params) => (navigation.navigate as (r: string, p?: object) => void)(route, params)}
       />
     </SafeAreaView>
   );
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────────
+// Guava-flat: stage background only; every content block a white card
+// (radius 20, padding 20, no border, no shadow); Poppins via TYPE; 8pt grid.
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: mv.surfaceOffwhite,
+    backgroundColor: GV.stage,
   },
 
-  // Header
+  // Header — transparent on the stage, white circular buttons, dark glyphs.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: mv.spaceScreen,
+    paddingHorizontal: SPACE.screenH,
     paddingTop: 8,
-    paddingBottom: 6,
+    paddingBottom: 8,
     zIndex: 5,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 128 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 },
   avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: mv.surfaceDarkCard,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: GV.wash,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: mv.surfaceWhite,
+    borderColor: GV.stageline,
     overflow: 'hidden',
   },
   avatarPhoto: {
     width: '100%',
     height: '100%',
   },
-  avatarText: { ...mvType.navTitle, color: mv.textOnDarkPrimary, fontSize: 15 },
-  headerGreeting: { marginLeft: mv.spaceSideBySide, flexShrink: 1, maxWidth: '52%' },
-  greetingSmall: { ...mvType.caption, color: mv.textOnLightSecondary, fontSize: 12, lineHeight: 16 },
-  greetingName: { ...mvType.navTitle, color: mv.textOnLightPrimary, marginTop: 1, fontSize: 15, lineHeight: 20 },
+  // No photo, no emoji, no invented initial — a quiet empty disc.
+  avatarEmpty: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+    backgroundColor: GV.wash,
+  },
   headerWordmark: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerBell: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: GV.card,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   bellDot: {
     position: 'absolute',
@@ -1114,163 +1546,104 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: mv.accentCoral,
+    backgroundColor: GV.cta,
   },
 
-  deco: {
-    position: 'absolute',
-    top: -150,
-    left: -60,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: 'rgba(11,104,82,0.07)',
-    zIndex: 0,
+  // Centered screen title on the stage.
+  titleBlock: {
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  titleEyebrow: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  titleDisplay: {
+    ...TYPE.display,
+    color: GV.card,
+    textAlign: 'center',
   },
 
   listContent: {
-    paddingHorizontal: mv.spaceScreen,
-    paddingBottom: 110,
-    paddingTop: mv.spaceStack - 4,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 112,
+    paddingTop: 24,
     zIndex: 1,
   },
-  section: { marginBottom: mv.spaceStack, zIndex: 1 },
+  section: { marginBottom: SPACE.sectionGap, zIndex: 1 },
+  // Hero sits directly under the title — tighter follow than the gaps
+  // between data sections below.
+  sectionHero: { marginBottom: 16, gap: SPACE.cardGap },
 
   // ── Shared correlation range (Week / Month / Year, global state) ──
   rangeRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 10,
+    marginTop: 12,
   },
-  rangeChip: {
+  rangeChipFlex: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E6DBC6',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
   },
-  rangeChipSelected: { backgroundColor: '#1D1B17', borderColor: '#1D1B17' },
-  rangeChipText: { fontSize: 12, fontWeight: '700', color: '#5C6B7A' },
-  rangeChipTextSelected: { color: '#FFFFFF' },
 
-  // ── Improve / Keep duo (replaces the signal tiles) ──
+  // ── Improve / Keep duo (CTA green + white secondary) ──
   actionDuo: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    marginTop: 10,
+    gap: 8,
+    marginTop: 12,
   },
   duoBtn: {
     flex: 1,
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
   },
-  duoImprove: {
-    backgroundColor: '#2B8A3E',
-    borderColor: '#2B8A3E',
-    shadowColor: '#2B8A3E',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  duoImproveText: {
-    ...TYPOGRAPHY.bodyStrong,
-    fontSize: 16,
-    color: '#FFFFFF',
-  },
-  duoKeep: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E6DBC6',
-  },
-  duoKeepText: {
-    ...TYPOGRAPHY.bodyStrong,
-    fontSize: 16,
-    color: '#16212C',
-  },
-  // ── Today stack: check-in hero ──
+
+  // ── Today stack: check-in hero (flat white card) ──
   todayCard: {
-    backgroundColor: '#FFFBF3',
-    borderRadius: mv.radiusCard,
-    borderCurve: 'continuous',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E6DBC6',
-    boxShadow: '0 1px 2px rgba(124,90,46,0.08), 0 10px 28px rgba(124,90,46,0.10)',
+    padding: SPACE.cardPad,
   },
-  // Same breathing room as the medication card below (medRowContent),
-  // with a tighter top so TODAY sits closer to the card edge.
-  todayCardContent: { padding: 14, paddingTop: 5, gap: 0.5 },
-  // Lit-up state when the day is fully logged: light green wash, green
-  // border, soft green glow.
-  todayCardLit: {
-    backgroundColor: '#EDF6EE',
-    borderColor: 'rgba(78,155,95,0.55)',
-    boxShadow: '0 1px 2px rgba(78,155,95,0.18), 0 10px 30px rgba(78,155,95,0.22)',
-  },
-  todayRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  todayText: { flex: 1, gap: 2 },
+  todayRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  todayText: { flex: 1, gap: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   dupBadge: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
   },
-  dupCross: { fontWeight: '800', lineHeight: undefined },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dupCross: { fontFamily: FONT.semi, color: GV.muted, lineHeight: undefined },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { ...mvType.pill, letterSpacing: 1.4, fontSize: 11, fontWeight: '800' },
-  statusCount: { ...mvType.pill, color: '#A8A094', fontSize: 11, marginLeft: 2, fontVariant: ['tabular-nums'] },
-  // Hug-the-text: grow 0 + shrink 1 (NOT flex:1) so the tick/cross badge
-  // sits immediately after the words instead of docking at the row's far
-  // edge. Long titles still wrap instead of overflowing.
-  todayTitle: { color: '#1D1B17', fontSize: 20, fontWeight: '800', letterSpacing: -0.4, lineHeight: 24, flexGrow: 0, flexShrink: 1 },
-  // Caught-up title in a different face: Georgia serif italic, larger,
-  // deep green — instantly distinct from every grotesk headline.
-  todayTitleCaughtUp: {
-    fontFamily: 'Georgia, serif',
-    fontStyle: 'italic',
-    fontWeight: '700',
-    fontSize: 22,
-    lineHeight: 26,
-    letterSpacing: 0,
-    color: '#2F7A3E',
-  },
-  todayCaption: { ...mvType.caption, color: '#797166' },
+  statusText: { ...TYPE.caption, color: GV.body },
+  statusCount: { ...TYPE.caption, color: GV.muted, marginLeft: 2, fontVariant: ['tabular-nums'] },
+  // Hug-the-text: grow 0 + shrink 1 (NOT flex:1) so the status badge sits
+  // immediately after the words instead of docking at the row's far edge.
+  // Long titles still wrap instead of overflowing.
+  todayTitle: { ...TYPE.display, color: GV.ink, flexGrow: 0, flexShrink: 1 },
   ringCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  ringText: { fontSize: 16, fontWeight: '800', color: '#1D1B17', fontVariant: ['tabular-nums'] },
-  todayCta: { alignSelf: 'flex-start', borderRadius: mv.radiusPill, paddingHorizontal: 16, paddingVertical: 9 },
-  todayCtaPrimary: { backgroundColor: '#1D1B17' },
-  todayCtaQuiet: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#D3C3A6' },
-  todayCtaPrimaryText: { ...mvType.pill, color: '#FFFFFF', fontWeight: '800' },
-  todayCtaQuietText: { ...mvType.pill, color: '#1D1B17', fontWeight: '800' },
-
-  // ── Today stack: medication up-next row ──
-  medRowCard: {
-    marginTop: 10,
-    backgroundColor: '#FFFBF3',
-    borderRadius: mv.radiusCard,
-    borderCurve: 'continuous',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E6DBC6',
-    boxShadow: '0 1px 2px rgba(124,90,46,0.08), 0 10px 28px rgba(124,90,46,0.10)',
+  ringText: { ...TYPE.display, color: GV.ink, fontVariant: ['tabular-nums'] },
+  todayCta: {
+    alignSelf: 'flex-start',
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.cta,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 8,
   },
-  medRowContent: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  medIconTile: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#FBE3C8', alignItems: 'center', justifyContent: 'center' },
-  medIcon: { fontSize: 22 },
-  medRowText: { flex: 1, gap: 2 },
-  medRowEyebrow: { ...mvType.pill, color: '#C96A1E', letterSpacing: 1.4, fontSize: 10, fontWeight: '800' },
-  medRowName: { color: '#1D1B17', fontSize: 16, fontWeight: '800', letterSpacing: -0.2, lineHeight: 21 },
-  medRowSub: { ...mvType.caption, color: '#797166', fontVariant: ['tabular-nums'] },
-  dosePill: { backgroundColor: '#D9EAF7', borderRadius: mv.radiusPill, paddingHorizontal: 10, paddingVertical: 5 },
-  dosePillText: { fontSize: 12, fontWeight: '800', color: '#2D5F86', fontVariant: ['tabular-nums'] },
-  // Up-next taken toggle: green filled tick (taken, status only) vs red
-  // outline cross (tap to record the dose now).
+  todayCtaText: { ...TYPE.button, color: '#FFFFFF' },
+
+  // ── Medication row: a flat white card. ──
+  medCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: SPACE.cardPad,
+  },
+  medIconTile: { width: 40, height: 40, borderRadius: 12, backgroundColor: GV.wash, alignItems: 'center', justifyContent: 'center' },
+  medRowText: { flex: 1, gap: 4 },
+  medRowEyebrow: { ...TYPE.caption, color: GV.muted },
+  medRowName: { ...TYPE.title, color: GV.ink },
+  medRowSub: { ...TYPE.body, color: GV.body, fontVariant: ['tabular-nums'] },
+  // Up-next taken toggle: CTA-green filled tick (taken, status only) vs
+  // CTA-green outline cross (tap to record the dose now).
   medTakenToggle: {
     width: 36,
     height: 36,
@@ -1279,209 +1652,148 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  medTakenToggleOn: { backgroundColor: '#2B8A3E', borderColor: '#2B8A3E' },
-  medTakenToggleOff: { backgroundColor: 'transparent', borderColor: '#C2503E' },
-  medTakenToggleGlyph: { fontSize: 17, fontWeight: '800', lineHeight: 22 },
+  medTakenToggleOn: { backgroundColor: GV.cta, borderColor: GV.cta },
+  medTakenToggleOff: { backgroundColor: 'transparent', borderColor: GV.cta },
+  medTakenToggleGlyph: { fontSize: 17, fontFamily: FONT.semi, lineHeight: 22 },
   medTakenToggleGlyphOn: { color: '#FFFFFF' },
-  medTakenToggleGlyphOff: { color: '#C2503E' },
-  medChevron: { fontSize: 22, fontWeight: '600', color: '#A8A094', paddingRight: 2 },
+  medTakenToggleGlyphOff: { color: GV.cta },
+  medChevron: { fontSize: 22, fontFamily: FONT.semi, color: GV.muted, paddingRight: 2 },
 
-  // Retired two-up card styles (replaced by the Today stack above).
   doseTrack: {
-    height: 7,
+    height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(232,134,46,0.18)',
-    marginTop: 10,
+    backgroundColor: GV.line,
+    marginTop: 12,
     overflow: 'hidden',
   },
   doseFill: {
-    height: 7,
+    height: 8,
     borderRadius: 4,
-    backgroundColor: '#E8862E',
+    backgroundColor: GV.cta,
   },
 
-  // Insights panel — one quiet cream card: map, actions, 3D link.
+  // Insights panel — flat white card: map, verdicts, actions, 3D link.
   panel: {
-    backgroundColor: '#FFFBF3',
-    borderRadius: mv.radiusCard,
-    borderCurve: 'continuous',
-    padding: mv.spaceCard,
+    padding: SPACE.cardPad,
     gap: 12,
-    borderWidth: 1,
-    borderColor: '#E6DBC6',
-    boxShadow: '0 1px 2px rgba(124,90,46,0.08), 0 12px 32px rgba(124,90,46,0.10)',
   },
-  auraRed: {
-    position: 'absolute',
-    top: -90,
-    right: -70,
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: 'rgba(232,134,46,0.10)',
-  },
-  auraSlate: {
-    position: 'absolute',
-    top: 120,
-    left: -90,
-    width: 230,
-    height: 230,
-    borderRadius: 115,
-    backgroundColor: 'rgba(43,108,176,0.08)',
-  },
-  auraRose: {
-    position: 'absolute',
-    bottom: -80,
-    right: 40,
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    backgroundColor: 'rgba(232,134,46,0.06)',
-  },
-  panelTexture: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  panelTopLight: {
-    position: 'absolute',
-    top: 0,
-    left: 18,
-    right: 18,
-    height: 1.5,
-    borderRadius: 1,
-    backgroundColor: 'rgba(232,134,46,0.22)',
-  },
-  // Insights section header (mirrors the Correlations heading language)
+  // Insights section header — single quiet eyebrow on the stage (the dial
+  // below opens fullscreen on tap, so no expand affordance needed here).
   insightHead: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    paddingHorizontal: 2,
-  },
-  insightEyebrow: {
-    ...mvType.pill,
-    color: mv.textOnLightSecondary,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  insightTitle: { ...mvType.navTitle, color: mv.textOnLightPrimary, marginTop: 4 },
-  insightExpand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingLeft: 12,
-  },
-  insightExpandText: { ...mvType.pill, color: mv.textOnLightSecondary },
-  insightExpandGlyph: { fontSize: 13, fontWeight: '800', color: '#C96A1E' },
-  panelMap: { alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', gap: 8 },
-  panelHint: {
-    ...mvType.caption,
-    color: mv.textOnLightSecondary,
-    textAlign: 'center',
+    marginBottom: 12,
     paddingHorizontal: 4,
   },
-  // Quiet footer link to the full 3D graph (replaces the embedded canvas).
+  insightEyebrow: {
+    ...TYPE.caption,
+    color: GV.fog,
+  },
+  // One quiet status line straight from the dial values — nothing invented.
+  verdictLine: {
+    ...TYPE.body,
+    color: GV.fog,
+    fontVariant: ['tabular-nums'],
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  panelMap: { alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', gap: 8 },
+  // Day scrubber: label + range chips + week slider, full card width.
+  dayScrub: {
+    alignSelf: 'stretch',
+    gap: 4,
+    paddingHorizontal: 4,
+    marginTop: 4,
+  },
+  dayTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  rangeChips: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  dayLabel: {
+    ...TYPE.chip,
+    color: GV.cta,
+    textAlign: 'center',
+  },
+  // Quiet footer link to the full 3D graph.
   graphLink: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 12,
-    marginTop: 2,
+    marginTop: 4,
+    minHeight: 44,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(29,27,23,0.08)',
+    borderTopColor: GV.line,
   },
-  graphLinkText: { ...mvType.pill, color: '#1D1B17' },
-  graphLinkArrow: { fontSize: 14, fontWeight: '800', color: '#C96A1E' },
+  graphLinkText: { ...TYPE.button, color: GV.ink },
+  graphLinkArrow: { fontSize: 16, fontFamily: FONT.semi, color: GV.muted },
 
-  eyebrowClinical: {
-    ...mvType.pill,
-    color: '#1D1B17',
-    letterSpacing: 1.6,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
+  // Correlations heading — shared SectionHeader + CTA Chip row.
+  corrHeadingWrap: { marginTop: 16 },
 
-  // Correlations heading
-  corrHeadingWrap: { marginTop: mv.spaceCard },
-  corrHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  corrEyebrow: {
-    ...mvType.pill,
-    color: mv.textOnLightSecondary,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  corrTitle: { ...mvType.navTitle, color: mv.textOnLightPrimary, marginTop: 4 },
-  corrSeeAll: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 2 },
-  corrSeeAllText: { ...mvType.pill, color: mv.textOnLightSecondary },
-
-  // Feed states (sunset paper to match the cards)
+  // Feed states (flat white cards)
   feedSkeleton: {
-    backgroundColor: '#FFFBF3',
-    borderRadius: mv.radiusCard,
-    borderCurve: 'continuous',
-    padding: mv.spaceCard,
+    padding: SPACE.cardPad,
     gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(154,52,18,0.14)',
   },
   feedSkeletonBar: {
     width: '55%',
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#F5E3CE',
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: GV.wash,
   },
   feedSkeletonPlot: {
     height: 168,
-    borderRadius: 18,
-    backgroundColor: '#F9EBD9',
+    borderRadius: 16,
+    backgroundColor: GV.wash,
   },
   feedEmpty: {
-    backgroundColor: '#FFFBF3',
-    borderRadius: mv.radiusCard,
-    borderCurve: 'continuous',
-    padding: mv.spaceCard,
-    gap: 6,
+    padding: SPACE.cardPad,
+    gap: 8,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(154,52,18,0.14)',
   },
-  feedEmptyTitle: { fontSize: 16, fontWeight: '800', color: '#C1121F' },
-  feedEmptyText: { ...mvType.caption, color: '#8A6D5B', textAlign: 'center' },
+  feedEmptyTitle: { ...TYPE.title, color: GV.ink, textAlign: 'center' },
+  feedEmptyText: { ...TYPE.body, color: GV.body, textAlign: 'center' },
 
-  // Radar fullscreen modal
+  // Build-your-own entry card at the end of the feed.
+  addCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: SPACE.cardPad,
+    minHeight: 56,
+  },
+  addGlyph: { fontSize: 20, fontFamily: FONT.semi, color: GV.cta, width: 28, textAlign: 'center' },
+  addText: { flex: 1, gap: 4 },
+  addTitle: { ...TYPE.title, color: GV.ink },
+  addSub: { ...TYPE.body, color: GV.body },
+  addArrow: { fontSize: 16, fontFamily: FONT.semi, color: GV.muted },
+
+  // Insights fullscreen modal (flat white sheet card on a stage scrim)
   modalScrim: {
     flex: 1,
-    backgroundColor: 'rgba(8,10,10,0.55)',
+    backgroundColor: 'rgba(10, 15, 14, 0.6)',
     justifyContent: 'center',
-    padding: mv.spaceScreen,
+    padding: 16,
   },
   modalCard: {
-    backgroundColor: '#0A211B',
-    borderRadius: mv.radiusCard,
-    borderCurve: 'continuous',
-    padding: mv.spaceCard,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: mv.spaceSideBySide,
+    gap: 16,
   },
   modalTitleBlock: { flex: 1, gap: 4 },
-  modalTitle: { ...mvType.hero, fontSize: 22, lineHeight: 28, color: mv.textOnDarkPrimary },
-  modalChartWrap: { alignItems: 'center', marginTop: mv.spaceStack },
+  modalTitle: { ...TYPE.title, color: GV.ink },
+  modalChartWrap: { alignItems: 'center', marginTop: 16 },
   modalScroll: { maxHeight: 520 },
 });

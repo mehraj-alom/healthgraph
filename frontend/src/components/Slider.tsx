@@ -14,6 +14,9 @@ interface SliderProps {
   /** Controlled value (number, clamped to [min, max] snapped to step). */
   value: number;
   onValueChange: (next: number) => void;
+  /** Fires continuously while dragging (same snapped value); use for live
+      scrub previews. The parent still commits via onValueChange on release. */
+  onLiveChange?: (next: number) => void;
   min?: number;
   max?: number;
   step?: number;
@@ -44,6 +47,7 @@ const THUMB_SIZE = 24;
 export const Slider = ({
   value,
   onValueChange,
+  onLiveChange,
   min = 0,
   max = 100,
   step = 1,
@@ -62,8 +66,8 @@ export const Slider = ({
   const [live, setLive] = useState<number | null>(null);
   const touchingRef = useRef(false);
   const pendingRef = useRef<number | null>(null);
-  const stateRef = useRef({ min, max, step, disabled, onValueChange, trackWidth, value });
-  stateRef.current = { min, max, step, disabled, onValueChange, trackWidth, value };
+  const stateRef = useRef({ min, max, step, disabled, onValueChange, onLiveChange, trackWidth, value });
+  stateRef.current = { min, max, step, disabled, onValueChange, onLiveChange, trackWidth, value };
 
   const computeFromX = (x: number) => {
     const { min: lo, max: hi, step: st, trackWidth: w } = stateRef.current;
@@ -79,6 +83,7 @@ export const Slider = ({
     const next = computeFromX(x);
     pendingRef.current = next;
     setLive(next);
+    stateRef.current.onLiveChange?.(next);
   };
 
   const release = () => {
@@ -93,7 +98,13 @@ export const Slider = ({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => !stateRef.current.disabled,
-        onMoveShouldSetPanResponder: () => !stateRef.current.disabled,
+        // Capture moves ONLY when the gesture is clearly horizontal — inside
+        // a vertical ScrollView, claiming vertical drags makes the thumb
+        // fight the scroll and stutter. Taps (grant) still always work.
+        onMoveShouldSetPanResponder: (_, g) =>
+          !stateRef.current.disabled &&
+          Math.abs(g.dx) > 4 &&
+          Math.abs(g.dx) > Math.abs(g.dy),
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (evt) => {
           touchingRef.current = true;

@@ -19,7 +19,7 @@ import { useRoute, useNavigation, type RouteProp } from '@react-navigation/nativ
 import { Button, Card } from '@/components';
 import { useDocuments, type DocumentsContextValue } from '@/context/DocumentsContext';
 import { getDocument, statusLabel, documentTypeLabel } from '@/services/documents';
-import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, SHADOWS } from '@/constants';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import type {
   DocumentListItem,
   DocumentExtraction,
@@ -112,7 +112,7 @@ export default function DocumentDetailScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={GV.cta} />
           <Text style={styles.centerText}>Loading document...</Text>
         </View>
       </SafeAreaView>
@@ -165,14 +165,7 @@ export default function DocumentDetailScreen() {
               style={[
                 styles.statusBadge,
                 {
-                  backgroundColor:
-                    document.status === 'COMPLETED'
-                      ? COLORS.accentBg
-                      : document.status === 'FAILED'
-                        ? COLORS.errorBg
-                        : COLORS.surfaceElevated,
-                  borderWidth: 1,
-                  borderColor: document.status === 'FAILED' ? 'rgba(232,93,104,0.25)' : COLORS.borderFaint,
+                  backgroundColor: GV.wash,
                 },
               ]}
             >
@@ -182,10 +175,10 @@ export default function DocumentDetailScreen() {
                   {
                     color:
                       document.status === 'COMPLETED'
-                        ? COLORS.accent
+                        ? GV.cta
                         : document.status === 'FAILED'
-                          ? COLORS.error
-                          : COLORS.textSecondary,
+                          ? GV.danger
+                          : GV.body,
                   },
                 ]}
               >
@@ -206,7 +199,7 @@ export default function DocumentDetailScreen() {
         {isProcessing && (
           <Card padding="md">
             <View style={styles.processingRow}>
-              <ActivityIndicator size="small" color={COLORS.primary} />
+              <ActivityIndicator size="small" color={GV.cta} />
               <Text style={styles.processingText}>
                 Still processing — check back shortly.
               </Text>
@@ -383,20 +376,21 @@ const infoStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.xs,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: GV.line,
   },
   label: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   value: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.ink,
     flex: 1,
     textAlign: 'right',
-    marginLeft: SPACING.md,
+    marginLeft: 16,
   },
 });
 
@@ -431,164 +425,163 @@ function MarkdownPreview({ markdown }: { markdown: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: GV.stage,
   },
   content: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xxl,
-    gap: SPACING.md,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 48,
+    gap: SPACE.cardGap,
   },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: SPACING.xl,
-    gap: SPACING.md,
+    padding: SPACE.cardPad,
+    gap: SPACE.cardGap,
   },
   centerText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    ...TYPE.body,
+    color: GV.fog,
     textAlign: 'center',
   },
   header: {
-    paddingVertical: SPACING.md,
+    paddingVertical: 16,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: SPACING.md,
+    gap: 16,
   },
   headerInfo: {
     flex: 1,
   },
   title: {
-    ...TYPOGRAPHY.h1,
-    color: COLORS.textPrimary,
+    ...TYPE.display,
+    color: '#FFFFFF',
   },
   subtitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+    ...TYPE.body,
+    color: GV.fog,
+    marginTop: 8,
   },
   date: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    marginTop: SPACING.xs,
+    ...TYPE.caption,
+    color: GV.fog,
+    marginTop: 8,
   },
   statusBadge: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: SPACE.rPill,
   },
   statusText: {
-    ...TYPOGRAPHY.label,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
     fontSize: 11,
   },
   section: {
-    gap: SPACING.sm,
+    gap: 8,
   },
   sectionTitle: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
+    ...TYPE.title,
+    color: '#FFFFFF',
   },
   processingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: 8,
   },
   processingText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    ...TYPE.body,
+    color: GV.body,
   },
-  alertCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.warning,
-  },
+  alertCard: {},
   alertSeverity: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.warning,
-    marginBottom: SPACING.xs,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.ink,
+    marginBottom: 8,
   },
   alertMessage: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
+    ...TYPE.body,
+    color: GV.ink,
   },
   alertPage: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    marginTop: SPACING.xs,
+    ...TYPE.caption,
+    color: GV.muted,
+    marginTop: 8,
   },
   bodyText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    lineHeight: 22,
+    ...TYPE.body,
+    color: GV.ink,
   },
   resultRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.sm,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    gap: SPACING.sm,
+    borderBottomColor: GV.line,
+    gap: 8,
   },
   resultInfo: {
     flex: 1,
   },
   resultName: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.ink,
   },
   resultRange: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
     marginTop: 2,
   },
   resultValue: {
     alignItems: 'flex-end',
   },
   resultValueText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.ink,
   },
   resultAbnormal: {
-    color: COLORS.warning,
+    color: GV.danger,
   },
   resultFlag: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.warning,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.body,
     fontSize: 10,
     marginTop: 2,
   },
   resultFlagCritical: {
-    color: COLORS.error,
+    color: GV.danger,
   },
   findingBlock: {
-    marginTop: SPACING.sm,
-    paddingTop: SPACING.sm,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: GV.line,
   },
   findingLabel: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.textMuted,
-    marginBottom: SPACING.xs,
+    ...TYPE.caption,
+    color: GV.muted,
+    marginBottom: 8,
   },
   findingText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    lineHeight: 22,
+    ...TYPE.body,
+    color: GV.ink,
   },
   markdownText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
+    ...TYPE.caption,
+    color: GV.body,
   },
   expandToggle: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.primary,
-    marginTop: SPACING.sm,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.cta,
+    marginTop: 8,
   },
 });

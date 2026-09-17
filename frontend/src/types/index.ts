@@ -365,6 +365,8 @@ export type RootStackParamList = {
   DocumentDetail: { documentId: string };
   HealthGraph: { focusStructureId?: string; source?: 'body' | 'graph' } | undefined;
   Medications: undefined;
+  /** Tappable symptom body map (front/back, male/female, local state). */
+  SymptomMap: undefined;
   Improve: { focus: 'improve' | 'keep'; metrics: ImproveMetric[] };
   /** Existing validated fingertip PPG flow (relocated from the Pulse tab). */
   PpgMeasureFlow: undefined;

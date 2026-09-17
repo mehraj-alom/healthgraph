@@ -1,19 +1,18 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path, Polyline } from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
   withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { COLORS } from '@/constants';
 import { useReducedMotion } from '@/theme';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { PressScale } from './PressScale';
 import {
   isTabBarHidden,
@@ -21,31 +20,62 @@ import {
   subscribeTabBarVisibility,
 } from './tabBarVisibility';
 
-const RED = '#D7263D';
-const RED_DARK = '#A8162B';
-// Slim floating dock: the strip is fully transparent (content flows behind
-// it like water); the red button rides half outside above it.
+// Guava-flat dock — one floating white bar on the dark stage, dark-ink
+// vector glyphs for the side tabs, one CTA-green pulse button. Flat fills
+// only; the pulse button's resting heartbeat is the only loop.
 const BAR_H = 62;
-const ARCH_TOP = 30;
-const ARCH_H = 20;
-const ARCH_HALF_W = 84;
-const BTN = 68;
-const BTN_TOP = -24;
+const BTN = 72;
+const BTN_TOP = -26;
+const CENTER_W = 128;
 
 const TABS = [
-  { name: 'Dashboard', label: 'Home', glyph: '🏠' },
-  { name: 'PpgMeasure', label: '', glyph: '' },
-  { name: 'Chat', label: 'Chat', glyph: '💬' },
+  { name: 'Dashboard', label: 'Home' },
+  { name: 'PpgMeasure', label: '' },
+  { name: 'Chat', label: 'Chat' },
 ] as const;
 
+function HomeGlyph({ color }: { color: string }) {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 11.5 12 4l8 7.5M6 10.5V20h4.5v-5.5h3V20H18v-9.5"
+        stroke={color}
+        strokeWidth={1.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function ChatGlyph({ color }: { color: string }) {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 6.5h16v9.5H9.5L4 20v-13.5Z"
+        stroke={color}
+        strokeWidth={1.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={9} cy={11.2} r={1.15} fill={color} stroke="none" />
+      <Circle cx={13.5} cy={11.2} r={1.15} fill={color} stroke="none" />
+    </Svg>
+  );
+}
+
+// Keep FONT referenced for the Guava contract import shape.
+void FONT;
+
 /**
- * UmbrellaTabBar — straight line, umbrella arch, straight line.
+ * UmbrellaTabBar — Guava-style floating dock.
  *
- * A custom bottom dock: the top edge runs straight, arches up over the
- * middle like an umbrella canopy, and runs straight again. The red PPG
- * button sits cradled under the arch with a bold ECG trace, a resting
- * heartbeat pop, and twin expanding halos — always alive, always
- * eye-catching. Static (no loops) under reduced motion.
+ * A white pill bar (GV.card, radius 28) with dark-ink Home / Chat tabs and
+ * a red pulse button riding half above center — white ECG trace,
+ * resting double-thump heartbeat, press-scale feedback. No orbit ring, no
+ * halos: the button stays one clean flat circle. The whole pulse assembly
+ * mounts ONLY on Home; every other tab gets a quiet two-tab dock. Static
+ * (no loops) under reduced motion.
  *
  * Standard tab contract: emits tabPress, navigates only when not focused.
  */
@@ -54,58 +84,36 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
   const { width: W } = useWindowDimensions();
   const reduced = useReducedMotion();
 
-  const H = BAR_H + insets.bottom;
   const cx = W / 2;
-  const peakY = ARCH_TOP - ARCH_H;
 
-  // The one and only line: just the umbrella canopy over the middle
-  // button. No full-width straights, no filled block — the bar stays
-  // transparent so content flows underneath.
-  const topCurve =
-    `M ${cx - ARCH_HALF_W} ${ARCH_TOP} ` +
-    `C ${cx - ARCH_HALF_W + 36} ${ARCH_TOP}, ${cx - 46} ${peakY}, ${cx} ${peakY} ` +
-    `C ${cx + 46} ${peakY}, ${cx + ARCH_HALF_W - 36} ${ARCH_TOP}, ${cx + ARCH_HALF_W} ${ARCH_TOP}`;
+  const focusedName = state.routes[state.index]?.name;
+  const isHome = focusedName === 'Dashboard';
 
-  // Resting heartbeat pop + twin halo rings (UI thread, perpetual).
+  // Resting double-thump heartbeat, UI-thread, perpetual; static at 1
+  // under reduced motion.
   const pop = useSharedValue(1);
-  const haloA = useSharedValue(0);
-  const haloB = useSharedValue(0);
   useEffect(() => {
     if (reduced) return;
     pop.value = withRepeat(
       withSequence(
-        withTiming(1.06, { duration: 150, easing: Easing.out(Easing.quad) }),
-        withTiming(1, { duration: 170 }),
-        withTiming(1.1, { duration: 130, easing: Easing.out(Easing.quad) }),
+        withTiming(1.07, { duration: 140, easing: Easing.out(Easing.quad) }),
+        withTiming(1, { duration: 160 }),
+        withTiming(1.12, { duration: 120, easing: Easing.out(Easing.quad) }),
         withTiming(1, { duration: 240 }),
         withTiming(1, { duration: 1100 }),
       ),
       -1,
     );
-    const ring = withRepeat(
-      withTiming(1, { duration: 2000, easing: Easing.out(Easing.quad) }),
-      -1,
-    );
-    haloA.value = ring;
-    haloB.value = withDelay(1000, ring);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced]);
 
   const popStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pop.value }],
   }));
-  const haloAStyle = useAnimatedStyle(() => ({
-    opacity: 0.55 * (1 - haloA.value),
-    transform: [{ scale: 1 + haloA.value * 0.85 }],
-  }));
-  const haloBStyle = useAnimatedStyle(() => ({
-    opacity: 0.55 * (1 - haloB.value),
-    transform: [{ scale: 1 + haloB.value * 0.85 }],
-  }));
 
   // Scroll-aware side tabs: hide on scroll down, return on scroll up.
-  // The center pulse button is intentionally outside this animation and
-  // never hides. Tab switches reset to visible.
+  // The pulse assembly is Home-only, so it never needs scroll logic.
+  // Tab switches reset to visible.
   const [sidesHidden, setSidesHidden] = useState(isTabBarHidden());
   useEffect(() => subscribeTabBarVisibility(setSidesHidden), []);
   useEffect(() => {
@@ -115,6 +123,11 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
     opacity: withTiming(sidesHidden ? 0 : 1, { duration: reduced ? 0 : 220 }),
     transform: [{ translateY: withTiming(sidesHidden ? 28 : 0, { duration: reduced ? 0 : 220 }) }],
   }));
+
+  // Chat is a full-screen surface — no dock, the system back button (or the
+  // Home pill's absence) handles exit. Hooks above always run; this only
+  // skips rendering.
+  if (focusedName === 'Chat') return null;
 
   const onTabPress = (routeName: string, routeKey: string, isFocused: boolean) => {
     const event = navigation.emit({
@@ -127,11 +140,12 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
     }
   };
 
-  const sideTab = (name: (typeof TABS)[number]['name'], label: string, glyph: string) => {
+  const sideTab = (name: (typeof TABS)[number]['name'], label: string) => {
     const route = state.routes.find((r) => r.name === name);
     if (!route) return <View style={styles.side} />;
     const isFocused = state.routes[state.index]?.key === route.key;
-    const color = isFocused ? COLORS.primary : COLORS.textMuted;
+    const color = isFocused ? GV.cta : GV.ink;
+    const Glyph = name === 'Dashboard' ? HomeGlyph : ChatGlyph;
     return (
       <PressScale
         onPress={() => onTabPress(route.name, route.key, isFocused)}
@@ -140,10 +154,9 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
         scaleTo={0.9}
         style={styles.side}
       >
-        <View style={styles.sidePill}>
-          <Text style={[styles.glyph, { opacity: isFocused ? 1 : 0.7 }]}>{glyph}</Text>
+        <View style={[styles.sidePill, isFocused && styles.sidePillFocused]}>
+          <Glyph color={color} />
           <Text style={[styles.sideLabel, { color }]}>{label}</Text>
-          <View style={[styles.dot, { backgroundColor: isFocused ? color : 'transparent' }]} />
         </View>
       </PressScale>
     );
@@ -151,30 +164,22 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
 
   const ppgRoute = state.routes.find((r) => r.name === 'PpgMeasure');
   const ppgFocused = ppgRoute != null && state.routes[state.index]?.key === ppgRoute.key;
+  // Pulse lives on Home and Home alone — off Home the dock is two tabs.
+  const showPulse = isHome && ppgRoute != null;
 
   return (
-    <View style={[styles.bar, { height: H, paddingBottom: insets.bottom }]}>
-      <Svg width={W} height={H} style={StyleSheet.absoluteFill}>
-        <Path d={topCurve} fill="none" stroke={COLORS.border} strokeWidth={1.5} />
-      </Svg>
-
+    <View style={[styles.bar, { height: BAR_H, bottom: insets.bottom + 8 }]}>
       <Animated.View
         style={[styles.row, sidesStyle]}
         pointerEvents={sidesHidden ? 'none' : 'auto'}
       >
-        {sideTab('Dashboard', 'Home', '🏠')}
+        {sideTab('Dashboard', 'Home')}
         <View style={styles.centerSpacer} />
-        {sideTab('Chat', 'Chat', '💬')}
+        {sideTab('Chat', 'Chat')}
       </Animated.View>
 
-      {ppgRoute ? (
-        <View style={[styles.centerWrap, { left: cx - BTN / 2, top: BTN_TOP }]} pointerEvents="box-none">
-          {!reduced ? (
-            <>
-              <Animated.View style={[styles.halo, haloAStyle]} pointerEvents="none" />
-              <Animated.View style={[styles.halo, haloBStyle]} pointerEvents="none" />
-            </>
-          ) : null}
+      {showPulse && ppgRoute ? (
+        <View style={[styles.centerWrap, { left: cx - SPACE.screenH - BTN / 2, top: BTN_TOP }]} pointerEvents="box-none">
           <PressScale
             onPress={() => onTabPress(ppgRoute.name, ppgRoute.key, ppgFocused)}
             accessibilityLabel="Measure pulse"
@@ -186,9 +191,9 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
             ]}
           >
             <Animated.View style={[styles.ppgInner, popStyle]}>
-              <Svg width={44} height={34} viewBox="0 0 40 32">
-                <Polyline
-                  points="2,18 10,18 14,18 17,7 21,27 24,13 26,18 38,18"
+              <Svg width={46} height={36} viewBox="0 0 40 32">
+                <Path
+                  d="M2 18 H10 L14 18 L17 7 L21 27 L24 13 L26 18 H38"
                   fill="none"
                   stroke="#FFFFFF"
                   strokeWidth={3.5}
@@ -196,6 +201,7 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
                   strokeLinejoin="round"
                 />
               </Svg>
+              <View style={styles.coreDot} />
             </Animated.View>
           </PressScale>
         </View>
@@ -205,12 +211,13 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 const styles = StyleSheet.create({
+  // Floating white dock on the stage — flat fill, no border, no shadow.
   bar: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
+    left: SPACE.screenH,
+    right: SPACE.screenH,
+    backgroundColor: GV.card,
+    borderRadius: 28,
   },
   row: {
     flex: 1,
@@ -221,35 +228,26 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 8,
   },
-  // Translucent pill so Home/Chat stay legible over scrolling content while
-  // keeping the floating transparent-dock feel (never a solid block).
+  // Quiet tab pill — transparent at rest, soft wash when focused.
+  // Focus carries CTA green: glyph + label shift together.
   sidePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    borderRadius: 9999,
-    backgroundColor: 'rgba(255,251,243,0.82)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(29,27,23,0.10)',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: SPACE.rPill,
+    backgroundColor: 'transparent',
   },
-  glyph: {
-    fontSize: 22,
+  sidePillFocused: {
+    backgroundColor: GV.wash,
   },
   sideLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    ...TYPE.chip,
   },
   centerSpacer: {
-    width: ARCH_HALF_W * 2 - 40,
+    width: CENTER_W,
   },
   centerWrap: {
     position: 'absolute',
@@ -258,34 +256,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  halo: {
-    position: 'absolute',
-    width: BTN,
-    height: BTN,
-    borderRadius: BTN / 2,
-    borderWidth: 2.5,
-    borderColor: '#E8862E',
-  },
+  // One clean red circle, white ECG trace. No ring, no halos.
   ppgBtn: {
     width: BTN,
     height: BTN,
     borderRadius: BTN / 2,
-    backgroundColor: RED,
-    borderWidth: 3,
-    borderColor: RED_DARK,
+    backgroundColor: GV.pulse,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: RED,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 8,
   },
   ppgBtnFocused: {
-    borderColor: '#FFFFFF',
+    backgroundColor: GV.pulsePressed,
   },
   ppgInner: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Lit core under the trace — the one white point on the dock.
+  coreDot: {
+    position: 'absolute',
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    bottom: 1,
+    backgroundColor: '#FFFFFF',
   },
 });

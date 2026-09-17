@@ -12,12 +12,9 @@ import { useState } from 'react';
 
 import { useAuth } from '@/context/AuthContext';
 import { Button, Input, Card } from '@/components';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 
 import {
-  COLORS,
-  SPACING,
-  BORDER_RADIUS,
-  TYPOGRAPHY,
   MEDICAL_DISCLAIMER,
 } from '@/constants';
 
@@ -330,8 +327,7 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor:
-      COLORS.background,
+    backgroundColor: GV.stage,
   },
 
   keyboardAvoiding: {
@@ -341,10 +337,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal:
-      SPACING.xl,
-    paddingVertical:
-      SPACING.xxl,
+    paddingHorizontal: SPACE.screenH,
+    paddingVertical: SPACE.sectionGap,
   },
 
   // --------------------------------------------------------------------------
@@ -353,31 +347,23 @@ const styles = StyleSheet.create({
 
   header: {
     alignItems: 'center',
-    marginBottom:
-      SPACING.xl,
+    marginBottom: SPACE.sectionGap,
   },
 
   logoContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom:
-      SPACING.sm,
+    marginBottom: 8,
   },
 
   logo: {
-    ...TYPOGRAPHY.display,
-    color: COLORS.primary,
-    fontWeight: '700',
-    letterSpacing: -1,
-    textShadowColor: 'rgba(244, 197, 27, 0.22)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 12,
+    ...TYPE.display,
+    color: '#FFFFFF',
   },
 
   tagline: {
-    ...TYPOGRAPHY.body,
-    color:
-      COLORS.textSecondary,
+    ...TYPE.body,
+    color: GV.fog,
     textAlign: 'center',
   },
 
@@ -387,28 +373,18 @@ const styles = StyleSheet.create({
 
   formCard: {
     width: '100%',
-    backgroundColor: COLORS.surfaceElevated,
-    borderColor: COLORS.borderFaint,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 6,
   },
 
   formTitle: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.textPrimary,
-    marginBottom:
-      SPACING.xs,
+    ...TYPE.title,
+    color: GV.ink,
+    marginBottom: 8,
   },
 
   formSubtitle: {
-    ...TYPOGRAPHY.body,
-    color:
-      COLORS.textSecondary,
-    marginBottom:
-      SPACING.lg,
+    ...TYPE.body,
+    color: GV.body,
+    marginBottom: 16,
   },
 
   // --------------------------------------------------------------------------
@@ -416,34 +392,22 @@ const styles = StyleSheet.create({
   // --------------------------------------------------------------------------
 
   errorBanner: {
-    backgroundColor:
-      'rgba(239, 68, 68, 0.1)',
-    borderWidth: 1,
-    borderColor:
-      'rgba(239, 68, 68, 0.3)',
-    borderRadius:
-      BORDER_RADIUS.md,
-    padding: SPACING.md,
-    marginBottom:
-      SPACING.md,
+    backgroundColor: GV.wash,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
   },
 
   formErrorBanner: {
-    backgroundColor:
-      'rgba(239, 68, 68, 0.1)',
-    borderWidth: 1,
-    borderColor:
-      'rgba(239, 68, 68, 0.3)',
-    borderRadius:
-      BORDER_RADIUS.md,
-    padding: SPACING.md,
-    marginBottom:
-      SPACING.md,
+    backgroundColor: GV.wash,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
   },
 
   errorText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.error,
+    ...TYPE.caption,
+    color: GV.danger,
   },
 
   // --------------------------------------------------------------------------
@@ -451,8 +415,7 @@ const styles = StyleSheet.create({
   // --------------------------------------------------------------------------
 
   submitButton: {
-    marginTop:
-      SPACING.sm,
+    marginTop: 8,
   },
 
   // --------------------------------------------------------------------------
@@ -461,20 +424,18 @@ const styles = StyleSheet.create({
 
   toggleContainer: {
     alignItems: 'center',
-    marginTop:
-      SPACING.lg,
+    marginTop: 16,
   },
 
   toggleText: {
-    ...TYPOGRAPHY.body,
-    color:
-      COLORS.textSecondary,
+    ...TYPE.body,
+    color: GV.fog,
     textAlign: 'center',
   },
 
   toggleLink: {
-    color: COLORS.primary,
-    fontWeight: '600',
+    color: GV.teal,
+    fontFamily: FONT.semi,
   },
 
   // --------------------------------------------------------------------------
@@ -482,23 +443,18 @@ const styles = StyleSheet.create({
   // --------------------------------------------------------------------------
 
   disclaimerCard: {
-    marginTop:
-      SPACING.xl,
-    backgroundColor:
-      COLORS.surfaceSunken,
-    borderColor: COLORS.borderFaint,
+    marginTop: SPACE.sectionGap,
   },
 
   disclaimerTitle: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.warning,
-    marginBottom:
-      SPACING.xs,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.ink,
+    marginBottom: 8,
   },
 
   disclaimerText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
-    lineHeight: 18,
+    ...TYPE.caption,
+    color: GV.body,
   },
 });

@@ -1,19 +1,21 @@
 /**
  * HealthGraphScreen — 3D health graph using Three.js + expo-gl.
  *
- * Uses the same proven rendering approach as the original BodyScreen:
+ * Night instrument voice (Oura formula): cool near-black canvas, flat crisp
+ * nodes in domain hues, floating labels so every major node reads without a
+ * tap, verdicts in teal/soft-coral only. Same proven rendering approach:
  * - expo-gl GLView for native GL context
  * - Canvas shim for Three.js compatibility
  * - THREE.WebGLRenderer with the shimmed canvas
  * - PerspectiveCamera with group-based orbit
  *
- * Visual hierarchy (simplified):
- * - Patient: large central gold sphere
- * - Observations: medium blue spheres
- * - Body structures: medium teal spheres
- * - Documents: small purple spheres
- * - Timeline events: tiny orange dots (subtle)
- * - Edges: thin semi-transparent lines
+ * Visual hierarchy:
+ * - Patient: large white hub + teal glow
+ * - Observations / events: domain hue by metric family (sleep indigo,
+ *   energy amber, move teal, fuel sky, heart rose, mind violet)
+ * - Body structures: neutral slate anchors
+ * - Documents: soft violet records
+ * - Edges: domain-tinted arcs; semantic links thicker + brighter
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
@@ -36,7 +38,7 @@ import { GLView } from 'expo-gl';
 import * as THREE from 'three';
 import { useReducedMotion } from '@/theme';
 
-import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { Chip } from '@/components';
 import { useHealthGraph, useGraphNodeDetail, type GraphNode, type GraphEdge } from '@/hooks/useHealthGraph';
 import { useTrends } from '@/hooks/useTrends';
@@ -51,7 +53,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CANVAS_HEIGHT = SCREEN_HEIGHT * 0.55;
 
 // On-screen build fingerprint (dev only) — proves which bundle a screenshot runs.
-const GRAPH_BUILD_TAG = 'fit-v2';
+const GRAPH_BUILD_TAG = 'labels-v1';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'HealthGraph'>;
@@ -60,37 +62,29 @@ type Route = RouteProp<RootStackParamList, 'HealthGraph'>;
 // Visual constants
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ═══ Event-type color system (warm clinical) ═══
-const EVENT_TYPE_COLORS: Record<string, number> = {
-  sleep: 0x8a7bc8,
-  vitals: 0xc2503e,
-  nutrition: 0x4e9b5f,
-  activity: 0x4a90c2,
-  pain: 0xe84393,
-  medication: 0x9b59b6,
-  wellbeing: 0xf1c40f,
-  symptom: 0xe67e22,
-  mood: 0xfd79a8,
-};
+// ═══ Domain color system (night instrument — color is information) ═══
+// Sleep indigo · energy amber · move teal · fuel sky · heart rose ·
+// mind violet. Off-track verdicts speak soft coral, on-track teal.
+// (Per-node hues resolve in nodeDomainColor below — the single source.)
 
 const NODE_COLORS: Record<string, string> = {
-  patient: '#E8862E',
-  body_structure: '#4A90C2',
-  observation: '#4A90C2',
+  patient: '#FFFFFF',
+  body_structure: '#7C8DA6',
+  observation: '#4FD1C5',
   document: '#8A7BC8',
-  timeline_event: '#C96A1E',
-  medication: '#8A7BC8',
-  medication_taken_event: '#B9A8E8',
+  timeline_event: '#F5A623',
+  medication: '#4FD1C5',
+  medication_taken_event: '#3AA79D',
 };
 
 const NODE_SIZES: Record<string, number> = {
-  patient: 0.22,
-  body_structure: 0.13,
-  observation: 0.12,
-  document: 0.07,
-  timeline_event: 0.06,
-  medication: 0.11,
-  medication_taken_event: 0.07,
+  patient: 0.30,
+  body_structure: 0.17,
+  observation: 0.15,
+  document: 0.09,
+  timeline_event: 0.08,
+  medication: 0.15,
+  medication_taken_event: 0.08,
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -109,17 +103,28 @@ const MAX_BADGES = 64;
 // Dim factor for non-focused nodes/edges in focus mode.
 const DIM = 0.14;
 
-function getEventColor(node: GraphNode): number {
-  // Handle medication nodes directly
-  if (node.type === 'medication') return 0x7C3AED;
-  if (node.type === 'medication_taken_event') return 0xA78BFA;
-  
-  if (node.type !== 'timeline_event') return 0xf4b740;
-  const et = (node.properties?.event_type || '').toLowerCase();
-  for (const [key, color] of Object.entries(EVENT_TYPE_COLORS)) {
-    if (et.includes(key)) return color;
-  }
-  return 0xf4b740;
+/**
+ * Domain hue for ANY node — single source for the 3D instances, the filter
+ * dots, and the floating labels. Observations resolve by metric family so a
+ * sleep dot is indigo everywhere it appears.
+ */
+export function nodeDomainColor(node: GraphNode): string {
+  if (node.type === 'patient') return '#FFFFFF';
+  if (node.type === 'body_structure') return '#7C8DA6';
+  if (node.type === 'document') return '#8A7BC8';
+  if (node.type === 'medication') return '#4FD1C5';
+  if (node.type === 'medication_taken_event') return '#3AA79D';
+  const hay = `${node.label ?? ''} ${node.properties?.observation_type ?? ''} ${node.properties?.category ?? ''} ${node.properties?.event_type ?? ''}`.toLowerCase();
+  if (/(heart|pulse|bpm|blood|pressure|oxygen|spo2|glucose|temperatur|respir|hrv)/.test(hay)) return '#F27E93';
+  if (/(sleep|wake|bedtime|insomnia)/.test(hay)) return '#7C6FF0';
+  if (/(energy)/.test(hay)) return '#F5A623';
+  if (/(activ|move|exercise|walk|step|workout|strain)/.test(hay)) return '#4FD1C5';
+  if (/(water|drink|hydrat|meal|nutri|appetite|food|calori)/.test(hay)) return '#6EC1E4';
+  if (/(wellbeing|well-being|mood)/.test(hay)) return '#4FD1C5';
+  if (/(stress|anxiety|pain|symptom|ache)/.test(hay)) return '#B8A6E8';
+  if (node.type === 'timeline_event') return '#F5A623';
+  if (node.type === 'observation') return '#9A9AA5';
+  return '#9AA8B8';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -139,6 +144,21 @@ function stableHash(str: string): number {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 interface LayoutPos { x: number; y: number; z: number; }
+
+/** Screen-space projection of one labeled node (floating label overlay). */
+export interface NodeLabelProjection {
+  id: string;
+  x: number;
+  y: number;
+  behind: boolean;
+}
+
+/** A node worth naming on the canvas (computed by the parent from data). */
+export interface NodeLabelDef {
+  id: string;
+  text: string;
+  color: string;
+}
 
 function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, LayoutPos> {
   const positions = new Map<string, LayoutPos>();
@@ -355,46 +375,32 @@ class GraphSceneManager {
 
   // Shared node geometry + single material (per-node color via instanceColor).
   private sphereGeo: THREE.SphereGeometry | null = null;
-  private nodeMaterial: THREE.MeshStandardMaterial | null = null;
+  private nodeMaterial: THREE.MeshBasicMaterial | null = null;
 
-  // Edge visibility per backdrop — light paper needs stronger lines.
-  private edgeBaseOp = 0.85;
-  private derivedOp = 0.4;
+  // Edge visibility — dark canvas wants punch, not haze.
+  private edgeBaseOp = 1.0;
+  private derivedOp = 0.5;
 
-  constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT - 120, theme: 'dark' | 'light' = 'dark') {
+  constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT - 120, theme: 'dark' | 'panel' = 'dark') {
     this.viewport = { width, height };
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(theme === 'light' ? 0xFAFAF8 : 0x1B222C);
-    if (theme === 'light') {
-      this.edgeBaseOp = 0.62;
-      this.derivedOp = 0.34;
-    }
+    // Night instrument canvas (panel matches the dashboard insight card).
+    const bgHex = theme === 'panel' ? 0x16161c : 0x0b0b0f;
+    this.scene.background = new THREE.Color(bgHex);
 
     this.camera = new THREE.PerspectiveCamera(55, width / Math.max(height, 1), 0.1, 100);
     this.camera.position.set(0, 1.0, 6.5);
     this.camera.lookAt(0, 0, 0);
 
-    // Lighting
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const key = new THREE.DirectionalLight(0xffffff, 0.8);
-    key.position.set(5, 8, 5);
-    this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0x88aaff, 0.3);
-    fill.position.set(-4, 2, 3);
-    this.scene.add(fill);
+    // Flat precise instruments need no lights (unlit basic material below).
 
-    // Depth cue + atmosphere: soft fog, a polar grid floor to ground the
+    // Depth cue + atmosphere: soft fog, a faint polar grid to ground the
     // constellation, and slow dust motes so the void feels designed.
-    const bgHex = theme === 'light' ? 0xFAFAF8 : 0x1B222C;
-    this.scene.fog = new THREE.Fog(bgHex, 9, 18);
-    const grid = new THREE.PolarGridHelper(
-      4.2, 12, 6, 48,
-      theme === 'light' ? 0xcbbf9f : 0x4a5468,
-      theme === 'light' ? 0xd8cba6 : 0x3a4356,
-    );
+    this.scene.fog = new THREE.Fog(bgHex, 10, 20);
+    const grid = new THREE.PolarGridHelper(4.2, 12, 6, 48, 0x2a2a33, 0x2a2a33);
     const gridMat = grid.material as THREE.LineBasicMaterial;
     gridMat.transparent = true;
-    gridMat.opacity = 0.22;
+    gridMat.opacity = 0.5;
     gridMat.toneMapped = false;
     grid.position.y = -2.4;
     this.scene.add(grid);
@@ -415,10 +421,10 @@ class GraphSceneManager {
     dustAttr.setUsage(THREE.DynamicDrawUsage);
     dustGeo.setAttribute('position', dustAttr);
     this.dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({
-      color: theme === 'light' ? 0x8a7a5a : 0x8fa3c0,
+      color: 0x9a9aa5,
       size: 0.035,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.35,
       toneMapped: false,
       depthWrite: false,
       sizeAttenuation: true,
@@ -428,20 +434,20 @@ class GraphSceneManager {
     this.scene.add(this.dust);
 
     // Shared sphere geometry (low poly for performance)
-    this.sphereGeo = new THREE.SphereGeometry(1, 16, 12);
+    this.sphereGeo = new THREE.SphereGeometry(1, 20, 14);
 
-    // Single shared node material — per-node color via instanceColor.
-    this.nodeMaterial = new THREE.MeshStandardMaterial({
+    // Single shared node material — unlit so domain hues stay crisp and
+    // saturated on the dark canvas. Per-node color via instanceColor.
+    this.nodeMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
-      roughness: 0.42,
-      metalness: 0.18,
+      toneMapped: false,
     });
 
     // Selection halo (billboard ring, parked on the selected node).
     this.halo = new THREE.Mesh(
       new THREE.RingGeometry(0.62, 0.7, 48),
       new THREE.MeshBasicMaterial({
-        color: 0xe8862e,
+        color: 0x4fd1c5,
         transparent: true,
         opacity: 0.9,
         side: THREE.DoubleSide,
@@ -574,30 +580,31 @@ class GraphSceneManager {
 
   private nodeHexFor(node: GraphNode): string | number {
     switch (node.type) {
-      case 'patient': return '#E8862E';
-      case 'body_structure': return '#4A90C2';
-      case 'observation': return '#4A90C2';
+      case 'patient': return '#FFFFFF';
+      case 'body_structure': return '#7C8DA6';
       case 'document': return '#8A7BC8';
-      default: return getEventColor(node);
+      case 'medication': return '#4FD1C5';
+      case 'medication_taken_event': return '#3AA79D';
+      default: return nodeDomainColor(node);
     }
   }
 
   private edgeBaseColor(relationship: string): THREE.Color {
     if (!this.edgePalette) {
       this.edgePalette = {
-        HAS_OBSERVATION: new THREE.Color(0x6f9fd0),
-        AFFECTS: new THREE.Color(0xff6b6b),
-        SOURCE_DOCUMENT: new THREE.Color(0xb28cff),
-        LOGGED_ON: new THREE.Color(0xf0b95a),
-        HAS_TIMELINE_EVENT: new THREE.Color(0x66819b),
-        DERIVED_SAME_TYPE: new THREE.Color(0x7d8ee8),
-        DERIVED_SAME_BODY_SITE: new THREE.Color(0x53c7b5),
-        DERIVED_SAME_DAY: new THREE.Color(0x64707c),
-        CORRELATES: new THREE.Color(0xe8862e),
-        INVERSES: new THREE.Color(0xc2503e),
+        HAS_OBSERVATION: new THREE.Color(0x7c8da6),
+        AFFECTS: new THREE.Color(0xe0746b),
+        SOURCE_DOCUMENT: new THREE.Color(0x8a7bc8),
+        LOGGED_ON: new THREE.Color(0xf5a623),
+        HAS_TIMELINE_EVENT: new THREE.Color(0x55606e),
+        DERIVED_SAME_TYPE: new THREE.Color(0x4a5568),
+        DERIVED_SAME_BODY_SITE: new THREE.Color(0x4fd1c5),
+        DERIVED_SAME_DAY: new THREE.Color(0x3a4356),
+        CORRELATES: new THREE.Color(0x4fd1c5),
+        INVERSES: new THREE.Color(0xe0746b),
       };
     }
-    return this.edgePalette[relationship] ?? new THREE.Color(0x3a6a9b);
+    return this.edgePalette[relationship] ?? new THREE.Color(0x55606e);
   }
 
   private isSemanticEdge(edge: GraphEdge, flowEdgeIds: Set<string>): boolean {
@@ -651,7 +658,7 @@ class GraphSceneManager {
 
       const tubular = Math.max(6, Math.min(14, Math.round(len * 5)));
       const semantic = this.isSemanticEdge(edge, flowEdgeIds);
-      const radius = semantic ? 0.024 : 0.013;
+      const radius = semantic ? 0.03 : 0.018;
       // Hub spokes (patient fan) carry little information — rest them so
       // semantic + clinical arcs star.
       const hubFan = edge.relationship === 'HAS_TIMELINE_EVENT' ? 0.5 : 1;
@@ -752,8 +759,8 @@ class GraphSceneManager {
         speed: 0.1 + (((stableHash(this.arcs[i].edgeId) % 100) + 100) % 100) / 100 * 0.12,
       });
       const c = this.arcs[i].semantic
-        ? new THREE.Color(0xffd9a8)
-        : new THREE.Color(0x9fc3e8);
+        ? new THREE.Color(0xffffff)
+        : new THREE.Color(0x9a9aa5);
       this.pulseMesh?.setColorAt(k, c);
     });
     if (this.pulseMesh?.instanceColor) this.pulseMesh.instanceColor.needsUpdate = true;
@@ -882,13 +889,13 @@ class GraphSceneManager {
       if (this.hitMesh) this.hitMesh.instanceMatrix.needsUpdate = true;
     }
 
-    // Edges: incident edges take the neighbor's verdict color (green = healthy,
-    // red = strained), everything else dims — recolored in place.
+    // Edges: incident edges take the neighbor's verdict color (teal = healthy,
+    // soft coral = strained), everything else dims — recolored in place.
     if (this.edgeColorAttr) {
       const arr = this.edgeColorAttr.array as Float32Array;
       const tmp = new THREE.Color();
-      const good = new THREE.Color(0x4e9b5f);
-      const bad = new THREE.Color(0xc2503e);
+      const good = new THREE.Color(0x4fd1c5);
+      const bad = new THREE.Color(0xe0746b);
       for (const r of this.edgeRanges) {
         const other = sel != null
           ? (r.source === sel ? r.target : r.target === sel ? r.source : null)
@@ -918,8 +925,8 @@ class GraphSceneManager {
   private updateBadges() {
     if (!this.badgeMesh) return;
     let k = 0;
-    const good = new THREE.Color(0x4e9b5f);
-    const bad = new THREE.Color(0xc2503e);
+    const good = new THREE.Color(0x4fd1c5);
+    const bad = new THREE.Color(0xe0746b);
     if (this.selectedId) {
       for (const [id, v] of this.neighborVerdicts) {
         if (k >= MAX_BADGES) break;
@@ -1100,6 +1107,31 @@ class GraphSceneManager {
     const hw = this.viewport.width / 2;
     const hh = this.viewport.height / 2;
     return { x: this.tmpV1.x * hw + hw, y: -(this.tmpV1.y * hh) + hh };
+  }
+
+  /**
+   * Project any set of nodes to screen space — drives the floating label
+   * overlay so major nodes read without a tap. Same math as the popup path.
+   */
+  projectNodes(ids: string[]): NodeLabelProjection[] {
+    if (!this.renderer || this.nodeBase.length === 0) return [];
+    const hw = this.viewport.width / 2;
+    const hh = this.viewport.height / 2;
+    const out: NodeLabelProjection[] = [];
+    for (const id of ids) {
+      const i = this.nodeIndexById.get(id);
+      if (i == null) continue;
+      this.tmpV1.set(0, 0, 0);
+      this.nodeWorldPos(i, this.tmpV1);
+      this.tmpV1.project(this.camera);
+      out.push({
+        id,
+        x: this.tmpV1.x * hw + hw,
+        y: -(this.tmpV1.y * hh) + hh,
+        behind: this.tmpV1.z > 1,
+      });
+    }
+    return out;
   }
 
   handleTap(x: number, y: number, graphX = 0, graphY = 0): string | null {
@@ -1404,15 +1436,15 @@ function NodeDetailContent({ nodeDetail, onSelectNode, onViewBody, localDetails 
   return (
     <>
       <View style={styles.detailHeader}>
-        <View style={[styles.detailTypeBadge, { backgroundColor: color + '20' }]}>
+        <View style={styles.detailTypeBadge}>
           <View style={[styles.detailTypeDot, { backgroundColor: color }]} />
-          <Text style={[styles.detailTypeText, { color }]}>{CATEGORY_LABELS[node.type] || node.type}</Text>
+          <Text style={styles.detailTypeText}>{CATEGORY_LABELS[node.type] || node.type}</Text>
         </View>
         <Pressable onPress={() => onSelectNode('')}><Text style={styles.detailClose}>✕</Text></Pressable>
       </View>
       <Text style={styles.detailTitle}>{title}</Text>
       {hero ? (
-        <View style={[styles.heroBox, { borderColor: color + '55' }]}>
+        <View style={styles.heroBox}>
           <Text style={styles.heroValue} numberOfLines={2}>{hero.value}</Text>
           <Text style={styles.heroLabel}>{hero.label}</Text>
           {hero.rows.map((r) => (
@@ -1434,8 +1466,8 @@ function NodeDetailContent({ nodeDetail, onSelectNode, onViewBody, localDetails 
         <View style={styles.dc}>
           <Text style={styles.dct}>Linked patterns ({semanticRows.length})</Text>
           {semanticRows.map((s) => (
-            <Pressable key={s.id} style={styles.dci} onPress={() => onSelectNode(s.id)}>
-              <View style={[styles.dot, { backgroundColor: s.verdict === 'bad' ? '#C2503E' : s.verdict === 'good' ? '#4E9B5F' : '#9AA8B8' }]} />
+              <Pressable key={s.id} style={styles.dci} onPress={() => onSelectNode(s.id)}>
+                <View style={[styles.dot, { backgroundColor: s.verdict === 'bad' ? '#E0746B' : s.verdict === 'good' ? '#4FD1C5' : '#9AA8B8' }]} />
               <View style={styles.nbRowText}>
                 <Text style={styles.clbl} numberOfLines={1}>{s.label}</Text>
                 <Text style={styles.nbRel} numberOfLines={1}>{s.rel}</Text>
@@ -1539,16 +1571,16 @@ function NeighborFocusCard({
   return (
     <>
       <View style={styles.detailHeader}>
-        <View style={[styles.detailTypeBadge, { backgroundColor: color + '20' }]}>
+        <View style={styles.detailTypeBadge}>
           <View style={[styles.detailTypeDot, { backgroundColor: color }]} />
-          <Text style={[styles.detailTypeText, { color }]}>{CATEGORY_LABELS[node.type] || node.type}</Text>
+          <Text style={styles.detailTypeText}>{CATEGORY_LABELS[node.type] || node.type}</Text>
         </View>
         <Pressable onPress={() => onSelectNode('')}><Text style={styles.detailClose}>✕</Text></Pressable>
       </View>
       <Text style={styles.detailTitle}>{title}</Text>
       <Text style={styles.nbSummary}>{summary}</Text>
       {rows.map((r) => {
-        const dot = r.verdict === 'bad' ? '#C2503E' : r.verdict === 'good' ? '#4E9B5F' : NODE_COLORS[r.type] || '#9AA8B8';
+        const dot = r.verdict === 'bad' ? '#E0746B' : r.verdict === 'good' ? '#4FD1C5' : NODE_COLORS[r.type] || '#9AA8B8';
         return (
           <Pressable key={r.id} style={styles.dci} onPress={() => onSelectNode(r.id)}>
             <View style={[styles.dot, { backgroundColor: dot }]} />
@@ -1583,6 +1615,8 @@ function NativeCanvas({
   theme = 'dark',
   flowEdgeIds,
   focusVerdicts,
+  labelDefs = [],
+  dimIds = null,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -1592,9 +1626,11 @@ function NativeCanvas({
   onNodeLongPress?: (id: string) => void;
   onLayout?: (w: number, h: number) => void;
   sceneOut?: React.MutableRefObject<GraphSceneManager | null>;
-  theme?: 'dark' | 'light';
+  theme?: 'dark' | 'panel';
   flowEdgeIds?: Set<string>;
   focusVerdicts?: Map<string, NeighborVerdict>;
+  labelDefs?: NodeLabelDef[];
+  dimIds?: Set<string> | null;
 }) {
   const sceneRef = useRef<GraphSceneManager | null>(null);
   const animFrameRef = useRef<number>(0);
@@ -1615,6 +1651,14 @@ function NativeCanvas({
   reduceMotionRef.current = reduceMotion;
   const canvasSize = useRef({ w: SCREEN_WIDTH, h: SCREEN_HEIGHT - 120 });
   const graphBounds = useRef({ x: 0, y: 0, width: SCREEN_WIDTH, height: SCREEN_HEIGHT - 120 });
+  // Floating labels: projected positions refreshed ~8Hz (cheap setState, tiny views).
+  const [labelProjs, setLabelProjs] = useState<NodeLabelProjection[]>([]);
+  const labelDefsRef = useRef(labelDefs);
+  labelDefsRef.current = labelDefs;
+  const dimIdsRef = useRef(dimIds);
+  dimIdsRef.current = dimIds;
+  const selectedRef = useRef(selectedNodeId);
+  selectedRef.current = selectedNodeId;
 
   useEffect(() => {
     return () => {
@@ -1704,11 +1748,18 @@ function NativeCanvas({
       }
 
       let last = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      let lastLabels = 0;
       const animate = () => {
         const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
         const dt = Math.min((now - last) / 1000, 0.05);
         last = now;
         scene.render(dt);
+        // Floating labels track the camera — throttled, skipped when idle
+        // and static (reduced motion parks everything anyway).
+        if (now - lastLabels > 125 && labelDefsRef.current.length > 0) {
+          lastLabels = now;
+          setLabelProjs(scene.projectNodes(labelDefsRef.current.map((d) => d.id)));
+        }
         animFrameRef.current = requestAnimationFrame(animate);
       };
       animate();
@@ -1860,9 +1911,82 @@ function NativeCanvas({
         style={{ width: '100%' as any, height: '100%' as any }}
         onContextCreate={handleContextCreate}
       />
+      {/* Floating labels — every major node reads without a tap. */}
+      <NodeLabels
+        defs={labelDefs}
+        projs={labelProjs}
+        width={canvasSize.current.w}
+        height={canvasSize.current.h}
+        selectedId={selectedRef.current}
+        dimIds={dimIdsRef.current}
+      />
     </View>
   );
 }
+
+/** Screen-space label pills projected from the 3D scene (pointer-transparent). */
+function NodeLabels({
+  defs,
+  projs,
+  width,
+  height,
+  selectedId,
+  dimIds,
+}: {
+  defs: NodeLabelDef[];
+  projs: NodeLabelProjection[];
+  width: number;
+  height: number;
+  selectedId: string | null;
+  dimIds: Set<string> | null;
+}) {
+  const meta = useMemo(() => new Map(defs.map((d) => [d.id, d])), [defs]);
+  if (projs.length === 0) return null;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {projs.map((p) => {
+        const m = meta.get(p.id);
+        if (!m || p.behind || p.x < -60 || p.x > width + 60 || p.y < -16 || p.y > height + 16) return null;
+        const dimmed = dimIds != null && dimIds.has(p.id);
+        const selected = selectedId === p.id;
+        return (
+          <View
+            key={p.id}
+            style={[
+              labelStyles.pill,
+              selected && labelStyles.pillSelected,
+              { left: p.x + 12, top: p.y - 12, opacity: dimmed ? 0.22 : 1 },
+            ]}
+          >
+            <View style={[labelStyles.dot, { backgroundColor: m.color }]} />
+            <Text style={labelStyles.text} numberOfLines={1}>{m.text}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const labelStyles = StyleSheet.create({
+  pill: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 140,
+    backgroundColor: GV.stage,
+    borderWidth: 1,
+    borderColor: GV.stageline,
+    borderRadius: SPACE.rPill,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  pillSelected: {
+    borderColor: GV.teal,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  text: { color: '#FFFFFF', fontSize: 11, fontFamily: FONT.semi, flexShrink: 1 },
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Main Screen
@@ -1953,6 +2077,40 @@ export default function HealthGraphScreen({
     () => new Map((graphData?.nodes ?? []).map((n) => [n.id, n] as [string, GraphNode])),
     [graphData],
   );
+
+  // Floating labels: patient → structures → observations → meds, capped so
+  // the canvas reads instead of crowds (8 embedded, 24 full screen).
+  const labelDefs = useMemo<NodeLabelDef[]>(() => {
+    if (!graphData) return [];
+    const rank: Record<string, number> = {
+      patient: 0,
+      body_structure: 1,
+      observation: 2,
+      medication: 3,
+      medication_taken_event: 4,
+      document: 5,
+      timeline_event: 6,
+    };
+    const cap = embedded ? 8 : 24;
+    return [...graphData.nodes]
+      .sort((a, b) => (rank[a.type] ?? 9) - (rank[b.type] ?? 9))
+      .slice(0, cap)
+      .map((n) => ({
+        id: n.id,
+        text: (n.label || CATEGORY_LABELS[n.type] || n.type).slice(0, 22),
+        color: nodeDomainColor(n),
+      }));
+  }, [graphData, embedded]);
+
+  // In focus mode the dimmed nodes' labels dim with them.
+  const labelDimIds = useMemo<Set<string> | null>(() => {
+    if (!selectedNodeId) return null;
+    const dim = new Set<string>();
+    for (const d of labelDefs) {
+      if (d.id !== selectedNodeId && !focusVerdicts.has(d.id)) dim.add(d.id);
+    }
+    return dim;
+  }, [selectedNodeId, focusVerdicts, labelDefs]);
 
   const availableCategories = useMemo(() => {
     if (!graphData) return [];
@@ -2048,12 +2206,12 @@ export default function HealthGraphScreen({
 
   if (isLoading) return embedded ? (
     <View style={[styles.embeddedState, styles.embeddedStateLight]}>
-      <ActivityIndicator size="small" color="#E8862E" />
+      <ActivityIndicator size="small" color="#FFFFFF" />
       <Text style={styles.embeddedHintDark}>Building graph…</Text>
     </View>
   ) : (
     <SafeAreaView style={styles.container}>
-      <View style={styles.loading}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.loadingTxt}>Building your Health Graph…</Text></View>
+      <View style={styles.loading}><ActivityIndicator size="large" color="#FFFFFF" /><Text style={styles.loadingTxt}>Building your Health Graph…</Text></View>
     </SafeAreaView>
   );
 
@@ -2083,13 +2241,13 @@ export default function HealthGraphScreen({
       {isEmpty ? (
         embedded ? (
           <View style={[styles.embeddedState, styles.embeddedStateLight]}>
-            <Text style={styles.emptyIcon}>🔗</Text>
+            <Text style={styles.emptyIcon}>+</Text>
             <Text style={styles.embeddedErrTitleDark}>Your Health Graph</Text>
             <Text style={styles.embeddedHintDark}>Your connections will appear here as you log health info.</Text>
           </View>
         ) : (
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🔗</Text>
+            <Text style={styles.emptyIcon}>+</Text>
             <Text style={styles.emptyTitle}>Your Health Graph</Text>
             <Text style={styles.emptyTxt}>As you add health information, your connections will appear here.</Text>
             <Pressable style={styles.emptyBtn} onPress={() => handleViewBody()}><Text style={styles.emptyBtnTxt}>Explore 3D Body</Text></Pressable>
@@ -2104,9 +2262,11 @@ export default function HealthGraphScreen({
           onNodeTap={handleNodeTap}
           onNodeLongPress={handleNodeLongPress}
           sceneOut={sceneOutRef}
-          theme="light" // TEMP-WHITE-BG: revert to {embedded ? 'light' : 'dark'}
+          theme={embedded ? 'panel' : 'dark'}
           flowEdgeIds={flowEdgeIds}
           focusVerdicts={focusVerdicts}
+          labelDefs={labelDefs}
+          dimIds={labelDimIds}
         />
       )}
 
@@ -2128,7 +2288,7 @@ export default function HealthGraphScreen({
             <Chip
               label="All"
               selected={!activeFilter}
-              color={COLORS.accentBlue}
+              color={GV.cta}
               onPress={() => handleFilterPress(null)}
             />
             {availableCategories.map((cat) => (
@@ -2136,7 +2296,7 @@ export default function HealthGraphScreen({
                 key={cat}
                 label={CATEGORY_LABELS[cat] || cat}
                 selected={activeFilter === cat}
-                color={NODE_COLORS[cat] || COLORS.accentBlue}
+                color={GV.cta}
                 onPress={() => handleFilterPress(cat)}
               />
             ))}
@@ -2148,10 +2308,7 @@ export default function HealthGraphScreen({
       {!embedded && patternCounts.total > 0 && !selectedNodeId && (
         <View style={styles.patternStrip} pointerEvents="none">
           <Text style={styles.patternStripText}>
-            <Text style={{ color: '#C2503E' }}>●</Text>
-            <Text> {patternCounts.bad} strained · </Text>
-            <Text style={{ color: '#4E9B5F' }}>●</Text>
-            <Text> {patternCounts.good} healthy · {patternCounts.total} patterns</Text>
+            {patternCounts.bad} strained · {patternCounts.good} healthy · {patternCounts.total} patterns
           </Text>
         </View>
       )}
@@ -2183,7 +2340,7 @@ export default function HealthGraphScreen({
                 nodesById={nodesById}
               />
             ) : (
-              <ActivityIndicator size="small" color={COLORS.primary} />
+              <ActivityIndicator size="small" color="#FFFFFF" />
             )}
           </ScrollView>
         </View>
@@ -2204,107 +2361,105 @@ export default function HealthGraphScreen({
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const styles = StyleSheet.create({
-  fullScreen: { flex: 1, backgroundColor: '#1B222C' },
-  fullScreenEmbedded: { backgroundColor: '#EAE4D6' },
-  container: { flex: 1, backgroundColor: COLORS.background },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md },
-  loadingTxt: { ...TYPOGRAPHY.body, color: COLORS.textMuted },
-  errTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, marginBottom: SPACING.sm },
-  errTxt: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center', marginBottom: SPACING.lg },
-  retry: { backgroundColor: COLORS.primary, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md },
-  retryTxt: { ...TYPOGRAPHY.bodyStrong, color: '#FFFFFF' },
+  fullScreen: { flex: 1, backgroundColor: GV.stage },
+  fullScreenEmbedded: { backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: GV.stage },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: GV.stage },
+  loadingTxt: { ...TYPE.body, color: GV.fog },
+  errTitle: { ...TYPE.title, color: '#FFFFFF', marginBottom: 8 },
+  errTxt: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginBottom: 24 },
+  retry: { backgroundColor: GV.cta, paddingHorizontal: 32, paddingVertical: 8, borderRadius: SPACE.rPill },
+  retryTxt: { ...TYPE.button, fontSize: 15, color: '#FFFFFF' },
 
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: COLORS.surface },
-  overlayHeader: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.md, paddingTop: 36, paddingBottom: 6, backgroundColor: 'rgba(10, 18, 30, 0.72)', borderBottomWidth: 1, borderBottomColor: COLORS.borderFaint, zIndex: 10 },
-  overlayFilters: { position: 'absolute', top: 88, left: 0, right: 0, height: 42, backgroundColor: 'rgba(8, 15, 25, 0.72)', justifyContent: 'center', zIndex: 10 },
-  overlayStats: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, backgroundColor: 'rgba(10, 18, 30, 0.72)', borderTopWidth: 1, borderTopColor: COLORS.borderFaint, zIndex: 10 },
-  popup: { position: 'absolute', width: 240, maxHeight: 340, backgroundColor: COLORS.surfaceElevated, borderRadius: BORDER_RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderFaint, zIndex: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.screenH, paddingVertical: 8, backgroundColor: GV.stage },
+  overlayHeader: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.screenH, paddingTop: 56, paddingBottom: 12, backgroundColor: GV.stage, zIndex: 10 },
+  overlayFilters: { position: 'absolute', top: 124, left: 0, right: 0, paddingVertical: 8, backgroundColor: GV.stage, justifyContent: 'center', zIndex: 10 },
+  overlayStats: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: SPACE.screenH, paddingVertical: 12, backgroundColor: GV.stage, zIndex: 10 },
+  popup: { position: 'absolute', width: 248, maxHeight: 360, backgroundColor: GV.card, borderRadius: SPACE.rCard, zIndex: 20 },
   popupScroll: { flexShrink: 1 },
-  popupScrollContent: { padding: SPACING.md },
+  popupScrollContent: { padding: SPACE.cardPad },
   headerL: { flex: 1 },
-  headerTitle: { ...TYPOGRAPHY.h3, fontSize: 19, lineHeight: 26, color: COLORS.textPrimary },
-  headerSub: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: 2 },
-  resetBtn: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, backgroundColor: 'rgba(255,255,255,0.04)' },
-  resetTxt: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary },
+  headerTitle: { ...TYPE.display, fontSize: 22, lineHeight: 28, color: '#FFFFFF' },
+  headerSub: { ...TYPE.caption, color: GV.fog, marginTop: 2 },
+  resetBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: SPACE.rPill, backgroundColor: GV.card },
+  resetTxt: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink },
 
-  filterBar: { height: 44, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border, justifyContent: 'center' },
-  filterRow: { flexDirection: 'row', paddingHorizontal: SPACING.md, alignItems: 'center', gap: SPACING.sm },
+  filterBar: { paddingVertical: 8, backgroundColor: GV.stage, justifyContent: 'center' },
+  filterRow: { flexDirection: 'row', paddingHorizontal: SPACE.screenH, alignItems: 'center', gap: 8 },
   patternStrip: {
     position: 'absolute',
-    top: 134,
+    top: 180,
     alignSelf: 'center',
-    backgroundColor: 'rgba(10, 18, 30, 0.6)',
-    borderRadius: BORDER_RADIUS.pill,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rPill,
     paddingHorizontal: 12,
     paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: COLORS.borderFaint,
     zIndex: 10,
   },
-  patternStripText: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary, fontSize: 11 },
+  patternStripText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink, fontSize: 11 },
 
-  canvasWrap: { flex: 1, backgroundColor: '#FAFAF8' }, // TEMP-WHITE-BG: revert to '#24211C'
+  canvasWrap: { flex: 1, backgroundColor: GV.stage },
   glView: { width: SCREEN_WIDTH, height: CANVAS_HEIGHT },
 
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, gap: SPACING.md },
-  emptyIcon: { fontSize: 48 },
-  emptyTitle: { ...TYPOGRAPHY.h2, color: COLORS.textPrimary },
-  emptyTxt: { ...TYPOGRAPHY.body, color: COLORS.textMuted, textAlign: 'center', lineHeight: 22 },
-  emptyBtn: { backgroundColor: COLORS.primary, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.lg, marginTop: SPACING.md },
-  emptyBtnTxt: { ...TYPOGRAPHY.bodyStrong, color: '#FFFFFF' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.cardPad, gap: 16, backgroundColor: GV.stage },
+  emptyIcon: { ...TYPE.display, color: GV.fog },
+  emptyTitle: { ...TYPE.display, color: '#FFFFFF' },
+  emptyTxt: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  emptyBtn: { backgroundColor: GV.cta, paddingHorizontal: 32, paddingVertical: 16, borderRadius: SPACE.rPill, marginTop: 16 },
+  emptyBtnTxt: { ...TYPE.button, fontSize: 15, color: '#FFFFFF' },
 
-  embeddedState: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#24211C', padding: SPACING.md, gap: SPACING.sm },
-  // Paper variants — embedded states sit on the off-white canvas in insights.
-  embeddedStateLight: { backgroundColor: '#EAE4D6' },
-  embeddedHintDark: { ...TYPOGRAPHY.caption, color: '#797166', textAlign: 'center' },
-  embeddedErrTitleDark: { ...TYPOGRAPHY.bodyStrong, color: '#1D1B17', textAlign: 'center' },
-  embeddedRetryTxtDark: { ...TYPOGRAPHY.captionStrong, color: '#C96A1E' },
-  embeddedHint: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, textAlign: 'center' },
-  embeddedErrTitle: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textPrimary, textAlign: 'center' },
-  embeddedRetry: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: 'rgba(255,255,255,0.04)', marginTop: SPACING.xs },
-  embeddedRetryTxt: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary },
+  embeddedState: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', padding: 16, gap: 8 },
+  // Embedded states sit on the dark insight card — quiet greys, no chrome.
+  embeddedStateLight: { backgroundColor: 'transparent' },
+  embeddedHintDark: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  embeddedErrTitleDark: { ...TYPE.body, fontFamily: FONT.semi, color: '#FFFFFF', textAlign: 'center' },
+  embeddedRetryTxtDark: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.teal },
+  embeddedHint: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  embeddedErrTitle: { ...TYPE.body, fontFamily: FONT.semi, color: '#FFFFFF', textAlign: 'center' },
+  embeddedRetry: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: GV.card, marginTop: 8 },
+  embeddedRetryTxt: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink },
 
   popupEmbedded: { maxHeight: 245 },
 
-  detailPanel: { backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border, padding: SPACING.md, maxHeight: SCREEN_HEIGHT * 0.38 },
-  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.sm },
-  detailTypeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.full, gap: SPACING.xs },
+  detailPanel: { backgroundColor: GV.card, padding: SPACE.cardPad, maxHeight: SCREEN_HEIGHT * 0.38 },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  detailTypeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: GV.wash, paddingHorizontal: 12, paddingVertical: 8, borderRadius: SPACE.rPill, gap: 8 },
   detailTypeDot: { width: 6, height: 6, borderRadius: 3 },
-  detailTypeText: { ...TYPOGRAPHY.captionStrong, fontSize: 11 },
-  detailClose: { fontSize: 18, color: COLORS.textMuted },
-  detailTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, marginBottom: SPACING.xs },
-  detailDesc: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginBottom: SPACING.md, lineHeight: 20 },
-  df: { marginBottom: SPACING.sm },
-  dfl: { ...TYPOGRAPHY.label, color: COLORS.textMuted, marginBottom: 2 },
-  dfv: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textPrimary },
-  dc: { marginTop: SPACING.sm, paddingTop: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.borderLight },
-  dct: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary, marginBottom: SPACING.xs },
-  dci: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3, gap: SPACING.sm },
+  detailTypeText: { ...TYPE.caption, fontFamily: FONT.semi, fontSize: 11, color: GV.ink },
+  detailClose: { fontSize: 18, color: GV.muted },
+  detailTitle: { ...TYPE.title, color: GV.ink, marginBottom: 8 },
+  detailDesc: { ...TYPE.body, color: GV.body, marginBottom: 16 },
+  df: { marginBottom: 8 },
+  dfl: { ...TYPE.caption, color: GV.muted, marginBottom: 2 },
+  dfv: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink },
+  dc: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: GV.line },
+  dct: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.muted, marginBottom: 8 },
+  dci: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: 8 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  clbl: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, flex: 1, fontSize: 13 },
-  ctype: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, fontSize: 11 },
-  nbSummary: { ...TYPOGRAPHY.captionStrong, color: COLORS.textSecondary, marginTop: 2, marginBottom: 6 },
+  clbl: { ...TYPE.body, color: GV.ink, flex: 1, fontSize: 13 },
+  ctype: { ...TYPE.caption, color: GV.muted, fontSize: 11 },
+  nbSummary: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.muted, marginTop: 2, marginBottom: 6 },
   nbRowText: { flex: 1, gap: 1 },
-  nbRel: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, fontSize: 11 },
-  nbGo: { fontSize: 18, fontWeight: '700', color: COLORS.textMuted },
-  nbFooter: { marginTop: SPACING.sm, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md, backgroundColor: COLORS.primary, alignItems: 'center' },
-  nbFooterText: { ...TYPOGRAPHY.bodyStrong, color: '#FFFFFF' },
-  heroBox: { marginTop: SPACING.sm, marginBottom: SPACING.sm, padding: SPACING.md, borderRadius: BORDER_RADIUS.md, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.03)' },
-  heroValue: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary, fontVariant: ['tabular-nums'] },
-  heroLabel: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 2, marginBottom: 6 },
+  nbRel: { ...TYPE.caption, color: GV.muted, fontSize: 11 },
+  nbGo: { ...TYPE.title, color: GV.muted },
+  nbFooter: { marginTop: 8, paddingVertical: 8, borderRadius: 12, backgroundColor: GV.cta, alignItems: 'center' },
+  nbFooterText: { ...TYPE.body, fontFamily: FONT.semi, color: '#FFFFFF' },
+  heroBox: { marginTop: 8, marginBottom: 8, padding: 16, borderRadius: 12, backgroundColor: GV.wash },
+  heroValue: { ...TYPE.display, color: GV.ink, fontVariant: ['tabular-nums'] },
+  heroLabel: { ...TYPE.caption, color: GV.muted, marginTop: 2, marginBottom: 6 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
-  heroRowKey: { ...TYPOGRAPHY.caption, color: COLORS.textMuted },
-  heroRowVal: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textPrimary, fontSize: 13 },
-  heroZone: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 6 },
-  heroFlag: { ...TYPOGRAPHY.captionStrong, color: '#E8862E', marginTop: 4 },
-  dt: { marginTop: SPACING.sm, paddingTop: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.borderLight },
-  dtt: { ...TYPOGRAPHY.captionStrong, color: COLORS.textMuted, marginBottom: SPACING.xs, fontSize: 10 },
+  heroRowKey: { ...TYPE.caption, color: GV.muted },
+  heroRowVal: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink, fontSize: 13 },
+  heroZone: { ...TYPE.caption, color: GV.muted, marginTop: 6 },
+  heroFlag: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink, marginTop: 4 },
+  dt: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: GV.line },
+  dtt: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.muted, marginBottom: 8, fontSize: 10 },
   dpr: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
-  dpk: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, textTransform: 'capitalize', fontSize: 11 },
-  dpv: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textSecondary, fontSize: 11 },
-  vbb: { backgroundColor: COLORS.teal, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: BORDER_RADIUS.md, alignItems: 'center', marginTop: SPACING.sm },
-  vbbt: { ...TYPOGRAPHY.bodyStrong, color: '#FFFFFF' },
+  dpk: { ...TYPE.caption, color: GV.muted, textTransform: 'capitalize', fontSize: 11 },
+  dpv: { ...TYPE.body, fontFamily: FONT.semi, color: GV.body, fontSize: 11 },
+  vbb: { backgroundColor: GV.cta, paddingVertical: 8, paddingHorizontal: 16, borderRadius: SPACE.rPill, alignItems: 'center', marginTop: 8 },
+  vbbt: { ...TYPE.body, fontFamily: FONT.semi, color: '#FFFFFF' },
 
-  stats: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border },
-  statsTxt: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, textAlign: 'center' },
+  stats: { paddingHorizontal: SPACE.screenH, paddingVertical: 8, backgroundColor: GV.stage },
+  statsTxt: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
 });

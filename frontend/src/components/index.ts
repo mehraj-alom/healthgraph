@@ -36,6 +36,14 @@ export { StatusLabel } from './StatusLabel';
 export { MetricCard } from './MetricCard';
 export { ProgressBar } from './ProgressBar';
 export { BrandLogo, LOGO_ASPECT } from './BrandLogo';
+export {
+  SymptomBodyMap,
+  type SymptomDatum,
+  type SelectedBodyPart,
+  type BodySide,
+  type BodyGender,
+  type PainSide,
+} from './SymptomBodyMap';
 
 // ── Med* aliases (legacy naming, kept for backward compatibility) ───────────
 export { Card as MedCard } from './Card';

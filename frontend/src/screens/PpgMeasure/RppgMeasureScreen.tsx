@@ -26,11 +26,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Badge, Button, ErrorState, ProgressBar } from '@/components';
+import { Button, ErrorState, ProgressBar } from '@/components';
 import { useRppgMeasurement } from '@/hooks/useRppgMeasurement';
 import { RppgCameraPreview, RppgCameraPreviewBoundary } from 'healthgraph-rppg';
-import { useTheme } from '@/theme';
-import { spacing, radius } from '@/theme/tokens';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import type { RootStackParamList } from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'RppgMeasure'>;
@@ -46,9 +45,17 @@ function qualityLabel(quality: number): string {
   return 'Poor';
 }
 
+/** Flat status pill — wash fill, ink label. No colored fills. */
+function StatusPill({ label }: { label: string }) {
+  return (
+    <View style={styles.pill}>
+      <Text style={styles.pillText}>{label}</Text>
+    </View>
+  );
+}
+
 export default function RppgMeasureScreen() {
   const navigation = useNavigation<Nav>();
-  const { colors, typography } = useTheme();
   const {
     state,
     hint,
@@ -100,14 +107,10 @@ export default function RppgMeasureScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[typography.heading, { color: colors.textPrimary }]}>
-          Face pulse scan
-        </Text>
-        <Text style={[typography.bodySecondary, { color: colors.textSecondary }]}>
-          {hint}
-        </Text>
+        <Text style={styles.title}>Face pulse scan</Text>
+        <Text style={styles.hint}>{hint}</Text>
 
         <View style={styles.previewWrap}>
           <RppgCameraPreviewBoundary style={styles.preview}>
@@ -115,7 +118,7 @@ export default function RppgMeasureScreen() {
           </RppgCameraPreviewBoundary>
           {busy && (
             <View style={styles.guide} pointerEvents="none">
-              <View style={[styles.oval, { borderColor: colors.brand }]} />
+              <View style={styles.oval} />
             </View>
           )}
         </View>
@@ -128,7 +131,7 @@ export default function RppgMeasureScreen() {
         )}
 
         {liveStability !== null && busy && (
-          <Text style={[typography.captionStrong, { color: colors.textSecondary }]}>
+          <Text style={styles.stability}>
             Face stability {Math.round(liveStability * 100)}%
           </Text>
         )}
@@ -142,27 +145,26 @@ export default function RppgMeasureScreen() {
         )}
 
         {hasResult && result && (
-          <View style={[styles.result, { borderColor: colors.border }]}>
-            <Text style={[typography.metricValue, { color: colors.textPrimary }]}>
+          <View style={styles.result}>
+            <Text style={styles.resultBpm}>
               {hr} BPM
             </Text>
             <View style={styles.badges}>
-              <Badge
+              <StatusPill
                 label={result.qualityLevel === 'reliable' ? 'Reliable' : 'Borderline'}
-                health={result.qualityLevel === 'reliable' ? 'positive' : 'attention'}
               />
-              <Badge label={`Quality ${qualityLabel(result.signalQuality)}`} tone="neutral" />
-              <Badge label="Face scan" tone="purple" />
+              <StatusPill label={`Quality ${qualityLabel(result.signalQuality)}`} />
+              <StatusPill label="Face scan" />
             </View>
-            <Text style={[typography.bodySecondary, { color: colors.textSecondary }]}>
+            <Text style={styles.resultMeta}>
               {synced === true
                 ? 'Saved · synced'
                 : synced === false
                   ? 'Saved · will sync when online'
                   : 'Saved'}
             </Text>
-            <Button title="Scan again" onPress={() => reset()} variant="outline" fullWidth />
-            <Button title="Done" onPress={exit} variant="ghost" fullWidth />
+            <Button title="Done" onPress={exit} fullWidth />
+            <Button title="Scan again" onPress={() => reset()} variant="secondary" fullWidth />
           </View>
         )}
 
@@ -183,7 +185,7 @@ export default function RppgMeasureScreen() {
           <Button title="Try again" onPress={() => void start()} fullWidth />
         )}
 
-        <Text style={[styles.disclaimer, typography.caption, { color: colors.textSecondary }]}>
+        <Text style={styles.disclaimer}>
           {DISCLAIMER} Your face images never leave this phone.
         </Text>
       </ScrollView>
@@ -192,9 +194,29 @@ export default function RppgMeasureScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  content: { padding: spacing.lg, gap: spacing.md },
-  previewWrap: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
+  safe: { flex: 1, backgroundColor: GV.stage },
+  content: {
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 32,
+    gap: SPACE.cardGap,
+  },
+  title: {
+    ...TYPE.display,
+    color: GV.card,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  hint: {
+    ...TYPE.body,
+    color: GV.fog,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  previewWrap: {
+    borderRadius: SPACE.rCard,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
   preview: { minHeight: 320 },
   guide: {
     position: 'absolute',
@@ -211,15 +233,55 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     borderWidth: 2,
     borderStyle: 'dashed',
+    borderColor: GV.teal,
     backgroundColor: 'transparent',
   },
+  stability: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
   result: {
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.sm,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    gap: SPACE.cardGap,
     alignItems: 'center',
   },
-  badges: { flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap', justifyContent: 'center' },
-  disclaimer: { marginTop: spacing.md },
+  resultBpm: {
+    fontFamily: FONT.semi,
+    fontSize: 48,
+    lineHeight: 56,
+    color: GV.ink,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+  },
+  badges: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  pill: {
+    backgroundColor: GV.wash,
+    borderRadius: SPACE.rPill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  pillText: {
+    ...TYPE.chip,
+    color: GV.ink,
+  },
+  resultMeta: {
+    ...TYPE.caption,
+    color: GV.muted,
+    textAlign: 'center',
+  },
+  disclaimer: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+    marginTop: 8,
+  },
 });

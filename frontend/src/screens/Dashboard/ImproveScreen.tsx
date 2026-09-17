@@ -1,26 +1,13 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeInUp } from 'react-native-reanimated';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY } from '@/constants';
-import { AmbientBackground } from '@/components';
-import { useReducedMotion } from '@/theme';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { SPOKE_GUIDANCE, GUIDANCE_FALLBACK } from '@/components/home/HGraphMap';
 import type { ImproveMetric, RootStackParamList } from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'Improve'>;
-
-const CLIN = {
-  bg: '#EAE4D6',
-  card: '#FFFBF3',
-  ink: '#1D1B17',
-  muted: '#797166',
-  faint: '#E6DBC6',
-  red: '#C2503E',
-  green: '#4E9B5F',
-};
 
 /**
  * Improve / Keep — the actions window behind the dashboard duo buttons.
@@ -31,7 +18,6 @@ const CLIN = {
 export default function ImproveScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const reducedMotion = useReducedMotion();
   const focus = route.params?.focus ?? 'improve';
   const metrics = route.params?.metrics ?? [];
 
@@ -46,79 +32,64 @@ export default function ImproveScreen() {
     return 'in zone';
   };
 
-  // Card tone drives the whole interior: green-tinted "keep" cards,
-  // warm/red-tinted "improve" cards, neutral "watch" blocks.
-  const renderCard = (m: ImproveMetric, index: number, maintain: boolean) => {
+  // Flat white cards: status reads from a single small dot + label copy,
+  // never from tinted fills. Keep = CTA green, needs-a-nudge = amber dot.
+  const renderCard = (m: ImproveMetric, maintain: boolean) => {
     const g = SPOKE_GUIDANCE[m.id] ?? GUIDANCE_FALLBACK;
     // Spotlight the direction that moves toward the goal.
     const towardLow = g.goal === 'low';
     const first = maintain
-      ? towardLow
-        ? { title: 'Keep doing', items: g.lower, color: CLIN.green }
-        : { title: 'Keep doing', items: g.raise, color: CLIN.green }
+      ? { title: 'Keep doing', items: towardLow ? g.lower : g.raise }
       : towardLow
-        ? { title: 'Ease off', items: g.lower, color: CLIN.red }
-        : { title: 'Nudge up', items: g.raise, color: CLIN.green };
+        ? { title: 'Ease off', items: g.lower }
+        : { title: 'Nudge up', items: g.raise };
     const second = maintain
       ? null
       : towardLow
-        ? { title: 'Watch for', items: g.raise, color: CLIN.muted }
-        : { title: 'Ease off', items: g.lower, color: CLIN.red };
-    const tone = maintain ? 'keep' : 'improve';
-    const toneColor = maintain ? CLIN.green : CLIN.red;
+        ? { title: 'Watch for', items: g.raise }
+        : { title: 'Ease off', items: g.lower };
+    const dotColor = maintain ? GV.cta : GV.fx.amber;
     return (
-      <Animated.View
-        key={m.id}
-        entering={reducedMotion ? undefined : FadeInUp.duration(280).delay(Math.min(index * 50, 300))}
-      >
-        <View
-          style={[
-            styles.card,
-            tone === 'keep' ? styles.cardKeep : styles.cardImprove,
-            { borderLeftColor: toneColor },
-          ]}
-        >
-          <View style={styles.cardTopRow}>
-            <View style={[styles.toneDot, { backgroundColor: toneColor }]} />
-            <Text style={[styles.toneLabel, { color: toneColor }]}>
-              {maintain ? 'Keep it steady' : 'Needs a nudge'}
-            </Text>
-            <View style={[styles.valuePill, { backgroundColor: toneColor + '1A' }]}>
-              <Text style={[styles.valuePillText, { color: toneColor }]}>{m.valueText}</Text>
-            </View>
-          </View>
-          <Text style={styles.cardLabel}>{m.label}</Text>
-          <Text style={styles.cardStatus}>
-            {positionOf(m)} ({g.zone}) · {m.avgDays}d avg
+      <View key={m.id} style={styles.card}>
+        <View style={styles.cardTopRow}>
+          <View style={[styles.toneDot, { backgroundColor: dotColor }]} />
+          <Text style={styles.toneLabel}>
+            {maintain ? 'Keep it steady' : 'Needs a nudge'}
           </Text>
-          {m.good === false && g.flag ? <Text style={styles.flag}>{g.flag}</Text> : null}
-          <Text style={[styles.listTitle, { color: first.color }]}>{first.title}</Text>
-          {first.items.map((tip) => (
-            <Text key={tip} style={styles.tip}>· {tip}</Text>
-          ))}
-          {second ? (
-            <View style={styles.watchBlock}>
-              <Text style={[styles.listTitle, { color: second.color }]}>{second.title}</Text>
-              {second.items.map((tip) => (
-                <Text key={tip} style={styles.tip}>· {tip}</Text>
-              ))}
-            </View>
-          ) : null}
+          <View style={styles.valuePill}>
+            <Text style={styles.valuePillText}>{m.valueText}</Text>
+          </View>
         </View>
-      </Animated.View>
+        <Text style={styles.cardLabel}>{m.label}</Text>
+        <Text style={styles.cardStatus}>
+          {positionOf(m)} ({g.zone}) · {m.avgDays}d avg
+        </Text>
+        {m.good === false && g.flag ? <Text style={styles.flag}>{g.flag}</Text> : null}
+        <Text style={styles.listTitle}>{first.title}</Text>
+        {first.items.map((tip) => (
+          <Text key={tip} style={styles.tip}>· {tip}</Text>
+        ))}
+        {second ? (
+          <View style={styles.watchBlock}>
+            <Text style={styles.listTitle}>{second.title}</Text>
+            {second.items.map((tip) => (
+              <Text key={tip} style={styles.tip}>· {tip}</Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
     );
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <AmbientBackground tone="clinical" />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Pressable
           onPress={() => navigation.goBack()}
-          style={styles.backBtn}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.85 }]}
           accessibilityRole="button"
           accessibilityLabel="Go back"
-          hitSlop={8}
+          hitSlop={12}
         >
           <Text style={styles.backBtnText}>‹ Back</Text>
         </Pressable>
@@ -132,8 +103,10 @@ export default function ImproveScreen() {
 
         {primary.length === 0 ? (
           focus === 'improve' ? (
-            <View style={[styles.emptyCard, styles.emptyCelebrate]}>
-              <Text style={styles.celebrateEmoji}>🎉</Text>
+            <View style={styles.emptyCard}>
+              <View style={styles.celebrateTile}>
+                <Text style={styles.celebrateGlyph}>✓</Text>
+              </View>
               <Text style={styles.emptyTitle}>
                 Congratulations — nothing to improve!
               </Text>
@@ -144,10 +117,10 @@ export default function ImproveScreen() {
               </Text>
               <Pressable
                 onPress={() => navigation.setParams({ focus: 'keep' })}
-                style={styles.emptyBtn}
+                style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.85 }]}
                 accessibilityRole="button"
                 accessibilityLabel="See what to keep doing"
-                hitSlop={8}
+                hitSlop={12}
               >
                 <Text style={styles.emptyBtnText}>See what to keep doing →</Text>
               </Pressable>
@@ -155,7 +128,7 @@ export default function ImproveScreen() {
           ) : (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>
-                Nothing steady yet — let's build it 🌱
+                Nothing steady yet — let&apos;s build it
               </Text>
               <Text style={styles.emptyText}>
                 Signals show up here once they have a few days of history.
@@ -163,19 +136,19 @@ export default function ImproveScreen() {
               </Text>
               <Pressable
                 onPress={() => navigation.setParams({ focus: 'improve' })}
-                style={[styles.emptyBtn, styles.emptyBtnImprove]}
+                style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.85 }]}
                 accessibilityRole="button"
                 accessibilityLabel="See what to improve"
-                hitSlop={8}
+                hitSlop={12}
               >
-                <Text style={[styles.emptyBtnText, styles.emptyBtnImproveText]}>
+                <Text style={styles.emptyBtnText}>
                   See what to improve →
                 </Text>
               </Pressable>
             </View>
           )
         ) : (
-          primary.map((m, i) => renderCard(m, i, focus === 'keep'))
+          primary.map((m) => renderCard(m, focus === 'keep'))
         )}
 
         {secondary.length > 0 ? (
@@ -183,7 +156,7 @@ export default function ImproveScreen() {
             <Text style={styles.sectionTitle}>
               {focus === 'improve' ? 'Holding steady' : 'Needs attention'}
             </Text>
-            {secondary.map((m, i) => renderCard(m, primary.length + i, focus === 'improve'))}
+            {secondary.map((m) => renderCard(m, focus === 'improve'))}
           </>
         ) : null}
 
@@ -198,61 +171,47 @@ export default function ImproveScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: CLIN.bg,
+    backgroundColor: GV.stage,
   },
   content: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xxl,
-    gap: SPACING.sm,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 32,
+    gap: SPACE.cardGap,
   },
   backBtn: {
     alignSelf: 'flex-start',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: CLIN.card,
-    borderWidth: 1,
-    borderColor: CLIN.faint,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.screenH,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.card,
   },
   backBtnText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: CLIN.red,
+    ...TYPE.button,
+    fontSize: 15,
+    color: GV.ink,
   },
   title: {
-    ...TYPOGRAPHY.h1,
-    color: CLIN.ink,
+    ...TYPE.display,
+    color: GV.card,
+    textAlign: 'center',
   },
   subtitle: {
-    ...TYPOGRAPHY.body,
-    color: CLIN.muted,
+    ...TYPE.body,
+    color: GV.fog,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   card: {
-    backgroundColor: CLIN.card,
-    borderWidth: 1,
-    borderColor: CLIN.faint,
-    borderLeftWidth: 4,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    gap: 4,
-    shadowColor: '#16212C',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  // Tone-tinted interiors: keep cards breathe green, improve cards glow warm.
-  cardKeep: {
-    backgroundColor: '#F2F8F0',
-    borderColor: 'rgba(78,155,95,0.35)',
-  },
-  cardImprove: {
-    backgroundColor: '#FBF3E4',
-    borderColor: 'rgba(194,80,62,0.30)',
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    gap: 8,
   },
   cardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
+    gap: 8,
   },
   toneDot: {
     width: 10,
@@ -260,110 +219,114 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
   },
   toneLabel: {
-    ...TYPOGRAPHY.captionStrong,
+    ...TYPE.chip,
+    color: GV.ink,
     flex: 1,
   },
   valuePill: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: 9999,
+    backgroundColor: GV.wash,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: SPACE.rPill,
   },
   valuePillText: {
-    ...TYPOGRAPHY.captionStrong,
-    fontSize: 12,
+    ...TYPE.chip,
+    color: GV.ink,
+    fontVariant: ['tabular-nums'],
   },
   watchBlock: {
-    marginTop: SPACING.xs,
-    padding: SPACING.sm,
-    borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: 'rgba(121,113,102,0.08)',
-    gap: 2,
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: GV.wash,
+    gap: 4,
   },
   cardLabel: {
-    ...TYPOGRAPHY.bodyStrong,
-    fontSize: 16,
-    color: CLIN.ink,
+    ...TYPE.title,
+    color: GV.ink,
   },
   cardStatus: {
-    ...TYPOGRAPHY.caption,
-    color: CLIN.muted,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   flag: {
-    ...TYPOGRAPHY.caption,
-    fontWeight: '700',
-    color: CLIN.red,
-    backgroundColor: 'rgba(215,38,61,0.08)',
-    borderRadius: BORDER_RADIUS.sm,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.ink,
+    backgroundColor: GV.wash,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     overflow: 'hidden',
-    marginTop: 2,
+    marginTop: 4,
   },
   listTitle: {
-    ...TYPOGRAPHY.captionStrong,
-    marginTop: SPACING.xs,
+    fontFamily: FONT.semi,
+    fontSize: 14,
+    lineHeight: 20,
+    color: GV.ink,
+    marginTop: 8,
   },
   tip: {
-    ...TYPOGRAPHY.body,
-    fontSize: 14,
-    color: CLIN.ink,
-    lineHeight: 20,
+    ...TYPE.body,
+    color: GV.body,
   },
   sectionTitle: {
-    ...TYPOGRAPHY.overline,
-    color: CLIN.muted,
+    ...TYPE.caption,
+    color: GV.fog,
     letterSpacing: 1,
-    marginTop: SPACING.sm,
+    textAlign: 'center',
+    marginTop: 8,
   },
   emptyCard: {
-    backgroundColor: CLIN.card,
-    borderWidth: 1,
-    borderColor: CLIN.faint,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    gap: 6,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    gap: 8,
     alignItems: 'center',
   },
-  emptyCelebrate: {
-    backgroundColor: '#F2F8F0',
-    borderColor: 'rgba(78,155,95,0.45)',
-    borderWidth: 1.5,
+  celebrateTile: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: GV.wash,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  celebrateEmoji: {
-    fontSize: 40,
+  celebrateGlyph: {
+    fontFamily: FONT.semi,
+    fontSize: 28,
+    lineHeight: 32,
+    color: GV.cta,
   },
   emptyBtn: {
-    marginTop: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    borderRadius: 9999,
-    backgroundColor: CLIN.green,
+    marginTop: 8,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.cta,
   },
   emptyBtnText: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: '#FFFFFF',
+    ...TYPE.button,
     fontSize: 14,
-  },
-  emptyBtnImprove: {
-    backgroundColor: CLIN.red,
-  },
-  emptyBtnImproveText: {
     color: '#FFFFFF',
+    textAlign: 'center',
   },
   emptyTitle: {
-    ...TYPOGRAPHY.h3,
-    color: CLIN.ink,
+    ...TYPE.title,
+    color: GV.ink,
     textAlign: 'center',
   },
   emptyText: {
-    ...TYPOGRAPHY.body,
-    color: CLIN.muted,
+    ...TYPE.body,
+    color: GV.muted,
     textAlign: 'center',
   },
   foot: {
-    ...TYPOGRAPHY.caption,
-    color: CLIN.muted,
+    ...TYPE.caption,
+    color: GV.fog,
     textAlign: 'center',
-    marginTop: SPACING.sm,
+    marginTop: 8,
   },
 });

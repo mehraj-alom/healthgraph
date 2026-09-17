@@ -19,13 +19,12 @@ import {
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { Badge, Button, Card } from '@/components';
+import { Button, Card } from '@/components';
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getRecentRppgMeasurements } from '@/db/queries/rppg';
-import { useTheme } from '@/theme';
-import { spacing, radius } from '@/theme/tokens';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import type { MainTabParamList, RootStackParamList } from '@/types';
 
 type Nav = CompositeNavigationProp<
@@ -56,9 +55,31 @@ function qualityLabel(quality: number): string {
   return 'Poor';
 }
 
+/** Flat icon tile — wash fill, single CTA-green glyph. Icons only. */
+function MethodIcon({ glyph, label }: { glyph: string; label: string }) {
+  return (
+    <View
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={label}
+      style={styles.iconTile}
+    >
+      <Text style={styles.iconGlyph}>{glyph}</Text>
+    </View>
+  );
+}
+
+/** Flat source pill — wash fill, ink label. No colored fills. */
+function SourcePill({ label }: { label: string }) {
+  return (
+    <View style={styles.sourcePill}>
+      <Text style={styles.sourcePillText}>{label}</Text>
+    </View>
+  );
+}
+
 export default function PulseMethodScreen() {
   const navigation = useNavigation<Nav>();
-  const { colors, typography } = useTheme();
   const [recentPpg, setRecentPpg] = useState<RecentRow | null>(null);
   const [recentRppg, setRecentRppg] = useState<RecentRow | null>(null);
   // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
@@ -118,16 +139,14 @@ export default function PulseMethodScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView
         contentContainerStyle={styles.content}
         onScroll={onTabScroll}
         scrollEventThrottle={16}
       >
-        <Text style={[typography.heading, { color: colors.textPrimary }]}>
-          Pulse
-        </Text>
-        <Text style={[typography.bodySecondary, { color: colors.textSecondary }]}>
+        <Text style={styles.title}>Pulse</Text>
+        <Text style={styles.subtitle}>
           Choose how to measure. Both run entirely on this device.
         </Text>
 
@@ -137,20 +156,29 @@ export default function PulseMethodScreen() {
           style={styles.card}
         >
           <View style={styles.row}>
+            <MethodIcon glyph="♥" label="Fingertip pulse icon" />
             <View style={styles.texts}>
-              <Text style={[typography.sectionHeading, { color: colors.textPrimary }]}>
-                Fingertip PPG
-              </Text>
-              <Text style={[typography.bodySecondary, { color: colors.textSecondary }]}>
+              <Text style={styles.cardTitle}>Fingertip PPG</Text>
+              <Text style={styles.cardBody}>
                 Camera + flash on your fingertip · about a minute
               </Text>
-              <Text style={[typography.captionStrong, { color: colors.textSecondary }]}>
-                {recentPpg
-                  ? `${recentPpg.bpm} BPM · ${relativeTime(recentPpg.measuredAt)} · ${qualityLabel(recentPpg.quality)}`
-                  : 'No recent fingertip measurement'}
-              </Text>
+              {recentPpg ? (
+                <Text style={styles.recent}>
+                  <Text style={styles.recentBpm}>{recentPpg.bpm} BPM</Text>
+                  <Text>
+                    {' · '}
+                    {relativeTime(recentPpg.measuredAt)}
+                    {' · '}
+                    {qualityLabel(recentPpg.quality)}
+                  </Text>
+                </Text>
+              ) : (
+                <Text style={styles.recent}>
+                  No recent fingertip measurement
+                </Text>
+              )}
             </View>
-            <Badge label="Fingertip" tone="blue" />
+            <SourcePill label="Fingertip" />
           </View>
         </Card>
 
@@ -160,28 +188,34 @@ export default function PulseMethodScreen() {
           style={styles.card}
         >
           <View style={styles.row}>
+            <MethodIcon glyph="◉" label="Face scan icon" />
             <View style={styles.texts}>
-              <Text style={[typography.sectionHeading, { color: colors.textPrimary }]}>
-                Face rPPG
-              </Text>
-              <Text style={[typography.bodySecondary, { color: colors.textSecondary }]}>
+              <Text style={styles.cardTitle}>Face rPPG</Text>
+              <Text style={styles.cardBody}>
                 Front-camera face scan · a few seconds
               </Text>
-              <Text style={[typography.captionStrong, { color: colors.textSecondary }]}>
-                {recentRppg
-                  ? `${recentRppg.bpm} BPM · ${relativeTime(recentRppg.measuredAt)} · ${qualityLabel(recentRppg.quality)}`
-                  : 'No recent face measurement'}
-              </Text>
+              {recentRppg ? (
+                <Text style={styles.recent}>
+                  <Text style={styles.recentBpm}>{recentRppg.bpm} BPM</Text>
+                  <Text>
+                    {' · '}
+                    {relativeTime(recentRppg.measuredAt)}
+                    {' · '}
+                    {qualityLabel(recentRppg.quality)}
+                  </Text>
+                </Text>
+              ) : (
+                <Text style={styles.recent}>No recent face measurement</Text>
+              )}
             </View>
-            <Badge label="Face scan" tone="purple" />
+            <SourcePill label="Face scan" />
           </View>
         </Card>
 
         <Button title="Measure with fingertip" onPress={goFingertip} fullWidth />
-        <View style={styles.gap} />
         <Button title="Measure with face scan" onPress={goFace} variant="secondary" fullWidth />
 
-        <Text style={[styles.disclaimer, typography.caption, { color: colors.textSecondary }]}>
+        <Text style={styles.disclaimer}>
           Wellness measurements only. Not a medical device — not for diagnosis or treatment.
         </Text>
       </ScrollView>
@@ -190,11 +224,77 @@ export default function PulseMethodScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  content: { padding: spacing.lg, gap: spacing.md },
-  card: { borderRadius: radius.lg },
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  texts: { flex: 1, gap: spacing.xs },
-  gap: { height: spacing.sm },
-  disclaimer: { marginTop: spacing.md },
+  safe: { flex: 1, backgroundColor: GV.stage },
+  content: {
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 32,
+    gap: SPACE.cardGap,
+  },
+  title: {
+    ...TYPE.display,
+    color: GV.card,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  subtitle: {
+    ...TYPE.body,
+    color: GV.fog,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  card: {
+    padding: SPACE.cardPad,
+  },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  texts: { flex: 1, gap: 8 },
+  iconTile: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: GV.wash,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconGlyph: {
+    fontFamily: FONT.semi,
+    fontSize: 24,
+    lineHeight: 28,
+    color: GV.cta,
+  },
+  sourcePill: {
+    backgroundColor: GV.wash,
+    borderRadius: SPACE.rPill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  sourcePillText: {
+    ...TYPE.chip,
+    color: GV.ink,
+  },
+  cardTitle: {
+    ...TYPE.title,
+    color: GV.ink,
+  },
+  cardBody: {
+    ...TYPE.body,
+    color: GV.body,
+  },
+  recent: {
+    ...TYPE.caption,
+    color: GV.muted,
+  },
+  recentBpm: {
+    fontFamily: FONT.semi,
+    fontSize: 13,
+    lineHeight: 18,
+    color: GV.ink,
+    fontVariant: ['tabular-nums'],
+  },
+  disclaimer: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+    marginTop: 8,
+  },
 });

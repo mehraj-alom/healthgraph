@@ -483,9 +483,11 @@ export function storyItemFromLogEvent(
     case 'NUTRITION_LOG': {
       const w = num(payload.water_ml);
       const meals = num(payload.meals_count);
+      // Meals lead: the hero value of a nutrition entry is what was eaten,
+      // water is context. (Water logged alone still headlines honestly.)
       const parts = [
-        w != null && w > 0 ? `${formatWaterMl(w)} water` : null,
         meals != null ? `${meals} meal${meals > 1 ? 's' : ''}` : null,
+        w != null && w > 0 ? `${formatWaterMl(w)} water` : null,
       ].filter(Boolean);
       return {
         id: ev.event_id,

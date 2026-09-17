@@ -17,7 +17,7 @@ import { useProfilePhoto } from '@/hooks/useProfilePhoto';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Input, NumberInput, SectionHeader } from '@/components';
-import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { api } from '@/services/api';
 import type { PatientProfile, RootStackParamList } from '@/types';
 
@@ -375,89 +375,88 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: GV.stage,
   },
   content: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xxl,
-    gap: SPACING.sm,
+    paddingHorizontal: SPACE.screenH,
+    paddingVertical: SPACE.sectionGap,
+    paddingBottom: 48,
+    gap: SPACE.cardGap,
   },
   sectionTitle: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.xs,
+    ...TYPE.title,
+    color: '#FFFFFF',
+    marginTop: SPACE.sectionGap,
+    marginBottom: 8,
   },
   sectionSubtitle: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    ...TYPE.caption,
+    color: GV.fog,
+    marginBottom: 8,
   },
   card: {
-    gap: SPACING.md,
+    gap: 16,
   },
   field: {
-    gap: SPACING.xs,
+    gap: 8,
   },
   fieldRow: {
     flexDirection: 'row',
-    gap: SPACING.md,
+    gap: 16,
   },
   fieldHalf: {
     flex: 1,
   },
   fieldLabel: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.textSecondary,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   fieldValue: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
-    paddingVertical: SPACING.sm,
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.ink,
+    paddingVertical: 8,
   },
   saveButton: {
-    marginTop: SPACING.sm,
+    marginTop: 8,
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
   },
   menuRowContent: {
     flex: 1,
   },
   menuRowTitle: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.ink,
     marginBottom: 2,
   },
   menuRowSubtitle: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
+    ...TYPE.caption,
+    color: GV.muted,
   },
   menuRowChevron: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.textMuted,
-    marginLeft: SPACING.sm,
+    ...TYPE.title,
+    color: GV.muted,
+    marginLeft: 8,
   },
   photoWrap: {
     alignItems: 'center',
-    paddingVertical: SPACING.md,
+    paddingVertical: 16,
     gap: 4,
   },
   photoAvatar: {
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: COLORS.surfaceSecondary,
+    backgroundColor: GV.card,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.border,
     overflow: 'hidden',
   },
   photoImage: {
@@ -465,57 +464,55 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   photoInitial: {
-    ...TYPOGRAPHY.h1,
-    color: COLORS.textSecondary,
+    ...TYPE.display,
+    color: GV.ink,
   },
   photoName: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-    marginTop: SPACING.xs,
+    ...TYPE.title,
+    color: '#FFFFFF',
+    marginTop: 8,
   },
   photoEmail: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
+    ...TYPE.caption,
+    color: GV.fog,
   },
   photoActions: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    marginTop: SPACING.xs,
+    gap: 8,
+    marginTop: 8,
   },
   photoBtn: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.pill,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    backgroundColor: COLORS.surface,
+    borderRadius: SPACE.rPill,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: GV.card,
   },
   photoBtnText: {
-    ...TYPOGRAPHY.captionStrong,
-    color: COLORS.textPrimary,
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.ink,
   },
   dangerTitle: {
-    color: COLORS.error,
+    color: GV.danger,
   },
   dangerCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.error,
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    paddingHorizontal: SPACE.cardPad,
   },
   dangerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.md,
+    paddingVertical: SPACE.cardPad,
   },
   dangerRowTitle: {
-    ...TYPOGRAPHY.bodyStrong,
-    color: COLORS.error,
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.danger,
     marginBottom: 2,
   },
   dangerDivider: {
     height: 1,
-    backgroundColor: COLORS.border,
-    marginHorizontal: SPACING.md,
+    backgroundColor: GV.line,
   },
 });

@@ -24,17 +24,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import { Button, Card } from '@/components';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import {
   useDocuments,
   type ProcessingStage,
 } from '@/context/DocumentsContext';
-import {
-  COLORS,
-  BORDER_RADIUS,
-  SPACING,
-  TYPOGRAPHY,
-  SHADOWS,
-} from '@/constants';
 import { formatFileSize } from '@/services/documents';
 
 // ---------------------------------------------------------------------------
@@ -66,23 +60,23 @@ const STAGE_ORDER: Record<string, number> = {
 function stageInfo(stage: string): { label: string; color: string } {
   switch (stage) {
     case 'uploading':
-      return { label: 'Uploading...', color: COLORS.info };
+      return { label: 'Uploading...', color: GV.fx.sky };
     case 'uploaded':
-      return { label: 'Uploaded', color: COLORS.success };
+      return { label: 'Uploaded', color: GV.fx.green };
     case 'processing':
       return {
         label: 'Processing (OCR & extraction)...',
-        color: COLORS.warning,
+        color: GV.fx.amber,
       };
     case 'extracted':
-      return { label: 'Extracted', color: COLORS.success };
+      return { label: 'Extracted', color: GV.fx.green };
     case 'completed':
-      return { label: 'Complete', color: COLORS.success };
+      return { label: 'Complete', color: GV.cta };
     case 'failed':
     case 'failed_triage':
-      return { label: 'Failed', color: COLORS.error };
+      return { label: 'Failed', color: GV.danger };
     default:
-      return { label: stage, color: COLORS.textMuted };
+      return { label: stage, color: GV.muted };
   }
 }
 
@@ -223,12 +217,12 @@ export default function DocumentUploadScreen() {
               return (
                 <View key={s} style={styles.stageRow}>
                   <View
-                    style={[
+                      style={[
                       styles.stageDot,
                       {
                         backgroundColor: pastOrCurrent
                           ? sInfo.color
-                          : COLORS.border,
+                          : GV.line,
                       },
                       isCurrent && styles.stageDotActive,
                     ]}
@@ -253,7 +247,7 @@ export default function DocumentUploadScreen() {
                     {isCurrent && !terminal && (
                       <ActivityIndicator
                         size="small"
-                        color={COLORS.primary}
+                        color={GV.cta}
                         style={styles.stageSpinner}
                       />
                     )}
@@ -264,8 +258,8 @@ export default function DocumentUploadScreen() {
                         styles.stageLine,
                         {
                           backgroundColor: pastOrCurrent
-                            ? COLORS.primary
-                            : COLORS.border,
+                            ? GV.cta
+                            : GV.line,
                         },
                       ]}
                     />
@@ -276,7 +270,7 @@ export default function DocumentUploadScreen() {
 
             {currentStage === 'failed' && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorIcon}>⚠</Text>
+                <Text style={styles.errorIcon}>!</Text>
                 <Text style={styles.errorText}>
                   {uploadError ||
                     'Processing failed. Your original document is still safe.'}
@@ -286,7 +280,7 @@ export default function DocumentUploadScreen() {
 
             {currentStage === 'failed_triage' && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorIcon}>ℹ</Text>
+                <Text style={styles.errorIcon}>i</Text>
                 <Text style={styles.errorInfo}>
                   This document was not recognized as a medical record.
                 </Text>
@@ -331,7 +325,7 @@ export default function DocumentUploadScreen() {
 
         {!selectedFile ? (
           <Pressable style={styles.dropZone} onPress={pickFile}>
-            <Text style={styles.dropIcon}>📄</Text>
+            <Text style={styles.dropIcon}>+</Text>
             <Text style={styles.dropTitle}>Tap to choose a file</Text>
             <Text style={styles.dropSubtitle}>
               PDF, PNG, JPG, or JPEG{'\n'}Maximum {formatFileSize(MAX_FILE_SIZE)}
@@ -342,7 +336,7 @@ export default function DocumentUploadScreen() {
             <View style={styles.previewRow}>
               <View style={styles.previewIcon}>
                 <Text style={styles.previewIconText}>
-                  {selectedFile.type.includes('pdf') ? '📑' : '🖼'}
+                  {selectedFile.type.includes('pdf') ? 'PDF' : 'IMG'}
                 </Text>
               </View>
               <View style={styles.previewInfo}>
@@ -369,7 +363,7 @@ export default function DocumentUploadScreen() {
 
         {validationError ? (
           <View style={styles.errorBox}>
-            <Text style={styles.errorIcon}>⚠</Text>
+            <Text style={styles.errorIcon}>!</Text>
             <Text style={styles.errorText}>{validationError}</Text>
           </View>
         ) : null}
@@ -398,89 +392,84 @@ export default function DocumentUploadScreen() {
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: GV.stage },
   content: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xxl,
-    gap: SPACING.md,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 48,
+    gap: SPACE.cardGap,
   },
-  header: { paddingVertical: SPACING.md },
-  title: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary },
+  header: { paddingVertical: 16 },
+  title: { ...TYPE.display, color: '#FFFFFF' },
   subtitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+    ...TYPE.body,
+    color: GV.fog,
+    marginTop: 8,
   },
 
-  // File picker — sunken dashed well with subtle glow on dark
+  // File picker — flat white card
   dropZone: {
-    borderWidth: 2,
-    borderColor: COLORS.borderStrong,
-    borderStyle: 'dashed',
-    borderRadius: BORDER_RADIUS.lg,
-    backgroundColor: COLORS.surfaceSunken,
-    paddingVertical: SPACING.xxl * 1.2,
+    borderRadius: SPACE.rCard,
+    backgroundColor: GV.card,
+    paddingVertical: 48,
+    paddingHorizontal: SPACE.cardPad,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: SPACING.sm,
+    gap: 8,
   },
-  dropIcon: { fontSize: 48 },
-  dropTitle: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textPrimary },
+  dropIcon: { ...TYPE.display, color: GV.muted },
+  dropTitle: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink },
   dropSubtitle: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.muted,
     textAlign: 'center',
-    lineHeight: 20,
   },
 
   // Preview
-  previewCard: { marginTop: SPACING.xs },
-  previewRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  previewCard: { marginTop: 8 },
+  previewRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   previewIcon: {
     width: 52,
     height: 52,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.primaryBg,
+    borderRadius: 12,
+    backgroundColor: GV.wash,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  previewIconText: { fontSize: 24 },
+  previewIconText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.fx.blue },
   previewInfo: { flex: 1, gap: 2 },
-  previewName: { ...TYPOGRAPHY.bodyStrong, color: COLORS.textPrimary },
-  previewMeta: { ...TYPOGRAPHY.caption, color: COLORS.textMuted },
+  previewName: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink },
+  previewMeta: { ...TYPE.caption, color: GV.muted },
   changeFile: {
-    marginTop: SPACING.sm,
-    paddingTop: SPACING.sm,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: GV.line,
     alignItems: 'center',
   },
-  changeFileText: { ...TYPOGRAPHY.captionStrong, color: COLORS.primary },
+  changeFileText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.cta },
 
-  // Errors — dark error well with hairline
+  // Errors — flat wash well
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.errorBg,
-    borderWidth: 1,
-    borderColor: 'rgba(232, 93, 104, 0.25)',
-    padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
+    gap: 8,
+    backgroundColor: GV.wash,
+    padding: 12,
+    borderRadius: 12,
   },
-  errorIcon: { fontSize: 18, color: COLORS.error },
-  errorText: { ...TYPOGRAPHY.caption, color: COLORS.error, flex: 1 },
-  errorInfo: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, flex: 1 },
+  errorIcon: { ...TYPE.title, color: GV.danger },
+  errorText: { ...TYPE.caption, color: GV.danger, flex: 1 },
+  errorInfo: { ...TYPE.caption, color: GV.body, flex: 1 },
 
   // Actions
-  actions: { gap: SPACING.sm, marginTop: SPACING.sm },
+  actions: { gap: 8, marginTop: 8 },
 
   // Processing
-  processingCard: { gap: SPACING.md },
+  processingCard: { gap: 16 },
   stageRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.md,
+    gap: 16,
     position: 'relative',
   },
   stageDot: {
@@ -490,18 +479,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stageDotActive: { ...SHADOWS.sm },
-  stageCheck: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  stageDotActive: {},
+  stageCheck: { color: '#FFFFFF', fontSize: 14, fontFamily: FONT.semi },
   stageContent: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: 8,
   },
-  stageLabel: { ...TYPOGRAPHY.body },
-  stageLabelActive: { color: COLORS.textPrimary, fontWeight: '600' },
-  stageLabelInactive: { color: COLORS.textMuted },
-  stageSpinner: { marginLeft: SPACING.xs },
+  stageLabel: { ...TYPE.body },
+  stageLabelActive: { color: GV.ink, fontFamily: FONT.semi },
+  stageLabelInactive: { color: GV.muted },
+  stageSpinner: { marginLeft: 8 },
   stageLine: {
     position: 'absolute',
     left: 13,
@@ -511,9 +500,9 @@ const styles = StyleSheet.create({
   },
 
   hint: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textMuted,
+    ...TYPE.caption,
+    color: GV.fog,
     textAlign: 'center',
-    marginTop: SPACING.sm,
+    marginTop: 8,
   },
 });
