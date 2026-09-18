@@ -18,7 +18,7 @@ from models.events import (
     VerificationStatus,
 )
 from models.outbox import enqueue_clinical_event
-from models.ontology import MedicalConcept
+from models.ontology import BodyRegion, MedicalConcept
 from models.anatomy import (
     AnatomicalObservation,
     AnatomicalStructure,
@@ -51,6 +51,57 @@ router = APIRouter(
     prefix="/api/v1/logs",
     tags=["daily_logs"],
 )
+
+
+def _sanitize_daily_checkin(db: Session, payload: DailyCheckInRequest) -> None:
+    """Defensively sanitize a check-in so it can never 500 on DB constraints.
+
+    - Unknown ``body_location_id`` values are nulled: ``body_regions`` has
+      no seed data, so any non-null location that is absent server-side
+      would otherwise raise an FK IntegrityError on flush/commit and
+      surface as a generic 500 for the whole check-in (offline clients
+      then retry the same payload forever).
+    - Over-long free-text columns are truncated to their VARCHAR widths
+      (Pydantic does not cap them, unlike ``food_label``).
+    Only counts are logged — never health data.
+    """
+    location_ids = {
+        pain.body_location_id
+        for pain in payload.pain
+        if pain.body_location_id is not None
+    }
+    if location_ids:
+        known = set(
+            db.scalars(
+                select(BodyRegion.region_id).where(
+                    BodyRegion.region_id.in_(location_ids)
+                )
+            ).all()
+        )
+        unknown = location_ids - known
+        if unknown:
+            logger.warning(
+                "Dropping %d unknown body_location_id(s) from daily check-in",
+                len(unknown),
+            )
+            for pain in payload.pain:
+                if pain.body_location_id in unknown:
+                    pain.body_location_id = None
+
+    for vital in payload.vitals:
+        if vital.unit and len(vital.unit) > 30:
+            vital.unit = vital.unit[:30]
+    for pain in payload.pain:
+        if pain.pain_type and len(pain.pain_type) > 100:
+            pain.pain_type = pain.pain_type[:100]
+    for activity in payload.activities:
+        if len(activity.activity_type) > 100:
+            activity.activity_type = activity.activity_type[:100]
+    for medication in payload.medications:
+        if len(medication.medication_name) > 255:
+            medication.medication_name = medication.medication_name[:255]
+        if medication.dosage_unit and len(medication.dosage_unit) > 50:
+            medication.dosage_unit = medication.dosage_unit[:50]
 
 
 @router.post("/daily-checkin")
@@ -135,6 +186,10 @@ def submit_daily_checkin(
                     "are unknown or inactive."
                 ),
             )
+
+    # Null unknown body locations / truncate over-long strings so the
+    # check-in can never fail the commit with an IntegrityError (500).
+    _sanitize_daily_checkin(db, payload)
 
     # =========================================================================
     # Wellbeing
@@ -983,6 +1038,10 @@ def update_daily_checkin(
                 status_code=422,
                 detail="One or more submitted medical concepts are unknown or inactive.",
             )
+
+    # Null unknown body locations / truncate over-long strings so the
+    # update can never fail the commit with an IntegrityError (500).
+    _sanitize_daily_checkin(db, payload)
 
     # Wellbeing
     if any(value is not None for value in (payload.overall_wellbeing, payload.energy_level, payload.stress_level)):
