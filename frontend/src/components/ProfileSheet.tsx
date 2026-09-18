@@ -75,6 +75,7 @@ export function ProfileSheet({
   const { logout } = useAuth();
   const toast = useToast();
   const [legalOpen, setLegalOpen] = useState<'terms' | 'privacy' | null>(null);
+  const [premiumOpen, setPremiumOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const drawerW = Math.round(W * (2 / 3));
 
@@ -92,6 +93,7 @@ export function ProfileSheet({
       Animated.timing(slideX, { toValue: 0, duration: 260, useNativeDriver: true }).start();
       panX.setValue(0);
       setLegalOpen(null);
+      setPremiumOpen(false);
     }
   }, [visible, slideX, drawerW, panX]);
 
@@ -252,19 +254,67 @@ export function ProfileSheet({
             </View>
 
             <Text style={styles.sectionLabel}>Premium</Text>
-            <Pressable
-              onPress={() => toast.info('Premium is coming soon.')}
-              accessibilityRole="button"
-              accessibilityLabel="Premium subscription, coming soon"
-              style={({ pressed }) => [styles.card, styles.premiumCard, pressed && { opacity: 0.85 }]}
-            >
-              <View style={[styles.dot, { backgroundColor: GV.violet }]} />
-              <View style={styles.rowText}>
-                <Text style={styles.rowTitle}>Go Premium</Text>
-                <Text style={styles.rowSub}>Deeper insights & unlimited history</Text>
-              </View>
-              <Text style={styles.chev}>›</Text>
-            </Pressable>
+            <View style={[styles.card, styles.premiumCardWrap]}>
+              <Pressable
+                onPress={() => setPremiumOpen((v) => !v)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: premiumOpen }}
+                accessibilityLabel="Premium plans and pricing"
+                style={({ pressed }) => [styles.premiumHead, pressed && { opacity: 0.7 }]}
+              >
+                <View style={[styles.dot, { backgroundColor: GV.violet }]} />
+                <View style={styles.rowText}>
+                  <Text style={styles.rowTitle}>Go Premium</Text>
+                  <Text style={styles.rowSub}>3 days free, then from €11 a month</Text>
+                </View>
+                <Text style={styles.chev}>{premiumOpen ? '▾' : '›'}</Text>
+              </Pressable>
+              {premiumOpen ? (
+                <View style={styles.tiers}>
+                  <View style={styles.tier}>
+                    <View style={styles.tierHead}>
+                      <Text style={styles.tierName}>Free</Text>
+                      <Text style={styles.tierPrice}>€0</Text>
+                    </View>
+                    <Text style={styles.tierFeat}>General logging and basic graph{'\n'}3 meal scans a month{'\n'}2 AI messages a month</Text>
+                    <View style={styles.tierCurrent}>
+                      <Text style={styles.tierCurrentText}>Your current plan</Text>
+                    </View>
+                  </View>
+                  <View style={styles.tier}>
+                    <View style={styles.tierHead}>
+                      <Text style={styles.tierName}>General</Text>
+                      <Text style={styles.tierPrice}>€11<Text style={styles.tierPer}>/mo</Text></Text>
+                    </View>
+                    <Text style={styles.tierFeat}>4 document scans{'\n'}Limited food scan{'\n'}No voice alarm and call reminders{'\n'}No 3D body</Text>
+                    <Pressable
+                      onPress={() => toast.info('Subscriptions open soon.')}
+                      accessibilityRole="button"
+                      accessibilityLabel="Choose General plan"
+                      style={({ pressed }) => [styles.tierBtn, pressed && { opacity: 0.8 }]}
+                    >
+                      <Text style={styles.tierBtnText}>Choose General</Text>
+                    </Pressable>
+                  </View>
+                  <View style={[styles.tier, styles.tierBest]}>
+                    <View style={styles.tierHead}>
+                      <Text style={styles.tierName}>All-in</Text>
+                      <Text style={styles.tierPrice}>€18<Text style={styles.tierPer}>/mo</Text></Text>
+                    </View>
+                    <Text style={styles.tierFeat}>Everything in General{'\n'}Voice alarm and call reminders{'\n'}3D body included{'\n'}Advanced features, all included</Text>
+                    <Pressable
+                      onPress={() => toast.info('Subscriptions open soon.')}
+                      accessibilityRole="button"
+                      accessibilityLabel="Choose All-in plan"
+                      style={({ pressed }) => [styles.tierBtn, pressed && { opacity: 0.8 }]}
+                    >
+                      <Text style={styles.tierBtnText}>Choose All-in</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.renewNote}>Start with 3 days free. Then your plan auto-renews every month. Cancel anytime and keep access until the period ends.</Text>
+                </View>
+              ) : null}
+            </View>
 
             <Text style={styles.sectionLabel}>About</Text>
             <View style={styles.card}>
@@ -438,11 +488,87 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
   },
-  premiumCard: {
+  premiumCardWrap: {
+    paddingVertical: 8,
+  },
+  premiumHead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 16,
+    paddingVertical: 8,
+    minHeight: 56,
+  },
+  tiers: {
+    gap: 12,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  tier: {
+    backgroundColor: GV.wash,
+    borderRadius: 14,
+    padding: 16,
+    gap: 8,
+  },
+  tierBest: {
+    borderWidth: 1.5,
+    borderColor: GV.violet,
+  },
+  tierHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  tierName: {
+    ...TYPE.button,
+    fontSize: 16,
+    color: GV.ink,
+  },
+  tierPrice: {
+    fontFamily: FONT.bold,
+    fontSize: 20,
+    color: GV.ink,
+    fontVariant: ['tabular-nums'],
+  },
+  tierPer: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    color: GV.muted,
+  },
+  tierFeat: {
+    ...TYPE.body,
+    fontSize: 13.5,
+    lineHeight: 21,
+    color: GV.body,
+  },
+  tierBtn: {
+    backgroundColor: GV.cta,
+    borderRadius: 9999,
+    alignItems: 'center',
+    paddingVertical: 11,
+    marginTop: 4,
+  },
+  tierBtnText: {
+    ...TYPE.button,
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  tierCurrent: {
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: GV.line,
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  tierCurrentText: {
+    ...TYPE.chip,
+    color: GV.muted,
+  },
+  renewNote: {
+    ...TYPE.caption,
+    color: GV.muted,
+    lineHeight: 18,
+    paddingHorizontal: 4,
   },
   legalCopy: {
     ...TYPE.body,

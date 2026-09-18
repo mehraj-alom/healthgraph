@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 /**
  * Migration function type.
@@ -606,6 +606,65 @@ const migrations: Record<number, MigrationFn> = {
       8,
     );
   },
+
+  // ========================================================================
+  // Migration 9: Offline viewing — documents.local_uri (additive)
+  // ========================================================================
+  // Caches the on-device file path of a downloaded document so reports can
+  // be opened offline. Pure extension: guarded ALTER keeps re-runs safe.
+  9: async (db: SQLiteDatabase) => {
+    const cols = await db.getAllAsync<{ name: string }>(
+      `SELECT name FROM pragma_table_info('documents')`,
+    );
+    const names = new Set(cols.map((c) => c.name));
+    if (!names.has('local_uri')) {
+      await db.execAsync(
+        `ALTER TABLE documents ADD COLUMN local_uri TEXT`,
+      );
+    }
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      9,
+      'Offline viewing: documents local_uri column',
+      9,
+    );
+  },
+
+  // ========================================================================
+  // Migration 10: Prescription scan sessions (additive)
+  // ========================================================================
+  // Local-only grouping for multipage prescription scans: which uploaded
+  // documents belong to one scanner run and where review stands. The
+  // documents themselves are untouched; deleting a session never deletes
+  // documents or medications.
+  10: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS scan_sessions (
+        session_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'prescription',
+        document_ids TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'capturing',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_scan_patient ON scan_sessions (patient_id);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      10,
+      'Prescription scanner: scan_sessions table',
+      10,
+    );
+  },
 };
 
 /**
@@ -656,6 +715,8 @@ const REQUIRED_TABLES = [
   'rppg_measurements',
   // Hydration control state (migration 6)
   'hydration_state',
+  // Prescription scan sessions (migration 10)
+  'scan_sessions',
 ];
 
 /**

@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getPpgProvider,
+  isExpoGoPpgRuntime,
   PPG_COPY,
   type PpgMeasurementResult,
   type PpgState,
@@ -95,7 +96,9 @@ export function usePpgMeasurement(): UsePpgMeasurement {
     if (provider.kind === 'native' && !provider.isAvailable) {
       if (!mounted.current) return;
       setError(
-        'Heart-rate measurement is not available in this build. Please install the latest version of HealthGraph.',
+        isExpoGoPpgRuntime()
+          ? 'Heart-rate measurement needs the HealthGraph app build — it cannot run inside Expo Go. Install the preview build and try again.'
+          : 'Heart-rate measurement is missing from this build. Install the newest preview build of HealthGraph and try again.',
       );
       return;
     }

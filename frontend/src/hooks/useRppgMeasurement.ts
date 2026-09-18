@@ -22,6 +22,7 @@ import {
   gateRppgQuality,
   getRppgFrameSource,
   getRppgProvider,
+  isExpoGoRuntime,
   mapNativeCaptureState,
   measuredFps,
   preprocessWindowYielding,
@@ -138,8 +139,13 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     if (!mounted.current) return;
 
     if (!frameSource.isAvailable) {
+      // Tell the user the REAL cause: Expo Go (or a build predating the
+      // module) has no face-capture native code. "Latest version" misled
+      // users who already had it — the runtime is what matters.
       fail(
-        'Face measurement is not available in this build. Please install the latest version of HealthGraph.',
+        isExpoGoRuntime()
+          ? 'Face measurement needs the HealthGraph app build — it cannot run inside Expo Go. Install the preview build and try again.'
+          : 'Face measurement is missing from this build. Install the newest preview build of HealthGraph and try again.',
       );
       return;
     }
@@ -158,7 +164,9 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     );
     if (!provider.isAvailable) {
       fail(
-        'The on-device pulse model is not available in this build. Please install the latest version of HealthGraph.',
+        isExpoGoRuntime()
+          ? 'Face measurement needs the HealthGraph app build — it cannot run inside Expo Go. Install the preview build and try again.'
+          : 'The on-device pulse model did not load in this build. Reinstall the newest preview build and try again.',
       );
       return;
     }

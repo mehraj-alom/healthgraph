@@ -90,6 +90,25 @@ export function getRppgFrameSource(): RppgFrameSource {
   return cached;
 }
 
+/**
+ * True when running inside Expo Go, which hosts no custom native modules.
+ * Same appOwnership probe the ONNX provider uses; try/catch so node tests
+ * and unknown runtimes degrade to false instead of crashing.
+ */
+export function isExpoGoRuntime(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('expo-constants') as {
+      default?: { appOwnership?: string };
+      appOwnership?: string;
+    };
+    const ownership = mod?.default?.appOwnership ?? mod?.appOwnership;
+    return ownership === 'expo';
+  } catch {
+    return false;
+  }
+}
+
 /** Test seam: reset the cached selection. */
 export function __resetRppgFrameSourceForTests(): void {
   cached = null;

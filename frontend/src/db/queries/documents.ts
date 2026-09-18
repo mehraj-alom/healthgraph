@@ -40,7 +40,8 @@ export async function getDocuments(
       storage_url,
       status,
       created_at,
-      updated_at
+      updated_at,
+      local_uri
     FROM documents
     WHERE patient_id = ?
   `;
@@ -66,6 +67,7 @@ export async function getDocuments(
     status: string;
     created_at: string;
     updated_at: string;
+    local_uri: string | null;
   }>(query, params);
 
   return rows.map(mapRowToDocumentListItem);
@@ -88,6 +90,7 @@ export async function getDocumentById(
     status: string;
     created_at: string;
     updated_at: string;
+    local_uri: string | null;
   }>(
     `
     SELECT
@@ -97,7 +100,8 @@ export async function getDocumentById(
       storage_url,
       status,
       created_at,
-      updated_at
+      updated_at,
+      local_uri
     FROM documents
     WHERE patient_id = ? AND document_id = ?
     `,
@@ -124,6 +128,7 @@ export async function getDocumentsByStatus(
     status: string;
     created_at: string;
     updated_at: string;
+    local_uri: string | null;
   }>(
     `
     SELECT
@@ -133,7 +138,8 @@ export async function getDocumentsByStatus(
       storage_url,
       status,
       created_at,
-      updated_at
+      updated_at,
+      local_uri
     FROM documents
     WHERE patient_id = ? AND status = ?
     ORDER BY created_at DESC
@@ -290,6 +296,7 @@ function mapRowToDocumentListItem(row: {
   status: string;
   created_at: string;
   updated_at: string;
+  local_uri: string | null;
 }): DocumentListItem {
   return {
     document_id: row.document_id,
@@ -299,5 +306,27 @@ function mapRowToDocumentListItem(row: {
     status: row.status as DocumentStatus,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    local_uri: row.local_uri,
   };
+}
+
+/**
+ * Remember the on-device cached file for a document (offline viewing).
+ * Never clears an existing path with NULL — pass an explicit URI.
+ */
+export async function setDocumentLocalUri(
+  patientId: string,
+  documentId: string,
+  localUri: string,
+): Promise<void> {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `
+    UPDATE documents
+    SET local_uri = ?, cached_at = datetime('now')
+    WHERE patient_id = ? AND document_id = ?
+    `,
+    [localUri, patientId, documentId],
+  );
 }

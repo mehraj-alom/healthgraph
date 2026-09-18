@@ -28,6 +28,7 @@ export function ProcessingBadge({ onPress }: ProcessingBadgeProps) {
   const [activeCount, setActiveCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
   const [latestName, setLatestName] = useState('');
+  const [pausedNote, setPausedNote] = useState<string | null>(null);
 
   // Re-read from the ref whenever the processing list changes structurally
   useEffect(() => {
@@ -41,7 +42,11 @@ export function ProcessingBadge({ onPress }: ProcessingBadgeProps) {
     const current = active.find(
       (e) => e.stage === 'processing' || e.stage === 'uploading',
     );
-    setLatestName(current?.fileName ?? '');
+    // A friendly paused/queued note (set when the worker is unavailable)
+    // takes precedence over the generic spinner copy.
+    const noted = active.find((e) => e.note);
+    setLatestName(noted?.note ?? current?.fileName ?? '');
+    setPausedNote(noted?.note ?? null);
   }, [processingVersion, getActiveProcessing]);
 
   if (activeCount === 0 && completedCount === 0) return null;
@@ -54,11 +59,16 @@ export function ProcessingBadge({ onPress }: ProcessingBadgeProps) {
     >
       {activeCount > 0 && (
         <>
-          <ActivityIndicator size="small" color={COLORS.primary} />
-          <Text style={styles.activeText}>
-            {activeCount === 1
-              ? `Processing ${latestName || 'document'}...`
-              : `Processing ${activeCount} documents...`}
+          {pausedNote ? (
+            <Text style={styles.pausedIcon}>⏸</Text>
+          ) : (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          )}
+          <Text style={styles.activeText} numberOfLines={2}>
+            {pausedNote ??
+              (activeCount === 1
+                ? `Processing ${latestName || 'document'}...`
+                : `Processing ${activeCount} documents...`)}
           </Text>
         </>
       )}
@@ -110,7 +120,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  completeText: {
+  pausedIcon: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },  completeText: {
     ...TYPOGRAPHY.captionStrong,
     color: COLORS.success,
     flex: 1,

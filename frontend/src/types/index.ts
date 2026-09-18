@@ -286,6 +286,8 @@ export interface DocumentListItem {
   status: DocumentStatus;
   created_at: string;
   updated_at: string;
+  /** On-device cached file path for offline viewing (null until downloaded). */
+  local_uri?: string | null;
 }
 
 export interface DocumentExtraction {
@@ -376,6 +378,8 @@ export type RootStackParamList = {
   RppgMeasure: undefined;
   /** Food photo calorie estimation (camera viewfinder + result sheet). */
   FoodScan: undefined;
+  /** Guided multipage prescription capture (premium). */
+  PrescriptionScanner: undefined;
 };
 
 // ============================================================================

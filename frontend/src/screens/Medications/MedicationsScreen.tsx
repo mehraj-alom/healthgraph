@@ -9,7 +9,7 @@
  * - Medication history
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,13 @@ import { useMedications, useMedicationSchedule, useMedicationTakenEvents, record
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useAuth } from '@/context/AuthContext';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import { usePremiumEntitled } from '@/services/premium';
+import {
+  listScanSessions,
+  setScanStatus,
+  deleteScanSession,
+  type ScanSession,
+} from '@/db/queries/scanSessions';
 import { api } from '@/services/api';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 void FONT;
@@ -82,6 +89,20 @@ function getStatusLabel(status: MedicationStatus): string {
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
+/** Friendly one-liner per scan-session lifecycle state. */
+function scanStatusCopy(status: ScanSession['status']): string {
+  switch (status) {
+    case 'capturing':
+      return 'Unfinished scan — pages were never uploaded.';
+    case 'uploading':
+      return 'Uploading pages…';
+    case 'awaiting_extraction':
+      return 'Saved. Reading finishes automatically — confirm each medicine with + Add med. Nothing is added on its own.';
+    case 'reviewed':
+      return 'Done — medicines confirmed from this scan.';
+  }
+}
+
 // ── MAIN COMPONENT ──
 
 export default function MedicationsScreen() {
@@ -94,6 +115,58 @@ export default function MedicationsScreen() {
   const onTabScroll = useHideTabBarOnScroll();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
+  // Prefilled link when adding a medication from a scanned prescription.
+  const [scanSourceDocId, setScanSourceDocId] = useState<string | null>(null);
+  const premiumEntitled = usePremiumEntitled();
+
+  // ---- Scanned prescription sessions (local record of scanner runs) ----
+  const [scanSessions, setScanSessions] = useState<ScanSession[]>([]);
+  const loadScanSessions = useCallback(async () => {
+    const patientId = getCachedPatientId();
+    if (!patientId) {
+      setScanSessions([]);
+      return;
+    }
+    try {
+      setScanSessions(await listScanSessions(patientId));
+    } catch {
+      // Sessions are convenience only — the documents list is unaffected.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadScanSessions();
+  }, [loadScanSessions]);
+
+  // Refresh when coming back from the scanner.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      void loadScanSessions();
+    });
+    return unsubscribe;
+  }, [navigation, loadScanSessions]);
+
+  const openScanner = useCallback(() => {
+    if (!premiumEntitled) {
+      Alert.alert(
+        'Premium feature',
+        'The prescription scanner is part of Premium. See Profile → Premium (3 days free) to unlock it.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+    navigation.navigate('PrescriptionScanner');
+  }, [navigation, premiumEntitled]);
+
+  const addMedicationFromScan = useCallback((session: ScanSession) => {
+    setEditingMedication(null);
+    setScanSourceDocId(session.document_ids[0] ?? null);
+    setShowAddModal(true);
+  }, []);
+
+  const dismissScanSession = useCallback((session: ScanSession) => {
+    void deleteScanSession(session.session_id).then(() => loadScanSessions());
+  }, [loadScanSessions]);
 
   // Get today's date for schedule
   const today = new Date().toISOString().split('T')[0];
@@ -199,11 +272,56 @@ export default function MedicationsScreen() {
           title="+ Add"
           onPress={() => {
             setEditingMedication(null);
+            setScanSourceDocId(null);
             setShowAddModal(true);
           }}
           accessibilityLabel="Add medication"
         />
+        <Button
+          title="⊕ Scan prescription"
+          variant="outline"
+          onPress={openScanner}
+          accessibilityLabel="Scan prescription pages"
+        />
       </View>
+
+      {scanSessions.length > 0 && (
+        <Card style={styles.scanCard}>
+          <Text style={styles.scanTitle}>Scanned prescriptions</Text>
+          {scanSessions.map((session) => (
+            <View key={session.session_id} style={styles.scanRow}>
+              <View style={styles.scanInfo}>
+                <Text style={styles.scanName}>
+                  {session.document_ids.length === 1
+                    ? '1 page'
+                    : `${session.document_ids.length} pages`}
+                  {session.status === 'reviewed' ? ' · reviewed ✓' : ''}
+                </Text>
+                <Text style={styles.scanSub}>{scanStatusCopy(session.status)}</Text>
+              </View>
+              {session.status !== 'reviewed' && session.document_ids.length > 0 && (
+                <Pressable
+                  onPress={() => addMedicationFromScan(session)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add medication from this scan"
+                  style={styles.scanAddBtn}
+                >
+                  <Text style={styles.scanAddText}>+ Add med</Text>
+                </Pressable>
+              )}
+              <Pressable
+                onPress={() => dismissScanSession(session)}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss scanned prescription"
+                hitSlop={8}
+                style={styles.scanDismissBtn}
+              >
+                <Text style={styles.scanDismissText}>✕</Text>
+              </Pressable>
+            </View>
+          ))}
+        </Card>
+      )}
 
       <Card style={styles.tabCard}>
         <View style={styles.tabRow}>
@@ -277,15 +395,28 @@ export default function MedicationsScreen() {
 
       {/* Add/Edit Modal */}
       <AddMedicationModal
+        key={editingMedication?.medication_id ?? scanSourceDocId ?? 'new'}
         visible={showAddModal}
         medication={editingMedication}
+        sourceDocumentId={scanSourceDocId}
         onClose={() => {
           setShowAddModal(false);
           setEditingMedication(null);
+          setScanSourceDocId(null);
         }}
         onSave={() => {
+          // Saving from a scan confirms review of every session holding it.
+          if (scanSourceDocId) {
+            const matched = scanSessions.filter((s) =>
+              s.document_ids.includes(scanSourceDocId),
+            );
+            void Promise.all(
+              matched.map((s) => setScanStatus(s.session_id, 'reviewed')),
+            ).then(() => loadScanSessions());
+          }
           setShowAddModal(false);
           setEditingMedication(null);
+          setScanSourceDocId(null);
           refetchMedications();
           refetchSchedule();
         }}
@@ -639,11 +770,14 @@ function HistoryItem({
 function AddMedicationModal({
   visible,
   medication,
+  sourceDocumentId,
   onClose,
   onSave,
 }: {
   visible: boolean;
   medication: Medication | null;
+  /** Set when adding from a scanned prescription — linked, never auto-filled. */
+  sourceDocumentId?: string | null;
   onClose: () => void;
   onSave: () => void;
 }) {
@@ -696,6 +830,7 @@ function AddMedicationModal({
         prn,
         reminder_enabled: reminderEnabled,
         notes: notes.trim() || null,
+        source_document_id: sourceDocumentId ?? medication?.source_document_id ?? null,
       };
 
       if (medication) {
@@ -710,7 +845,7 @@ function AddMedicationModal({
     } finally {
       setSaving(false);
     }
-  }, [name, genericName, brandName, strength, strengthUnit, doseAmount, doseUnit, route, frequency, scheduledTimes, startDate, endDate, purpose, instructions, prescriber, prn, reminderEnabled, notes, medication, onSave]);
+  }, [name, genericName, brandName, strength, strengthUnit, doseAmount, doseUnit, route, frequency, scheduledTimes, startDate, endDate, purpose, instructions, prescriber, prn, reminderEnabled, notes, medication, sourceDocumentId, onSave]);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -723,6 +858,9 @@ function AddMedicationModal({
             <Text style={styles.modalCancel}>Cancel</Text>
           </Pressable>
           <Text style={styles.modalTitle}>{medication ? 'Edit Medication' : 'Add Medication'}</Text>
+          {sourceDocumentId && !medication ? (
+            <Text style={styles.scanLinkHint}>Linked to your scanned prescription — review each field before saving.</Text>
+          ) : null}
           <Button
             title={saving ? 'Saving...' : 'Save'}
             onPress={() => void handleSave()}
@@ -939,6 +1077,65 @@ const styles = StyleSheet.create({
   addWrap: {
     paddingHorizontal: SPACE.screenH,
     marginBottom: SPACE.cardGap,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  scanCard: {
+    backgroundColor: GV.card,
+    borderRadius: SPACE.rCard,
+    padding: SPACE.cardPad,
+    marginHorizontal: SPACE.screenH,
+    marginBottom: SPACE.cardGap,
+    gap: 12,
+  },
+  scanTitle: {
+    ...TYPE.title,
+    color: GV.ink,
+  },
+  scanRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scanInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  scanName: {
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.ink,
+  },
+  scanSub: {
+    ...TYPE.caption,
+    color: GV.muted,
+  },
+  scanAddBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: GV.cta,
+  },
+  scanAddText: {
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.cta,
+  },
+  scanDismissBtn: {
+    minWidth: 32,
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scanDismissText: {
+    ...TYPE.body,
+    color: GV.muted,
+  },
+  scanLinkHint: {
+    ...TYPE.caption,
+    color: GV.cta,
+    marginTop: 4,
   },
   tabCard: {
     backgroundColor: GV.card,

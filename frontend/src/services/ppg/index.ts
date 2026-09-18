@@ -33,6 +33,11 @@ function runningInExpoGo(): boolean {
   }
 }
 
+/** True inside Expo Go (no custom native modules) — for honest error copy. */
+export function isExpoGoPpgRuntime(): boolean {
+  return runningInExpoGo();
+}
+
 /** Select the usable provider for this runtime (cached). */
 export function getPpgProvider(): PpgProvider {
   if (!cached) {

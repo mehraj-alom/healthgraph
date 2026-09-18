@@ -1,4 +1,7 @@
-import { api } from '@/services/api';
+import * as FileSystem from 'expo-file-system/legacy';
+
+import { api, getApiBaseUrl } from '@/services/api';
+import { auth } from '@/context/AuthContext';
 import type {
   DocumentListItem,
   DocumentExtraction,
@@ -134,6 +137,85 @@ export async function pollDocumentStatus(
   console.warn(`[Poll]   ⚠ Max attempts (${maxAttempts}) reached — returning last known state`);
   // Return whatever we have after max attempts
   return getDocument(documentId);
+}
+
+/**
+ * Offline file cache — download the original document bytes once, then open
+ * from disk forever. Files live under the app's document directory so the
+ * user can view reports with no connectivity.
+ */
+const DOC_CACHE_SUBDIR = 'documents/';
+
+async function ensureDocCacheDir(): Promise<string> {
+  const base = FileSystem.documentDirectory;
+  if (!base) {
+    throw new Error('On-device file storage is not available on this platform.');
+  }
+  const dir = `${base}${DOC_CACHE_SUBDIR}`;
+  const info = await FileSystem.getInfoAsync(dir);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  }
+  return dir;
+}
+
+function safeCacheName(documentId: string, hint?: string | null): string {
+  const clean = (hint ?? 'document').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80) || 'document';
+  return `${documentId}-${clean}`;
+}
+
+/**
+ * Check whether a cached file still exists on disk. Cached paths can go
+ * stale (OS cleanup, reinstall) — always verify before opening.
+ */
+export async function cachedFileExists(localUri: string | null | undefined): Promise<boolean> {
+  if (!localUri) return false;
+  try {
+    const info = await FileSystem.getInfoAsync(localUri);
+    return info.exists;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Download the original file for a document into the on-device cache.
+ * Returns the local URI. Throws on auth/network errors (caller shows UI).
+ */
+export async function downloadDocumentFile(
+  documentId: string,
+  filenameHint?: string | null,
+): Promise<string> {
+  const dir = await ensureDocCacheDir();
+  const target = `${dir}${safeCacheName(documentId, filenameHint)}`;
+
+  const currentUser = auth.currentUser;
+  const token = currentUser ? await currentUser.getIdToken() : null;
+
+  const result = await FileSystem.downloadAsync(
+    `${getApiBaseUrl()}/api/v1/documents/${documentId}/file`,
+    target,
+    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+  );
+  if (result.status !== 200) {
+    throw new Error('The file could not be downloaded. Please try again.');
+  }
+  return result.uri;
+}
+
+/**
+ * Copy an already-on-device file (e.g. freshly picked for upload) into the
+ * persistent cache dir. Cheaper than re-downloading after upload.
+ */
+export async function cacheLocalCopy(
+  documentId: string,
+  sourceUri: string,
+  filenameHint?: string | null,
+): Promise<string> {
+  const dir = await ensureDocCacheDir();
+  const target = `${dir}${safeCacheName(documentId, filenameHint)}`;
+  await FileSystem.copyAsync({ from: sourceUri, to: target });
+  return target;
 }
 
 /**

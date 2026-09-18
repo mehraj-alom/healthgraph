@@ -252,4 +252,9 @@ class ApiService {
 export const api =
   new ApiService();
 
+/** Absolute API base URL (for non-Axios transfers like file downloads). */
+export function getApiBaseUrl(): string {
+  return API_URL;
+}
+
 export default api;

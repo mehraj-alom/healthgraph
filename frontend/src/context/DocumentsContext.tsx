@@ -35,12 +35,14 @@ import {
   listDocuments,
   getDocumentExtraction,
   pollDocumentStatus,
+  cacheLocalCopy,
 } from '@/services/documents';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import {
   getDocuments as dbGetDocuments,
   upsertDocument as dbUpsertDocument,
   hydrateDocuments as dbHydrateDocuments,
+  setDocumentLocalUri,
 } from '@/db/queries/documents';
 import type {
   DocumentListItem,
@@ -67,6 +69,12 @@ export interface ActiveProcessing {
   stage: ProcessingStage;
   startedAt: number;
   error?: string;
+  /**
+   * Friendly, user-facing note (e.g. processing paused). Optional so all
+   * existing producers/consumers keep working unchanged. Rendered by the
+   * badge and the upload screen instead of the generic spinner copy.
+   */
+  note?: string;
 }
 
 export interface DocumentsContextValue {
@@ -136,6 +144,20 @@ const TERMINAL_STATUSES = new Set(['COMPLETED', 'FAILED', 'FAILED_TRIAGE']);
 
 const isTerminal = (stage: ProcessingStage): boolean =>
   stage === 'completed' || stage === 'failed' || stage === 'failed_triage';
+
+// ---------------------------------------------------------------------------
+// Friendly copy for paused/queued processing.
+// Shown instead of raw HTTP details or an eternal spinner when the
+// processing worker is unavailable. No jargon, no status codes.
+// ---------------------------------------------------------------------------
+
+/** Upload 503: the document row is saved, only the queue handoff failed. */
+const PAUSED_AFTER_SAVE_MSG =
+  'Saved on your account. Processing is paused right now and will start automatically — nothing you need to do.';
+
+/** Poll gave up while the document was still mid-pipeline. */
+const STILL_QUEUED_MSG =
+  'Still in the queue — processing will finish automatically. You can leave; nothing is lost.';
 
 // ---------------------------------------------------------------------------
 // Context
@@ -330,7 +352,8 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
           console.log(`[UploadFlow] ✓ Upload succeeded → document_id=${realId}`);
           onUploaded?.(realId);
 
-          // 1b. Store metadata in SQLite
+          // 1b. Store metadata in SQLite + keep a persistent on-device
+          // copy of the picked file for offline viewing (best-effort).
           const patientId = getCachedPatientId();
           if (patientId) {
             await dbUpsertDocument(patientId, {
@@ -341,6 +364,12 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             });
+            try {
+              const localUri = await cacheLocalCopy(realId, file.uri, file.name);
+              await setDocumentLocalUri(patientId, realId, localUri);
+            } catch {
+              // Cache is a convenience — the server copy is authoritative.
+            }
           }
 
           // 2. Replace temp entry with real document ID
@@ -355,11 +384,11 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
           notifyStage(realId, stageFromStatus(doc.status));
 
           // 3. Poll if not already terminal
+          let lastStatus: string = doc.status;
           if (!TERMINAL_STATUSES.has(doc.status)) {
-            let lastStatus: string = doc.status;
             console.log(`[UploadFlow] ▶ Starting poll: status=${doc.status}`);
 
-            await pollDocumentStatus(
+            const polled = await pollDocumentStatus(
               realId,
               (status) => {
                 if (status !== lastStatus) {
@@ -374,26 +403,51 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
               3000,
               120,
             );
+            lastStatus = polled.status;
           }
 
-          // 4. Mark terminal and refresh list
-          const finalStage = stageFromStatus(
-            activeProcessingRef.current.find((e) => e.documentId === realId)
-              ?.stage ?? 'completed',
-          );
-          console.log(`[UploadFlow] ★ Processing done: stage=${finalStage}`);
-          setEntryTerminal(realId, finalStage);
+          // 4. Terminal → close out and refresh list. Still mid-pipeline
+          // after 6 min of polling (e.g. worker paused) → stay queued with
+          // a friendly note instead of an eternal unexplained spinner.
+          if (TERMINAL_STATUSES.has(lastStatus)) {
+            const finalStage = stageFromStatus(lastStatus);
+            console.log(`[UploadFlow] ★ Processing done: stage=${finalStage}`);
+            setEntryTerminal(realId, finalStage);
+          } else {
+            console.log(`[UploadFlow] ◷ Still queued after polling: status=${lastStatus}`);
+            updateEntry(realId, {
+              stage: stageFromStatus(lastStatus),
+              note: STILL_QUEUED_MSG,
+            });
+            setProcessingVersion((v) => v + 1);
+            notifyStage(realId, stageFromStatus(lastStatus));
+          }
           await refetchDocuments();
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : 'Upload failed';
           const code = (err as any)?.code ?? 'UNKNOWN';
+          const httpStatus = (err as any)?.response?.status as number | undefined;
           console.error(
             `[UploadFlow] ✖ FAILED resolvedId=${resolvedId} code=${code} msg=${msg}`,
             err,
           );
-          // Use resolvedId (realId if upload succeeded, tempId if it didn't)
-          setEntryTerminal(resolvedId, 'failed', msg);
-          onError?.(msg);
+          if (resolvedId !== tempId) {
+            // Upload itself succeeded (we hold a real document id) — the
+            // failure happened afterwards (local cache, hydrate). The server
+            // copy is safe: stay queued with a friendly note, not "failed".
+            updateEntry(resolvedId, { stage: 'uploaded', note: PAUSED_AFTER_SAVE_MSG });
+            setProcessingVersion((v) => v + 1);
+            notifyStage(resolvedId, 'uploaded');
+            await refetchDocuments().catch(() => {});
+            return;
+          }
+          // Upload never completed. A 503 means the server DID persist the
+          // document but the processing handoff failed — say so plainly
+          // instead of surfacing the raw HTTP error.
+          const friendly =
+            httpStatus === 503 ? PAUSED_AFTER_SAVE_MSG : msg;
+          setEntryTerminal(resolvedId, 'failed', friendly);
+          onError?.(friendly);
         }
       })();
     },

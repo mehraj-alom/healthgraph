@@ -92,8 +92,12 @@ function isTerminalStage(stage: ProcessingStage): boolean {
 
 export default function DocumentUploadScreen() {
   const navigation = useNavigation();
-  const { uploadAndProcess, subscribeStage, dismissProcessing } =
-    useDocuments();
+  const {
+    uploadAndProcess,
+    subscribeStage,
+    dismissProcessing,
+    getActiveProcessing,
+  } = useDocuments();
 
   // ---- File picker state ----
   const [selectedFile, setSelectedFile] = useState<{
@@ -110,14 +114,25 @@ export default function DocumentUploadScreen() {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   // ---- Subscribe to stage updates for this document ----
+  // The tick forces a re-render on every notify (even same-stage ones that
+  // only carry a note), so the paused message below always appears.
+  const [, setStageTick] = useState(0);
   useEffect(() => {
     if (!uploadedDocId) return;
-    return subscribeStage(uploadedDocId, setCurrentStage);
+    return subscribeStage(uploadedDocId, (s) => {
+      setCurrentStage(s);
+      setStageTick((v) => v + 1);
+    });
   }, [uploadedDocId, subscribeStage]);
 
   // ---- Derived ----
   const isProcessing = uploadedDocId !== null && !isTerminalStage(currentStage);
   const isTerminal = uploadedDocId !== null && isTerminalStage(currentStage);
+  // Friendly paused/queued note set by the upload flow (worker unavailable).
+  const pausedNote =
+    uploadedDocId != null
+      ? (getActiveProcessing().find((e) => e.documentId === uploadedDocId)?.note ?? null)
+      : null;
 
   // ---- File selection ----
   const pickFile = useCallback(async () => {
@@ -284,6 +299,13 @@ export default function DocumentUploadScreen() {
                 <Text style={styles.errorInfo}>
                   This document was not recognized as a medical record.
                 </Text>
+              </View>
+            )}
+
+            {pausedNote && !terminal && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorIcon}>⏸</Text>
+                <Text style={styles.errorInfo}>{pausedNote}</Text>
               </View>
             )}
           </Card>

@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,10 +16,19 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import { Button, Card } from '@/components';
 import { useDocuments, type DocumentsContextValue } from '@/context/DocumentsContext';
-import { getDocument, statusLabel, documentTypeLabel } from '@/services/documents';
+import {
+  getDocument,
+  statusLabel,
+  documentTypeLabel,
+  cachedFileExists,
+  downloadDocumentFile,
+} from '@/services/documents';
+import { setDocumentLocalUri } from '@/db/queries/documents';
+import { getCachedPatientId } from '@/services/patientIdentity';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import type {
   DocumentListItem,
@@ -60,6 +70,36 @@ export default function DocumentDetailScreen() {
   const [extraction, setExtraction] = useState<DocumentExtraction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // ---- Original-file viewer (offline-first) ----
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  const openOriginal = useCallback(async () => {
+    if (!document) return;
+    setFileError(null);
+    try {
+      // 1. Use the on-device copy when it exists (works offline).
+      if (await cachedFileExists(document.local_uri)) {
+        setViewerUri(document.local_uri as string);
+        return;
+      }
+      // 2. Otherwise download once, remember the path, then open.
+      setFileLoading(true);
+      const patientId = getCachedPatientId();
+      const uri = await downloadDocumentFile(document.document_id, document.file_hash);
+      if (patientId) {
+        await setDocumentLocalUri(patientId, document.document_id, uri).catch(() => {});
+        setDocument((prev) => (prev ? { ...prev, local_uri: uri } : prev));
+      }
+      setViewerUri(uri);
+    } catch {
+      setFileError('Could not load the file. Connect to the internet and try again.');
+    } finally {
+      setFileLoading(false);
+    }
+  }, [document]);
 
   // -----------------------------------------------------------------------
   // Load document + extraction data
@@ -193,6 +233,15 @@ export default function DocumentDetailScreen() {
               year: 'numeric',
             })}
           </Text>
+          <View style={styles.fileRow}>
+            <Button
+              title={fileLoading ? 'Loading file...' : 'View original'}
+              variant="outline"
+              onPress={openOriginal}
+              disabled={fileLoading}
+            />
+          </View>
+          {fileError ? <Text style={styles.fileError}>{fileError}</Text> : null}
         </View>
 
         {/* Processing spinner */}
@@ -354,6 +403,33 @@ export default function DocumentDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Original-file viewer (PDF / image, works offline from cache) */}
+      <Modal
+        visible={viewerUri !== null}
+        animationType="slide"
+        onRequestClose={() => setViewerUri(null)}
+      >
+        <SafeAreaView style={styles.viewerContainer} edges={['top', 'bottom']}>
+          <View style={styles.viewerHeader}>
+            <Pressable onPress={() => setViewerUri(null)} hitSlop={12}>
+              <Text style={styles.viewerClose}>‹ Back</Text>
+            </Pressable>
+            <Text style={styles.viewerTitle} numberOfLines={1}>
+              Original document
+            </Text>
+            <View style={styles.viewerSpacer} />
+          </View>
+          {viewerUri ? (
+            <WebView
+              source={{ uri: viewerUri }}
+              style={styles.viewer}
+              originWhitelist={['*']}
+              allowFileAccess
+            />
+          ) : null}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -469,6 +545,44 @@ const styles = StyleSheet.create({
     ...TYPE.caption,
     color: GV.fog,
     marginTop: 8,
+  },
+  fileRow: {
+    marginTop: 12,
+  },
+  fileError: {
+    ...TYPE.caption,
+    color: GV.danger,
+    marginTop: 8,
+  },
+  viewerContainer: {
+    flex: 1,
+    backgroundColor: GV.stage,
+  },
+  viewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  viewerClose: {
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.cta,
+  },
+  viewerTitle: {
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: '#FFFFFF',
+    flex: 1,
+    textAlign: 'center',
+  },
+  viewerSpacer: {
+    width: 48,
+  },
+  viewer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   statusBadge: {
     paddingHorizontal: 12,

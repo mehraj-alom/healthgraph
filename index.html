@@ -3,1040 +3,823 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MedGraph — Clinical Intelligence</title>
+<title>HealthGraph: your whole health in one dial</title>
+<meta name="description" content="HealthGraph keeps sleep, symptoms, medicines, meals, pulse readings, and medical records in one place, then shows what they add up to.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='white' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%234FD1C5'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Instrument+Serif:ital@1&display=swap" rel="stylesheet">
 <style>
-/* ═══════════════════════════════════════════════════════════════
-   MedGraph — grounded in clinical medicine.
-   Palette derived from surgical steel, vitals monitor phosphor,
-   and lab report paper. One typeface (DM Sans) with JetBrains Mono
-   for data. The only accent: a calibrated teal for active state.
-   ═══════════════════════════════════════════════════════════════ */
-:root {
-  --font: 'DM Sans', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', 'SF Mono', monospace;
-  --bg: #0b0e14;
-  --bg-raised: #111620;
-  --bg-card: #151b28;
-  --bg-input: #0e1219;
-  --border: #1e2636;
-  --border-focus: #2a7a7a;
-  --text: #d4dce8;
-  --text-dim: #7a879a;
-  --text-faint: #4a5568;
-  --teal: #2dd4a8;
-  --teal-dim: rgba(45,212,168,0.12);
-  --teal-glow: rgba(45,212,168,0.25);
-  --red: #f06060;
-  --red-bg: rgba(240,96,96,0.1);
-  --amber: #e8a838;
-  --amber-bg: rgba(232,168,56,0.1);
-  --blue: #5b9cf6;
-  --blue-bg: rgba(91,156,246,0.1);
-  --green: #3cc68a;
-  --green-bg: rgba(60,198,138,0.1);
-  --purple: #9b7cf6;
-  --purple-bg: rgba(155,124,246,0.1);
-  --r: 10px;
-  --r-lg: 14px;
-  --shadow: 0 2px 12px rgba(0,0,0,0.3);
+html, body { background: #0B4A3F !important; color: #ffffff; }
+:root{
+  --stage:#0B4A3F;
+  --stage-deep:#07332B;
+  --card:#FFFFFF;
+  --ink:#14201D;
+  --body:#3E4F4A;
+  --muted:#7A8B85;
+  --line:#E4EBE8;
+  --wash:#EFF5F2;
+  --cta:#0B7A55;
+  --cta-pressed:#095F43;
+  --teal:#4FD1C5;
+  --pulse:#D7263D;
+  --fog:#A7B8B2;
+  --text:#ffffff;
+  --font:'Poppins',system-ui,-apple-system,sans-serif;
+  --serif:'Instrument Serif','Times New Roman',Times,serif;
 }
+html, body { background:#0B4A3F; background:var(--stage,#0B4A3F); color:#ffffff; color:var(--text,#ffffff); }
+html{scroll-behavior:smooth}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;overflow-x:hidden;position:relative;font-family:var(--font)}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
 
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-html { font-size: 15px; }
-body {
-  font-family: var(--font);
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.55;
-  min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
-}
-::-webkit-scrollbar { width:5px; }
-::-webkit-scrollbar-track { background:transparent; }
-::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+/* film behind the hero */
+.hero-film{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.35;z-index:0}
+.hero-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,74,63,.3),rgba(11,74,63,.9) 82%,var(--stage));z-index:0}
 
-/* ═══ SHELL ═══ */
-.shell { display:flex; height:100vh; }
+/* nav */
+/* living background graph: fixed canvas, content floats above it */
+#bgGraph{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.8}
+nav,header.hero,.wrap,.chapter,.scroll-graph,footer,.index{position:relative;z-index:1}
+nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(11,74,63,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.14)}
+.nav-in{max-width:1120px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:10px}
+.brand{display:inline-flex;align-items:center;gap:9px;font-size:15.5px;font-weight:600;letter-spacing:-.02em}
+.brand-mark{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--teal);position:relative;flex:none}
+.brand-mark::after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--teal)}
+.nav-links{display:flex;gap:8px;margin-left:auto}
+.nav-links a{height:40px;padding:0 18px;border-radius:7px;display:inline-flex;align-items:center;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.35);background:linear-gradient(105deg,rgba(0,0,0,.35) 0%,rgba(255,255,255,.08) 50%,rgba(0,0,0,.25) 100%);color:#f3f3f3;font-size:14px;white-space:nowrap;transition:background .35s ease,border-color .35s ease,box-shadow .35s ease}
+.nav-links a::before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.22) 50%,transparent 70%);transform:translateX(-120%)}
+.nav-links a:hover::before{transform:translateX(120%);transition:transform .6s ease}
+.nav-links a:hover{border-color:rgba(235,235,235,.9);box-shadow:0 0 18px rgba(79,209,197,.25)}
+.btn{position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 16px;border-radius:6px;font-size:13.5px;font-weight:500;letter-spacing:-.01em;line-height:1;white-space:nowrap;cursor:pointer;border:0;transition:background .35s ease,border-color .35s ease,box-shadow .35s ease}
+.btn::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.45) 48%,transparent 76%);transform:translateX(-130%)}
+.btn:hover::after{transform:translateX(130%);transition:transform .65s ease}
+.btn-solid{background:linear-gradient(180deg,#fff 0%,#e7e7e7 48%,#cfcfcf 100%);color:#111;border:1px solid #fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.95)}
+.btn-solid:hover{box-shadow:inset 0 1px 0 #fff,0 0 22px rgba(186,208,255,.35),0 8px 18px rgba(255,255,255,.12)}
+.btn-green{background:var(--cta);color:#fff;font-weight:600;font-size:15px;padding:14px 30px;border-radius:999px;height:auto}
+.btn-green:hover{background:var(--cta-pressed)}
+.btn-ghost{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.4);font-weight:600;font-size:15px;padding:14px 30px;border-radius:999px;height:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.btn-ghost:hover{border-color:#fff;background:rgba(255,255,255,.14)}
+.btn.big{height:42px;padding:0 18px}
+@media(max-width:820px){.nav-links{display:none}}
 
-/* Sidebar */
-.side {
-  width: 64px;
-  background: var(--bg-raised);
-  border-right: 1px solid var(--border);
-  display: flex; flex-direction: column; align-items: center;
-  padding: 14px 0;
-  flex-shrink: 0;
-  z-index: 50;
-}
-.side-logo {
-  width: 38px; height: 38px;
-  background: var(--teal);
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 16px; color: var(--bg);
-  margin-bottom: 20px;
-}
-.side-nav { display:flex; flex-direction:column; gap:3px; flex:1; width:100%; padding:0 8px; }
-.ni {
-  width: 48px; height: 44px;
-  border-radius: 8px;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  cursor: pointer;
-  color: var(--text-dim);
-  transition: color 0.15s, background 0.15s;
-  font-size: 8px; font-weight: 500; letter-spacing: 0.4px;
-  gap: 2px;
-  border: none; background: none; font-family: var(--font);
-}
-.ni:hover { background: var(--bg-card); color: var(--text); }
-.ni.on { background: var(--teal-dim); color: var(--teal); }
-.ni.on::before {
-  content:''; position:absolute; left:-8px; top:50%; transform:translateY(-50%);
-  width:3px; height:20px; background:var(--teal); border-radius:0 3px 3px 0;
-}
-.ni-icon { font-size:18px; line-height:1; }
-.ni-badge {
-  position:absolute; top:4px; right:8px;
-  min-width:14px; height:14px; background:var(--red);
-  color:#fff; border-radius:7px; font-size:8px; font-weight:700;
-  display:flex; align-items:center; justify-content:center; padding:0 3px;
-}
-.side-bottom { padding:0 8px; }
-.side-avatar {
-  width:48px; height:48px; border-radius:8px;
-  background:var(--bg-card); display:flex; align-items:center; justify-content:center;
-  cursor:pointer; font-size:18px; transition:background 0.15s;
-}
-.side-avatar:hover { background:var(--border); }
+/* hero */
+.hero{position:relative;min-height:100svh;display:flex;align-items:flex-end;justify-content:center;padding:8px 24px 70px;overflow:hidden}
+.hero-copy{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;max-width:860px;width:100%}
+.badge{display:inline-flex;align-items:center;gap:8px;margin-bottom:22px;padding:9px 15px;border-radius:5px;background:linear-gradient(90deg,rgba(0,0,0,.45) 0%,rgba(255,255,255,.1) 52%,rgba(0,0,0,.35) 100%);border:1px solid rgba(79,209,197,.4);color:#f2f2f2;font-size:12.5px}
+.badge i{width:7px;height:7px;border-radius:50%;background:var(--teal);font-style:normal}
+.hero h1{font-size:clamp(42px,6.5vw,72px);font-weight:600;letter-spacing:-.04em;line-height:1.08;display:flex;flex-direction:column;align-items:center}
+.hero h1 .line{display:block;overflow:hidden;padding:.06em .15em .14em}
+.hero h1 em{font-family:var(--serif);font-style:italic;font-weight:400;font-size:1.08em;letter-spacing:-.02em;color:var(--teal)}
+.lede{max-width:470px;margin-top:18px;color:#E4EBE8;font-size:15.5px;line-height:1.55}
+.hero-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:26px}
+.hero-note{margin-top:18px;font-size:13px;color:var(--fog)}
 
-/* Main */
-.main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
-.bar {
-  height:50px; background:rgba(11,14,20,0.85); backdrop-filter:blur(12px);
-  border-bottom:1px solid var(--border);
-  display:flex; align-items:center; padding:0 22px; gap:12px; flex-shrink:0;
-}
-.bar-title { font-size:14px; font-weight:600; }
-.bar-spacer { flex:1; }
-.bar-search {
-  display:flex; align-items:center; background:var(--bg-input);
-  border:1px solid var(--border); border-radius:8px;
-  padding:5px 10px; gap:6px; width:240px; transition:border-color 0.15s;
-}
-.bar-search:focus-within { border-color:var(--border-focus); }
-.bar-search input {
-  background:none; border:none; color:var(--text); font-family:var(--font);
-  font-size:12px; outline:none; width:100%;
-}
-.bar-search input::placeholder { color:var(--text-faint); }
-.bar-search .ico { color:var(--text-faint); font-size:12px; }
-.bar-user { font-size:11px; color:var(--text-dim); }
-.btn-ghost {
-  padding:5px 10px; border-radius:6px; border:1px solid var(--border);
-  background:none; color:var(--text-dim); font-family:var(--font);
-  font-size:11px; font-weight:500; cursor:pointer; transition:all 0.15s;
-}
-.btn-ghost:hover { border-color:var(--teal); color:var(--teal); }
-.content { flex:1; overflow-y:auto; padding:22px; }
+/* entrance: Vesper motion design, staged delays */
+.appear{opacity:1;animation-duration:1.05s;animation-fill-mode:both;animation-timing-function:cubic-bezier(.16,1,.3,1);animation-delay:var(--d,.08s)}
+.appear--soft{animation-name:in-soft}
+.appear--mask{animation-name:in-mask}
+.appear--pop{animation-name:in-pop}
+.appear--btn{animation-name:in-btn}
+.appear--side{animation-name:in-side}
+.appear.is-in{animation:none;opacity:1;transform:none;filter:none}
+@keyframes in-soft{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes in-mask{from{opacity:0;transform:translateY(40%)}to{opacity:1;transform:none}}
+@keyframes in-pop{0%{opacity:0;transform:scale(.9)}70%{opacity:1;transform:scale(1.03)}100%{opacity:1;transform:scale(1)}}
+@keyframes in-btn{from{opacity:0;transform:translateY(18px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes in-side{from{opacity:0;transform:translateX(22px)}to{opacity:1;transform:none}}
+.hero h1 em{animation:in-em 1.2s both;animation-delay:.72s}
+@keyframes in-em{from{opacity:.35;filter:blur(4px)}to{opacity:1;filter:blur(0)}}
 
-/* ═══ AUTH ═══ */
-.auth { display:none; position:fixed; inset:0; background:var(--bg); z-index:1000; align-items:center; justify-content:center; }
-.auth.show { display:flex; }
-.auth-card {
-  background:var(--bg-raised); border:1px solid var(--border);
-  border-radius:var(--r-lg); padding:40px; width:380px; max-width:90vw;
-}
-.auth-mark {
-  width:52px; height:52px; background:var(--teal); border-radius:12px;
-  display:flex; align-items:center; justify-content:center;
-  font-weight:700; font-size:22px; color:var(--bg); margin:0 auto 20px;
-}
-.auth-card h2 { text-align:center; font-size:20px; font-weight:600; margin-bottom:4px; }
-.auth-card .sub { text-align:center; color:var(--text-dim); font-size:13px; margin-bottom:28px; }
-.fg { margin-bottom:14px; }
-.fg label { display:block; font-size:11px; font-weight:600; color:var(--text-dim); margin-bottom:5px; text-transform:uppercase; letter-spacing:0.5px; }
-.fi {
-  width:100%; background:var(--bg-input); border:1px solid var(--border);
-  color:var(--text); padding:9px 12px; border-radius:8px;
-  font-family:var(--font); font-size:13px; outline:none; transition:border-color 0.15s;
-}
-.fi:focus { border-color:var(--border-focus); }
-.fi::placeholder { color:var(--text-faint); }
-select.fi {
-  appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%234a5568' d='M5 7L0 2h10z'/%3E%3C/svg%3E");
-  background-repeat:no-repeat; background-position:right 10px center; padding-right:30px;
-}
-.auth-row { display:flex; gap:8px; margin-top:20px; }
-.auth-err { background:var(--red-bg); border:1px solid rgba(240,96,96,0.2); color:var(--red); padding:8px 12px; border-radius:8px; font-size:12px; margin-top:10px; display:none; }
-textarea.fi { resize:vertical; min-height:56px; }
+/* contents index */
+.index{padding:80px 0 20px}
+.index h2{font-size:clamp(28px,4vw,44px);font-weight:600;letter-spacing:-.03em;max-width:640px}
+.index h2 em{font-family:var(--serif);font-style:italic;font-weight:400;color:var(--teal)}
+.index p{color:#E4EBE8;margin-top:14px;max-width:560px;line-height:1.7}
+.index-list{margin-top:34px;border-top:1px solid rgba(255,255,255,.2)}
+.index-list a{display:flex;align-items:baseline;gap:18px;padding:15px 4px;border-bottom:1px solid rgba(255,255,255,.2)}
+.index-list a:hover{background:rgba(255,255,255,.05)}
+.index-list .n{font-size:13px;color:var(--teal);font-variant-numeric:tabular-nums;flex:none;width:26px}
+.index-list .t{font-size:17px;font-weight:600}
+.index-list .d{margin-left:auto;font-size:13px;color:var(--fog);text-align:right}
+@media(max-width:640px){.index-list .d{display:none}}
 
-/* ═══ BUTTONS ═══ */
-.btn {
-  display:inline-flex; align-items:center; justify-content:center; gap:6px;
-  padding:8px 16px; border-radius:8px; font-family:var(--font);
-  font-size:12px; font-weight:600; cursor:pointer; border:none;
-  transition:all 0.15s; white-space:nowrap;
-}
-.btn:disabled { opacity:0.4; cursor:not-allowed; }
-.btn-fill { background:var(--teal); color:var(--bg); }
-.btn-fill:hover { opacity:0.9; }
-.btn-out { background:none; color:var(--text-dim); border:1px solid var(--border); }
-.btn-out:hover { border-color:var(--teal); color:var(--teal); }
-.btn-sm { padding:5px 10px; font-size:11px; }
-.btn-full { width:100%; }
-.btn-danger { background:var(--red); color:#fff; }
+/* scroll dial */
+.scroll-graph{height:300vh;position:relative}
+.sticky{position:sticky;top:0;height:100vh;display:flex;align-items:center;overflow:hidden}
+.sg-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;width:100%}
+.sg-copy p.k-label{font-size:14px;color:var(--teal);font-weight:500;margin-bottom:14px}
+.sg-copy h2{font-size:clamp(30px,4.5vw,48px);font-weight:600;letter-spacing:-.03em;line-height:1.12}
+.sg-copy h2 em{font-family:var(--serif);font-style:italic;font-weight:400;color:var(--teal)}
+.sg-copy p.body{margin-top:16px;color:#E4EBE8;line-height:1.75;font-size:16px;max-width:440px}
+.sg-phase{margin-top:22px;display:flex;gap:10px}
+.sg-dot{width:34px;height:5px;border-radius:3px;background:rgba(255,255,255,.2);transition:background .3s}
+.sg-dot.on{background:var(--teal)}
+#dialSvg{width:100%;max-width:440px;height:auto;margin:0 auto;display:block}
+#dialSvg text{font-family:var(--font)}
+@media(max-width:860px){.sg-grid{grid-template-columns:1fr}.sticky{height:auto;padding:90px 0}.scroll-graph{height:auto}#dialSvg{max-width:320px}}
 
-/* ═══ CARDS ═══ */
-.card {
-  background:var(--bg-card); border:1px solid var(--border);
-  border-radius:var(--r-lg); padding:20px; transition:border-color 0.15s;
-}
-.card:hover { border-color:#2a3348; }
-.card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
-.card-title { font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; }
+/* chapters */
+.chapter{padding:110px 0;border-top:1px solid rgba(255,255,255,.12)}
+/* finale body: the figure the graph flies into */
+.finale{min-height:110vh;display:flex;align-items:center;text-align:center}
+.finale h2{font-size:clamp(34px,5.5vw,60px);font-weight:600;letter-spacing:-.03em;line-height:1.08;max-width:760px;margin:16px auto 0}
+.finale h2 em{font-family:var(--serif);font-style:italic;font-weight:400;color:var(--teal)}
+.finale p{color:#E4EBE8;max-width:520px;margin:18px auto 0;line-height:1.7}
+#graphBodyWrap{position:relative;width:min(340px,72vw);margin:36px auto 0}
+#graphBody{width:100%;height:auto;display:block;position:relative}
+.ch-num{font-size:14px;color:var(--teal);font-weight:500;font-variant-numeric:tabular-nums}
+.chapter h2{font-size:clamp(32px,5vw,54px);font-weight:600;letter-spacing:-.03em;line-height:1.08;margin:16px 0 0;max-width:820px}
+.chapter h2 em{font-family:var(--serif);font-style:italic;font-weight:400;color:var(--teal)}
+.chapter .lede2{font-size:clamp(16px,2vw,19px);line-height:1.7;color:#E4EBE8;max-width:640px;margin-top:22px}
+.prose-two{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:36px}
+.prose-two p{color:#D8E5E0;line-height:1.8;font-size:15.5px}
+@media(max-width:860px){.prose-two{grid-template-columns:1fr}.chapter{padding:72px 0}}
+.chapter .go{margin-top:32px}
+.band{background:var(--card);color:var(--ink);border-radius:20px;padding:clamp(30px,5vw,60px);margin-top:44px;display:grid;grid-template-columns:1.1fr .9fr;gap:44px;align-items:center}
+.band h3{font-size:clamp(23px,3vw,32px);font-weight:600;letter-spacing:-.02em}
+.band p{color:var(--body);line-height:1.75;margin-top:14px;font-size:15.5px}
+.band .facts{margin-top:22px;border-top:1px solid var(--line)}
+.band .facts div{display:flex;justify-content:space-between;gap:16px;padding:13px 2px;border-bottom:1px solid var(--line);font-size:14px}
+.band .facts div span:first-child{color:var(--muted)}
+.band .facts div span:last-child{font-weight:600;text-align:right}
+@media(max-width:860px){.band{grid-template-columns:1fr}}
+.ledger{margin-top:40px;border-top:1px solid rgba(255,255,255,.2)}
+.ledger-row{display:grid;grid-template-columns:120px 1fr auto;gap:20px;align-items:baseline;padding:22px 4px;border-bottom:1px solid rgba(255,255,255,.2)}
+.ledger-row .when{font-size:13px;color:var(--fog);font-variant-numeric:tabular-nums}
+.ledger-row .what{font-size:16px;font-weight:600}
+.ledger-row .what small{display:block;font-weight:400;color:#D8E5E0;font-size:14px;margin-top:5px;line-height:1.65}
+.ledger-row .val{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--teal);white-space:nowrap}
+@media(max-width:640px){.ledger-row{grid-template-columns:1fr auto}.ledger-row .when{grid-column:1/-1}}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:44px;align-items:stretch}
+.paper{background:var(--card);color:var(--ink);border-radius:20px;padding:36px}
+.paper h3{font-size:23px;font-weight:600;letter-spacing:-.02em}
+.paper p{color:var(--body);line-height:1.75;margin-top:12px;font-size:15px}
+.visual{background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:30px;display:flex;align-items:center;justify-content:center;min-height:360px;position:relative;overflow:hidden}
+@media(max-width:860px){.split{grid-template-columns:1fr}}
+.mock-phone{width:230px;background:#fff;border-radius:34px;padding:14px;color:var(--ink)}
+.mock-screen{background:var(--wash);border-radius:24px;padding:16px;display:grid;gap:10px}
+.mock-row{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12px;font-weight:600;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
+.mock-row small{color:var(--muted);font-weight:400}
+.mock-cta{background:var(--cta);color:#fff;border-radius:999px;text-align:center;font-size:13px;font-weight:600;padding:11px}
+.chat-mock{display:grid;gap:10px;width:100%;max-width:320px}
+.bubble{border-radius:16px;padding:12px 15px;font-size:13.5px;line-height:1.6;max-width:88%}
+.bubble.them{background:#fff;color:var(--ink);border-bottom-left-radius:5px}
+.bubble.me{background:var(--cta);color:#fff;justify-self:end;border-bottom-right-radius:5px}
+.scan-frame{width:230px;height:290px;border-radius:18px;border:2px dashed rgba(255,255,255,.5);position:relative;overflow:hidden;background:rgba(0,0,0,.25)}
+.scan-line{position:absolute;left:8px;right:8px;height:3px;border-radius:2px;background:var(--teal);animation:sweep 2.4s ease-in-out infinite}
+@keyframes sweep{0%,100%{top:12px}50%{top:calc(100% - 15px)}}
+.scan-tag{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:12px;font-weight:600}
+.body-mock{display:flex;gap:16px;align-items:center}
+.body-fig{width:110px;height:200px;border-radius:60px;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.4);position:relative;flex:none}
+.body-fig i{position:absolute;width:16px;height:16px;border-radius:50%;background:var(--pulse)}
+.body-fig i:nth-child(1){top:52px;left:30px}.body-fig i:nth-child(2){top:110px;right:24px}
+.body-list{display:grid;gap:8px;font-size:13px}
+.body-list div{background:#fff;color:var(--ink);border-radius:10px;padding:8px 12px;font-weight:600}
+.pulse-line{width:100%;max-width:320px}
+.principles{margin-top:40px;border-top:1px solid rgba(255,255,255,.2)}
+.principles div{display:grid;grid-template-columns:1fr 2fr;gap:20px;padding:24px 4px;border-bottom:1px solid rgba(255,255,255,.2)}
+.principles b{font-size:16px;font-weight:600}
+.principles p{color:#D8E5E0;font-size:14.5px;line-height:1.75}
+@media(max-width:640px){.principles div{grid-template-columns:1fr}}
+.faq{max-width:760px;margin:36px auto 0;display:grid;gap:12px}
+.faq-item{background:var(--card);border-radius:16px;overflow:hidden;color:var(--ink)}
+.faq-q{width:100%;background:none;border:0;font-family:var(--font);font-size:15px;font-weight:600;color:var(--ink);text-align:left;padding:22px 24px;cursor:pointer;display:flex;justify-content:space-between;gap:12px;align-items:center}
+.faq-q span:last-child{color:var(--cta);font-size:20px;flex:none;transition:transform .25s}
+.faq-item.open .faq-q span:last-child{transform:rotate(45deg)}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .35s ease}
+.faq-a p{padding:0 24px 24px;font-size:14.5px;color:var(--body);line-height:1.8}
+.get{background:var(--card);color:var(--ink);border-radius:24px;padding:clamp(36px,6vw,64px) clamp(24px,5vw,56px)}
+.get h2{font-size:clamp(30px,4.5vw,46px);font-weight:600;letter-spacing:-.03em;max-width:600px}
+.get h2 em{font-family:var(--serif);font-style:italic;font-weight:400;color:var(--cta)}
+.get p.lede{color:var(--body);margin-top:16px;max-width:520px;line-height:1.75}
+.get-row{display:flex;gap:12px;margin-top:28px;flex-wrap:wrap}
+.store{display:inline-flex;align-items:center;background:var(--ink);color:#fff;border-radius:14px;padding:13px 24px;font-weight:600;font-size:15px}
+.store small{display:block;font-size:10px;font-weight:400;color:#B9C6C1}
+.get .fine{margin-top:22px;font-size:13px;color:var(--muted)}
+.get .fine a{color:var(--cta);font-weight:600}
+footer{padding:48px 0 60px;color:var(--fog);font-size:13px;border-top:1px solid rgba(255,255,255,.12)}
+footer .cols{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:flex-start}
+footer .disclaimer{max-width:620px;margin-top:16px;line-height:1.7;font-size:12px}
+footer .colophon{margin-top:16px;font-size:12px}
 
-/* Metrics */
-.metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-bottom:20px; }
-.m-card {
-  background:var(--bg-card); border:1px solid var(--border);
-  border-radius:var(--r-lg); padding:18px; position:relative;
-  transition:all 0.15s;
-}
-.m-card:hover { border-color:#2a3348; transform:translateY(-1px); }
-.m-label { font-size:10px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.7px; margin-bottom:6px; }
-.m-val { font-size:26px; font-weight:700; line-height:1.1; margin-bottom:3px; }
-.m-sub { font-size:11px; color:var(--text-dim); }
-.m-ico { position:absolute; top:16px; right:16px; width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; }
+/* reveal: opacity only, motion answers nothing here so nothing slides */
+.rv{opacity:0;transition:opacity .8s ease}
+.rv.in{opacity:1}
 
-/* ═══ BADGES ═══ */
-.b { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:6px; font-size:10px; font-weight:600; letter-spacing:0.3px; }
-.b-teal { background:var(--teal-dim); color:var(--teal); }
-.b-red { background:var(--red-bg); color:var(--red); }
-.b-amber { background:var(--amber-bg); color:var(--amber); }
-.b-blue { background:var(--blue-bg); color:var(--blue); }
-.b-green { background:var(--green-bg); color:var(--green); }
-.b-purple { background:var(--purple-bg); color:var(--purple); }
-
-/* ═══ CHAT ═══ */
-.chat { display:flex; flex-direction:column; height:calc(100vh - 94px); }
-.chat-msgs { flex:1; overflow-y:auto; padding:22px; display:flex; flex-direction:column; gap:14px; }
-.cm { display:flex; gap:10px; max-width:78%; animation:fadeUp 0.2s ease; }
-@keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-.cm.user { align-self:flex-end; flex-direction:row-reverse; }
-.cm.agent { align-self:flex-start; }
-.cm-av {
-  width:28px; height:28px; border-radius:7px;
-  display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0;
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none !important;animation:none !important}
+  .appear,.hero h1 em{opacity:1;transform:none;filter:none}
+  .rv{opacity:1}
 }
-.cm.user .cm-av { background:var(--teal-dim); }
-.cm.agent .cm-av { background:var(--bg-card); border:1px solid var(--border); }
-.cm-bub {
-  padding:10px 14px; border-radius:10px; font-size:13px; line-height:1.6;
-}
-.cm.user .cm-bub { background:var(--teal); color:var(--bg); border-bottom-right-radius:3px; }
-.cm.agent .cm-bub { background:var(--bg-card); border:1px solid var(--border); border-bottom-left-radius:3px; }
-.cm-bub .meta { font-size:10px; color:var(--text-dim); margin-top:5px; }
-.chat-bar {
-  padding:14px 22px; background:var(--bg-raised); border-top:1px solid var(--border);
-}
-.chat-wrap {
-  display:flex; gap:8px; align-items:flex-end;
-  background:var(--bg-input); border:1px solid var(--border);
-  border-radius:10px; padding:5px; transition:border-color 0.15s;
-}
-.chat-wrap:focus-within { border-color:var(--border-focus); }
-.chat-wrap textarea {
-  flex:1; background:none; border:none; color:var(--text);
-  font-family:var(--font); font-size:13px; resize:none; outline:none;
-  padding:6px 10px; max-height:100px; line-height:1.5;
-}
-.chat-wrap textarea::placeholder { color:var(--text-faint); }
-.chat-send {
-  width:36px; height:36px; background:var(--teal); border:none; border-radius:8px;
-  color:var(--bg); font-size:16px; cursor:pointer; flex-shrink:0;
-  display:flex; align-items:center; justify-content:center; transition:opacity 0.15s;
-}
-.chat-send:hover { opacity:0.85; }
-.chat-send:disabled { opacity:0.4; cursor:not-allowed; }
-.chat-quick { display:flex; gap:6px; padding:0 22px 10px; flex-wrap:wrap; }
-.qa {
-  padding:4px 12px; background:var(--bg-card); border:1px solid var(--border);
-  border-radius:16px; color:var(--text-dim); font-size:11px; font-weight:500;
-  cursor:pointer; transition:all 0.15s; font-family:var(--font);
-}
-.qa:hover { border-color:var(--teal); color:var(--teal); }
-.chat-welcome {
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  flex:1; text-align:center; padding:36px;
-}
-.chat-welcome .ico { font-size:40px; margin-bottom:14px; opacity:0.6; }
-.chat-welcome h3 { font-size:17px; font-weight:600; margin-bottom:6px; }
-.chat-welcome p { color:var(--text-dim); font-size:13px; max-width:360px; }
-
-/* ═══ DOCUMENTS ═══ */
-.drop {
-  background:var(--bg-card); border:2px dashed var(--border);
-  border-radius:var(--r-lg); padding:40px; text-align:center;
-  cursor:pointer; transition:all 0.15s; margin-bottom:20px;
-}
-.drop:hover, .drop.drag { border-color:var(--teal); background:var(--teal-dim); }
-.drop .ico { font-size:32px; margin-bottom:10px; }
-.drop h3 { font-size:14px; font-weight:600; margin-bottom:3px; }
-.drop p { color:var(--text-dim); font-size:12px; }
-.progress { margin-top:12px; display:none; }
-.progress.show { display:block; }
-.pbar { height:3px; background:var(--bg); border-radius:2px; overflow:hidden; margin-top:6px; }
-.pbar-fill { height:100%; background:var(--teal); border-radius:2px; transition:width 0.3s; }
-.doc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
-.doc-card {
-  background:var(--bg-card); border:1px solid var(--border);
-  border-radius:var(--r-lg); padding:18px; cursor:pointer; transition:all 0.15s;
-}
-.doc-card:hover { border-color:var(--teal); }
-.doc-icon { width:40px; height:40px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:20px; margin-bottom:12px; }
-.doc-title { font-size:13px; font-weight:600; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.doc-meta { font-size:11px; color:var(--text-dim); }
-
-/* Pipeline */
-.pipe { display:flex; gap:4px; align-items:center; flex-wrap:wrap; margin:10px 0; }
-.pipe .ps {
-  padding:5px 10px; border-radius:6px; font-size:11px; font-weight:600;
-  background:var(--bg); border:1px solid var(--border); color:var(--text-dim);
-}
-.pipe .ps.on { border-color:var(--amber); color:var(--amber); background:var(--amber-bg); }
-.pipe .ps.ok { border-color:var(--green); color:var(--green); background:var(--green-bg); }
-.pipe .ps.no { border-color:var(--red); color:var(--red); background:var(--red-bg); }
-.pipe .arr { color:var(--text-faint); font-size:11px; }
-
-/* ═══ BODY STATE ═══ */
-.body-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; }
-.bi {
-  background:var(--bg-card); border:1px solid var(--border);
-  border-radius:var(--r); padding:14px; display:flex; align-items:flex-start; gap:12px;
-  transition:border-color 0.15s;
-}
-.bi:hover { border-color:#2a3348; }
-.bi-dot { width:8px; height:8px; border-radius:50%; margin-top:5px; flex-shrink:0; }
-.bi-dot.normal { background:var(--green); box-shadow:0 0 6px rgba(60,198,138,0.4); }
-.bi-dot.mild { background:var(--amber); box-shadow:0 0 6px rgba(232,168,56,0.4); }
-.bi-dot.moderate { background:var(--amber); }
-.bi-dot.critical { background:var(--red); box-shadow:0 0 6px rgba(240,96,96,0.4); animation:pulse 2s infinite; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-.bi-info { flex:1; }
-.bi-name { font-size:13px; font-weight:600; margin-bottom:2px; }
-.bi-id { font-size:10px; color:var(--text-dim); margin-bottom:5px; }
-.bi-tags { display:flex; gap:5px; flex-wrap:wrap; }
-.bi-tag { font-size:10px; padding:2px 6px; border-radius:5px; background:var(--bg); color:var(--text-dim); }
-
-/* ═══ TIMELINE ═══ */
-.tl-list { display:flex; flex-direction:column; gap:2px; }
-.tl-entry {
-  display:flex; gap:14px; padding:14px 16px;
-  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r);
-  transition:border-color 0.15s;
-}
-.tl-entry:hover { border-color:#2a3348; }
-.tl-time { font-size:11px; color:var(--text-dim); min-width:90px; flex-shrink:0; padding-top:1px; }
-.tl-body { flex:1; }
-.tl-title { font-size:13px; font-weight:600; margin-bottom:3px; display:flex; align-items:center; gap:7px; }
-.tl-desc { font-size:12px; color:var(--text-dim); }
-.tl-tags { display:flex; gap:5px; margin-top:6px; flex-wrap:wrap; }
-
-/* ═══ MEDICATIONS ═══ */
-.med-list { display:flex; flex-direction:column; gap:8px; }
-.med-item {
-  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r);
-  padding:14px 16px; display:flex; align-items:center; gap:14px;
-  transition:border-color 0.15s;
-}
-.med-item:hover { border-color:#2a3348; }
-.med-pill { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
-.med-info { flex:1; }
-.med-name { font-size:13px; font-weight:600; margin-bottom:2px; }
-.med-detail { font-size:11px; color:var(--text-dim); }
-
-/* ═══ LOGS ═══ */
-.log-bar {
-  display:flex; gap:6px; align-items:center;
-  padding:10px 14px; background:var(--bg-raised);
-  border:1px solid var(--border); border-bottom:none;
-  border-radius:var(--r-lg) var(--r-lg) 0 0;
-}
-.log-list {
-  max-height:calc(100vh - 180px); overflow-y:auto;
-  background:var(--bg); border:1px solid var(--border);
-  border-radius:0 0 var(--r-lg) var(--r-lg);
-  font-size:11px; font-family:var(--mono);
-}
-.le {
-  display:flex; gap:10px; padding:4px 14px;
-  border-bottom:1px solid var(--border); align-items:flex-start;
-}
-.le:hover { background:rgba(45,212,168,0.03); }
-.le-time { color:var(--text-faint); min-width:64px; flex-shrink:0; }
-.le-lvl {
-  min-width:44px; font-weight:700; font-size:9px;
-  padding:1px 5px; border-radius:3px; text-align:center;
-  text-transform:uppercase; flex-shrink:0;
-}
-.le-lvl.info { color:var(--teal); background:var(--teal-dim); }
-.le-lvl.warning { color:var(--amber); background:var(--amber-bg); }
-.le-lvl.error { color:var(--red); background:var(--red-bg); }
-.le-msg { flex:1; word-break:break-word; }
-
-/* ═══ SETTINGS ═══ */
-.set-sec {
-  background:var(--bg-card); border:1px solid var(--border);
-  border-radius:var(--r-lg); padding:20px; margin-bottom:14px;
-}
-.set-sec h3 { font-size:14px; font-weight:600; margin-bottom:14px; display:flex; align-items:center; gap:7px; }
-.set-row {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:10px 0; border-bottom:1px solid var(--border);
-}
-.set-row:last-child { border-bottom:none; }
-.set-label { font-size:13px; font-weight:500; }
-.set-desc { font-size:11px; color:var(--text-dim); margin-top:1px; }
-.toggle {
-  width:38px; height:20px; background:var(--border);
-  border-radius:10px; position:relative; cursor:pointer; transition:background 0.15s;
-}
-.toggle.on { background:var(--teal); }
-.toggle::after {
-  content:''; position:absolute; top:2px; left:2px;
-  width:16px; height:16px; background:#fff; border-radius:50%; transition:left 0.15s;
-}
-.toggle.on::after { left:20px; }
-
-/* ═══ REVIEW ═══ */
-.review-item {
-  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r);
-  padding:14px 16px; margin-bottom:8px; transition:border-color 0.15s;
-}
-.review-item:hover { border-color:#2a3348; }
-
-/* ═══ PAGES ═══ */
-.page { display:none; }
-.page.on { display:block; animation:fadeIn 0.15s ease; }
-@keyframes fadeIn { from{opacity:0} to{opacity:1} }
-.section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
-.section-title { font-size:16px; font-weight:600; display:flex; align-items:center; gap:8px; }
-
-/* Modal */
-.modal-bg {
-  position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(6px);
-  z-index:100; display:none; align-items:center; justify-content:center;
-}
-.modal-bg.show { display:flex; }
-.modal {
-  background:var(--bg-raised); border:1px solid var(--border);
-  border-radius:var(--r-lg); padding:28px; width:480px; max-width:90vw;
-  max-height:80vh; overflow-y:auto;
-}
-.modal h2 { font-size:16px; font-weight:600; margin-bottom:14px; }
-.modal-x { float:right; background:none; border:none; color:var(--text-dim); font-size:18px; cursor:pointer; }
-.modal-x:hover { color:var(--text); }
-
-/* Table */
-.tbl { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; }
-table { width:100%; border-collapse:collapse; }
-thead th { padding:10px 14px; text-align:left; font-size:10px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; background:var(--bg-raised); border-bottom:1px solid var(--border); }
-tbody td { padding:10px 14px; font-size:12px; border-bottom:1px solid var(--border); }
-tbody tr:hover { background:var(--bg-card); }
-tbody tr:last-child td { border-bottom:none; }
-
-/* Empty */
-.empty { text-align:center; padding:40px 20px; color:var(--text-dim); }
-.empty .ico { font-size:36px; margin-bottom:12px; opacity:0.4; }
-.empty h3 { font-size:14px; font-weight:600; color:var(--text); margin-bottom:5px; }
-.empty p { font-size:12px; }
-
-/* Toast */
-.toast-c { position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:6px; }
-.toast {
-  background:var(--bg-raised); border:1px solid var(--border); border-radius:var(--r);
-  padding:10px 16px; font-size:12px; display:flex; align-items:center; gap:8px;
-  box-shadow:var(--shadow); animation:slideR 0.2s ease; max-width:360px;
-}
-@keyframes slideR { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
-.toast.ok { border-left:3px solid var(--green); }
-.toast.err { border-left:3px solid var(--red); }
-.toast.info { border-left:3px solid var(--teal); }
-
-/* Responsive */
-@media(max-width:768px) { .side{width:56px} .bar-search{display:none} .metrics{grid-template-columns:1fr 1fr} .cm{max-width:90%} .doc-grid{grid-template-columns:1fr} .content{padding:14px} }
 </style>
 </head>
-<body>
+<body style="background:#0B4A3F;color:#fff">
+<canvas id="bgGraph" aria-hidden="true"></canvas>
 
-<!-- AUTH -->
-<div class="auth show" id="authScr">
-  <div class="auth-card">
-    <div class="auth-mark">M</div>
-    <h2>MedGraph</h2>
-    <p class="sub">Clinical Intelligence Platform</p>
-    <div class="auth-err" id="authErr"></div>
-    <div class="fg"><label>Email</label><input class="fi" id="aEmail" type="email" placeholder="you@example.com" autocomplete="email"></div>
-    <div class="fg"><label>Password</label><input class="fi" id="aPass" type="password" placeholder="Password" autocomplete="current-password"></div>
-    <div class="auth-row">
-      <button class="btn btn-fill btn-full" id="loginBtn" onclick="doLogin()">Sign in</button>
-      <button class="btn btn-out btn-full" onclick="doRegister()">Create account</button>
+<nav>
+  <div class="nav-in">
+    <a class="brand" href="#top"><span class="brand-mark"></span>HealthGraph</a>
+    <div class="nav-links">
+      <a href="#inside">Inside</a><a href="#dial">Dial</a><a href="#pricing">Pricing</a><a href="#promises">Promises</a><a href="#faq">FAQ</a>
+    </div>
+    <a class="btn btn-solid" href="#get" style="margin-left:auto">Get the app</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <video class="hero-film" autoplay muted loop playsinline>
+    <source src="../assets/app-load.mp4" type="video/mp4">
+    <source src="frontend/assets/app-load.mp4" type="video/mp4">
+  </video>
+  <div class="hero-shade"></div>
+  <div class="hero-copy">
+    <span class="badge appear appear--pop" style="--d:.22s"><i></i>Sleep · Symptoms · Meds · Meals · Pulse · Records</span>
+    <h1>
+      <span class="line appear appear--mask" style="--d:.42s">Your whole health</span>
+      <span class="line appear appear--mask" style="--d:.62s">in <em>one dial.</em></span>
+    </h1>
+    <p class="lede appear appear--soft" style="--d:.82s">HealthGraph keeps your sleep, symptoms, medicines, meals, pulse readings, and medical records in one place, then shows what they add up to across ten spokes you can scrub back through thirty days.</p>
+    <div class="hero-actions appear appear--btn" style="--d:.96s">
+      <a class="btn btn-solid big" href="#get">Get HealthGraph free</a>
+      <a class="btn btn-ghost big" href="#inside">Look inside first</a>
+    </div>
+    <p class="hero-note appear appear--soft" style="--d:1.1s">Free during early access. iOS and Android. Your data stays yours.</p>
+  </div>
+</header>
+
+<div class="wrap" id="inside" style="padding-top:80px">
+  <p class="rv" style="font-size:14px;color:var(--teal);font-weight:500">Inside</p>
+  <h2 class="rv" style="font-size:clamp(28px,4vw,44px);font-weight:600;letter-spacing:-.03em;max-width:640px;margin-top:14px">Everything below lives in the app, and all of it reads from the same data.</h2>
+  <p class="rv" style="color:#E4EBE8;margin-top:14px;max-width:560px;line-height:1.7">Log something once and it shows up everywhere it matters. The list below is the whole product, and nothing on it is a mockup.</p>
+  <div class="ledger rv" style="margin-top:30px">
+    <a class="ledger-row" href="#dial" style="text-decoration:none"><span class="when">01</span><span class="what">The insight dial<small>Ten spokes, thirty days of scrub, verdicts in plain words.</small></span><span class="val">›</span></a>
+    <a class="ledger-row" href="#food" style="text-decoration:none"><span class="when">02</span><span class="what">Food scan<small>A photo becomes a logged meal in about forty seconds.</small></span><span class="val">›</span></a>
+    <a class="ledger-row" href="#chat" style="text-decoration:none"><span class="when">03</span><span class="what">Health chat<small>Answers quoted from your own records.</small></span><span class="val">›</span></a>
+    <a class="ledger-row" href="#record" style="text-decoration:none"><span class="when">04</span><span class="what">Daily log and timeline<small>Sixty seconds of logging, a lifetime ledger.</small></span><span class="val">›</span></a>
+    <a class="ledger-row" href="#pulse" style="text-decoration:none"><span class="when">05</span><span class="what">Pulse check<small>Fingertip or face, live trace included.</small></span><span class="val">›</span></a>
+    <a class="ledger-row" href="#treatment" style="text-decoration:none"><span class="when">06</span><span class="what">Meds and symptom map<small>Schedules plus a body you can tap.</small></span><span class="val">›</span></a>
+    <a class="ledger-row" href="#evidence" style="text-decoration:none"><span class="when">07</span><span class="what">3D body, graph, records<small>Walk through your own data.</small></span><span class="val">›</span></a>
+  </div>
+</div>
+
+<div class="scroll-graph" id="dial">
+  <div class="sticky">
+    <div class="wrap sg-grid">
+      <div class="sg-copy">
+        <p class="k-label">01 · The insight dial</p>
+        <h2>One ring. Ten signals. <em>Your call</em> what it shows next.</h2>
+        <p class="body" id="sgText">Sleep, energy, water, stress, movement, wellbeing, pain, meals, heart, and doses each get a spoke, and each spoke sits inside its healthy band or steps outside it where you can see it happen.</p>
+        <div class="sg-phase"><span class="sg-dot on"></span><span class="sg-dot"></span><span class="sg-dot"></span></div>
+      </div>
+      <svg id="dialSvg" viewBox="0 0 400 400" role="img" aria-label="Health dial drawing itself">
+        <circle cx="200" cy="200" r="150" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="26"/>
+        <circle id="dialBand" cx="200" cy="200" r="150" fill="none" stroke="#4FD1C5" stroke-width="26" stroke-linecap="round" transform="rotate(-90 200 200)"/>
+        <circle cx="200" cy="200" r="104" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
+        <circle cx="200" cy="200" r="60" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
+        <g id="dialSpokes" stroke="#4FD1C5" stroke-width="3" stroke-linecap="round"></g>
+        <g id="dialDots" fill="#FFFFFF"></g>
+        <text id="dialCenter" x="200" y="196" text-anchor="middle" fill="#fff" font-size="34" font-weight="700">8</text>
+        <text x="200" y="220" text-anchor="middle" fill="#A7B8B2" font-size="13">steady</text>
+      </svg>
     </div>
   </div>
 </div>
 
-<!-- APP -->
-<div class="shell" id="appShell" style="display:none">
-  <aside class="side">
-    <div class="side-logo">M</div>
-    <nav class="side-nav">
-      <button class="ni on" data-p="dashboard" onclick="nav('dashboard')"><span class="ni-icon">📊</span><span>Home</span></button>
-      <button class="ni" data-p="chat" onclick="nav('chat')"><span class="ni-icon">💬</span><span>Chat</span></button>
-      <button class="ni" data-p="docs" onclick="nav('docs')"><span class="ni-icon">📄</span><span>Docs</span></button>
-      <button class="ni" data-p="body" onclick="nav('body')"><span class="ni-icon">🫀</span><span>Body</span></button>
-      <button class="ni" data-p="timeline" onclick="nav('timeline')"><span class="ni-icon">📈</span><span>History</span></button>
-      <button class="ni" data-p="meds" onclick="nav('meds')"><span class="ni-icon">💊</span><span>Meds</span></button>
-      <button class="ni" data-p="daily" onclick="nav('daily')"><span class="ni-icon">📝</span><span>Log</span></button>
-      <button class="ni" data-p="review" onclick="nav('review')"><span class="ni-icon">🔍</span><span>Review</span></button>
-      <button class="ni" data-p="logs" onclick="nav('logs')"><span class="ni-icon">📋</span><span>Logs</span></button>
-      <button class="ni" data-p="settings" onclick="nav('settings')"><span class="ni-icon">⚙️</span><span>Config</span></button>
-    </nav>
-    <div class="side-bottom"><button class="side-avatar" onclick="nav('settings')" title="Settings">👤</button></div>
-  </aside>
-
-  <main class="main">
-    <header class="bar">
-      <span class="bar-title" id="pageTitle">Dashboard</span>
-      <span class="bar-spacer"></span>
-      <div class="bar-search"><span class="ico">🔍</span><input type="text" placeholder="Search..." id="gSearch" onkeydown="if(event.key==='Enter'){nav('chat');document.getElementById('chatIn').value=this.value;sendChat();this.value=''}"></div>
-      <span class="bar-user" id="barUser"></span>
-      <button class="btn-ghost" onclick="doLogout()">Sign out</button>
-    </header>
-
-    <div class="content" id="content">
-
-      <!-- DASHBOARD -->
-      <div class="page on" id="pg-dashboard">
-        <div class="section-head">
-          <div class="section-title">📊 Health overview</div>
-          <button class="btn btn-out btn-sm" onclick="loadDashboard()">↻ Refresh</button>
-        </div>
-        <div class="metrics" id="mGrid">
-          <div class="m-card"><div class="m-label">Latest vitals</div><div class="m-val" id="mvVitals">—</div><div class="m-sub" id="mvVitalsSub">No data</div><div class="m-ico" style="background:var(--blue-bg)">🩺</div></div>
-          <div class="m-card"><div class="m-label">Wellbeing</div><div class="m-val" id="mvWellbeing">—</div><div class="m-sub" id="mvWellbeingSub">No check-in today</div><div class="m-ico" style="background:var(--green-bg)">😊</div></div>
-          <div class="m-card"><div class="m-label">Latest pain</div><div class="m-val" id="mvPain">—</div><div class="m-sub" id="mvPainSub">No pain logged</div><div class="m-ico" style="background:var(--red-bg)">🔴</div></div>
-          <div class="m-card"><div class="m-label">Sleep</div><div class="m-val" id="mvSleep">—</div><div class="m-sub" id="mvSleepSub">No sleep logged</div><div class="m-ico" style="background:var(--purple-bg)">🌙</div></div>
-          <div class="m-card"><div class="m-label">Documents</div><div class="m-val" id="mvDocs">—</div><div class="m-sub">Medical records</div><div class="m-ico" style="background:var(--teal-dim)">📄</div></div>
-          <div class="m-card"><div class="m-label">Body observations</div><div class="m-val" id="mvBody">—</div><div class="m-sub">Active findings</div><div class="m-ico" style="background:var(--amber-bg)">🫀</div></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-          <div class="card"><div class="card-head"><div class="card-title">📄 Recent documents</div><button class="btn btn-ghost btn-sm" onclick="nav('docs')">View all →</button></div><div id="dDashDocs"><div class="empty"><p>No documents yet</p></div></div></div>
-          <div class="card"><div class="card-head"><div class="card-title">📈 Latest events</div><button class="btn btn-ghost btn-sm" onclick="nav('timeline')">View all →</button></div><div id="dDashTL"><div class="empty"><p>No events yet</p></div></div></div>
-        </div>
-      </div>
-
-      <!-- CHAT -->
-      <div class="page" id="pg-chat">
-        <div class="chat">
-          <div class="chat-msgs" id="chatMsgs"><div class="chat-welcome"><div class="ico">🤖</div><h3>MedGraph AI</h3><p>Ask about your health data, lab results, medications, or anything from your uploaded documents.</p></div></div>
-          <div class="chat-quick" id="chatQA">
-            <button class="qa" onclick="qChat('What are my latest lab results?')">📋 Lab results</button>
-            <button class="qa" onclick="qChat('Summarize my health status')">🩺 Health summary</button>
-            <button class="qa" onclick="qChat('What medications am I on?')">💊 Medications</button>
-            <button class="qa" onclick="qChat('Show me any abnormal findings')">⚠️ Abnormalities</button>
-          </div>
-          <div class="chat-bar"><div class="chat-wrap"><textarea id="chatIn" rows="1" placeholder="Ask about your health data..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea><button class="chat-send" id="chatBtn" onclick="sendChat()">➤</button></div></div>
-        </div>
-      </div>
-
-      <!-- DOCUMENTS -->
-      <div class="page" id="pg-docs">
-        <div class="section-head"><div class="section-title">📄 Documents</div></div>
-        <div class="drop" id="dropZone" onclick="document.getElementById('fileIn').click()" ondrop="onDrop(event)" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')">
-          <div class="ico">📁</div><h3>Upload medical documents</h3><p>Drop PDF or image files here, or click to browse</p><p style="margin-top:6px;font-size:11px;color:var(--text-faint)">PDF, PNG, JPG · Max 20 MB</p>
-          <input type="file" id="fileIn" accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="onFileSel(event)">
-          <div class="progress" id="upProg"><div style="display:flex;align-items:center;gap:6px"><div style="width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin 0.6s linear infinite"></div><span id="upStatus" style="font-size:12px">Uploading...</span></div><div class="pbar"><div class="pbar-fill" id="upFill" style="width:0%"></div></div></div>
-        </div>
-        <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-        <div id="pipeBox" style="display:none"><div class="card" style="margin-bottom:14px"><div class="card-title" style="margin-bottom:10px">⚡ Processing pipeline</div><div class="pipe" id="pipeSteps"><span class="ps" id="pU">Upload</span><span class="arr">→</span><span class="ps" id="pE">Extract</span><span class="arr">→</span><span class="ps" id="pV">Vector</span><span class="arr">→</span><span class="ps" id="pT">Timeline</span><span class="arr">→</span><span class="ps" id="pO">Observe</span><span class="arr">→</span><span class="ps" id="pB">Outbox</span><span class="arr">→</span><span class="ps" id="pN">Neo4j</span></div><div id="pipeDet" style="font-size:11px;color:var(--text-dim);margin-top:6px"></div></div></div>
-        <div class="doc-grid" id="docGrid"><div class="empty" style="grid-column:1/-1"><div class="ico">📄</div><h3>No documents</h3><p>Upload to get started</p></div></div>
-      </div>
-
-      <!-- BODY STATE -->
-      <div class="page" id="pg-body">
-        <div class="section-head"><div class="section-title">🫀 Body state</div><div style="display:flex;gap:6px"><button class="btn btn-fill btn-sm" onclick="showObsModal()">+ Observation</button><button class="btn btn-out btn-sm" onclick="loadBody()">↻ Refresh</button></div></div>
-        <div class="body-grid" id="bodyGrid"><div class="empty" style="grid-column:1/-1"><div class="ico">🫀</div><h3>No body state data</h3><p>Upload documents or log observations</p></div></div>
-      </div>
-
-      <!-- TIMELINE -->
-      <div class="page" id="pg-timeline">
-        <div class="section-head"><div class="section-title">📈 Clinical timeline</div><button class="btn btn-out btn-sm" onclick="loadTimeline()">↻ Refresh</button></div>
-        <div class="tl-list" id="tlList"><div class="empty"><div class="ico">📈</div><h3>No events</h3><p>Upload documents to populate your timeline</p></div></div>
-      </div>
-
-      <!-- MEDICATIONS -->
-      <div class="page" id="pg-meds">
-        <div class="section-head"><div class="section-title">💊 Medications</div><button class="btn btn-fill btn-sm" onclick="showMedModal()">+ Add medication</button></div>
-        <div class="med-list" id="medList"><div class="empty"><div class="ico">💊</div><h3>No medications</h3><p>Add medications to track them</p></div></div>
-      </div>
-
-      <!-- DAILY LOG -->
-      <div class="page" id="pg-daily">
-        <div class="section-head"><div class="section-title">📝 Daily check-in</div><button class="btn btn-fill btn-sm" onclick="showDailyModal()">+ New check-in</button></div>
-        <div class="card" id="dailyCard"><div class="empty"><div class="ico">📝</div><h3>No check-in today</h3><p>Log your daily wellbeing, vitals, sleep, and activities</p></div></div>
-      </div>
-
-      <!-- REVIEW -->
-      <div class="page" id="pg-review">
-        <div class="section-head"><div class="section-title">🔍 Review queue</div><button class="btn btn-out btn-sm" onclick="loadReview()">↻ Refresh</button></div>
-        <div id="reviewList"><div class="empty"><div class="ico">🔍</div><h3>No pending reviews</h3><p>Unverified extractions will appear here</p></div></div>
-      </div>
-
-      <!-- LOGS -->
-      <div class="page" id="pg-logs">
-        <div class="section-head"><div class="section-title">📋 Pipeline logs</div></div>
-        <div class="log-bar">
-          <button class="btn btn-out btn-sm" onclick="loadLogs()">↻ Refresh</button>
-          <button class="btn btn-out btn-sm" id="liveBtn" onclick="toggleLive()">▶ Live</button>
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('logC').innerHTML=''">Clear</button>
-          <span style="flex:1"></span>
-          <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px"><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
-        </div>
-        <div class="log-list" id="logC"><div class="empty" id="logE"><p>No logs yet</p></div></div>
-      </div>
-
-      <!-- SETTINGS -->
-      <div class="page" id="pg-settings">
-        <div class="section-head"><div class="section-title">⚙️ Settings</div></div>
-        <div class="set-sec">
-          <h3>👤 Profile</h3>
-          <div class="fg"><label>Display name</label><input class="fi" id="pName" placeholder="Your name"></div>
-          <div class="fg"><label>Email</label><input class="fi" id="pEmail" disabled style="opacity:0.5"></div>
-          <div class="fg"><label>Phone</label><input class="fi" id="pPhone" placeholder="+1 (555) 000-0000"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="fg"><label>Height (cm)</label><input class="fi" id="pHeight" type="number" placeholder="170"></div>
-            <div class="fg"><label>Weight (kg)</label><input class="fi" id="pWeight" type="number" placeholder="70"></div>
-          </div>
-          <button class="btn btn-fill" onclick="saveProfile()">Save profile</button>
-        </div>
-        <div class="set-sec">
-          <h3>📊 Health summaries</h3>
-          <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Rebuild daily and longitudinal summaries from your clinical events.</p>
-          <button class="btn btn-out btn-sm" onclick="rebuildAll()">🔄 Rebuild all summaries</button>
-        </div>
-        <div class="set-sec">
-          <h3>🔑 Session</h3>
-          <div class="set-row"><div><div class="set-label">Patient ID</div><div class="set-desc" id="sPID">—</div></div></div>
-          <div class="set-row"><div><div class="set-label">Sign out</div><div class="set-desc">End current session</div></div><button class="btn btn-danger btn-sm" onclick="doLogout()">Sign out</button></div>
-        </div>
+<div class="chapter wrap" id="food">
+  <span class="ch-num rv">02 · Food scan</span>
+  <h2 class="rv">Dinner first, <em>arithmetic</em> second.</h2>
+  <p class="lede2 rv">Nobody keeps a food diary for long when every entry means typing ingredients into tiny boxes. So the diary works the other way here. You frame the plate, tap once, and about forty seconds later the meal is sitting in your log with calories and macros attached, ready for you to correct.</p>
+  <div class="band rv">
+    <div>
+      <h3>How a photo becomes a number you can trust enough to log</h3>
+      <p>Vision AI names each food on the plate and judges portions against the plate itself, then the USDA nutrition database fills in calories, protein, carbs, and fat per hundred grams. Because a photo is evidence rather than measurement, the answer arrives as a range with a confidence note, and every item carries gram steppers so a heavy pour of rice takes two taps to fix. Logging works offline and syncs when you reconnect.</p>
+      <div class="facts">
+        <div><span>Typical analysis time</span><span>About 40 seconds</span></div>
+        <div><span>Portion adjustment</span><span>10 gram steps, totals rescale live</span></div>
+        <div><span>Nutrition source</span><span>USDA FoodData Central</span></div>
+        <div><span>When unsure</span><span>A range, never a fake exact figure</span></div>
       </div>
     </div>
-  </main>
-</div>
-
-<!-- OBS MODAL -->
-<div class="modal-bg" id="obsModal">
-  <div class="modal">
-    <button class="modal-x" onclick="closeM('obsModal')">✕</button>
-    <h2>Log body observation</h2>
-    <div class="fg"><label>Body part</label><select class="fi" id="obsStr"><option value="">Select...</option></select></div>
-    <div class="fg"><label>Finding</label><select class="fi" id="obsFind"><option value="pain_level">Pain</option><option value="blood_sugar">Blood sugar</option><option value="resting_pulse">Resting pulse</option><option value="swelling">Swelling</option><option value="stiffness">Stiffness</option><option value="fatigue">Fatigue</option><option value="numbness">Numbness</option></select></div>
-    <div class="fg"><label>Severity (0–1)</label><input type="range" id="obsSev" min="0" max="100" value="30" class="fi" style="padding:0;border:none;background:none" oninput="document.getElementById('obsSevL').textContent=(this.value/100).toFixed(2)"><div style="font-size:11px;color:var(--text-dim);margin-top:4px">Severity: <span id="obsSevL">0.30</span></div></div>
-    <div class="fg"><label>Visual status</label><select class="fi" id="obsVS"><option value="normal">Normal</option><option value="mild">Mild</option><option value="moderate">Moderate</option><option value="critical">Critical</option></select></div>
-    <div class="fg"><label>Notes</label><textarea class="fi" id="obsNotes" placeholder="Describe what you're experiencing..."></textarea></div>
-    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-fill" onclick="submitObs()">Submit</button><button class="btn btn-out" onclick="closeM('obsModal')">Cancel</button></div>
+    <div class="visual" style="background:rgba(0,0,0,.2)">
+      <div class="scan-frame"><div class="scan-line"></div><div class="scan-tag">Rice and stew · 420 to 520 kcal</div></div>
+    </div>
   </div>
 </div>
 
-<!-- MED MODAL -->
-<div class="modal-bg" id="medModal">
-  <div class="modal">
-    <button class="modal-x" onclick="closeM('medModal')">✕</button>
-    <h2>Add medication</h2>
-    <div class="fg"><label>Name</label><input class="fi" id="medName" placeholder="e.g. Metformin"></div>
-    <div class="fg"><label>Dosage</label><input class="fi" id="medDose" placeholder="e.g. 500mg"></div>
-    <div class="fg"><label>Frequency</label><select class="fi" id="medFreq"><option value="ONCE_DAILY">Once daily</option><option value="TWICE_DAILY">Twice daily</option><option value="THREE_TIMES_DAILY">Three times daily</option><option value="AS_NEEDED">As needed</option><option value="WEEKLY">Weekly</option></select></div>
-    <div class="fg"><label>Route</label><select class="fi" id="medRoute"><option value="ORAL">Oral</option><option value="INTRAVENOUS">IV</option><option value="INTRAMUSCULAR">IM</option><option value="TOPICAL">Topical</option></select></div>
-    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-fill" onclick="submitMed()">Add</button><button class="btn btn-out" onclick="closeM('medModal')">Cancel</button></div>
+<div class="chapter wrap" id="chat">
+  <span class="ch-num rv">03 · Health chat</span>
+  <h2 class="rv">Ask the week <em>what happened.</em></h2>
+  <div class="prose-two">
+    <p class="rv">The assistant reads before it speaks. When you ask how sleep went, it has already pulled the week of sleep points, the energy curve beside it, and anything your records say that bears on the question. Answers arrive as streamed sentences with the receipts attached: quoted lines from your own documents and, where anatomy is involved, a button that jumps straight to the structure in the 3D body.</p>
+    <p class="rv">It also knows what it should not do. Doses and diagnoses are off limits, uncertainty is stated instead of smoothed over, and every reply ends with two or three follow-up questions it genuinely expects, which means most second questions cost two taps instead of a paragraph of typing.</p>
+  </div>
+  <div class="split">
+    <div class="visual rv"><div class="chat-mock">
+      <div class="bubble them">Your sleep averaged 7h 10m this week, up from 6h 20m last week. Energy followed it upward on four of seven days.</div>
+      <div class="bubble me">Has my stress changed too?</div>
+      <div class="bubble them">Down a full point since Monday. The timeline has the daily entries if you want them.</div>
+    </div></div>
+    <div class="paper rv">
+      <h3>A stop button under your thumb</h3>
+      <p>Most health questions arrive in pairs, and the second one depends on the first answer. The chat keeps the thread and the sources visible, and a stop control stays on screen the whole time a reply generates, because an answer that looks wrong should be stoppable rather than watchable.</p>
+    </div>
   </div>
 </div>
 
-<!-- DAILY CHECK-IN MODAL -->
-<div class="modal-bg" id="dailyModal">
-  <div class="modal">
-    <button class="modal-x" onclick="closeM('dailyModal')">✕</button>
-    <h2>Daily check-in</h2>
-    <div class="fg"><label>Date</label><input class="fi" id="dcDate" type="date"></div>
-    <div class="fg"><label>Overall wellbeing (1–10)</label><input class="fi" id="dcWell" type="number" min="1" max="10" placeholder="1–10"></div>
-    <div class="fg"><label>Energy level (1–10)</label><input class="fi" id="dcEnergy" type="number" min="1" max="10" placeholder="1–10"></div>
-    <div class="fg"><label>Stress level (1–10)</label><input class="fi" id="dcStress" type="number" min="1" max="10" placeholder="1–10"></div>
-    <div class="fg"><label>Sleep duration (minutes)</label><input class="fi" id="dcSleep" type="number" placeholder="480"></div>
-    <div class="fg"><label>Sleep quality (1–10)</label><input class="fi" id="dcSleepQ" type="number" min="1" max="10"></div>
-    <div class="fg"><label>Water intake (ml)</label><input class="fi" id="dcWater" type="number" placeholder="2000"></div>
-    <div class="fg"><label>Notes</label><textarea class="fi" id="dcNotes" placeholder="How are you feeling today?"></textarea></div>
-    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-fill" onclick="submitDaily()">Submit</button><button class="btn btn-out" onclick="closeM('dailyModal')">Cancel</button></div>
+<div class="chapter wrap" id="record">
+  <span class="ch-num rv">04 · Daily log and timeline</span>
+  <h2 class="rv">Sixty seconds in, <em>a lifetime ledger</em> out.</h2>
+  <p class="lede2 rv">The daily sheet is sliders and chips, almost no keyboard: mood, sleep, water, meals, activity, pain, vitals, and a notes line for anything the sliders cannot say. It validates as you go and saves locally first, so a dead zone never eats an entry. The timeline is where all of it lands, mixed with medication events and uploaded records on one chronological ledger of white day cards.</p>
+  <div class="ledger rv">
+    <div class="ledger-row"><span class="when">Today</span><span class="what">Evening log<small>Mood 4, pain 2, water 1.8 litres, notes about the headache after lunch.</small></span><span class="val">Saved</span></div>
+    <div class="ledger-row"><span class="when">Yesterday</span><span class="what">Amtiva 5g, morning dose<small>Taken at 8:04, four minutes after the reminder.</small></span><span class="val">Taken</span></div>
+    <div class="ledger-row"><span class="when">Sep 14</span><span class="what">Lipid panel, uploaded PDF<small>Extraction finished overnight. Two values flagged in place.</small></span><span class="val">Ready</span></div>
+    <div class="ledger-row"><span class="when">Sep 12</span><span class="what">Face pulse check<small>72 bpm, good quality, thirty second scan.</small></span><span class="val">72</span></div>
   </div>
 </div>
 
-<!-- TOASTS -->
-<div class="toast-c" id="toastC"></div>
+<div class="chapter wrap" id="pulse">
+  <span class="ch-num rv">05 · Pulse check</span>
+  <h2 class="rv">Two ways to take a pulse, <em>zero wearables</em> required.</h2>
+  <div class="prose-two">
+    <p class="rv">The fingertip method is the classic one: cover the camera, hold still, and watch the live waveform draw itself while the quality meter decides whether the reading counts. The face method needs nothing but light. It reads the pulse remotely from skin tone changes over about thirty seconds, which makes it the option you will actually use on an ordinary Tuesday.</p>
+    <p class="rv">Both end in the same place. Results carry a quality score and heart rate variability where the signal supports it, then land on the dial as the heart spoke and in the timeline as a dated entry. A bad reading is discarded with an explanation instead of being filed as fact.</p>
+  </div>
+  <div class="band rv">
+    <div>
+      <h3>The trace is the truth serum</h3>
+      <p>Any app can print a number. The live waveform is what lets you believe it, because you can see a shaky hold ruin the signal in real time and fix your grip before the result commits. That is why the trace stays on screen the whole way through instead of hiding behind a spinner.</p>
+    </div>
+    <div class="visual" style="background:transparent;border:0;min-height:0">
+      <svg class="pulse-line" viewBox="0 0 300 90"><path id="pulsePath" d="M0 45 H70 L85 45 L95 15 L108 72 L118 30 L126 45 H300" fill="none" stroke="#4FD1C5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+  </div>
+</div>
+
+<div class="chapter wrap" id="treatment">
+  <span class="ch-num rv">06 · Meds and symptom map</span>
+  <h2 class="rv">The treatment half <em>of the record.</em></h2>
+  <div class="split">
+    <div class="paper rv">
+      <h3>Schedules that survive real life</h3>
+      <p>You define each medicine once with its dose, times, and days, and the day view reduces the rest to a single decision per row: taken or not. One tap stamps the time. Adherence becomes a spoke on the dial, which turns out to motivate more reliably than any reminder sentence, though the reminders stay.</p>
+    </div>
+    <div class="paper rv">
+      <h3>A body you can point at</h3>
+      <p>Thirty seven regions across front and back views, each tappable, each with a severity slider for the days a spot flares. A thirty day replay strip shows how each place behaved over the month, which is the difference between telling your doctor the shoulder hurts and showing them the four weeks it hurt.</p>
+    </div>
+  </div>
+  <div class="split">
+    <div class="visual rv"><div class="mock-phone"><div class="mock-screen">
+      <div class="mock-row">Amtiva 5g <small>8:00 AM, taken</small></div>
+      <div class="mock-row">Vitamin D <small>due 1:00 PM</small></div>
+      <div class="mock-cta">Mark taken</div>
+    </div></div></div>
+    <div class="visual rv"><div class="body-mock">
+      <div class="body-fig"><i></i><i></i></div>
+      <div class="body-list"><div>Shoulder · 4/10</div><div>Lower back · 6/10</div><div>Knee · 2/10</div></div>
+    </div></div>
+  </div>
+</div>
+
+<div class="chapter wrap" id="evidence">
+  <span class="ch-num rv">07 · 3D body, graph, records</span>
+  <h2 class="rv">Your body of evidence, <em>walkable.</em></h2>
+  <p class="lede2 rv">Metrics become a rotatable anatomical model and a living knowledge graph, and the chat links straight into whichever structure an answer is about. Records arrive the unglamorous way, as PDFs and photos you upload, and leave as extracted values filed into the timeline with the originals one tap away in the profile drawer. Everything connects because everything reads from the same store.</p>
+  <div class="go rv"><a class="btn btn-green" href="#get">Open it all in the app</a></div>
+</div>
+
+<div class="finale wrap" id="return">
+  <div style="width:100%">
+    <span class="ch-num rv">The return</span>
+    <h2 class="rv">Everything comes back <em>to the body.</em></h2>
+    <p class="rv">Every signal on this page has been one of yours. Watch them come home.</p>
+    <div id="graphBodyWrap" class="rv">
+      <svg id="graphBody" viewBox="0 0 200 340" role="img" aria-label="Human figure receiving the health graph">
+        <defs>
+          <radialGradient id="bodyGlowGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#4FD1C5" stop-opacity=".55"/>
+            <stop offset="60%" stop-color="#4FD1C5" stop-opacity=".18"/>
+            <stop offset="100%" stop-color="#4FD1C5" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse id="bodyGlow" cx="100" cy="175" rx="95" ry="160" fill="url(#bodyGlowGrad)" opacity="0"/>
+        <g id="bodyFigure" opacity=".92">
+          <circle cx="100" cy="34" r="24" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <rect x="88" y="56" width="24" height="22" rx="8" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <path d="M60 84 Q100 68 140 84 L132 198 Q100 212 68 198 Z" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <rect x="36" y="92" width="22" height="118" rx="11" transform="rotate(7 47 92)" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <rect x="142" y="92" width="22" height="118" rx="11" transform="rotate(-7 153 92)" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <circle cx="42" cy="216" r="10" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <circle cx="158" cy="216" r="10" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <rect x="70" y="204" width="25" height="112" rx="12" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <rect x="105" y="204" width="25" height="112" rx="12" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <ellipse cx="80" cy="324" rx="14" ry="7" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+          <ellipse cx="120" cy="324" rx="14" ry="7" fill="rgba(255,255,255,.07)" stroke="#FFFFFF" stroke-width="2"/>
+        </g>
+        <circle id="bodyHeart" cx="100" cy="125" r="7" fill="#4FD1C5" opacity=".9"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<div class="chapter wrap" id="promises">
+  <span class="ch-num rv">Promises</span>
+  <h2 class="rv">What we <em>refuse</em> to do.</h2>
+  <div class="principles">
+    <div class="rv"><b>No invented precision</b><p>An estimate ships with its range and its confidence, or it does not ship. Missing days show as missing days. A blank is always more honest than a plausible number.</p></div>
+    <div class="rv"><b>No medical cosplay</b><p>The app spots patterns and keeps records organized. It does not diagnose, does not prescribe, and says plainly when a question belongs with a clinician.</p></div>
+    <div class="rv"><b>No data market</b><p>Your logs sync to your private account for backup and are never sold. Uploaded documents are processed only to build your timeline. Sign out keeps local data on the device.</p></div>
+    <div class="rv"><b>No dead ends offline</b><p>Logging, meds, the dial, and history work without a connection and sync quietly when one returns. Anything needing the network says so instead of spinning.</p></div>
+  </div>
+</div>
+
+<div class="chapter wrap" id="pricing">
+  <span class="ch-num rv">Pricing</span>
+  <h2 class="rv">Start free. <em>Stay</em> because it works.</h2>
+  <p class="lede2 rv">Every plan starts with three free days, renews monthly on its own, and cancels anytime with access kept until the period ends. No annual lock, no rescue offers at the exit door.</p>
+  <div class="split" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="paper rv">
+      <h3>Free</h3>
+      <p style="font-size:28px;font-weight:700;color:var(--ink);margin-top:6px">€0</p>
+      <p>General logging and the basic graph, with 3 meal scans and 2 AI messages every month. Enough to feel the dial working.</p>
+      <div class="go"><a class="btn btn-green" href="#get">Start free</a></div>
+    </div>
+    <div class="paper rv">
+      <h3>General</h3>
+      <p style="font-size:28px;font-weight:700;color:var(--ink);margin-top:6px">€11<span style="font-size:14px;font-weight:400;color:var(--muted)">/mo</span></p>
+      <p>4 document scans and a limited food scan. Voice alarm and call reminders plus the 3D body stay out of this one.</p>
+      <div class="go"><a class="btn btn-green" href="#get">Try 3 days free</a></div>
+    </div>
+    <div class="paper rv" style="border:2px solid var(--cta)">
+      <h3>All-in</h3>
+      <p style="font-size:28px;font-weight:700;color:var(--ink);margin-top:6px">€18<span style="font-size:14px;font-weight:400;color:var(--muted)">/mo</span></p>
+      <p>Everything in General, plus voice alarm and call reminders, the 3D body, and every advanced feature included.</p>
+      <div class="go"><a class="btn btn-green" href="#get">Try 3 days free</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="chapter wrap" id="faq" style="padding-top:20px">
+  <span class="ch-num rv">Questions</span>
+  <h2 class="rv">Asked often, <em>answered plainly.</em></h2>
+  <div class="faq">
+    <div class="faq-item rv"><button class="faq-q">Is HealthGraph free?<span>+</span></button><div class="faq-a"><p>Logging, the basic graph, three meal scans and two AI messages a month are free forever. General at 11 euros a month adds document scans with a limited food scan. All-in at 18 euros a month includes everything: voice alarms and call reminders, the 3D body, and the advanced features. Every paid plan starts with 3 days free, auto-renews monthly, and cancels anytime.</p></div></div>
+    <div class="faq-item rv"><button class="faq-q">How does the food scanner estimate portions from a flat photo?<span>+</span></button><div class="faq-a"><p>It compares the food against the plate and utensils in the frame, using a standard plate size as the reference, then converts volume to grams with a density table. That is estimation, which is why every result carries a range and a confidence note, and why the gram steppers sit right under each item before you log.</p></div></div>
+    <div class="faq-item rv"><button class="faq-q">Which phones can measure pulse?<span>+</span></button><div class="faq-a"><p>Any phone with a camera and flash handles fingertip readings. The face scan needs only a front camera and decent light, and takes about thirty seconds. Both show a live quality meter, and a reading that fails it is discarded with an explanation instead of being saved.</p></div></div>
+    <div class="faq-item rv"><button class="faq-q">What happens to my data if I stop using the app?<span>+</span></button><div class="faq-a"><p>Signing out leaves your local data on the device, and uninstalling removes it. Your synced account keeps the backup until you ask for deletion from the account screen. Nothing is retained for advertising under any circumstance, because there is no advertising.</p></div></div>
+    <div class="faq-item rv"><button class="faq-q">Can it replace my doctor?<span>+</span></button><div class="faq-a"><p>No, and it will tell you so inside the app as well. HealthGraph exists to make the patterns visible and the records organized so your appointments go further. Diagnosis and treatment stay with qualified clinicians.</p></div></div>
+  </div>
+</div>
+
+<div class="chapter wrap" id="get" style="padding-top:20px">
+  <div class="get rv">
+    <h2>Get HealthGraph while it is <em>free.</em></h2>
+    <p class="lede">One account across iOS and Android, with history everywhere you sign in. Tap below and an email opens, addressed and ready. Send it and we reply with your invite link.</p>
+    <div class="get-row">
+      <a class="store" href="mailto:hello@healthgraph.app?subject=HealthGraph%20early%20access"><span><small>Get it on</small>App Store</span></a>
+      <a class="store" href="mailto:hello@healthgraph.app?subject=HealthGraph%20early%20access"><span><small>Get it on</small>Google Play</span></a>
+    </div>
+    <p class="fine">One email from you, one invite back from us. No newsletter, no drip campaign, unsubscribe by replying stop.</p>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="cols">
+      <a class="brand" href="#top"><span class="brand-mark"></span>HealthGraph</a>
+      <div class="colophon">Set in Poppins, with an italic serif for emphasis. One HTML file, no trackers, no cookies.<br>© <span id="year">2026</span> HealthGraph.</div>
+    </div>
+    <p class="disclaimer">HealthGraph is a wellness companion, not a medical device. Everything on this page and in the app is informational only and never medical advice, diagnosis, or treatment. Consult a qualified clinician about any health concern.</p>
+  </div>
+</footer>
 
 <script>
-/* ═══════════════════════════════════════════════════════════════
-   MedGraph Web — all backend connections wired
-   ═══════════════════════════════════════════════════════════════ */
-const API = window.location.origin;
-let auth = null, pid = null, convId = null, selFile = null, poll = null;
-let logCtrl = null, liveMode = false, chatN = 0;
-
-// Firebase
-firebase.initializeApp({
-  apiKey: "AIzaSyBX2nwNuCSqB3nxuhyDT-bqZExe7B2XNfg",
-  authDomain: "medg-50cbe.firebaseapp.com",
-  projectId: "medg-50cbe"
-});
-
-// ═══ AUTH ═══
-async function doLogin() {
-  const em = document.getElementById('aEmail').value, pw = document.getElementById('aPass').value;
-  if (!em || !pw) return authErr('Enter email and password');
-  document.getElementById('loginBtn').disabled = true;
-  try {
-    const c = await firebase.auth().signInWithEmailAndPassword(em, pw);
-    auth = await c.user.getIdToken();
-    await syncPID();
-    showApp();
-  } catch(e) { authErr(e.message); }
-  document.getElementById('loginBtn').disabled = false;
-}
-async function doRegister() {
-  const em = document.getElementById('aEmail').value, pw = document.getElementById('aPass').value;
-  if (!em || !pw) return authErr('Enter email and password');
-  try {
-    const c = await firebase.auth().createUserWithEmailAndPassword(em, pw);
-    auth = await c.user.getIdToken();
-    await syncPID();
-    showApp();
-  } catch(e) { authErr(e.message); }
-}
-function doLogout() {
-  firebase.auth().signOut();
-  auth=null; pid=null; convId=null; chatN=0;
-  if(logCtrl){logCtrl.abort();logCtrl=null} liveMode=false;
-  document.getElementById('authScr').classList.add('show');
-  document.getElementById('appShell').style.display='none';
-}
-async function syncPID() {
-  if(!auth) return;
-  try { const r=await h('POST','/api/v1/auth/sync'); const d=await r.json(); if(r.ok) pid=d.patient_id; } catch(e){}
-}
-function authErr(m){const e=document.getElementById('authErr');e.textContent=m;e.style.display='block';}
-function showApp(){
-  document.getElementById('authScr').classList.remove('show');
-  document.getElementById('appShell').style.display='flex';
-  const u=firebase.auth().currentUser;
-  if(u){document.getElementById('barUser').textContent=u.email;document.getElementById('pEmail').value=u.email;}
-  document.getElementById('sPID').textContent=pid||'Syncing...';
-  loadDashboard();
-}
-firebase.auth().onAuthStateChanged(async u=>{if(u){auth=await u.getIdToken();await syncPID();showApp();}});
-
-// ═══ HTTP ═══
-function h(method,url,body){
-  const o={method,headers:{'Authorization':'Bearer '+auth}};
-  if(body){o.headers['Content-Type']='application/json';o.body=JSON.stringify(body);}
-  return fetch(API+url,o);
-}
-async function g(url){const r=await h('GET',url);if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json();}
-async function p(url,body){const r=await h('POST',url,body);if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||`HTTP ${r.status}`);}return r.json();}
-async function u(url,body){const r=await h('PUT',url,body);if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json();}
-
-// ═══ NAV ═══
-const titles={dashboard:'Dashboard',chat:'AI Chat',docs:'Documents',body:'Body state',timeline:'Clinical timeline',meds:'Medications',daily:'Daily check-in',review:'Review queue',logs:'Pipeline logs',settings:'Settings'};
-function nav(pg){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
-  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
-  document.getElementById('pg-'+pg).classList.add('on');
-  document.querySelector(`.ni[data-p="${pg}"]`).classList.add('on');
-  document.getElementById('pageTitle').textContent=titles[pg]||pg;
-  document.getElementById('content').scrollTop=0;
-  const loaders={dashboard:loadDashboard,docs:loadDocs,body:loadBody,timeline:loadTimeline,meds:loadMeds,review:loadReview,logs:loadLogs,settings:loadProfile};
-  if(loaders[pg]) loaders[pg]();
-}
-
-// ═══ DASHBOARD ═══
-async function loadDashboard(){
-  if(!auth)return;
-  try{
-    const[dm,docs,body]=await Promise.allSettled([g('/api/v1/daily-metrics'),g('/v1/documents'),g('/api/v1/body-state')]);
-    if(dm.status==='fulfilled'){
-      const d=dm.value;
-      if(d.latest_vitals&&d.latest_vitals.length){
-        const v=d.latest_vitals[0];
-        document.getElementById('mvVitals').textContent=`${v.value} ${v.unit||''}`;
-        document.getElementById('mvVitalsSub').textContent=v.display_name;
-      }
-      if(d.today_wellbeing){
-        document.getElementById('mvWellbeing').textContent=d.today_wellbeing.overall_wellbeing||'—';
-        document.getElementById('mvWellbeingSub').textContent=`Energy ${d.today_wellbeing.energy_level||'—'} · Stress ${d.today_wellbeing.stress_level||'—'}`;
-      }
-      if(d.latest_pain){
-        document.getElementById('mvPain').textContent=d.latest_pain.severity;
-        document.getElementById('mvPainSub').textContent=d.latest_pain.pain_type||'Logged';
-      }
-      if(d.latest_sleep){
-        const hrs=Math.round(d.latest_sleep.duration_minutes/60);
-        document.getElementById('mvSleep').textContent=`${hrs}h`;
-        document.getElementById('mvSleepSub').textContent=`Quality ${d.latest_sleep.sleep_quality||'—'}`;
-      }
-    }
-    if(docs.status==='fulfilled'){document.getElementById('mvDocs').textContent=docs.value.length;renderDashDocs(docs.value.slice(0,4));}
-    if(body.status==='fulfilled'){document.getElementById('mvBody').textContent=body.value.length;}
-    // Timeline preview
-    try{
-      const tl=await g('/api/v1/timeline?limit=5');
-      renderDashTL(tl.slice(0,5));
-    }catch(e){}
-  }catch(e){console.error('Dashboard:',e);}
-}
-function renderDashDocs(ds){
-  const el=document.getElementById('dDashDocs');
-  if(!ds.length){el.innerHTML='<div class="empty"><p>No documents</p></div>';return;}
-  el.innerHTML=ds.map(d=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><span style="font-size:18px">${d.storage_url?.endsWith('.pdf')?'📕':'🖼️'}</span><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.document_id.slice(0,12)}…</div><div style="font-size:10px;color:var(--text-dim)">${new Date(d.created_at).toLocaleDateString()}</div></div><span class="b ${d.status==='COMPLETED'?'b-green':d.status==='FAILED'?'b-red':'b-amber'}">${d.status}</span></div>`).join('');
-}
-function renderDashTL(tl){
-  const el=document.getElementById('dDashTL');
-  if(!tl.length){el.innerHTML='<div class="empty"><p>No events</p></div>';return;}
-  el.innerHTML=tl.map(t=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div style="flex:1"><div style="font-size:12px;font-weight:500">${t.concept_display_name||t.finding_display_name||t.event_type||'Event'}</div><div style="font-size:10px;color:var(--text-dim)">${new Date(t.event_time).toLocaleDateString()}</div></div><span class="b ${t.resource_type==='observation'?'b-purple':'b-blue'}">${t.resource_type}</span></div>`).join('');
-}
-
-// ═══ CHAT ═══
-function qChat(m){document.getElementById('chatIn').value=m;sendChat();}
-async function sendChat(){
-  const inp=document.getElementById('chatIn'),msg=inp.value.trim();
-  if(!msg||!auth)return;
-  inp.value=''; inp.style.height='auto';
-  document.getElementById('chatBtn').disabled=true;
-  addMsg('user',msg);
-  const w=document.querySelector('.chat-welcome');if(w)w.remove();
-  try{
-    const body={message:msg};if(convId)body.conversation_id=convId;
-    const d=await p('/api/v1/chat',body);
-    convId=d.conversation_id;chatN++;
-    addMsg('agent',d.response_text,d);
-    if(d.ui_actions&&d.ui_actions.length){
-      const a=d.ui_actions.map(x=>`<span class="b b-purple" style="margin:1px">${x.action_type}: ${x.structure_id||'—'}</span>`).join(' ');
-      addMsg('agent',`<div style="margin-top:6px"><strong>UI actions:</strong><br>${a}</div>`);
-    }
-  }catch(e){addMsg('agent',`<span style="color:var(--red)">Error: ${esc(e.message)}</span>`);}
-  document.getElementById('chatBtn').disabled=false;
-}
-function addMsg(role,html,data){
-  const el=document.getElementById('chatMsgs');
-  const d=document.createElement('div');d.className=`cm ${role}`;
-  d.innerHTML=`<div class="cm-av">${role==='user'?'👤':'🤖'}</div><div class="cm-bub">${html}${data?.conversation_id?`<div class="meta">Thread ${data.conversation_id.slice(0,8)}…</div>`:''}</div>`;
-  el.appendChild(d);el.scrollTop=el.scrollHeight;
-}
-
-// ═══ DOCUMENTS ═══
-async function loadDocs(){
-  if(!auth)return;
-  try{const ds=await g('/v1/documents');renderDocs(ds);}catch(e){}
-}
-function renderDocs(ds){
-  const el=document.getElementById('docGrid');
-  if(!ds.length){el.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="ico">📄</div><h3>No documents</h3><p>Upload to get started</p></div>';return;}
-  el.innerHTML=ds.map(d=>{
-    const isPdf=d.storage_url?.endsWith('.pdf');
-    return`<div class="doc-card" onclick="window.open(API+'/v1/documents/${d.document_id}/file','_blank')"><div class="doc-icon" style="background:${isPdf?'var(--red-bg)':'var(--blue-bg)'}">${isPdf?'📕':'🖼️'}</div><div class="doc-title">${d.document_id.slice(0,16)}…</div><div class="doc-meta">${new Date(d.created_at).toLocaleString()}<br>Hash ${d.file_hash.slice(0,10)}…</div><div style="margin-top:10px"><span class="b ${d.status==='COMPLETED'?'b-green':d.status==='FAILED'?'b-red':'b-amber'}">${d.status}</span></div></div>`;
-  }).join('');
-}
-function onFileSel(e){selFile=e.target.files[0];if(selFile)uploadDoc();}
-function onDrop(e){e.preventDefault();e.currentTarget.classList.remove('drag');if(e.dataTransfer.files.length){selFile=e.dataTransfer.files[0];uploadDoc();}}
-async function uploadDoc(){
-  if(!selFile||!auth)return toast('Select a file','err');
-  const fd=new FormData();fd.append('file',selFile);
-  const pr=document.getElementById('upProg');pr.classList.add('show');
-  document.getElementById('upStatus').textContent=`Uploading ${selFile.name}...`;
-  document.getElementById('upFill').style.width='30%';
-  resetPipe();setPipe('pU','on');
-  try{
-    const r=await fetch(API+'/v1/documents/upload',{method:'POST',headers:{'Authorization':'Bearer '+auth},body:fd});
-    const d=await r.json();
-    if(r.ok){
-      document.getElementById('upFill').style.width='100%';
-      document.getElementById('upStatus').textContent='Uploaded';
-      setPipe('pU','ok');toast('Document uploaded','ok');pollPipe(d.document_id);loadDocs();
-    }else{setPipe('pU','no');toast(d.detail||'Upload failed','err');}
-  }catch(e){setPipe('pU','no');toast('Upload error: '+e.message,'err');}
-  setTimeout(()=>pr.classList.remove('show'),2000);selFile=null;document.getElementById('fileIn').value='';
-}
-function resetPipe(){['pU','pE','pV','pT','pO','pB','pN'].forEach(id=>setPipe(id,''));document.getElementById('pipeBox').style.display='block';document.getElementById('pipeDet').textContent='Processing...';if(poll)clearInterval(poll);}
-function setPipe(id,s){document.getElementById(id).className='ps'+(s?' '+s:'');}
-async function pollPipe(did){
-  let n=0;poll=setInterval(async()=>{
-    n++;if(n>60){clearInterval(poll);return;}
-    try{
-      const tl=await g('/api/v1/timeline');
-      const de=tl.filter(e=>e.evidence&&e.evidence.document_id===did);
-      if(de.length>0){['pE','pV','pT','pO','pB','pN'].forEach(id=>setPipe(id,'ok'));document.getElementById('pipeDet').innerHTML=`<span class="b b-green">Complete</span> ${de.length} events created`;clearInterval(poll);toast(`Pipeline done — ${de.length} events`,'ok');}
-      else if(n>5){setPipe('pE','on');setPipe('pV','on');document.getElementById('pipeDet').textContent=`Running… (check ${n})`;}
-    }catch(e){}
-  },3000);
-}
-
-// ═══ BODY STATE ═══
-async function loadBody(){
-  if(!auth)return;
-  try{const d=await g('/api/v1/body-state');renderBody(d);}catch(e){}
-}
-function renderBody(items){
-  const el=document.getElementById('bodyGrid');
-  if(!items.length){el.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="ico">🫀</div><h3>No body state data</h3><p>Upload documents or log observations</p></div>';return;}
-  el.innerHTML=items.map(b=>`<div class="bi"><div class="bi-dot ${b.visual_status}"></div><div class="bi-info"><div class="bi-name">${b.display_name}</div><div class="bi-id">${b.structure_id}</div><div class="bi-tags"><span class="bi-tag">Severity ${b.severity?.toFixed(2)}</span><span class="bi-tag">Trend ${b.trend}</span><span class="bi-tag">${b.visual_status}</span></div>${b.latest_summary?`<div style="font-size:11px;color:var(--text-dim);margin-top:6px">${b.latest_summary}</div>`:''}</div></div>`).join('');
-}
-async function showObsModal(){
-  try{const s=await g('/api/v1/body-state/structures');const sel=document.getElementById('obsStr');sel.innerHTML='<option value="">Select...</option>';s.forEach(x=>{sel.innerHTML+=`<option value="${x.structure_id}">${x.display_name}</option>`;});}catch(e){}
-  document.getElementById('obsModal').classList.add('show');
-}
-async function submitObs(){
-  const sid=document.getElementById('obsStr').value;if(!sid)return toast('Select a body part','err');
-  try{
-    await p('/api/v1/body-state/log',{structure_id:sid,finding_code:document.getElementById('obsFind').value,visual_severity_score:parseInt(document.getElementById('obsSev').value)/100,visual_status:document.getElementById('obsVS').value,clinical_summary:document.getElementById('obsNotes').value||null});
-    toast('Observation logged','ok');closeM('obsModal');loadBody();
-  }catch(e){toast('Error: '+e.message,'err');}
-}
-
-// ═══ TIMELINE ═══
-async function loadTimeline(){
-  if(!auth)return;
-  try{const tl=await g('/api/v1/timeline');renderTL(tl);}catch(e){}
-}
-function renderTL(tl){
-  const el=document.getElementById('tlList');
-  if(!tl.length){el.innerHTML='<div class="empty"><div class="ico">📈</div><h3>No events</h3><p>Upload documents to populate</p></div>';return;}
-  el.innerHTML=tl.map(t=>{
-    const tc={LAB_RESULT:'b-blue',VITAL_SIGN:'b-green',PAIN_LOG:'b-amber',SYMPTOM:'b-amber',WELLBEING_LOG:'b-green',SLEEP_LOG:'b-purple',ACTIVITY_LOG:'b-green',MEDICATION_TAKEN:'b-purple',MEDICATION_EVENT:'b-purple',NUTRITION_LOG:'b-teal',observation:'b-purple',event:'b-blue'};
-    const badge=tc[t.event_type]||tc[t.resource_type]||'b-blue';
-    let det='';
-    if(t.lab_result)det=`<div class="tl-desc">Value: <strong>${t.lab_result.value} ${t.lab_result.unit||''}</strong> (ref ${t.lab_result.reference_range||'N/A'}) ${t.lab_result.abnormal_flag?`<span class="b b-red">${t.lab_result.abnormal_flag}</span>`:''}</div>`;
-    if(t.vital_sign)det=`<div class="tl-desc">Value: <strong>${t.vital_sign.value} ${t.vital_sign.unit||''}</strong></div>`;
-    if(t.finding_display_name)det=`<div class="tl-desc">${t.clinical_summary||t.finding_display_name}</div>`;
-    const name=t.concept_display_name||t.finding_display_name||t.event_type?.replace(/_/g,' ')||'Event';
-    return`<div class="tl-entry"><div class="tl-time">${new Date(t.event_time).toLocaleDateString()}<br><span style="font-size:10px">${new Date(t.event_time).toLocaleTimeString()}</span></div><div class="tl-body"><div class="tl-title">${esc(name)} ${t.verification_status?`<span class="b ${t.verification_status==='HUMAN_VERIFIED'?'b-green':'b-amber'}">${t.verification_status}</span>`:''}</div>${det}<div class="tl-tags"><span class="b ${badge}">${(t.event_type||t.observation_type||t.resource_type||'').replace(/_/g,' ')}</span><span class="b b-teal">${t.source_type||''}</span>${t.evidence?'<span class="b b-purple">Evidence</span>':''}</div></div></div>`;
-  }).join('');
-}
-
-// ═══ MEDICATIONS ═══
-async function loadMeds(){
-  if(!auth)return;
-  try{const d=await g('/api/v1/medications');renderMeds(d.medications||[]);}catch(e){}
-}
-function renderMeds(ms){
-  const el=document.getElementById('medList');
-  if(!ms.length){el.innerHTML='<div class="empty"><div class="ico">💊</div><h3>No medications</h3><p>Add medications to track them</p></div>';return;}
-  el.innerHTML=ms.map(m=>`<div class="med-item"><div class="med-pill" style="background:var(--teal-dim)">💊</div><div class="med-info"><div class="med-name">${esc(m.name)}</div><div class="med-detail">${m.dosage_value||''} ${m.dosage_unit||''} · ${m.frequency?.replace(/_/g,' ')||''} · ${m.route||''}</div></div><span class="b ${m.status==='ACTIVE'?'b-green':m.status==='PAUSED'?'b-amber':'b-blue'}">${m.status}</span></div>`).join('');
-}
-function showMedModal(){document.getElementById('medModal').classList.add('show');}
-async function submitMed(){
-  const name=document.getElementById('medName').value.trim();if(!name)return toast('Enter medication name','err');
-  try{
-    await p('/api/v1/medications',{name,dosage_value:document.getElementById('medDose').value.trim(),frequency:document.getElementById('medFreq').value,route:document.getElementById('medRoute').value,status:'ACTIVE'});
-    toast('Medication added','ok');closeM('medModal');loadMeds();
-  }catch(e){toast('Error: '+e.message,'err');}
-}
-
-// ═══ DAILY CHECK-IN ═══
-function showDailyModal(){
-  document.getElementById('dcDate').value=new Date().toISOString().split('T')[0];
-  document.getElementById('dailyModal').classList.add('show');
-}
-async function submitDaily(){
-  const date=document.getElementById('dcDate').value;if(!date)return toast('Select a date','err');
-  const payload={log_date:date};
-  const well=parseInt(document.getElementById('dcWell').value);
-  const energy=parseInt(document.getElementById('dcEnergy').value);
-  const stress=parseInt(document.getElementById('dcStress').value);
-  if(!isNaN(well))payload.overall_wellbeing=well;
-  if(!isNaN(energy))payload.energy_level=energy;
-  if(!isNaN(stress))payload.stress_level=stress;
-  const sleep=parseInt(document.getElementById('dcSleep').value);
-  const sleepQ=parseInt(document.getElementById('dcSleepQ').value);
-  if(!isNaN(sleep))payload.sleep={duration_minutes:sleep,sleep_quality:isNaN(sleepQ)?null:sleepQ,awakenings:null};
-  const water=parseInt(document.getElementById('dcWater').value);
-  if(!isNaN(water))payload.nutrition={water_ml:water,meals_count:null,appetite_level:null};
-  payload.vitals=[];payload.symptoms=[];payload.pain=[];payload.activities=[];payload.medications=[];
-  const notes=document.getElementById('dcNotes').value.trim();
-  if(notes)payload.notes=notes;
-  try{await p('/api/v1/logs/daily-checkin',payload);toast('Check-in saved','ok');closeM('dailyModal');}catch(e){toast('Error: '+e.message,'err');}
-}
-
-// ═══ REVIEW ═══
-async function loadReview(){
-  if(!auth)return;
-  try{const d=await g('/api/v1/review/pending');renderReview(d);}catch(e){}
-}
-function renderReview(items){
-  const el=document.getElementById('reviewList');
-  if(!items.length){el.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>No pending reviews</h3><p>Unverified extractions appear here</p></div>';return;}
-  el.innerHTML=items.map(r=>`<div class="review-item"><div style="display:flex;justify-content:space-between;align-items:start"><div><div style="font-size:13px;font-weight:600">${esc(r.event_type?.replace(/_/g,' '))}</div><div style="font-size:11px;color:var(--text-dim)">${new Date(r.event_time).toLocaleString()}</div>${r.extracted_text?`<div style="font-size:11px;color:var(--text-dim);margin-top:4px;font-style:italic">"${esc(r.extracted_text)}"</div>`:''}${r.value?`<div style="font-size:12px;margin-top:4px">Value: <strong>${r.value} ${r.unit||''}</strong></div>`:''}</div><span class="b b-amber">Unverified</span></div></div>`).join('');
-}
-
-// ═══ LOGS ═══
-async function loadLogs(){
-  if(!auth)return;
-  try{const d=await g('/api/v1/system/logs/recent?n=200');const c=document.getElementById('logC');c.innerHTML='';if(!d.logs||!d.logs.length){c.innerHTML='<div class="empty" id="logE"><p>No logs</p></div>';return;}d.logs.forEach(appendLog);}catch(e){}
-}
-function appendLog(e){
-  const c=document.getElementById('logC'),empty=document.getElementById('logE');if(empty)empty.remove();
-  const d=document.createElement('div');d.className='le';
-  d.innerHTML=`<span class="le-time">${e.time}</span><span class="le-lvl ${(e.level||'info').toLowerCase()}">${(e.level||'INFO').slice(0,5)}</span><span class="le-msg">${esc(e.msg||'')}</span>`;
-  c.appendChild(d);if(document.getElementById('autoScroll').checked)c.scrollTop=c.scrollHeight;
-}
-function toggleLive(){
-  const b=document.getElementById('liveBtn');
-  if(liveMode){if(logCtrl){logCtrl.abort();logCtrl=null}liveMode=false;b.textContent='▶ Live';b.style.background='';b.style.color='';}
-  else{
-    if(!auth)return toast('Login first','err');
-    liveMode=true;b.textContent='⏹ Live';b.style.background='var(--teal)';b.style.color='var(--bg)';
-    const ctrl=new AbortController();logCtrl=ctrl;
-    (async()=>{try{
-      const r=await fetch(API+'/api/v1/system/logs/stream',{headers:{'Authorization':'Bearer '+auth},signal:ctrl.signal});
-      if(!r.ok||!r.body)throw new Error('Stream failed');
-      const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
-      while(liveMode){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let s;while((s=buf.indexOf('\n\n'))!==-1){const raw=buf.slice(0,s);buf=buf.slice(s+2);for(const ln of raw.split('\n')){if(!ln.startsWith('data: '))continue;try{appendLog(JSON.parse(ln.slice(6)))}catch(_){}}}}
-    }catch(e){if(liveMode)toggleLive();}})();
+(function () {
+  function settle(el) { el.classList.add('is-in'); }
+  document.querySelectorAll('.appear').forEach(function (el) {
+    el.addEventListener('animationend', function () { settle(el); }, { once: true });
+  });
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      document.querySelectorAll('.appear').forEach(function (el) {
+        var anims = (typeof el.getAnimations === 'function') ? el.getAnimations() : [];
+        var alive = anims.some(function (a) { return a.playState === 'running' || a.playState === 'finished'; });
+        if (!alive) settle(el);
+      });
+    });
+  });
+  var els = document.querySelectorAll('.rv');
+  if (!('IntersectionObserver' in window)) {
+    els.forEach(function (e) { e.classList.add('in'); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.1 });
+    els.forEach(function (e) { io.observe(e); });
   }
-}
+  var section = document.querySelector('.scroll-graph');
+  var band = document.getElementById('dialBand');
+  var spokesG = document.getElementById('dialSpokes');
+  var dotsG = document.getElementById('dialDots');
+  var center = document.getElementById('dialCenter');
+  var sgText = document.getElementById('sgText');
+  var dots = document.querySelectorAll('.sg-dot');
+  var C = 2 * Math.PI * 150;
+  band.style.strokeDasharray = C;
+  band.style.strokeDashoffset = C;
+  var N = 10, built = false;
+  function build() {
+    if (built) return; built = true;
+    for (var i = 0; i < N; i++) {
+      var a = -Math.PI / 2 + (2 * Math.PI * i) / N;
+      var x1 = 200 + 104 * Math.cos(a), y1 = 200 + 104 * Math.sin(a);
+      var r = 104 + [46, 30, 52, 22, 40, 48, 18, 36, 44, 28][i] * 0.9;
+      var x2 = 200 + Math.min(r, 148) * Math.cos(a), y2 = 200 + Math.min(r, 148) * Math.sin(a);
+      var ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
+      ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
+      var len = Math.hypot(x2 - x1, y2 - y1);
+      ln.style.strokeDasharray = len; ln.style.strokeDashoffset = len;
+      ln.dataset.len = len;
+      spokesG.appendChild(ln);
+      var c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', x2); c.setAttribute('cy', y2); c.setAttribute('r', 6);
+      c.style.opacity = 0;
+      dotsG.appendChild(c);
+    }
+  }
+  var phases = [
+    'Sleep, energy, water, stress, movement, wellbeing, pain, meals, heart, and doses each get a spoke, and each spoke sits inside its healthy band or steps outside it where you can see it happen.',
+    'Scroll and the ring draws itself. Every spoke lands where the latest logs would put it. The count in the middle is simply how many spokes sit inside their bands right now.',
+    'This is the same dial that lives in the app, replaying any of the last thirty days from the slider under it. The chapters below walk through everything feeding it.'
+  ];
+  function onScroll() {
+    var rect = section.getBoundingClientRect();
+    var total = section.offsetHeight - window.innerHeight;
+    var p = Math.min(1, Math.max(0, -rect.top / Math.max(total, 1)));
+    build();
+    band.style.strokeDashoffset = C * (1 - Math.min(1, p * 1.6));
+    var sp = Math.min(1, Math.max(0, (p - 0.15) / 0.6));
+    var lines = spokesG.childNodes, cs = dotsG.childNodes;
+    for (var i = 0; i < lines.length; i++) {
+      var q = Math.min(1, Math.max(0, sp * lines.length - i));
+      lines[i].style.strokeDashoffset = lines[i].dataset.len * (1 - q);
+      cs[i].style.opacity = q;
+    }
+    center.textContent = Math.round(4 + p * 4);
+    var ph = Math.min(2, Math.floor(p * 3));
+    if (sgText.dataset.ph !== String(ph)) {
+      sgText.dataset.ph = ph;
+      sgText.textContent = phases[ph];
+      dots.forEach(function (d, j) { d.classList.toggle('on', j === ph); });
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+  var p2 = document.getElementById('pulsePath');
+  if (p2) {
+    var len2 = p2.getTotalLength();
+    p2.style.strokeDasharray = len2;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { p2.style.strokeDashoffset = 0; }
+    else {
+      var t0 = null;
+      (function tick(t) {
+        if (!t0) t0 = t;
+        p2.style.strokeDashoffset = len2 * (1 - (((t - t0) % 2600) / 2600));
+        requestAnimationFrame(tick);
+      })(performance.now());
+    }
+  }
+  document.querySelectorAll('.faq-item').forEach(function (item) {
+    var q = item.querySelector('.faq-q'), a = item.querySelector('.faq-a');
+    q.addEventListener('click', function () {
+      var open = item.classList.contains('open');
+      document.querySelectorAll('.faq-item.open').forEach(function (o) {
+        o.classList.remove('open'); o.querySelector('.faq-a').style.maxHeight = null;
+      });
+      if (!open) { item.classList.add('open'); a.style.maxHeight = a.scrollHeight + 'px'; }
+    });
+  });
+  document.getElementById('year').textContent = new Date().getFullYear();
+})();
 
-// ═══ SETTINGS ═══
-async function loadProfile(){
-  if(!auth)return;
-  try{const d=await g('/api/v1/profile');document.getElementById('pName').value=d.display_name||'';document.getElementById('pPhone').value=d.phone_number||'';document.getElementById('pHeight').value=d.height_cm||'';document.getElementById('pWeight').value=d.weight_kg||'';}catch(e){}
-}
-async function saveProfile(){
-  if(!auth)return;
-  const data={};
-  const n=document.getElementById('pName').value.trim(),ph=document.getElementById('pPhone').value.trim(),h2=document.getElementById('pHeight').value,w=document.getElementById('pWeight').value;
-  if(n)data.display_name=n;if(ph)data.phone_number=ph;if(h2)data.height_cm=parseFloat(h2);if(w)data.weight_kg=parseFloat(w);
-  try{await u('/api/v1/profile',data);toast('Profile saved','ok');}catch(e){toast('Error: '+e.message,'err');}
-}
-async function rebuildAll(){
-  if(!auth)return;
-  try{await p('/api/v1/summaries/rebuild-all',{});toast('Summaries rebuilt','ok');}catch(e){toast('Error: '+e.message,'err');}
-}
+// living background graph: follows the cursor, grows as you scroll,
+// flies into the body visual and dissolves
+(function () {
+  var canvas = document.getElementById('bgGraph');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var W = 0, H = 0, dpr = 1;
+  function size() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  size();
+  window.addEventListener('resize', size);
 
-// ═══ UTILS ═══
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
-function toast(m,t='info'){const c=document.getElementById('toastC'),d=document.createElement('div');d.className=`toast ${t}`;d.innerHTML=`<span>${t==='ok'?'✅':t==='err'?'❌':'ℹ️'}</span><span>${esc(m)}</span>`;c.appendChild(d);setTimeout(()=>{d.style.opacity='0';setTimeout(()=>d.remove(),200);},3500);}
-function closeM(id){document.getElementById(id).classList.remove('show');}
-document.querySelectorAll('.modal-bg').forEach(o=>{o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('show');});});
+  var MAX = 70, BASE = 14;
+  var nodes = [];
+  function spawn(edge) {
+    var side = Math.floor(Math.random() * 4);
+    var x = Math.random() * W, y = Math.random() * H;
+    if (edge) {
+      if (side === 0) { x = Math.random() * W; y = -12; }
+      else if (side === 1) { x = W + 12; y = Math.random() * H; }
+      else if (side === 2) { x = Math.random() * W; y = H + 12; }
+      else { x = -12; y = Math.random() * H; }
+    }
+    return {
+      x: x, y: y,
+      vx: (Math.random() - 0.5) * 0.22,
+      vy: (Math.random() - 0.5) * 0.22,
+      r: 1.2 + Math.random() * 2.2,
+      teal: Math.random() < 0.45
+    };
+  }
+  for (var i = 0; i < MAX; i++) nodes.push(spawn(false));
+
+  var mouse = { x: -9999, y: -9999, active: false };
+  window.addEventListener('pointermove', function (e) {
+    mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true;
+  }, { passive: true });
+  document.addEventListener('pointerleave', function () { mouse.active = false; });
+
+  function scrollP() {
+    var total = document.documentElement.scrollHeight - window.innerHeight;
+    if (total <= 0) return 0;
+    return Math.min(1, Math.max(0, window.scrollY / total));
+  }
+  function bodyPoint() {
+    var fig = document.getElementById('graphBody');
+    if (!fig) return null;
+    var r = fig.getBoundingClientRect();
+    if (r.bottom < -100 || r.top > window.innerHeight + 100) return null;
+    // strength peaks while the figure crosses viewport center
+    var mid = r.top + r.height / 2;
+    var closeness = Math.min(1, Math.max(0, 1 - Math.abs(mid - window.innerHeight / 2) / (window.innerHeight * 0.55)));
+    return { x: r.left + r.width / 2, y: r.top + r.height * 0.42, strength: closeness * closeness };
+  }
+  function smooth(a, b, x) {
+    var t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  }
+
+  function frame() {
+    var p = scrollP();
+    var active = BASE + Math.floor(p * (MAX - BASE));
+    var bp = bodyPoint();
+    var endFade = smooth(0.93, 1, p);
+    var dissolve = bp ? bp.strength : 0;
+    var alpha = (1 - endFade) * (1 - 0.92 * dissolve);
+    // light the figure as its signals arrive; kill it once dissolved
+    var glow = document.getElementById('bodyGlow');
+    if (glow) glow.setAttribute('opacity', (dissolve * (1 - endFade)).toFixed(3));
+    var heart = document.getElementById('bodyHeart');
+    if (heart) {
+      heart.setAttribute('opacity', (0.9 * (1 - endFade)).toFixed(3));
+      heart.setAttribute('r', (7 + dissolve * 5).toFixed(1));
+    }
+    var tx = mouse.active ? mouse.x : W / 2;
+    var ty = mouse.active ? mouse.y : H / 2;
+    if (bp) {
+      tx = tx + (bp.x - tx) * dissolve;
+      ty = ty + (bp.y - ty) * dissolve;
+    }
+    // landing pads spread across the figure: head, shoulders, chest,
+    // abdomen, hips, hands, knees, feet. ~1 in 4 lights red, rest green.
+    var pads = [
+      [0.5, 0.1], [0.3, 0.25], [0.7, 0.25], [0.5, 0.37], [0.5, 0.5],
+      [0.4, 0.6], [0.6, 0.6], [0.21, 0.63], [0.79, 0.63],
+      [0.41, 0.78], [0.59, 0.78], [0.4, 0.95], [0.6, 0.95]
+    ];
+    var figEl = document.getElementById('graphBody');
+    var figRect = figEl ? figEl.getBoundingClientRect() : null;
+    var landing = dissolve > 0.25 && figRect && figRect.bottom > 0 && figRect.top < window.innerHeight;
+    if (!landing) {
+      for (var li = 0; li < active; li++) nodes[li].landed = false;
+    }
+    var pull = 0.0016 + dissolve * 0.02 + endFade * 0.03;
+
+    ctx.clearRect(0, 0, W, H);
+    if (alpha <= 0.01) { requestAnimationFrame(frame); return; }
+
+    var i, j, n;
+    for (i = 0; i < active; i++) {
+      n = nodes[i];
+      var gx = tx, gy = ty, gp = pull;
+      if (landing) {
+        var pad = pads[i % pads.length];
+        gx = figRect.left + pad[0] * figRect.width;
+        gy = figRect.top + pad[1] * figRect.height;
+        gp = 0.02 + dissolve * 0.09;
+      }
+      if (n.landed && landing) {
+        n.x = gx; n.y = gy; n.vx = 0; n.vy = 0;
+      } else {
+        n.landed = false;
+        var dx = gx - n.x, dy = gy - n.y;
+        var d2 = dx * dx + dy * dy;
+        if (d2 > 1) {
+          var d = Math.sqrt(d2);
+          var f = Math.min(gp * 60, 0.6) / Math.max(d, 60);
+          n.vx += dx * f * 0.06;
+          n.vy += dy * f * 0.06;
+        }
+        if (landing && d2 < 16 * 16) {
+          n.landed = true;
+          n.signal = (i * 7 % 4 === 0) ? 'red' : 'green';
+          n.x = gx; n.y = gy;
+        }
+      }
+      n.vx *= 0.985; n.vy *= 0.985;
+      n.x += n.vx; n.y += n.vy;
+      if (n.x < -20) n.x = W + 20; if (n.x > W + 20) n.x = -20;
+      if (n.y < -20) n.y = H + 20; if (n.y > H + 20) n.y = -20;
+    }
+
+    ctx.lineWidth = 1;
+    for (i = 0; i < active; i++) {
+      for (j = i + 1; j < active; j++) {
+        var a = nodes[i], b = nodes[j];
+        var ex = a.x - b.x, ey = a.y - b.y;
+        var dist = Math.sqrt(ex * ex + ey * ey);
+        if (dist < 150) {
+          ctx.strokeStyle = 'rgba(79,209,197,' + (0.4 * (1 - dist / 150) * alpha).toFixed(3) + ')';
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+      }
+    }
+    for (i = 0; i < active; i++) {
+      n = nodes[i];
+      var near = 0;
+      if (mouse.active) {
+        var mx = n.x - mouse.x, my = n.y - mouse.y;
+        var md = Math.sqrt(mx * mx + my * my);
+        if (md < 190) near = 1 - md / 190;
+      }
+      var rr = n.r + 0.8 + near * 2.4 + dissolve * 1.5;
+      if (n.landed) {
+        // landed on the body: steady green or warning red, with a halo ring
+        var sig = n.signal === 'red' ? '255,90,90' : '61,220,132';
+        ctx.fillStyle = 'rgba(' + sig + ',' + Math.min(1, alpha + 0.15).toFixed(3) + ')';
+        ctx.beginPath(); ctx.arc(n.x, n.y, rr + 1.5, 0, 6.2832); ctx.fill();
+        ctx.strokeStyle = 'rgba(' + sig + ',' + (0.55 * alpha).toFixed(3) + ')';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(n.x, n.y, rr + 6, 0, 6.2832); ctx.stroke();
+        ctx.lineWidth = 1;
+        continue;
+      }
+      ctx.fillStyle = n.teal
+        ? 'rgba(79,209,197,' + Math.min(1, 0.85 * alpha + near * 0.4 * alpha).toFixed(3) + ')'
+        : 'rgba(255,255,255,' + Math.min(1, 0.8 * alpha + near * 0.4 * alpha).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(n.x, n.y, rr, 0, 6.2832); ctx.fill();
+      if (near > 0.02 && mouse.active) {
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.5 * near * alpha).toFixed(3) + ')';
+        ctx.beginPath(); ctx.moveTo(n.x, n.y); ctx.lineTo(mouse.x, mouse.y); ctx.stroke();
+      }
+    }
+    // cursor glow: the graph visibly follows the pointer
+    if (mouse.active && alpha > 0.05) {
+      var g = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 90);
+      g.addColorStop(0, 'rgba(79,209,197,' + (0.28 * alpha).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(79,209,197,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 90, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.9 * alpha).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 2.4, 0, 6.2832); ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  if (reduced) {
+    // one static frame per scroll position, no loop
+    function still() {
+      var p = scrollP();
+      var active = BASE + Math.floor(p * (MAX - BASE));
+      ctx.clearRect(0, 0, W, H);
+      for (var i = 0; i < active; i++) {
+        var n = nodes[i];
+        ctx.fillStyle = n.teal ? 'rgba(79,209,197,.75)' : 'rgba(255,255,255,.7)';
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 0.8, 0, 6.2832); ctx.fill();
+      }
+    }
+    still();
+    window.addEventListener('scroll', still, { passive: true });
+  } else {
+    requestAnimationFrame(frame);
+  }
+})();
 </script>
 </body>
 </html>

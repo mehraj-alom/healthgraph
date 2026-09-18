@@ -36,7 +36,7 @@ export { estimateRppgHeartRate, buildSineWaveform } from './hrEstimator';
 export type { RppgHrEstimate, RppgHrRejectReason } from './hrEstimator';
 export { gateRppgQuality, rppgReliableForPersistence, RPPG_Q } from './qualityGate';
 export type { RppgQualityLevel, RppgQualityInput, RppgQualityResult } from './qualityGate';
-export { createRppgFrameSource, getRppgFrameSource, __resetRppgFrameSourceForTests } from './frameSource';
+export { createRppgFrameSource, getRppgFrameSource, isExpoGoRuntime, __resetRppgFrameSourceForTests } from './frameSource';
 export type { RppgFrameSource, RppgFrameSourceKind, RppgFrameSourceDeps } from './frameSource';
 // NOTE: cameraPermission is intentionally NOT re-exported here: it imports
 // react-native at module scope, which would break node unit tests that stage
