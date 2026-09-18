@@ -155,7 +155,7 @@ export interface DailyCheckInRequest {
   energy_level?: number;
   stress_level?: number;
   sleep?: { duration_minutes: number; sleep_quality?: number; awakenings?: number };
-  nutrition?: { water_ml?: number; meals_count?: number; appetite_level?: number };
+  nutrition?: { water_ml?: number; meals_count?: number; appetite_level?: number; calories_kcal?: number; food_label?: string };
   notes?: string;
   symptoms: Array<{ concept_id: string; severity: number; duration_minutes?: number; notes?: string }>;
   vitals: Array<{ concept_id: string; value: number | null; unit: string | null }>;
@@ -182,6 +182,8 @@ export interface DailyCheckInDetail {
   water_ml: number | null;
   meals_count: number | null;
   appetite_level: number | null;
+  calories_kcal: number | null;
+  food_label: string | null;
   symptoms: Array<{ concept_id: string | null; severity: number; duration_minutes: number | null; notes: string | null }>;
   vitals: Array<{ concept_id: string | null; value: number | null; unit: string | null }>;
   pain: Array<{ body_location_id: string | null; severity: number; pain_type: string | null }>;
@@ -372,6 +374,8 @@ export type RootStackParamList = {
   PpgMeasureFlow: undefined;
   /** Face rPPG flow (on-device capture + PhysFormer inference). */
   RppgMeasure: undefined;
+  /** Food photo calorie estimation (camera viewfinder + result sheet). */
+  FoodScan: undefined;
 };
 
 // ============================================================================

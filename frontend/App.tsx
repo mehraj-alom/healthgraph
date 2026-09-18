@@ -53,6 +53,7 @@ import PpgMeasureScreen from '@/screens/PpgMeasure/PpgMeasureScreen';
 import PulseMethodScreen from '@/screens/PpgMeasure/PulseMethodScreen';
 import RppgMeasureScreen from '@/screens/PpgMeasure/RppgMeasureScreen';
 import ImproveScreen from '@/screens/Dashboard/ImproveScreen';
+import FoodScanScreen from '@/screens/FoodScan/FoodScanScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
 // and prevent the WebGL renderer from blocking app startup on Android.
@@ -339,6 +340,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="SymptomMap"
               component={SymptomMapScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Food photo calorie estimation — stack route (no tab). */}
+            <RootStack.Screen
+              name="FoodScan"
+              component={FoodScanScreen}
               options={{
                 headerShown: false,
               }}

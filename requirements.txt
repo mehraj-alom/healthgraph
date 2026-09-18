@@ -38,6 +38,10 @@ landingai-ade>=1.17.0     # LandingAI ADE for document classification and extrac
 # Vector Database & Embeddings
 qdrant-client>=1.8.0      # For interacting with Qdrant vector database
 
+# Nutrition / food-scan calorie estimation
+openai>=1.0.0             # AICredits OpenAI-compatible VLM gateway
+pillow>=10.0.0            # Photo downscale + EXIF strip before VLM upload
+
 # Neo4j Graph Database
 neo4j>=5.14.1
 asyncpg>=0.29.0           # Async PostgreSQL driver for LangGraph checkpointing

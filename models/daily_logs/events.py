@@ -62,6 +62,8 @@ class NutritionPayload(Base):
     water_ml: Mapped[int | None] = mapped_column(Integer)
     meals_count: Mapped[int | None] = mapped_column(SmallInteger)
     appetite_level: Mapped[int | None] = mapped_column(SmallInteger) # 1-5
+    calories_kcal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    food_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     __table_args__ = (CheckConstraint("appetite_level BETWEEN 1 AND 5", name="ck_appetite"),)
 
 class MedicationTakenPayload(Base):

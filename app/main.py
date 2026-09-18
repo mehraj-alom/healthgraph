@@ -21,6 +21,7 @@ from app.api.v1 import (
     health_graph,
     logs,
     medications,
+    nutrition,
     ontology,
     ppg,
     profile,
@@ -208,11 +209,16 @@ def create_app() -> FastAPI:
     # affects browser-based access (dev console, web admin).
     # Set CORS_ORIGINS env var to a comma-separated list for production.
     cors_origins_str = os.getenv("CORS_ORIGINS", "")
-    cors_origins = [
-        origin.strip()
-        for origin in cors_origins_str.split(",")
-        if origin.strip()
-    ] if cors_origins_str else []
+    if cors_origins_str:
+        cors_origins = [
+            origin.strip()
+            for origin in cors_origins_str.split(",")
+            if origin.strip()
+        ]
+    else:
+        # No CORS_ORIGINS set: allow all origins (safe because
+        # allow_credentials is False and auth uses Bearer tokens, not cookies).
+        cors_origins = ["*"]
 
     app.add_middleware(
         CORSMiddleware,
@@ -278,6 +284,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router)
     app.include_router(documents.router)
+    app.include_router(nutrition.router)
     app.include_router(review.router)
     app.include_router(provenance.router)
     app.include_router(timeline.router)
@@ -303,28 +310,28 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     def dev_console():
-        # The static dev console is a development-only tool. It is NOT
-        # served in production (404); /health stays available everywhere.
+        """Serve the web app. Tries frontend/web/index.html first,
+        falls back to root index.html (legacy dev console)."""
         if settings.APP_ENV == "production":
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
-        index_path = os.path.join(
+        # Try the new web app first
+        web_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "frontend", "web", "index.html",
+        )
+        if os.path.exists(web_path):
+            return FileResponse(web_path, media_type="text/html")
+
+        # Fallback to legacy root index.html
+        root_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "index.html",
         )
+        if os.path.exists(root_path):
+            return FileResponse(root_path, media_type="text/html")
 
-        if os.path.exists(index_path):
-            return FileResponse(
-                index_path,
-                media_type="text/html",
-            )
-
-        return {
-            "detail": (
-                "Dev console not found. "
-                "Place index.html in the project root."
-            )
-        }
+        return {"detail": "Web app not found."}
 
     _done("create_app.build", _t_build)
     _done("create_app", t_start)

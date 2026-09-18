@@ -141,6 +141,19 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = ""
 
     # ─────────────────────────────────────────────────────────────────────
+    # Nutrition / food-scan (AICredits VLM + USDA FoodData Central).
+    #
+    # AICredits is OpenAI-compatible (base_url + api_key). The key is a
+    # bearer secret: it must never be logged, only passed to the SDK
+    # client constructor. Empty AICREDITS_API_KEY disables /analyze
+    # with a safe 503 (see app/services/nutrition/vlm.py).
+    # ─────────────────────────────────────────────────────────────────────
+    AICREDITS_API_KEY: str = ""
+    AICREDITS_BASE_URL: str = "https://api.aicredits.in/v1"
+    AICREDITS_MODEL: str = "openai/gpt-4o"
+    USDA_API_KEY: str = "DEMO_KEY"
+
+    # ─────────────────────────────────────────────────────────────────────
     # Production start-up gates.
     #
     # The development fallbacks (secret_key="dev-secret-key", missing

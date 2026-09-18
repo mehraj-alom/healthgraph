@@ -486,6 +486,8 @@ def submit_daily_checkin(
                 water_ml=payload.nutrition.water_ml,
                 meals_count=payload.nutrition.meals_count,
                 appetite_level=payload.nutrition.appetite_level,
+                calories_kcal=payload.nutrition.calories_kcal,
+                food_label=payload.nutrition.food_label,
             )
         )
 
@@ -688,6 +690,8 @@ class DailyCheckInResponse(BaseModel):
     water_ml: int | None = None
     meals_count: int | None = None
     appetite_level: int | None = None
+    calories_kcal: int | None = None
+    food_label: str | None = None
     symptoms: list[dict] = []
     vitals: list[dict] = []
     pain: list[dict] = []
@@ -785,6 +789,8 @@ def _reconstruct_checkin(
                 result.water_ml = nut.water_ml
                 result.meals_count = nut.meals_count
                 result.appetite_level = nut.appetite_level
+                result.calories_kcal = nut.calories_kcal
+                result.food_label = nut.food_label
 
     return result
 
@@ -1147,6 +1153,7 @@ def update_daily_checkin(
         db.add(NutritionPayload(
             event_id=nutrition_event_id, water_ml=payload.nutrition.water_ml,
             meals_count=payload.nutrition.meals_count, appetite_level=payload.nutrition.appetite_level,
+            calories_kcal=payload.nutrition.calories_kcal, food_label=payload.nutrition.food_label,
         ))
 
     # Medications

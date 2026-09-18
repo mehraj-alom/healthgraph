@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { Button, Card, Chip, DialInput, Input, LogCelebration, SectionHeader, Slider } from '@/components';
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useReducedMotion } from '@/theme';
@@ -1742,6 +1743,31 @@ export default function VitalsLoggerScreen() {
             <View style={styles.fieldSpacer} />
             <Text style={styles.fieldLabel}>Appetite</Text>
             <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={APPETITE_LABELS} />
+            <View style={styles.fieldSpacer} />
+            <Pressable
+              onPress={() => navigation.navigate('FoodScan')}
+              accessibilityRole="button"
+              accessibilityLabel="Scan food with the camera"
+              style={({ pressed }) => [styles.scanFoodCta, pressed && { opacity: 0.75 }]}
+            >
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M4 8.5h3l1.8-2.5h6.4L17 8.5h3v10H4v-10Z"
+                  stroke="#FFFFFF"
+                  strokeWidth={1.9}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <Circle
+                  cx={12}
+                  cy={13.2}
+                  r={3.1}
+                  stroke="#FFFFFF"
+                  strokeWidth={1.9}
+                />
+              </Svg>
+              <Text style={styles.scanFoodCtaText}>Scan food</Text>
+            </Pressable>
           </View>
         </Section>
 
@@ -2637,6 +2663,22 @@ const styles = StyleSheet.create({
     ...TYPE.chip,
     color: GV.ink,
     textAlign: 'center',
+  },
+  scanFoodCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 52,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.cta,
+    marginTop: 8,
+  },
+  scanFoodCtaText: {
+    ...TYPE.button,
+    color: '#FFFFFF',
   },
   unitToggleRow: {
     flexDirection: 'row',

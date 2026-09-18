@@ -42,6 +42,8 @@ interface DailyLogRow {
   water_ml: number | null;
   meals_count: number | null;
   appetite_level: number | null;
+  calories_kcal: number | null;
+  food_label: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -181,9 +183,10 @@ export async function upsertDailyLog(
         overall_wellbeing, energy_level, stress_level,
         sleep_duration_minutes, sleep_quality, sleep_awakenings,
         water_ml, meals_count, appetite_level,
+        calories_kcal, food_label,
         notes, created_at, updated_at,
         local_id, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_create')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_create')
       ON CONFLICT(group_id) DO UPDATE SET
         overall_wellbeing = excluded.overall_wellbeing,
         energy_level = excluded.energy_level,
@@ -194,6 +197,8 @@ export async function upsertDailyLog(
         water_ml = excluded.water_ml,
         meals_count = excluded.meals_count,
         appetite_level = excluded.appetite_level,
+        calories_kcal = excluded.calories_kcal,
+        food_label = excluded.food_label,
         notes = excluded.notes,
         updated_at = excluded.updated_at,
         sync_status = CASE WHEN sync_status = 'synced' THEN 'pending_update' ELSE sync_status END`,
@@ -210,6 +215,8 @@ export async function upsertDailyLog(
         request.nutrition?.water_ml ?? null,
         request.nutrition?.meals_count ?? null,
         request.nutrition?.appetite_level ?? null,
+        request.nutrition?.calories_kcal ?? null,
+        request.nutrition?.food_label ?? null,
         request.notes ?? null,
         existing?.created_at ?? now,
         now,
@@ -414,8 +421,9 @@ export async function hydrateDailyLog(
         overall_wellbeing, energy_level, stress_level,
         sleep_duration_minutes, sleep_quality, sleep_awakenings,
         water_ml, meals_count, appetite_level,
+        calories_kcal, food_label,
         notes, created_at, updated_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
       ON CONFLICT(group_id) DO UPDATE SET
         patient_id = excluded.patient_id,
         log_date = excluded.log_date,
@@ -428,6 +436,8 @@ export async function hydrateDailyLog(
         water_ml = excluded.water_ml,
         meals_count = excluded.meals_count,
         appetite_level = excluded.appetite_level,
+        calories_kcal = excluded.calories_kcal,
+        food_label = excluded.food_label,
         notes = excluded.notes,
         updated_at = excluded.updated_at,
         sync_status = 'synced'
@@ -445,6 +455,8 @@ export async function hydrateDailyLog(
         detail.water_ml,
         detail.meals_count,
         detail.appetite_level,
+        detail.calories_kcal,
+        detail.food_label,
         detail.notes,
         now,
         now,
@@ -677,6 +689,8 @@ function buildEventsFromRequest(
         water_ml: request.nutrition.water_ml ?? null,
         meals_count: request.nutrition.meals_count ?? null,
         appetite_level: request.nutrition.appetite_level ?? null,
+        calories_kcal: request.nutrition.calories_kcal ?? null,
+        food_label: request.nutrition.food_label ?? null,
       },
     });
   }
@@ -820,7 +834,7 @@ function buildEventsFromDetail(
   }
 
   // Nutrition
-  if (detail.water_ml != null || detail.meals_count != null || detail.appetite_level != null) {
+  if (detail.water_ml != null || detail.meals_count != null || detail.appetite_level != null || detail.calories_kcal != null || detail.food_label != null) {
     events.push({
       event_id: generateLocalId(),
       group_id: detail.group_id,
@@ -831,6 +845,8 @@ function buildEventsFromDetail(
         water_ml: detail.water_ml,
         meals_count: detail.meals_count,
         appetite_level: detail.appetite_level,
+        calories_kcal: detail.calories_kcal,
+        food_label: detail.food_label,
       },
     });
   }
@@ -887,6 +903,8 @@ function reconstructDetail(
   let water_ml: number | null = null;
   let meals_count: number | null = null;
   let appetite_level: number | null = null;
+  let calories_kcal: number | null = null;
+  let food_label: string | null = null;
   let notes: string | null = null;
 
   for (const event of events) {
@@ -936,6 +954,8 @@ function reconstructDetail(
         water_ml = payload.water_ml as number ?? null;
         meals_count = payload.meals_count as number ?? null;
         appetite_level = payload.appetite_level as number ?? null;
+        calories_kcal = payload.calories_kcal as number ?? null;
+        food_label = (payload.food_label as string | null) ?? null;
         break;
 
       case 'MEDICATION_TAKEN':
@@ -952,6 +972,14 @@ function reconstructDetail(
     }
   }
 
+  // Group-level columns are the fallback when no NUTRITION_LOG event
+  // exists (e.g. a row written before events were rebuilt).
+  if (water_ml == null && log.water_ml != null) water_ml = log.water_ml;
+  if (meals_count == null && log.meals_count != null) meals_count = log.meals_count;
+  if (appetite_level == null && log.appetite_level != null) appetite_level = log.appetite_level;
+  if (calories_kcal == null && log.calories_kcal != null) calories_kcal = log.calories_kcal;
+  if (food_label == null && log.food_label != null) food_label = log.food_label;
+
   return {
     group_id: log.group_id,
     log_date: log.log_date,
@@ -964,6 +992,8 @@ function reconstructDetail(
     water_ml,
     meals_count,
     appetite_level,
+    calories_kcal,
+    food_label,
     symptoms,
     vitals,
     pain,

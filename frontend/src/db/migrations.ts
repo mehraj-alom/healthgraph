@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 /**
  * Migration function type.
@@ -571,6 +571,39 @@ const migrations: Record<number, MigrationFn> = {
       7,
       'Secondary indexes: documents (patient_id, status), ppg/rppg (patient_id, sync_status)',
       7,
+    );
+  },
+
+  // ========================================================================
+  // Migration 8: Food-scan calorie columns on daily_logs (additive)
+  // ========================================================================
+  // Extends the daily-log nutrition mirror with the two fields the
+  // food-scan flow persists (calories_kcal + food_label). Pure extension:
+  // no table is rebuilt, no data moves, and the guarded ALTERs keep
+  // re-runs safe on databases that already carry the columns.
+  8: async (db: SQLiteDatabase) => {
+    const cols = await db.getAllAsync<{ name: string }>(
+      `SELECT name FROM pragma_table_info('daily_logs')`,
+    );
+    const names = new Set(cols.map((c) => c.name));
+    if (!names.has('calories_kcal')) {
+      await db.execAsync(
+        `ALTER TABLE daily_logs ADD COLUMN calories_kcal INTEGER`,
+      );
+    }
+    if (!names.has('food_label')) {
+      await db.execAsync(
+        `ALTER TABLE daily_logs ADD COLUMN food_label TEXT`,
+      );
+    }
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      8,
+      'Food scan: daily_logs calories_kcal + food_label columns',
+      8,
     );
   },
 };

@@ -34,6 +34,8 @@ class NutritionCreate(BaseModel):
     water_ml: Optional[int] = None
     meals_count: Optional[int] = None
     appetite_level: Optional[int] = Field(None, ge=1, le=5)
+    calories_kcal: Optional[int] = Field(None, ge=0)
+    food_label: Optional[str] = Field(None, max_length=255)
 
 class MedicationTakenCreate(BaseModel):
     medication_name: str

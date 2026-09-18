@@ -42,6 +42,7 @@ const FEATURES: FeatureDef[] = [
   { title: 'Health Graph', sub: 'Full overview', dot: GV.cta, route: 'HealthGraph', params: { source: 'graph' } },
   { title: 'Measure Pulse', sub: 'Check heart rate', dot: GV.pulse, route: 'PpgMeasure' },
   { title: 'Upload Record', sub: 'Add a document', dot: GV.fx.amber, route: 'DocumentUpload' },
+  { title: 'Scan Food', sub: 'Estimate meal calories', dot: GV.fx.amber, route: 'FoodScan' },
   { title: 'Account', sub: 'Settings & sign out', dot: GV.fx.brown, route: 'Settings' },
 ];
 
