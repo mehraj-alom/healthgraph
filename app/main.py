@@ -59,6 +59,45 @@ def _done(name: str, t0) -> None:
     logger.info("DONE %s (%.1fs)", name, _time.monotonic() - t0)
 
 
+def _ensure_nutrition_columns() -> None:
+    """Idempotent backfill for the food-scan nutrition columns.
+
+    Alembic migrations are not executed at startup (only
+    Base.metadata.create_all, which never alters existing tables), so
+    databases created before revision e7f8a9b0c1d2 lack
+    payload_nutrition.calories_kcal / food_label and every check-in
+    carrying a nutrition block 500s with UndefinedColumn. ADD COLUMN
+    IF NOT EXISTS heals them without touching anything else.
+
+    Non-fatal by design: if it fails, startup continues and only
+    nutrition-bearing check-ins keep 500ing (current behavior) instead
+    of gating the whole API behind readiness.
+    """
+    from sqlalchemy import text
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE payload_nutrition "
+                    "ADD COLUMN IF NOT EXISTS calories_kcal INTEGER"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE payload_nutrition "
+                    "ADD COLUMN IF NOT EXISTS food_label VARCHAR(255)"
+                )
+            )
+            conn.commit()
+    except Exception:
+        logger.warning(
+            "Nutrition column backfill skipped; check-ins with "
+            "nutrition data may 500 until e7f8a9b0c1d2 is applied.",
+            exc_info=True,
+        )
+
+
 def _db_init() -> None:
     """Sync PostgreSQL schema/migration/seed steps (blocking psycopg2).
 
@@ -75,7 +114,11 @@ def _db_init() -> None:
 
     _marker("hooks.create_all")
     Base.metadata.create_all(bind=engine)
-    _done("hooks.create_all", _marker("hooks.seed"))
+    _done("hooks.create_all", _marker("hooks.nutrition_columns"))
+
+    _marker("hooks.nutrition_columns")
+    _ensure_nutrition_columns()
+    _done("hooks.nutrition_columns", _marker("hooks.seed"))
 
     _marker("hooks.seed")
     db = SessionLocal()
