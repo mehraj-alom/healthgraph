@@ -155,7 +155,11 @@ function detailToRequest(
       })),
     pain: (existing?.pain ?? []).map((p) => ({
       severity: p.severity,
-      ...(p.body_location_id ? { body_location_id: p.body_location_id } : {}),
+      // Only forward well-formed UUIDs: the server FKs body_location_id to
+      // body_regions, and a stale/local id would 500 the whole check-in.
+      ...(p.body_location_id && UUID_PATTERN.test(p.body_location_id)
+        ? { body_location_id: p.body_location_id }
+        : {}),
       ...(p.pain_type ? { pain_type: p.pain_type } : {}),
     })),
     activities: (existing?.activities ?? []).map((a) => ({

@@ -205,3 +205,37 @@ export async function resetDatabaseForDevelopment(): Promise<void> {
 export function isDatabaseInitialized(): boolean {
   return dbInstance !== null;
 }
+
+// ============================================================================
+// Serialized transactions
+// ============================================================================
+// expo-sqlite executes statements on a single connection without
+// transaction awareness: two concurrent withTransactionAsync() calls
+// interleave (A-BEGIN, B-BEGIN, ...) and the second BEGIN fails with
+// "cannot start a transaction within a transaction". After a fresh
+// install every hydration (documents, daily-log, medications, ...) fires
+// at once, so this race is near-certain on first launch.
+//
+// All repository transactions must go through this helper. It chains
+// them on a promise mutex so each transaction BEGINs only after the
+// previous one committed or rolled back. Callers must never nest it
+// (leaf transactions only — verified: no repository transaction body
+// opens another transaction).
+let transactionChain: Promise<void> = Promise.resolve();
+
+export async function withSerializedTransaction(
+  db: SQLiteDatabase,
+  task: () => Promise<void>,
+): Promise<void> {
+  // expo-sqlite types withTransactionAsync as void-returning; none of our
+  // transaction bodies produce a value, so void is the honest type.
+  const run: Promise<void> = transactionChain.then(
+    () => db.withTransactionAsync(task),
+  );
+  // Swallow for chaining only — the caller still receives the real outcome.
+  transactionChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}

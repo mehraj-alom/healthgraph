@@ -6,7 +6,7 @@
  * with sync_status tracking for future server synchronization.
  */
 
-import { getDatabase } from '@/db/connection';
+import { getDatabase, withSerializedTransaction } from '@/db/connection';
 import type {
   Medication,
   MedicationStatus,
@@ -366,7 +366,7 @@ export async function hydrateMedications(
 
   // One transaction for the whole batch: atomic and far fewer round-trips
   // than per-medication commits. Logic per row is unchanged.
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
   for (const med of serverMedications) {
     // Check if local record exists with pending mutation
     const existing = await db.getFirstAsync<{ sync_status: string }>(
@@ -470,10 +470,12 @@ async function addToSyncQueue(
   );
 
   if (existing) {
-    // Update existing entry instead of creating duplicate
+    // Update existing entry instead of creating duplicate.
+    // Rotate mutation_id: it is used as the Idempotency-Key, and the
+    // server 409s when a reused key carries a different payload hash.
     await db.runAsync(
-      'UPDATE sync_queue SET operation = ?, payload_json = ?, created_at = datetime(\'now\') WHERE id = ?',
-      [operation, payload ? JSON.stringify(payload) : null, existing.id],
+      'UPDATE sync_queue SET operation = ?, mutation_id = ?, payload_json = ?, created_at = datetime(\'now\') WHERE id = ?',
+      [operation, mutationId, payload ? JSON.stringify(payload) : null, existing.id],
     );
   } else {
     await db.runAsync(

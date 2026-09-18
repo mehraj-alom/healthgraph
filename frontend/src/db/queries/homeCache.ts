@@ -15,7 +15,7 @@
  */
 
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getDatabase } from '../connection';
+import { getDatabase, withSerializedTransaction } from '../connection';
 import type { PatientProfile, TrendsResponse } from '@/types';
 
 // DailyMetrics is defined in hooks/useDailyMetrics.ts
@@ -229,7 +229,7 @@ export async function setTrendsCache(
 export async function clearHomeCache(patientId: string): Promise<void> {
   const db = await getDatabase();
 
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     await db.runAsync(`DELETE FROM profile_cache WHERE patient_id = ?`, [patientId]);
     await db.runAsync(`DELETE FROM daily_metrics_cache WHERE patient_id = ?`, [patientId]);
     await db.runAsync(`DELETE FROM trends_cache WHERE patient_id = ?`, [patientId]);
@@ -262,7 +262,7 @@ export async function migrateLegacyHomeCache(
 ): Promise<void> {
   const db = await getDatabase();
 
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     // Migrate profile
     if (legacyData.profile) {
       await db.runAsync(

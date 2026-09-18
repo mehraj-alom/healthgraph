@@ -8,7 +8,7 @@
  * All queries are scoped to the authenticated patient via patient_id.
  */
 
-import { getDatabase } from '@/db/connection';
+import { getDatabase, withSerializedTransaction } from '@/db/connection';
 import type {
   DailyCheckInRequest,
   DailyCheckInDetail,
@@ -175,7 +175,7 @@ export async function upsertDailyLog(
   const existing = await getDailyLog(patientId, request.log_date);
   const groupId = existing?.group_id ?? generateLocalId();
 
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     // Upsert the daily_logs row
     await db.runAsync(
       `INSERT INTO daily_logs (
@@ -413,7 +413,7 @@ export async function hydrateDailyLog(
     return;
   }
 
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     // Upsert the daily_logs row
     await db.runAsync(
       `INSERT INTO daily_logs (
@@ -1025,9 +1025,13 @@ async function addToSyncQueue(
     );
 
     if (existing) {
+      // Rotate the mutation_id: the sync engine uses it as the
+      // Idempotency-Key, and the server 409s when a reused key carries a
+      // different payload hash. A coalesced edit IS a different payload,
+      // so it needs a fresh key.
       await db.runAsync(
-        "UPDATE sync_queue SET operation = ?, payload_json = ?, created_at = datetime('now') WHERE id = ?",
-        [operation, payload ? JSON.stringify(payload) : null, existing.id],
+        "UPDATE sync_queue SET operation = ?, mutation_id = ?, payload_json = ?, created_at = datetime('now') WHERE id = ?",
+        [operation, mutationId, payload ? JSON.stringify(payload) : null, existing.id],
       );
     } else {
       await db.runAsync(

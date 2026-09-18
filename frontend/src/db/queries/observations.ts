@@ -16,7 +16,7 @@
  */
 
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getDatabase } from '../connection';
+import { getDatabase, withSerializedTransaction } from '../connection';
 import type { Observation, BodyStateItem } from '@/types';
 
 // ============================================================================
@@ -240,7 +240,7 @@ export async function hydrateObservations(
 ): Promise<void> {
   const db = await getDatabase();
 
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     for (const obs of serverObservations) {
       // Skip if a pending local mutation exists
       const existing = await db.getFirstAsync<{ sync_status: string }>(
@@ -328,7 +328,7 @@ export async function hydrateBodyStateSnapshots(
 ): Promise<void> {
   const db = await getDatabase();
 
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     for (const snap of serverSnapshots) {
       await db.runAsync(
         `

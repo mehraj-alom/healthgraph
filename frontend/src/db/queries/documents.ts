@@ -15,7 +15,7 @@
  */
 
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getDatabase } from '../connection';
+import { getDatabase, withSerializedTransaction } from '../connection';
 import type { DocumentListItem, DocumentStatus } from '@/types';
 
 // ============================================================================
@@ -243,7 +243,7 @@ export async function hydrateDocuments(
 ): Promise<void> {
   const db = await getDatabase();
 
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     for (const doc of serverDocuments) {
       // The server DocumentResponse does not include updated_at, so fall back
       // to created_at for the NOT NULL column rather than inserting NULL.

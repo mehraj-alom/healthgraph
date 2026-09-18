@@ -350,11 +350,18 @@ function SleepDurationPicker({
   totalMinutes: number;
   onChange: (minutes: number) => void;
 }) {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
+  // Defensive: a non-finite value (NaN/undefined from a corrupt stored row)
+  // renders every segment empty and poisons every tap (NaN + 30 = NaN),
+  // leaving the display permanently blank. Coerce to 0 so the stepper
+  // always shows a value and the first tap heals the state for good.
+  const total = Number.isFinite(totalMinutes)
+    ? Math.max(0, Math.min(24 * 60, Math.round(totalMinutes as number)))
+    : 0;
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
 
   const adjust = (delta: number) => {
-    const next = Math.max(0, Math.min(24 * 60, totalMinutes + delta));
+    const next = Math.max(0, Math.min(24 * 60, total + delta));
     onChange(next);
   };
 
@@ -868,7 +875,7 @@ export default function VitalsLoggerScreen() {
     if (existing.overall_wellbeing != null) setMood(existing.overall_wellbeing);
     if (existing.energy_level != null) setEnergy(existing.energy_level);
     if (existing.stress_level != null) setStress(existing.stress_level);
-    if (existing.sleep_duration_minutes != null) setSleepMinutes(existing.sleep_duration_minutes);
+    if (existing.sleep_duration_minutes != null && Number.isFinite(existing.sleep_duration_minutes)) setSleepMinutes(existing.sleep_duration_minutes);
     if (existing.sleep_quality != null) setSleepQuality(existing.sleep_quality);
     if (existing.sleep_awakenings != null) setAwakenings(existing.sleep_awakenings);
     if (existing.water_ml != null) setWaterMl(String(existing.water_ml));
@@ -998,8 +1005,18 @@ export default function VitalsLoggerScreen() {
           const response = await api.put<DailyCheckInResponse>(path, payload, config);
           serverGroupId = response.group_id;
         } else {
-          const response = await api.post<DailyCheckInResponse>(path, payload, config);
-          serverGroupId = response.group_id;
+          try {
+            const response = await api.post<DailyCheckInResponse>(path, payload, config);
+            serverGroupId = response.group_id;
+          } catch (keyedError) {
+            // 409 = this key is bound to a different payload hash server-side
+            // (stale queued key after local edits). Retry once keyless so the
+            // server evaluates the current payload on its own merits.
+            const keyedStatus = axios.isAxiosError(keyedError) ? keyedError.response?.status : undefined;
+            if (keyedStatus !== 409) throw keyedError;
+            const response = await api.post<DailyCheckInResponse>(path, payload);
+            serverGroupId = response.group_id;
+          }
         }
         serverSaved = true;
         if (__DEV__) console.log(`[DailyLog] API_SYNC_SUCCESS method=${method} path=${path}`);

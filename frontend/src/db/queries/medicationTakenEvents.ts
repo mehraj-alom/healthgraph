@@ -5,7 +5,7 @@
  * Provides local-first dose tracking with sync queue integration.
  */
 
-import { getDatabase } from '@/db/connection';
+import { getDatabase, withSerializedTransaction } from '@/db/connection';
 import type { MedicationTakenEvent, DoseTakenStatus, ActiveMedicationForDailyLog, DailyMedicationSchedule } from '@/types';
 
 // ─── Row → Event Mapping ─────────────────────────────────────────────────────
@@ -525,7 +525,7 @@ export async function hydrateTakenEvents(
 
   // One transaction for the whole batch: atomic and far fewer round-trips
   // than per-event commits. Per-row logic is unchanged.
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
   for (const event of serverEvents) {
     // Check if this event_id exists locally (could be from reconciliation)
     const existing = await db.getFirstAsync<{ sync_status: string }>(
