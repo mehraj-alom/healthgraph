@@ -487,7 +487,10 @@ def submit_daily_checkin(
                 meals_count=payload.nutrition.meals_count,
                 appetite_level=payload.nutrition.appetite_level,
                 calories_kcal=payload.nutrition.calories_kcal,
-                food_label=payload.nutrition.food_label,
+                # DB column is VARCHAR(255): truncate defensively so an
+                # over-long client label can never 500 the whole check-in.
+                food_label=(payload.nutrition.food_label or None)
+                and payload.nutrition.food_label[:255],
             )
         )
 
@@ -1153,7 +1156,9 @@ def update_daily_checkin(
         db.add(NutritionPayload(
             event_id=nutrition_event_id, water_ml=payload.nutrition.water_ml,
             meals_count=payload.nutrition.meals_count, appetite_level=payload.nutrition.appetite_level,
-            calories_kcal=payload.nutrition.calories_kcal, food_label=payload.nutrition.food_label,
+            calories_kcal=payload.nutrition.calories_kcal,
+            food_label=(payload.nutrition.food_label or None)
+            and payload.nutrition.food_label[:255],
         ))
 
     # Medications

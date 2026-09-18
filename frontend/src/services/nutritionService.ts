@@ -205,7 +205,7 @@ export async function logScannedMeal(
   const prevMeals = existing?.meals_count ?? 0;
   const prevKcal = existing?.calories_kcal ?? 0;
   const prevLabel = existing?.food_label?.trim() ?? '';
-  const nextLabel = prevLabel ? `${prevLabel}; ${cleanLabel}`.slice(0, 500) : cleanLabel;
+  const nextLabel = prevLabel ? `${prevLabel}; ${cleanLabel}`.slice(0, 250) : cleanLabel.slice(0, 250);
 
   const nutrition: NonNullable<DailyCheckInRequest['nutrition']> = {
     ...(existing?.water_ml != null ? { water_ml: existing.water_ml } : {}),
@@ -234,13 +234,26 @@ export async function logScannedMeal(
     const config = idempotencyKey
       ? { headers: { 'Idempotency-Key': idempotencyKey } }
       : undefined;
-    const response = hasServerGroupId
-      ? await api.put<DailyCheckInResponse>(path, payload, config)
-      : await api.post<DailyCheckInResponse>(path, payload, config);
-    if (response.group_id) {
-      await dbReconcileDailyLogGroupId(groupId, response.group_id);
+    try {
+      const response = hasServerGroupId
+        ? await api.put<DailyCheckInResponse>(path, payload, config)
+        : await api.post<DailyCheckInResponse>(path, payload, config);
+      if (response.group_id) {
+        await dbReconcileDailyLogGroupId(groupId, response.group_id);
+      }
+      return { groupId: response.group_id ?? groupId, serverSaved: true };
+    } catch (keyedError) {
+      // 409 = this key is bound to a different payload hash server-side
+      // (stale queued key after local edits). Retry once keyless so the
+      // server evaluates the current payload on its own merits.
+      const keyedStatus = axios.isAxiosError(keyedError) ? keyedError.response?.status : undefined;
+      if (keyedStatus !== 409 || hasServerGroupId) throw keyedError;
+      const response = await api.post<DailyCheckInResponse>(path, payload);
+      if (response.group_id) {
+        await dbReconcileDailyLogGroupId(groupId, response.group_id);
+      }
+      return { groupId: response.group_id ?? groupId, serverSaved: true };
     }
-    return { groupId: response.group_id ?? groupId, serverSaved: true };
   } catch (error) {
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
     if (__DEV__) {
