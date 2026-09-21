@@ -3,6 +3,8 @@ from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+from services.retrieval.evidence import Citation
+
 class UIActionType(str, Enum):
     HIGHLIGHT_MESH = "highlight_mesh"
     FOCUS_CAMERA = "focus_camera"
@@ -17,6 +19,10 @@ class AgentStructuredOutput(BaseModel):
     """The final structured output produced by the LangGraph synthesis node."""
     response_text: str = Field(description="Clinical synthesis and conversational answer.")
     ui_actions: List[LLMUIAction] = Field(default_factory=list)
+    citations: List[Citation] = Field(
+        default_factory=list,
+        description="Provenance objects copied verbatim from tool results supporting the answer.",
+    )
 
 class HydratedUIAction(BaseModel):
     """What the API returns to Flutter, securely hydrated by PostgreSQL."""
@@ -34,3 +40,4 @@ class ChatResponse(BaseModel):
     conversation_id: uuid.UUID
     response_text: str
     ui_actions: List[HydratedUIAction]
+    citations: List[Citation] = Field(default_factory=list)

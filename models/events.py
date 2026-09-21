@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy import Enum, ForeignKey, DateTime, String, Float, LargeBinary
+from sqlalchemy import Enum, ForeignKey, DateTime, String, Float, LargeBinary, UniqueConstraint
 from sqlalchemy.sql import func
 from models.base import Base, TimestampMixin
 
@@ -53,6 +53,23 @@ class ClinicalEvent(Base, TimestampMixin):
     event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True, nullable=True)
 
+    # P0 assertion foundation (additive, nullable). ConText-lite classification
+    # of the source mention so negated / hypothetical / historical / family
+    # statements are never mistaken for confirmed active patient facts.
+    # See models/clinical_assertion.py.
+    polarity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    assertion_verification: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    experiencer: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    clinical_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_snippet: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # P6 per-mention normalization evidence (additive, nullable). The
+    # combined lexical/semantic score + status behind an AUTO_MATCH, kept
+    # separate from the alias-learning confidence weight. NULL for human
+    # or non-normalized rows; original text is never overwritten.
+    match_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    match_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
 class LabResult(Base):
     __tablename__ = "lab_results"
     event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clinical_events.event_id"), primary_key=True)
@@ -80,9 +97,16 @@ class Document(Base, TimestampMixin):
     __tablename__ = "documents"
     document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("patients.patient_id"), index=True)
-    file_hash: Mapped[str] = mapped_column(String, unique=True, index=True)
+    # P7: hash dedup is per-patient (two patients may upload the same file;
+    # the old global UNIQUE also raised IntegrityError 500s on races).
+    # Enforced by uq_document_patient_hash (see migration p7).
+    file_hash: Mapped[str] = mapped_column(String, index=True)
     storage_url: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String) # UPLOADED, PROCESSED, FAILED
+
+    __table_args__ = (
+        UniqueConstraint("patient_id", "file_hash", name="uq_document_patient_hash"),
+    )
 
 
 class DocumentBlob(Base):
@@ -125,4 +149,8 @@ class RawExtractionData(Base):
     markdown_text: Mapped[str] = mapped_column(String, nullable=True)  # Extracted text in markdown format
     extraction: Mapped[dict] = mapped_column(JSONB, nullable=True)  # Structured extraction data    
     deidentified_markdown: Mapped[str] = mapped_column(String, nullable=True)  # De-identified markdown text
+    # P0 pipeline versioning (additive, nullable): which models produced this
+    # extraction, so results stay reproducible and re-runnable on upgrade.
+    extraction_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    extraction_prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 

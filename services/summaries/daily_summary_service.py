@@ -150,6 +150,10 @@ def _collect_nutrition(
         "water_ml": p.water_ml,
         "meals_count": p.meals_count,
         "appetite_level": p.appetite_level,
+        # P4: previously dropped even though stored (payload_nutrition
+        # carries both). Additive keys only; rebuild via upsert for history.
+        "calories_kcal": p.calories_kcal,
+        "food_label": p.food_label,
     }
 
 

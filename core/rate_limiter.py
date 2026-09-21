@@ -85,6 +85,7 @@ from typing import Optional
 import redis
 from fastapi import HTTPException, Request, status
 
+from core.redis_client import build_redis_client
 from core.security_events import log_security_event
 
 _DEFAULT_PREFIX = "rate_limit:v1"
@@ -118,16 +119,16 @@ def _safe_operation(operation: str) -> str:
 def _get_redis() -> redis.Redis:
     """Return a Redis client on the combined Celery-broker / rate-limit Redis.
 
-    Mirrors core/log_collector.py: production (and preview) use the Upstash
-    rediss:// broker URL; local development falls back to REDIS_HOST/PORT.
-    A single client per process reuses redis-py's built-in connection pool.
+    Production (and preview) use the Upstash rediss:// broker URL; local
+    development falls back to REDIS_HOST/PORT. A single client per process
+    reuses redis-py's built-in connection pool.
+
+    Construction goes through core.redis_client (P15 / D7): the deployment
+    URL spells the TLS flag ``ssl_cert_reqs=CERT_REQUIRED``, which redis-py
+    >= 8 rejects before any command is sent — every limiter was therefore
+    hitting its Redis-error path (fail-open locally = no abuse protection).
     """
-    broker_url = os.getenv("CELERY_BROKER_URL")
-    if broker_url:
-        return redis.from_url(broker_url, decode_responses=True, db=0)
-    host = os.getenv("REDIS_HOST", "redis")
-    port = int(os.getenv("REDIS_PORT", "6379"))
-    return redis.Redis(host=host, port=port, db=0, decode_responses=True)
+    return build_redis_client(decode_responses=True, db=0)
 
 
 class RateLimitExceeded(HTTPException):

@@ -531,6 +531,43 @@ function toRealArrayBuffer(
 }
 
 /**
+ * Validated read of an on-demand GLB file.
+ *
+ * Checks size + glTF magic bytes BEFORE parsing so an HTML error page or a
+ * truncated download can never reach GLTFLoader (which would throw an opaque
+ * SyntaxError). A failed file is deleted so the install check flips back to
+ * NOT_INSTALLED and the next Body open re-downloads cleanly — corrupt cache
+ * can never wedge the feature.
+ */
+async function readValidatedGlbBuffer(
+  localUri: string,
+  fileName: string,
+): Promise<ArrayBuffer> {
+  const file = new ExpoFile(localUri);
+  const raw = await file.arrayBuffer();
+  const buffer = toRealArrayBuffer(raw);
+
+  const bytes = new Uint8Array(buffer);
+  const isGltf =
+    buffer.byteLength > 12 &&
+    bytes[0] === 0x67 && // g
+    bytes[1] === 0x6c && // l
+    bytes[2] === 0x54 && // T
+    bytes[3] === 0x46; // F
+
+  if (!isGltf) {
+    try {
+      await file.delete();
+    } catch { /* best-effort — re-download will overwrite */ }
+    throw new Error(
+      `Cached anatomy file failed validation: ${fileName}. Re-open 3D Body to re-download.`,
+    );
+  }
+
+  return buffer;
+}
+
+/**
  * Load a GLB file's binary data on native.
  * Returns an ArrayBuffer suitable for GLTFLoader.parse().
  */
@@ -540,6 +577,9 @@ async function loadGlbArrayBuffer(
 ): Promise<ArrayBuffer | null> {
   if (Platform.OS === 'web') return null; // web uses load() not parse()
   if (!assetModule) return null;
+  // NOTE: assetModule is always undefined on native since the on-demand
+  // migration — native loads go through readValidatedGlbBuffer() with a
+  // download-manager URI. This branch is retained for API compatibility.
 
   const assets = await Asset.loadAsync([assetModule]);
   const resolved = assets[0];
@@ -554,36 +594,15 @@ async function loadGlbArrayBuffer(
 }
 
 // ---------------------------------------------------------------------------
-// Native asset requires (Metro resolves these at bundle time)
+// Native asset registry — INTENTIONALLY EMPTY (on-demand architecture).
 // ---------------------------------------------------------------------------
-
-// @ts-ignore — Metro handles .glb asset requires
-const MALE_MVP_NATIVE: Record<string, number> = Platform.OS !== 'web' ? {
-  'regional_male.glb': require('../../../assets/anatomy/male/regional_male.glb'),
-  'muscular_male.glb': require('../../../assets/anatomy/male/muscular_male.glb'),
-  'skeletal_male.glb': require('../../../assets/anatomy/male/skeletal_male.glb'),
-  'digestive_male.glb': require('../../../assets/anatomy/male/digestive_male.glb'),
-  'renal_male.glb': require('../../../assets/anatomy/male/renal_male.glb'),
-  'reproductive_male.glb': require('../../../assets/anatomy/male/reproductive_male.glb'),
-  'respiratory_male.glb': require('../../../assets/anatomy/male/respiratory_male.glb'),
-  'endocrine_male.glb': require('../../../assets/anatomy/male/endocrine_male.glb'),
-  'lymphatic_male.glb': require('../../../assets/anatomy/male/lymphatic_male.glb'),
-  'articular_male.glb': require('../../../assets/anatomy/male/articular_male.glb'),
-  'nervous_male.glb': require('../../../assets/anatomy/male/nervous_male.glb'),
-  'visceral_male.glb': require('../../../assets/anatomy/male/visceral_male.glb'),
-  'cardiovascular_male.glb': require('../../../assets/anatomy/male/cardiovascular_male.glb'),
-} : {};
-
-// @ts-ignore — Metro handles .glb asset requires
-const FEMALE_MVP_NATIVE: Record<string, number> = Platform.OS !== 'web' ? {
-  'skeletal_female.glb': require('../../../assets/anatomy/female/skeletal_female.glb'),
-  'digestive_female.glb': require('../../../assets/anatomy/female/digestive_female.glb'),
-  'renal_female.glb': require('../../../assets/anatomy/female/renal_female.glb'),
-  'reproductive_female.glb': require('../../../assets/anatomy/female/reproductive_female.glb'),
-  'cardiovascular_female.glb': require('../../../assets/anatomy/female/cardiovascular_female.glb'),
-  'lymphatic_female.glb': require('../../../assets/anatomy/female/lymphatic_female.glb'),
-  'integumentary_female.glb': require('../../../assets/anatomy/female/integumentary_female.glb'),
-} : {};
+// Anatomy .glb files are NOT bundled: Metro only packages statically
+// require()d assets, and there are no require() calls for .glb anywhere in
+// this file, so the 45 MB never enters the binary. At runtime every native
+// load resolves through the download manager (getLocalModelUri + validated
+// read below); web keeps serving from public/ via resolveGlbUri.
+// The per-gender filename lists (MALE_MVP_FILES / FEMALE_MVP_FILES) remain
+// the single source of truth for which files a gender needs.
 
 const MALE_MVP_FILES = [
   'regional_male.glb',
@@ -720,21 +739,11 @@ const FEMALE_MVP_FILES = [
 ];
 
 /**
- * Bundled-model coverage: every MVP file for the gender shipped inside the
- * app binary via require(). When complete, the 3D body renders with ZERO
- * network — the scene already prefers bundled assets (setupScene +
- * loadLayerOnDemand fall back to the nativeModule branch when no downloaded
- * file URI exists). The download overlay must not block in that case.
- *
- * NOTE: the remote anatomy CDN is currently unconfigured in production
- * (EXPO_PUBLIC_ANATOMY_CDN_URL unset; the derived host:8081 URL refuses
- * connections), so without this gate the body screen is a dead end.
+ * On-demand coverage: the scene can draw a gender only from downloaded files.
+ * There is intentionally no bundled fallback — the require() maps were
+ * removed so Metro excludes the 45 MB from the binary. When files are absent
+ * the download overlay/prompt (not an empty canvas) is the UI contract.
  */
-function hasBundledModels(gender: Gender): boolean {
-  const files = gender === 'male' ? MALE_MVP_FILES : FEMALE_MVP_FILES;
-  const nativeAssets = gender === 'male' ? MALE_MVP_NATIVE : FEMALE_MVP_NATIVE;
-  return files.length > 0 && files.every((f) => nativeAssets[f] != null);
-}
 
 /** Systems that are available for each gender */
 const GENDER_SYSTEMS: Record<Gender, readonly string[]> = {
@@ -964,9 +973,7 @@ class AnatomySceneManager {
           if (Platform.OS === 'web') {
             await this.loadGlbFromUri(fileName, localUri);
           } else {
-            const file = new ExpoFile(localUri);
-            const raw = await file.arrayBuffer();
-            const buffer = toRealArrayBuffer(raw);
+            const buffer = await readValidatedGlbBuffer(localUri, fileName);
             await this.loadGlbFromBuffer(fileName, buffer);
           }
         } else if (assetModule) {
@@ -1270,14 +1277,11 @@ async function setupScene(
 ): Promise<void> {
   scene.setOnStructureSelected(onStructureSelected);
 
-  const nativeAssets = gender === 'male' ? MALE_MVP_NATIVE : FEMALE_MVP_NATIVE;
-
   // Determine the regional file for this gender
   const regionalFile = gender === 'male' ? 'regional_male.glb' : 'skeletal_female.glb';
   console.log(`[Body] STARTUP: Loading ${regionalFile} only`);
   const t0 = performance.now();
   const localUri = localFiles?.get(regionalFile);
-  const nativeModule = nativeAssets[regionalFile];
 
   if (localUri) {
     if (Platform.OS === 'web') {
@@ -1285,26 +1289,20 @@ async function setupScene(
     } else {
       // Measure file read separately from GLB parse
       const tFileRead = performance.now();
-      const file = new ExpoFile(localUri);
-      const raw = await file.arrayBuffer();
-      const buffer = toRealArrayBuffer(raw);
+      const buffer = await readValidatedGlbBuffer(localUri, regionalFile);
       const fileReadMs = (performance.now() - tFileRead).toFixed(0);
       console.log(`[Body] ${regionalFile} file read: ${fileReadMs}ms (${buffer.byteLength} bytes)`);
 
       await scene.loadGlbFromBuffer(regionalFile, buffer);
     }
   } else if (Platform.OS === 'web') {
-    const uri = await resolveGlbUri(regionalFile, nativeModule);
+    const uri = await resolveGlbUri(regionalFile);
     await scene.loadGlbFromUri(regionalFile, uri);
-  } else if (nativeModule) {
-    // Measure Asset.loadAsync + download separately
-    const tAsset = performance.now();
-    const buffer = await loadGlbArrayBuffer(regionalFile, nativeModule);
-    const assetMs = (performance.now() - tAsset).toFixed(0);
-    if (buffer) {
-      console.log(`[Body] ${regionalFile} asset load: ${assetMs}ms (${buffer.byteLength} bytes)`);
-      await scene.loadGlbFromBuffer(regionalFile, buffer);
-    }
+  } else {
+    // No downloaded file and no bundled fallback (by design): the overlay
+    // above owns this state. Log loudly so a silent empty canvas is never
+    // mistaken for a successful load.
+    console.warn(`[Body] STARTUP: ${regionalFile} has no local file — download required`);
   }
 
   const elapsed = (performance.now() - t0).toFixed(0);
@@ -1913,13 +1911,14 @@ export default function BodyScreen() {
 
   const currentStatus = gender === 'male' ? maleStatus : femaleStatus;
   const isInstalled = currentStatus.state === 'INSTALLED';
-  // Bundled models render with no download — only block on the overlay when
-  // neither a download install NOR bundled assets can draw the scene.
-  const bundledReady = hasBundledModels(gender);
+
+  // The canvas only draws from downloaded files. No bundled fallback exists
+  // by design (see above) — the overlay/prompt below is the full contract
+  // for the not-installed and downloading states.
 
   // Show overlay if not installed OR currently downloading
   // This ensures the progress UI is visible during download
-  const showOverlay = (!isInstalled && !bundledReady) || isDownloading;
+  const showOverlay = !isInstalled || isDownloading;
 
   const handleStructureSelected = useCallback((structureId: string | null) => {
     setSelectedStructure(structureId);
@@ -1935,8 +1934,8 @@ export default function BodyScreen() {
     if (newGender === gender) return;
 
     const status = newGender === 'male' ? maleStatus : femaleStatus;
-    if (status.state === 'INSTALLED' || hasBundledModels(newGender)) {
-      // Installed, or bundled in the app binary — switch directly
+    if (status.state === 'INSTALLED') {
+      // Installed — switch directly
       setGender(newGender);
       ctxSelectGender(newGender);
     } else {
@@ -1969,11 +1968,9 @@ export default function BodyScreen() {
         const isLoading = scene.isLayerLoading(sysKey);
 
         if (!isLoaded && !isLoading) {
-          // Load on demand
+          // Load on demand from the downloaded file (no bundled fallback).
           const localUri = localFiles?.get(fileName);
-          const nativeAssetsMap = gender === 'male' ? MALE_MVP_NATIVE : FEMALE_MVP_NATIVE;
-          const nativeModule = nativeAssetsMap[fileName];
-          scene.loadLayerOnDemand(fileName, localUri, nativeModule).then(() => {
+          scene.loadLayerOnDemand(fileName, localUri, undefined).then(() => {
             // Make visible after loading completes
             scene.setSystemVisibility(sysKey, true);
             scene.fitCameraToScene();

@@ -507,6 +507,38 @@ EXTRACTION_SCHEMA = {
                         "Extraction Confidence"
                       ],
                       "type": "number"
+                    },
+                    "finding_type": {
+                      "description": "OPTIONAL HINT ONLY. Source-fact category: symptom, finding, diagnosis, negative_finding, measurement, procedure, medication, or other. HealthGraph re-derives the authoritative classification locally; a wrong or missing hint never creates a false clinical entity.",
+                      "x-alternativeNames": [
+                        "Finding Type",
+                        "Fact Category"
+                      ],
+                      "type": "string"
+                    },
+                    "anatomical_site": {
+                      "description": "OPTIONAL HINT ONLY. Anatomical site stated in the source for this result (free text, e.g. 'bilateral maxillary sinuses'). HealthGraph maps anatomy downstream; leave empty when the source states none.",
+                      "x-alternativeNames": [
+                        "Anatomical Site",
+                        "Body Site"
+                      ],
+                      "type": "string"
+                    },
+                    "polarity_hint": {
+                      "description": "OPTIONAL HINT ONLY. Whether the source asserts (positive), negates (negated), or hedges (uncertain) this result, or places it in the past (historical) or as a supposition (hypothetical). HealthGraph classifies assertion locally and deterministically.",
+                      "x-alternativeNames": [
+                        "Polarity",
+                        "Negation Hint"
+                      ],
+                      "type": "string"
+                    },
+                    "is_negated": {
+                      "description": "OPTIONAL HINT ONLY. True when the source text explicitly negates this result (e.g. 'No hemorrhage').",
+                      "x-alternativeNames": [
+                        "Negated",
+                        "Is Negative"
+                      ],
+                      "type": "boolean"
                     }
                   }
                 }
@@ -748,6 +780,56 @@ EXTRACTION_SCHEMA = {
                     }
                   }
                 }
+              }
+            }
+          }
+        },
+        "encounters": {
+          "description": "OPTIONAL. Care encounters referenced by the source (study visit, admission, follow-up). Each entry preserves the source's own date and facility strings; HealthGraph decides downstream whether a Visit entity is justified. Never invent dates.",
+          "x-alternativeNames": [
+            "Encounters",
+            "Visits",
+            "Study Dates"
+          ],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "encounter_date": {
+                "description": "Date of the encounter as stated in the source (YYYY-MM-DD when known).",
+                "x-alternativeNames": [
+                  "Encounter Date",
+                  "Visit Date",
+                  "Study Date",
+                  "Performed Date"
+                ],
+                "format": "YYYY-MM-DD",
+                "type": "string"
+              },
+              "encounter_type": {
+                "description": "Type of encounter as stated (e.g. imaging study, consultation, admission). Free text; not a HealthGraph VisitType.",
+                "x-alternativeNames": [
+                  "Encounter Type",
+                  "Visit Type"
+                ],
+                "type": "string"
+              },
+              "facility": {
+                "description": "Facility name as stated in the source. Source metadata only; never creates Provider/Organization graph ontology.",
+                "x-alternativeNames": [
+                  "Facility",
+                  "Hospital",
+                  "Clinic"
+                ],
+                "type": "string"
+              },
+              "reason": {
+                "description": "Stated reason for the encounter (e.g. clinical indication).",
+                "x-alternativeNames": [
+                  "Reason",
+                  "Indication"
+                ],
+                "type": "string"
               }
             }
           }

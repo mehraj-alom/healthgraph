@@ -8,6 +8,15 @@ from sqlalchemy.orm import Session
 from core.db import SessionLocal
 from core.neo4j_client import neo4j_driver
 from models.anatomy import AnatomicalStructure
+# P15 / D2: the topology/context statements are registered in the template
+# registry (services/retrieval/templates.py) and executed through the runtime
+# safety gate, so they are covered by the same traversal invariants as every
+# router template and cannot bypass terminal-label protection.
+from services.retrieval.templates import (
+    CYPHER_STRUCTURE_CONTEXT_DESCENDANTS,
+    CYPHER_STRUCTURE_CONTEXT_EXACT,
+    run_patient_cypher,
+)
 
 def _get_patient_graph_context(
     patient_id: uuid.UUID, 
@@ -30,101 +39,25 @@ def _get_patient_graph_context(
         return {"error": f"Invalid canonical ID '{structure_id}'. Use resolve_anatomy_id first."}
 
     patient_id_str = str(patient_id)
-    
-    #  Comprehensive Topology & Context Aggregation (Neo4j)
-    # Using CALL {} subqueries to aggregate independently and avoid Cartesian fan-out.
+
+    # Comprehensive Topology & Context Aggregation (Neo4j).
+    # CALL {} subqueries aggregate independently to avoid Cartesian fan-out.
+    # CONTAINS traverses the global anatomy hierarchy only; every patient hop
+    # is anchored on `p` (`{id: $patient_id}`).
     if include_descendants:
-        cypher = """
-        MATCH (target:AnatomicalStructure {id: $structure_id})
-        
-        CALL {
-            WITH target
-            OPTIONAL MATCH (target)<-[:CONTAINS*1..]-(a:AnatomicalStructure)
-            RETURN collect(DISTINCT a.id) AS ancestors
-        }
-        
-        CALL {
-            WITH target
-            OPTIONAL MATCH (target)-[:CONTAINS*1..]->(d:AnatomicalStructure)
-            RETURN collect(DISTINCT d.id) AS descendants
-        }
-        
-        CALL {
-            WITH target, descendants
-            OPTIONAL MATCH (p:Patient {id: $patient_id})-[:HAS_OBSERVATION]->(o:Observation)-[:AFFECTS]->(struct:AnatomicalStructure)
-            WHERE struct.id = target.id OR struct.id IN descendants
-            RETURN collect(DISTINCT o) AS obs_nodes
-        }
-        
-        CALL {
-            WITH obs_nodes
-            UNWIND (CASE WHEN size(obs_nodes) > 0 THEN obs_nodes ELSE [null] END) AS o
-            OPTIONAL MATCH (o)-[:SOURCE_DOCUMENT]->(doc:Document)
-            RETURN collect(DISTINCT doc.id) AS documents
-        }
-        
-        CALL {
-            WITH obs_nodes
-            UNWIND (CASE WHEN size(obs_nodes) > 0 THEN obs_nodes ELSE [null] END) AS o
-            OPTIONAL MATCH (o)-[:LOGGED_ON]->(t:TimelineEvent)
-            RETURN collect(DISTINCT t.level_number) AS timeline_levels
-        }
-        
-        RETURN 
-            target.id AS structure,
-            [x IN ancestors WHERE x IS NOT NULL] AS ancestors,
-            [x IN descendants WHERE x IS NOT NULL] AS descendants,
-            [o IN obs_nodes WHERE o IS NOT NULL | o.id] AS observations,
-            [x IN documents WHERE x IS NOT NULL] AS documents,
-            [x IN timeline_levels WHERE x IS NOT NULL] AS timeline_event_levels
-        """
+        cypher = CYPHER_STRUCTURE_CONTEXT_DESCENDANTS
+        statement_id = "T-STRUCT-CTX"
     else:
-        cypher = """
-        MATCH (target:AnatomicalStructure {id: $structure_id})
-        
-        CALL {
-            WITH target
-            OPTIONAL MATCH (target)<-[:CONTAINS*1..]-(a:AnatomicalStructure)
-            RETURN collect(DISTINCT a.id) AS ancestors
-        }
-        
-        CALL {
-            WITH target
-            OPTIONAL MATCH (target)-[:CONTAINS*1..]->(d:AnatomicalStructure)
-            RETURN collect(DISTINCT d.id) AS descendants
-        }
-        
-        CALL {
-            WITH target
-            OPTIONAL MATCH (p:Patient {id: $patient_id})-[:HAS_OBSERVATION]->(o:Observation)-[:AFFECTS]->(target)
-            RETURN collect(DISTINCT o) AS obs_nodes
-        }
-        
-        CALL {
-            WITH obs_nodes
-            UNWIND (CASE WHEN size(obs_nodes) > 0 THEN obs_nodes ELSE [null] END) AS o
-            OPTIONAL MATCH (o)-[:SOURCE_DOCUMENT]->(doc:Document)
-            RETURN collect(DISTINCT doc.id) AS documents
-        }
-        
-        CALL {
-            WITH obs_nodes
-            UNWIND (CASE WHEN size(obs_nodes) > 0 THEN obs_nodes ELSE [null] END) AS o
-            OPTIONAL MATCH (o)-[:LOGGED_ON]->(t:TimelineEvent)
-            RETURN collect(DISTINCT t.level_number) AS timeline_levels
-        }
-        
-        RETURN 
-            target.id AS structure,
-            [x IN ancestors WHERE x IS NOT NULL] AS ancestors,
-            [x IN descendants WHERE x IS NOT NULL] AS descendants,
-            [o IN obs_nodes WHERE o IS NOT NULL | o.id] AS observations,
-            [x IN documents WHERE x IS NOT NULL] AS documents,
-            [x IN timeline_levels WHERE x IS NOT NULL] AS timeline_event_levels
-        """
-        
+        cypher = CYPHER_STRUCTURE_CONTEXT_EXACT
+        statement_id = "T-STRUCT-CTX-EXACT"
+
     with driver.session() as session:
-        result = session.run(cypher, patient_id=patient_id_str, structure_id=structure_id)
+        result = run_patient_cypher(
+            session,
+            cypher,
+            {"patient_id": patient_id_str, "structure_id": structure_id},
+            statement_id=statement_id,
+        )
         record = result.single()
         
         if not record:

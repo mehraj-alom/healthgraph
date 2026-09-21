@@ -23,10 +23,13 @@ from app.api.v1 import (
     medications,
     nutrition,
     ontology,
+    outbox,
     ppg,
+    privacy,
     profile,
     provenance,
     review,
+    statements,
     summaries,
     timeline,
     trends,
@@ -150,12 +153,27 @@ async def _run_startup_hooks(app: FastAPI, secret_key) -> None:
         await loop.run_in_executor(None, _db_init)
 
         _marker("lifespan.qdrant.setup")
-        app.state.qdrant_client = await loop.run_in_executor(
-            None, vector_db.setup_collection
-        )
+        # P7: vector-store outage must not gate the whole API. Degrade to
+        # PG-only evidence with an explicit flag instead of ready=False.
+        try:
+            app.state.qdrant_client = await loop.run_in_executor(
+                None, vector_db.setup_collection
+            )
+            app.state.qdrant_degraded = False
+        except Exception:
+            app.state.qdrant_client = None
+            app.state.qdrant_degraded = True
+            logger.exception(
+                "Qdrant setup failed — continuing degraded (document search "
+                "unavailable, PG evidence only)"
+            )
         _done("lifespan.qdrant.setup", _marker("lifespan.firebase.init"))
 
-        await loop.run_in_executor(None, initialize_firebase)
+        # P7: initialize_firebase returns False (not raise) on malformed
+        # credentials — failing over to ready=True would 401 every request.
+        _firebase_ok = await loop.run_in_executor(None, initialize_firebase)
+        if _firebase_ok is False:
+            raise RuntimeError("Firebase Admin SDK initialization failed.")
         _done("lifespan.firebase.init", _marker("lifespan.deidentifier.init"))
 
         app.state.deidentifier = DeIdentificationService(
@@ -225,6 +243,14 @@ async def lifespan(app: FastAPI):
 
     close_neo4j_driver()
 
+    # P7: release pooled PG connections on shutdown.
+    try:
+        from core.db import engine as _engine
+
+        _engine.dispose()
+    except Exception:
+        logger.exception("Engine dispose failed during shutdown.")
+
 
 def create_app() -> FastAPI:
     logger.info("Initializing FastAPI application.")
@@ -259,9 +285,10 @@ def create_app() -> FastAPI:
             if origin.strip()
         ]
     else:
-        # No CORS_ORIGINS set: allow all origins (safe because
-        # allow_credentials is False and auth uses Bearer tokens, not cookies).
-        cors_origins = ["*"]
+        # P7: empty CORS_ORIGINS means most restrictive. In production that
+        # is deny-all; outside production the dev console needs open access
+        # (safe: allow_credentials is False, auth uses Bearer tokens).
+        cors_origins = [] if settings.APP_ENV == "production" else ["*"]
 
     app.add_middleware(
         CORSMiddleware,
@@ -280,7 +307,7 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def readiness_gate(request, call_next):
-        if not app.state.ready and request.url.path not in ("/health", "/"):
+        if not app.state.ready and request.url.path not in ("/health", "/ready", "/"):
             return JSONResponse(
                 status_code=503,
                 content={
@@ -336,9 +363,12 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(body_state.router)
     app.include_router(summaries.router)
+    app.include_router(statements.router)
     app.include_router(logs.router)
+    app.include_router(outbox.router)
     app.include_router(ontology.router)
     app.include_router(ppg.router)
+    app.include_router(privacy.router)
     app.include_router(profile.router)
     app.include_router(trends.router)
     app.include_router(health_graph.router)
@@ -350,6 +380,18 @@ def create_app() -> FastAPI:
             "status": "ok",
             "service": "MedGraph API",
         }
+
+    @app.get("/ready", tags=["System"])
+    def readiness_check():
+        """Readiness (distinct from liveness): 200 only when startup hooks
+        completed. Cheap flag check — no dependency I/O. Orchestrators
+        should probe /ready, not /health, for traffic gating."""
+        if getattr(app.state, "ready", False):
+            return {"status": "ready", "service": "MedGraph API"}
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not-ready", "service": "MedGraph API"},
+        )
 
     @app.get("/", include_in_schema=False)
     def dev_console():

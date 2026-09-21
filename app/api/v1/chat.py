@@ -78,7 +78,10 @@ async def process_chat(
         # Force final_output to None to clear stale checkpoints
         graph_result = await medical_agent.ainvoke({"messages": [HumanMessage(content=user_prompt)], "final_output": None}, config=config)
     except Exception as e:
-        logger.exception(f"Agent execution failed: {type(e).__name__}: {e}")
+        # P15 / D3: log the failure category only. Provider exception text can
+        # echo the request (and therefore patient content), so the exception
+        # message is deliberately not interpolated; the traceback is kept.
+        logger.exception("Agent execution failed (%s).", type(e).__name__)
 
         # Connection errors indicate a transient dead/stale connection.
         # The AsyncConnectionPool's ``check`` callback already verifies
@@ -112,7 +115,7 @@ async def process_chat(
                 )
             except Exception as retry_err:
                 logger.exception(
-                    f"Retry also failed: {type(retry_err).__name__}: {retry_err}"
+                    "Retry also failed (%s).", type(retry_err).__name__
                 )
                 raise HTTPException(
                     status_code=500,
@@ -145,5 +148,6 @@ async def process_chat(
     return ChatResponse(
         conversation_id=conversation_id,
         response_text=final_output.response_text if final_output else "Processing incomplete.",
-        ui_actions=hydrated_actions
+        ui_actions=hydrated_actions,
+        citations=list(final_output.citations) if final_output and final_output.citations else [],
     )

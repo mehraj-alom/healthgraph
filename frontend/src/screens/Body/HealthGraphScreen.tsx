@@ -40,7 +40,7 @@ import { useReducedMotion } from '@/theme';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { Chip } from '@/components';
-import { useHealthGraph, useGraphNodeDetail, type GraphNode, type GraphEdge } from '@/hooks/useHealthGraph';
+import { useHealthGraph, useGraphNodeDetail, type GraphNode, type GraphEdge, type NodeDetailPayload, type GraphCitation } from '@/hooks/useHealthGraph';
 import { useTrends } from '@/hooks/useTrends';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { useCorrelationFeed } from '@/screens/Dashboard/correlations';
@@ -75,6 +75,24 @@ const NODE_COLORS: Record<string, string> = {
   timeline_event: '#F5A623',
   medication: '#4FD1C5',
   medication_taken_event: '#3AA79D',
+  // P0 Concept-lite (shared terminology reference, terminal for traversal).
+  concept: '#9AA8B8',
+  // P1 clinical graph expansion.
+  medication_request: '#4FD1C5',
+  condition_occurrence: '#F28B7E',
+  visit: '#5B6B82',
+  patient_statement: '#B8A6E8',
+  medication_canonical: '#3AA79D',
+  // P2 measurement split + regimen versions.
+  measurement: '#F27E93',
+  medication_version: '#3AA79D',
+  // P3 longitudinal personal-health domains (USER_REPORTED/device hues).
+  sleep_episode: '#7C6FF0',
+  activity_event: '#4FD1C5',
+  nutrition_intake: '#6EC1E4',
+  food_scan: '#6EC1E4',
+  food_entry: '#6EC1E4',
+  ppg_measurement: '#F27E93',
 };
 
 const NODE_SIZES: Record<string, number> = {
@@ -85,6 +103,20 @@ const NODE_SIZES: Record<string, number> = {
   timeline_event: 0.08,
   medication: 0.15,
   medication_taken_event: 0.08,
+  concept: 0.06,
+  medication_request: 0.13,
+  condition_occurrence: 0.14,
+  visit: 0.12,
+  patient_statement: 0.08,
+  medication_canonical: 0.10,
+  measurement: 0.10,
+  medication_version: 0.07,
+  sleep_episode: 0.10,
+  activity_event: 0.10,
+  nutrition_intake: 0.10,
+  food_scan: 0.11,
+  food_entry: 0.07,
+  ppg_measurement: 0.10,
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -95,6 +127,20 @@ const CATEGORY_LABELS: Record<string, string> = {
   timeline_event: 'Event',
   medication: 'Medication',
   medication_taken_event: 'Dose Taken',
+  concept: 'Concept',
+  medication_request: 'Med Request',
+  condition_occurrence: 'Condition',
+  visit: 'Visit',
+  patient_statement: 'Statement',
+  medication_canonical: 'Medication',
+  measurement: 'Measurement',
+  medication_version: 'Regimen v.',
+  sleep_episode: 'Sleep',
+  activity_event: 'Activity',
+  nutrition_intake: 'Nutrition',
+  food_scan: 'Food Scan',
+  food_entry: 'Food',
+  ppg_measurement: 'Heart',
 };
 
 // Renderer budgets (mobile-GPU-first: everything merged + instanced).
@@ -114,6 +160,18 @@ export function nodeDomainColor(node: GraphNode): string {
   if (node.type === 'document') return '#8A7BC8';
   if (node.type === 'medication') return '#4FD1C5';
   if (node.type === 'medication_taken_event') return '#3AA79D';
+  // P0–P3 graph types resolve by type first (metric sniffing below stays
+  // as a fallback for legacy observation/timeline_event nodes).
+  if (node.type === 'concept' || node.type === 'medication_canonical') return '#9AA8B8';
+  if (node.type === 'medication_request') return '#4FD1C5';
+  if (node.type === 'condition_occurrence') return '#F28B7E';
+  if (node.type === 'visit') return '#5B6B82';
+  if (node.type === 'patient_statement') return '#B8A6E8';
+  if (node.type === 'measurement' || node.type === 'ppg_measurement') return '#F27E93';
+  if (node.type === 'medication_version') return '#3AA79D';
+  if (node.type === 'sleep_episode') return '#7C6FF0';
+  if (node.type === 'activity_event') return '#4FD1C5';
+  if (node.type === 'nutrition_intake' || node.type === 'food_scan' || node.type === 'food_entry') return '#6EC1E4';
   const hay = `${node.label ?? ''} ${node.properties?.observation_type ?? ''} ${node.properties?.category ?? ''} ${node.properties?.event_type ?? ''}`.toLowerCase();
   if (/(heart|pulse|bpm|blood|pressure|oxygen|spo2|glucose|temperatur|respir|hrv)/.test(hay)) return '#F27E93';
   if (/(sleep|wake|bedtime|insomnia)/.test(hay)) return '#7C6FF0';
@@ -222,9 +280,15 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Layo
   }
 
   // Documents: near source observation (tight cluster)
+  // P4: accept both the legacy SOURCE_DOCUMENT link and the canonical
+  // DOCUMENTED_IN link (dual-written since P0).
   for (const doc of documents) {
     let src: string | null = null;
-    for (const e of edges) { if (e.relationship === 'SOURCE_DOCUMENT' && e.target === doc.id) { src = e.source; break; } }
+    for (const e of edges) {
+      if ((e.relationship === 'SOURCE_DOCUMENT' || e.relationship === 'DOCUMENTED_IN') && e.target === doc.id) {
+        src = e.source; break;
+      }
+    }
     const op = src ? positions.get(src) : null;
     const h = stableHash(doc.id);
     const a = ((h % 360) / 360) * Math.PI * 2;
@@ -297,6 +361,63 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Layo
       });
     });
   });
+
+  // P4: P0–P3 graph types — hub-optional fallback bucket.
+  // Previously any node outside the five legacy buckets was silently
+  // dropped from the canvas (buildGraph skips unpositioned nodes), which
+  // hid every Condition/Visit/Measurement/Sleep/Food/PPG node. This pass
+  // guarantees every node a deterministic position with the existing
+  // instanced-sphere pipeline — no layout rewrite, no new draw calls.
+  // Patient stays central; Visit-centered clustering is the hub
+  // alternative (members orbit their visit when it is positioned).
+  const extraNodes = nodes.filter((n) => !positions.has(n.id));
+  if (extraNodes.length > 0) {
+    // Pass 1: type-grouped outer ellipses (every node placed).
+    const byType = new Map<string, GraphNode[]>();
+    for (const n of extraNodes) {
+      const arr = byType.get(n.type) ?? []; arr.push(n); byType.set(n.type, arr);
+    }
+    const typeList = Array.from(byType.keys());
+    typeList.forEach((t, ti) => {
+      const group = byType.get(t)!;
+      const baseAngle = ((2 * Math.PI) / typeList.length) * ti;
+      const cx = Math.cos(baseAngle) * 1.5;
+      const cy = Math.sin(baseAngle) * 2.0;
+      group.forEach((n, i) => {
+        const h = stableHash(n.id);
+        const a = ((2 * Math.PI) / Math.max(group.length, 1)) * i;
+        const r = 0.15 + (i % 3) * 0.1;
+        positions.set(n.id, {
+          x: cx + Math.cos(a) * r,
+          y: cy + Math.sin(a) * r,
+          z: ((h % 60) / 60 - 0.5) * 0.4,
+        });
+      });
+    });
+    // Pass 2: tighten children near already-positioned parents —
+    // FoodEntry near its scan, MedicationVersion near its request, and
+    // OCCURRED_DURING members orbiting their visit.
+    const nearParent = (id: string, rel: string, radius: number) => {
+      for (const e of edges) {
+        if (e.relationship !== rel || e.target !== id) continue;
+        const pp = positions.get(e.source);
+        if (!pp) continue;
+        const h = stableHash(id);
+        const a = ((h % 360) / 360) * Math.PI * 2;
+        positions.set(id, {
+          x: pp.x + Math.cos(a) * radius,
+          y: pp.y + Math.sin(a) * radius,
+          z: pp.z + ((h % 40) / 40 - 0.5) * 0.15,
+        });
+        return;
+      }
+    };
+    for (const n of extraNodes) {
+      if (n.type === 'food_entry') nearParent(n.id, 'HAS_ENTRY', 0.22);
+      else if (n.type === 'medication_version') nearParent(n.id, 'HAS_VERSION', 0.22);
+      else nearParent(n.id, 'OCCURRED_DURING', 0.3);
+    }
+  }
 
   return positions;
 }
@@ -595,6 +716,7 @@ class GraphSceneManager {
         HAS_OBSERVATION: new THREE.Color(0x7c8da6),
         AFFECTS: new THREE.Color(0xe0746b),
         SOURCE_DOCUMENT: new THREE.Color(0x8a7bc8),
+        DOCUMENTED_IN: new THREE.Color(0x8a7bc8),
         LOGGED_ON: new THREE.Color(0xf5a623),
         HAS_TIMELINE_EVENT: new THREE.Color(0x55606e),
         DERIVED_SAME_TYPE: new THREE.Color(0x4a5568),
@@ -602,6 +724,27 @@ class GraphSceneManager {
         DERIVED_SAME_DAY: new THREE.Color(0x3a4356),
         CORRELATES: new THREE.Color(0x4fd1c5),
         INVERSES: new THREE.Color(0xe0746b),
+        // P0–P3 clinical + lifestyle topology (same hues as node domains).
+        HAS_CONDITION: new THREE.Color(0xf28b7e),
+        HAS_VISIT: new THREE.Color(0x5b6b82),
+        HAS_STATEMENT: new THREE.Color(0xb8a6e8),
+        HAS_MEDICATION_REQUEST: new THREE.Color(0x4fd1c5),
+        PRESCRIBES: new THREE.Color(0x3aa79d),
+        PRESCRIBED_FOR: new THREE.Color(0xf28b7e),
+        REASON_STATED_BY_PATIENT: new THREE.Color(0xb8a6e8),
+        ABOUT: new THREE.Color(0xb8a6e8),
+        RESULTS_FROM: new THREE.Color(0x3aa79d),
+        OCCURRED_DURING: new THREE.Color(0x5b6b82),
+        HAS_MEASUREMENT: new THREE.Color(0xf27e93),
+        HAS_CODE: new THREE.Color(0x9aa8b8),
+        HAS_VERSION: new THREE.Color(0x3aa79d),
+        SUPERSEDES: new THREE.Color(0x3aa79d),
+        HAS_SLEEP: new THREE.Color(0x7c6ff0),
+        HAS_ACTIVITY: new THREE.Color(0x4fd1c5),
+        HAS_NUTRITION: new THREE.Color(0x6ec1e4),
+        HAS_FOOD_SCAN: new THREE.Color(0x6ec1e4),
+        HAS_ENTRY: new THREE.Color(0x6ec1e4),
+        HAS_BIOMETRIC: new THREE.Color(0xf27e93),
       };
     }
     return this.edgePalette[relationship] ?? new THREE.Color(0x55606e);
@@ -1229,7 +1372,10 @@ function genDesc(n: GraphNode): string {
     }
     case 'document': return `${n.properties?.document_type || 'Medical document'} added to records.`;
     case 'timeline_event': return `${n.properties?.source_type?.replace(/_/g, ' ').toLowerCase() || 'Health event'} recorded.`;
-    default: return '';
+    // P4: P0–P3 types fall back to the server-provided label (value-qualified
+    // for measurements/PPG/sleep/nutrition); the rich detail payload renders
+    // in NodeDetailContent when present.
+    default: return n.label ? `${n.label} recorded.` : '';
   }
 }
 
@@ -1251,7 +1397,7 @@ function genWhat(n: GraphNode): string {
 }
 
 function genWhen(n: GraphNode): string {
-  return formatNaturalDate(n.properties?.event_time || n.properties?.created_at || n.properties?.date);
+  return formatNaturalDate(n.properties?.event_time || n.properties?.measured_at || n.properties?.recorded_at || n.properties?.created_at || n.properties?.date);
 }
 
 function genSource(n: GraphNode): string | null {
@@ -1259,6 +1405,20 @@ function genSource(n: GraphNode): string | null {
     case 'observation': { const s = n.properties?.source_type; return s ? s.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase()) : 'Health data'; }
     case 'document': return 'Uploaded medical record';
     case 'timeline_event': { const s = n.properties?.source_type; return s ? s.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase()) : 'Health timeline'; }
+    // P4: provenance-backed source line for P0–P3 types.
+    case 'condition_occurrence':
+    case 'measurement':
+    case 'sleep_episode':
+    case 'activity_event':
+    case 'nutrition_intake':
+    case 'food_scan':
+    case 'food_entry':
+    case 'ppg_measurement':
+    case 'patient_statement':
+    case 'visit': {
+      const s = n.properties?.source_type || n.properties?.method;
+      return s ? String(s).replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase()) : 'Health data';
+    }
     default: return null;
   }
 }
@@ -1371,7 +1531,105 @@ function eventHero(node: GraphNode, localDetails: DailyCheckInDetail[]): HeroSta
   return { value, label, rows, zone: guide?.zone, flag: guide?.flag };
 }
 
-function NodeDetailContent({ nodeDetail, onSelectNode, onViewBody, localDetails = [], allEdges = [], nodesById = new Map() }: { nodeDetail: any; onSelectNode: (id: string) => void; onViewBody: (sid?: string) => void; localDetails?: DailyCheckInDetail[]; allEdges?: GraphEdge[]; nodesById?: Map<string, GraphNode> }) {
+/** Evidence-tier pill color. AI-inferred content must never look
+ *  equivalent to source facts — amber/grey vs teal/violet. */
+function evidenceBadgeColor(badge: string | null | undefined): string {
+  const b = (badge || '').toUpperCase();
+  if (b.includes('SOURCE-STATED') || b === 'SOURCE_FACT' || b === 'CONFIRMED') return '#4FD1C5';
+  if (b.includes('USER-REPORTED')) return '#B8A6E8';
+  if (b.includes('AI-INFERRED')) return '#F5A623';
+  if (b === 'NORMALIZED' || b.includes('SYSTEM-DERIVED')) return '#7C8DA6';
+  return '#9AA8B8';
+}
+
+function formatDetailValue(v: any): string | null {
+  if (v == null) return null;
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+    const s = String(v);
+    return s.length > 220 ? `${s.slice(0, 220)}…` : s;
+  }
+  if (Array.isArray(v)) {
+    if (v.length === 0) return null;
+    // Compact scalar arrays only; object rows render via citations/entries.
+    if (v.every((x) => typeof x === 'string' || typeof x === 'number')) {
+      const s = v.slice(0, 6).join(', ');
+      return v.length > 6 ? `${s} (+${v.length - 6} more)` : s;
+    }
+    return `${v.length} items`;
+  }
+  return null;
+}
+
+/** Server-backed rich detail (P0–P3 NodeDetailPayload). Renders only fields
+ *  the API actually provides; absent data stays absent, never invented. */
+function RichDetailContent({ detail, onOpenDocument }: { detail: NodeDetailPayload; onOpenDocument?: (documentId: string) => void }) {
+  const rows: { key: string; value: string }[] = [];
+  for (const [k, v] of Object.entries(detail.structured_fields ?? {})) {
+    if (rows.length >= 12) break;
+    const fv = formatDetailValue(v);
+    if (fv == null || fv === '') continue;
+    rows.push({ key: k.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()), value: fv });
+  }
+  for (const [k, v] of Object.entries(detail.status ?? {})) {
+    if (rows.length >= 14) break;
+    const fv = formatDetailValue(v);
+    if (fv == null || fv === '') continue;
+    rows.push({ key: k.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()), value: fv });
+  }
+  const citations = (detail.citations ?? []).filter((c) => c && (c.quote || c.document_id));
+  return (
+    <>
+      {detail.evidence_badge ? (
+        <View style={styles.evBadgeRow}>
+          <View style={[styles.evBadge, { backgroundColor: evidenceBadgeColor(detail.evidence_badge) }]}>
+            <Text style={styles.evBadgeText}>{detail.evidence_badge}</Text>
+          </View>
+        </View>
+      ) : null}
+      {detail.summary ? <Text style={styles.detailDesc}>{detail.summary}</Text> : null}
+      {rows.length > 0 && (
+        <View style={styles.dt}>
+          <Text style={styles.dtt}>Details</Text>
+          {rows.map((p) => (<View key={p.key} style={styles.dpr}><Text style={styles.dpk}>{p.key}</Text><Text style={styles.dpv}>{p.value}</Text></View>))}
+        </View>
+      )}
+      {detail.evidence?.quote ? (
+        <View style={styles.dt}>
+          <Text style={styles.dtt}>Evidence</Text>
+          <View style={styles.evQuoteBox}>
+            <Text style={styles.evQuote} numberOfLines={6}>{String(detail.evidence.quote)}</Text>
+          </View>
+        </View>
+      ) : null}
+      {citations.length > 0 && (
+        <View style={styles.dc}>
+          <Text style={styles.dct}>Sources ({citations.length})</Text>
+          {citations.slice(0, 3).map((c: GraphCitation, i: number) => {
+            const docId = c.document_id;
+            const label = docId ? 'Open source document' : (c.node_id || 'Evidence');
+            const sub = c.quote ? String(c.quote).slice(0, 90) : null;
+            const Body = (
+              <View style={styles.nbRowText}>
+                <Text style={styles.clbl} numberOfLines={1}>{label}</Text>
+                {sub ? <Text style={styles.nbRel} numberOfLines={2}>{sub}</Text> : null}
+              </View>
+            );
+            return docId && onOpenDocument ? (
+              <Pressable key={`${docId}-${i}`} style={styles.dci} onPress={() => onOpenDocument(docId)}>
+                {Body}
+                <Text style={styles.nbGo}>›</Text>
+              </Pressable>
+            ) : (
+              <View key={`${docId || c.node_id || i}`} style={styles.dci}>{Body}</View>
+            );
+          })}
+        </View>
+      )}
+    </>
+  );
+}
+
+function NodeDetailContent({ nodeDetail, onSelectNode, onViewBody, onOpenDocument, localDetails = [], allEdges = [], nodesById = new Map() }: { nodeDetail: any; onSelectNode: (id: string) => void; onViewBody: (sid?: string) => void; onOpenDocument?: (documentId: string) => void; localDetails?: DailyCheckInDetail[]; allEdges?: GraphEdge[]; nodesById?: Map<string, GraphNode> }) {
   const node = nodeDetail.node;
   const color = NODE_COLORS[node.type] || '#9AA8B8';
   const title = node.label || CATEGORY_LABELS[node.type] || node.type;
@@ -1443,6 +1701,9 @@ function NodeDetailContent({ nodeDetail, onSelectNode, onViewBody, localDetails 
         <Pressable onPress={() => onSelectNode('')}><Text style={styles.detailClose}>✕</Text></Pressable>
       </View>
       <Text style={styles.detailTitle}>{title}</Text>
+      {nodeDetail.detail ? (
+        <RichDetailContent detail={nodeDetail.detail} onOpenDocument={onOpenDocument} />
+      ) : null}
       {hero ? (
         <View style={styles.heroBox}>
           <Text style={styles.heroValue} numberOfLines={2}>{hero.value}</Text>
@@ -2086,10 +2347,24 @@ export default function HealthGraphScreen({
       patient: 0,
       body_structure: 1,
       observation: 2,
+      condition_occurrence: 2,
+      measurement: 3,
+      ppg_measurement: 3,
       medication: 3,
+      medication_request: 4,
       medication_taken_event: 4,
-      document: 5,
+      medication_canonical: 5,
+      visit: 5,
+      sleep_episode: 5,
+      activity_event: 5,
+      nutrition_intake: 5,
+      food_scan: 5,
+      document: 6,
       timeline_event: 6,
+      patient_statement: 7,
+      food_entry: 7,
+      medication_version: 7,
+      concept: 8,
     };
     const cap = embedded ? 8 : 24;
     return [...graphData.nodes]
@@ -2335,6 +2610,7 @@ export default function HealthGraphScreen({
                 nodeDetail={nodeDetail}
                 onSelectNode={handleSelectNode}
                 onViewBody={handleViewBody}
+                onOpenDocument={(docId: string) => navigation.navigate('DocumentDetail', { documentId: docId } as any)}
                 localDetails={feedQ.localDetails}
                 allEdges={allEdges}
                 nodesById={nodesById}
@@ -2429,6 +2705,12 @@ const styles = StyleSheet.create({
   detailClose: { fontSize: 18, color: GV.muted },
   detailTitle: { ...TYPE.title, color: GV.ink, marginBottom: 8 },
   detailDesc: { ...TYPE.body, color: GV.body, marginBottom: 16 },
+  // P4: evidence-tier badge + quote + source rows (RichDetailContent).
+  evBadgeRow: { flexDirection: 'row', marginBottom: 8 },
+  evBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: SPACE.rPill },
+  evBadgeText: { ...TYPE.caption, fontFamily: FONT.semi, fontSize: 10, color: '#10151C' },
+  evQuoteBox: { marginTop: 4, padding: 10, borderRadius: 10, backgroundColor: GV.wash, borderLeftWidth: 3, borderLeftColor: GV.muted },
+  evQuote: { ...TYPE.body, color: GV.body, fontSize: 13, fontStyle: 'italic' },
   df: { marginBottom: 8 },
   dfl: { ...TYPE.caption, color: GV.muted, marginBottom: 2 },
   dfv: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink },

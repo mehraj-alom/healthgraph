@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.db import get_db
+from core.config import settings
 from core.rate_limiter import RateLimiter
 from models.identity import Patient  # Ensure your Patient model has a `firebase_uid` column
 from logger import logger
@@ -60,8 +61,11 @@ def get_authenticated_patient_id(
             detail="User identity established, but no corresponding patient record exists in the clinical database. Please complete registration."
         )
 
-    # General per-patient read/write abuse protection (cheap operations →
-    # fail open so a Redis blip never takes down normal API usage).
+    # General per-patient read/write abuse protection. Cheap operations
+    # fail open ONLY in local (a dev box without Redis must work);
+    # preview/production fail closed so a Redis outage cannot silently
+    # disable abuse protection. (Chat/upload already fail closed outside
+    # local; this aligns the general limiter with them.)
     operation = (
         "writes" if request.method in ("POST", "PUT", "PATCH", "DELETE") else "reads"
     )
@@ -71,7 +75,7 @@ def get_authenticated_patient_id(
         operation,
         limit,
         _RATE_WINDOW_SECONDS,
-        fail_open=True,
+        fail_open=settings.APP_ENV == "local",
     )
 
     return patient_id

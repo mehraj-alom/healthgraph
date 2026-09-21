@@ -50,6 +50,12 @@ celery_app.conf.update(
     # commands against a tight request quota. Short TTL as a second guard.
     task_ignore_result=True,
     result_expires=3600,
+    # P7: bound hung OCR/extraction/projection work instead of holding a
+    # worker slot forever under acks_late; retry broker connection at boot
+    # so beat/API ordering races fail soft instead of fast.
+    task_time_limit=900,
+    task_soft_time_limit=600,
+    broker_connection_retry_on_startup=True,
     task_queues=(
         Queue("celery", routing_key="celery"),
         Queue("ingestion", routing_key="ingestion"),
@@ -72,5 +78,12 @@ celery_app.conf.beat_schedule = {
     "drain-graph-outbox-every-60-seconds": {
         "task": "workers.graph_sync.drain_graph_outbox",
         "schedule": 60.0,
-    }
+    },
+    # P7: release crash-stalled documents (PROCESSING/EXTRACTED past the
+    # 15-minute lease) back to UPLOADED for reprocessing. Same quota
+    # reasoning as the outbox drain; 5 minutes is plenty (lease is 15).
+    "sweep-stuck-documents-every-5-minutes": {
+        "task": "ingestion_tasks.sweep_stuck_documents",
+        "schedule": 300.0,
+    },
 }

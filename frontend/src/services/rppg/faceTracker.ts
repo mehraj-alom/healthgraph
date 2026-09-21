@@ -33,6 +33,7 @@ export type FaceTrackState =
 export type RppgScreenState =
   | 'IDLE'
   | 'PREPARING'
+  | 'MODEL_DOWNLOAD'
   | 'FIND_FACE'
   | 'POSITION_FACE'
   | 'ACQUIRING'

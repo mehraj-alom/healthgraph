@@ -103,6 +103,22 @@ class Medication(Base, TimestampMixin):
     # Source tracking
     source_document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.document_id"), nullable=True)
 
+    # P1 graph context links (additive, nullable; maintained by
+    # services/clinical/occurrences.sync_medication_graph_context).
+    # purpose_condition_id: ConditionOccurrence derived from purpose text.
+    # reason_statement_id: PatientStatement when the purpose is user-reported
+    #   (no source document). Prescribed purpose != patient-stated reason.
+    purpose_condition_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("condition_occurrences.condition_id"), nullable=True
+    )
+    reason_statement_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("patient_statements.statement_id"), nullable=True
+    )
+
+    # P2 regimen version counter (additive; snapshots live in
+    # medication_versions, written by services/clinical/versions.py).
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
     __table_args__ = (
         Index("ix_medications_patient_status", "patient_id", "status"),
     )

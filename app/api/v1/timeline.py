@@ -63,6 +63,9 @@ class UnifiedTimelineItem(BaseModel):
     verification_status: Optional[str] = None
     concept_id: Optional[str] = None
     concept_display_name: Optional[str] = None
+    # P6 per-mention normalization evidence (NULL unless auto-matched).
+    match_confidence: Optional[float] = None
+    match_status: Optional[str] = None
     lab_result: Optional[dict] = None
     vital_sign: Optional[dict] = None
     safe_notes: Optional[str] = None
@@ -151,6 +154,8 @@ def get_timeline(
             verification_status=event.verification_status.value if event.verification_status else None,
             concept_id=str(event.concept_id) if event.concept_id else None,
             concept_display_name=concept.display_name if concept else None,
+            match_confidence=event.match_confidence,
+            match_status=event.match_status,
             lab_result={
                 "value": lab.value,
                 "unit": lab.unit,

@@ -271,6 +271,9 @@ def _nutrition_history(
             "water_ml": r.NutritionPayload.water_ml,
             "meals_count": r.NutritionPayload.meals_count,
             "appetite_level": r.NutritionPayload.appetite_level,
+            # P4: keep parity with _collect_nutrition (stored fields only).
+            "calories_kcal": r.NutritionPayload.calories_kcal,
+            "food_label": r.NutritionPayload.food_label,
             "event_time": r.event_time.isoformat() if r.event_time else None,
         }
         for r in rows

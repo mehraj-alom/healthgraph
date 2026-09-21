@@ -22,7 +22,7 @@ def _get_current_body_state(patient_id: uuid.UUID, db: Session) -> list[dict]:
     )
     
     results = db.execute(stmt).all()
-    
+
     return [
         {
             "structure_id": row.PatientBodyStateSnapshot.structure_id,
@@ -31,7 +31,9 @@ def _get_current_body_state(patient_id: uuid.UUID, db: Session) -> list[dict]:
             "visual_status": row.PatientBodyStateSnapshot.visual_status.value,
             "severity": row.PatientBodyStateSnapshot.visual_severity_score,
             "trend": row.PatientBodyStateSnapshot.trend.value,
-            "latest_summary": row.PatientBodyStateSnapshot.latest_summary
+            "latest_summary": row.PatientBodyStateSnapshot.latest_summary,
+            # P7: per-row citation (list shape unchanged).
+            "citations": [{"node_id": f"body_structure:{row.PatientBodyStateSnapshot.structure_id}"}],
         }
         for row in results
     ]

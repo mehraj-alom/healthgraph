@@ -23,7 +23,9 @@ async def get_patient_documents(config: RunnableConfig = None) -> List[Dict]:
     
     db: Session = SessionLocal()
     try:
-        stmt = select(Document).where(Document.patient_id == patient_id).order_by(Document.created_at.desc())
+        # P7: bounded newest-first; the LLM navigates via document_id, it
+        # never needs the full lifetime list in one call.
+        stmt = select(Document).where(Document.patient_id == patient_id).order_by(Document.created_at.desc()).limit(50)
         docs = db.execute(stmt).scalars().all()
         
         return [
@@ -32,6 +34,9 @@ async def get_patient_documents(config: RunnableConfig = None) -> List[Dict]:
                 "status": doc.status,
                 "created_at": doc.created_at.isoformat() if doc.created_at else None,
                 "file_hash": doc.file_hash[:16] + "..." if doc.file_hash else None,
+                # P7: per-row citation (list shape unchanged).
+                "citations": [{"node_id": f"document:{doc.document_id}",
+                               "document_id": str(doc.document_id)}],
             }
             for doc in docs
         ]

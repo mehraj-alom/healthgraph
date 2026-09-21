@@ -62,6 +62,7 @@ export default function RppgMeasureScreen() {
     result,
     progressFrames,
     liveStability,
+    modelProgress,
     synced,
     error,
     permissionBlocked,
@@ -72,6 +73,7 @@ export default function RppgMeasureScreen() {
 
   const busy = [
     'PREPARING',
+    'MODEL_DOWNLOAD',
     'FIND_FACE',
     'POSITION_FACE',
     'ACQUIRING',
@@ -82,8 +84,10 @@ export default function RppgMeasureScreen() {
   ].includes(state);
   const hr = result?.heartRateBpm ?? null;
   const hasResult = state === 'COMPLETE' && result != null && hr != null;
-  const progress =
-    state === 'COMPLETE' || state === 'MEASURING' || state === 'COMPLETING'
+  const isModelDownload = state === 'MODEL_DOWNLOAD';
+  const progress = isModelDownload
+    ? Math.max(0, Math.min(100, modelProgress ?? 0))
+    : state === 'COMPLETE' || state === 'MEASURING' || state === 'COMPLETING'
       ? 100
       : Math.max(0, Math.min(100, (progressFrames / WINDOW_FRAMES) * 100));
 
@@ -126,8 +130,18 @@ export default function RppgMeasureScreen() {
         {busy && (
           <ProgressBar
             segments={progress}
-            label={`Capture progress ${Math.round(progress)} percent`}
+            label={
+              isModelDownload
+                ? `Model download ${Math.round(progress)} percent`
+                : `Capture progress ${Math.round(progress)} percent`
+            }
           />
+        )}
+
+        {isModelDownload && (
+          <Text style={styles.stability}>
+            First use downloads the pulse model once — afterwards it works offline.
+          </Text>
         )}
 
         {liveStability !== null && busy && (

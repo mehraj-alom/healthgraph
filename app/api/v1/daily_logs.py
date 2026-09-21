@@ -191,6 +191,21 @@ def submit_daily_checkin(
     # check-in can never fail the commit with an IntegrityError (500).
     _sanitize_daily_checkin(db, payload)
 
+    # P3: the day's deterministic daily-checkin Visit, shared by every
+    # section below (OCCURRED_DURING grouping instead of a Patient hub).
+    from services.clinical.daily_domains import (
+        checkin_visit,
+        enqueue_checkin_event,
+        project_activity,
+        project_daily_meds_taken,
+        project_notes_statement,
+        project_nutrition,
+        project_sleep,
+        project_symptom_condition,
+    )
+
+    _visit = checkin_visit(db, patient_id, timestamp)
+
     # =========================================================================
     # Wellbeing
     # =========================================================================
@@ -212,15 +227,7 @@ def submit_daily_checkin(
         db.add(event)
         db.flush()
 
-        enqueue_clinical_event(
-            db,
-            event_id=event.event_id,
-            patient_id=patient_id,
-            event_type=event.event_type,
-            source_type=event.source_type,
-            verification_status=event.verification_status,
-            event_time=event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, event, _visit)
 
         db.add(
             WellbeingPayload(
@@ -274,15 +281,7 @@ def submit_daily_checkin(
         db.add(symptom_event)
         db.flush()
 
-        enqueue_clinical_event(
-            db,
-            event_id=symptom_event.event_id,
-            patient_id=patient_id,
-            event_type=symptom_event.event_type,
-            source_type=symptom_event.source_type,
-            verification_status=symptom_event.verification_status,
-            event_time=symptom_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, symptom_event, _visit, concept_id=symptom.concept_id)
 
         db.add(
             SymptomPayload(
@@ -292,6 +291,12 @@ def submit_daily_checkin(
                 notes=symptom.notes,
                 safe_notes=safe_notes,
             )
+        )
+
+        # P3: validated-concept symptom → ConditionOccurrence (USER_REPORTED).
+        project_symptom_condition(
+            db, patient_id, symptom_event, symptom.concept_id,
+            symptom.severity, symptom.duration_minutes, safe_notes, _visit,
         )
 
     # =========================================================================
@@ -310,10 +315,33 @@ def submit_daily_checkin(
             verification_status=VerificationStatus.HUMAN_VERIFIED,
             event_time=timestamp,
             group_id=daily_group_id,
+            polarity="positive",
+            assertion_verification="unconfirmed",
+            experiencer="patient",
         )
 
         db.add(vital_event)
         db.flush()
+
+        # P2: first-class Measurement on the day's shared Visit.
+        from services.clinical.measurements import create_vital_measurement
+
+        _concept = db.get(MedicalConcept, vital.concept_id) if vital.concept_id else None
+        _vital_name = _concept.display_name if _concept else "vital"
+        create_vital_measurement(
+            db,
+            patient_id=patient_id,
+            name=_vital_name,
+            concept_display=_concept.display_name if _concept else None,
+            value_number=vital.value,
+            value_text=str(vital.value) if vital.value is not None else "",
+            unit=vital.unit,
+            terminology=_concept.terminology if _concept else None,
+            code=_concept.code if _concept else None,
+            measured_at=timestamp,
+            source_event_id=vital_event.event_id,
+            visit_id=_visit.visit_id,
+        )
 
         enqueue_clinical_event(
             db,
@@ -323,6 +351,14 @@ def submit_daily_checkin(
             source_type=vital_event.source_type,
             verification_status=vital_event.verification_status,
             event_time=vital_event.event_time,
+            polarity="positive",
+            assertion_verification="unconfirmed",
+            experiencer="patient",
+            concept_id=vital.concept_id,
+            concept_system=_concept.terminology if _concept else None,
+            concept_code=_concept.code if _concept else None,
+            concept_display=_concept.display_name if _concept else None,
+            visit_id=_visit.visit_id,
         )
 
         db.add(
@@ -354,15 +390,7 @@ def submit_daily_checkin(
         db.add(pain_event)
         db.flush()
 
-        enqueue_clinical_event(
-            db,
-            event_id=pain_event.event_id,
-            patient_id=patient_id,
-            event_type=pain_event.event_type,
-            source_type=pain_event.source_type,
-            verification_status=pain_event.verification_status,
-            event_time=pain_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, pain_event, _visit)
 
         db.add(
             PainPayload(
@@ -445,15 +473,7 @@ def submit_daily_checkin(
         db.add(sleep_event)
         db.flush()
 
-        enqueue_clinical_event(
-            db,
-            event_id=sleep_event.event_id,
-            patient_id=patient_id,
-            event_type=sleep_event.event_type,
-            source_type=sleep_event.source_type,
-            verification_status=sleep_event.verification_status,
-            event_time=sleep_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, sleep_event, _visit)
 
         db.add(
             SleepPayload(
@@ -462,6 +482,13 @@ def submit_daily_checkin(
                 sleep_quality=payload.sleep.sleep_quality,
                 awakenings=payload.sleep.awakenings,
             )
+        )
+
+        # P3: first-class SleepEpisode (only collected fields, USER_REPORTED).
+        project_sleep(
+            db, patient_id, sleep_event,
+            payload.sleep.duration_minutes, payload.sleep.sleep_quality,
+            payload.sleep.awakenings, _visit,
         )
 
     # =========================================================================
@@ -485,15 +512,7 @@ def submit_daily_checkin(
         db.add(activity_event)
         db.flush()
 
-        enqueue_clinical_event(
-            db,
-            event_id=activity_event.event_id,
-            patient_id=patient_id,
-            event_type=activity_event.event_type,
-            source_type=activity_event.source_type,
-            verification_status=activity_event.verification_status,
-            event_time=activity_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, activity_event, _visit)
 
         db.add(
             ActivityPayload(
@@ -502,6 +521,13 @@ def submit_daily_checkin(
                 duration_minutes=activity.duration_minutes,
                 calories_burned=activity.calories_burned,
             )
+        )
+
+        # P3: first-class ActivityEvent (only collected fields, USER_REPORTED).
+        project_activity(
+            db, patient_id, activity_event,
+            activity.activity_type, activity.duration_minutes,
+            activity.calories_burned, _visit,
         )
 
     # =========================================================================
@@ -525,15 +551,7 @@ def submit_daily_checkin(
         db.add(nutrition_event)
         db.flush()
 
-        enqueue_clinical_event(
-            db,
-            event_id=nutrition_event.event_id,
-            patient_id=patient_id,
-            event_type=nutrition_event.event_type,
-            source_type=nutrition_event.source_type,
-            verification_status=nutrition_event.verification_status,
-            event_time=nutrition_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, nutrition_event, _visit)
 
         db.add(
             NutritionPayload(
@@ -547,6 +565,16 @@ def submit_daily_checkin(
                 food_label=(payload.nutrition.food_label or None)
                 and payload.nutrition.food_label[:255],
             )
+        )
+
+        # P3: first-class NutritionIntake (aggregate fields as collected).
+        project_nutrition(
+            db, patient_id, nutrition_event,
+            payload.nutrition.water_ml, payload.nutrition.meals_count,
+            payload.nutrition.appetite_level, payload.nutrition.calories_kcal,
+            (payload.nutrition.food_label or None)
+            and payload.nutrition.food_label[:255],
+            _visit,
         )
 
     # =========================================================================
@@ -570,15 +598,7 @@ def submit_daily_checkin(
         db.add(medication_event)
         db.flush()
 
-        enqueue_clinical_event(
-            db,
-            event_id=medication_event.event_id,
-            patient_id=patient_id,
-            event_type=medication_event.event_type,
-            source_type=medication_event.source_type,
-            verification_status=medication_event.verification_status,
-            event_time=medication_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, medication_event, _visit)
 
         db.add(
             MedicationTakenPayload(
@@ -587,6 +607,14 @@ def submit_daily_checkin(
                 dosage_value=medication.dosage_value,
                 dosage_unit=medication.dosage_unit,
             )
+        )
+
+        # P3: daily free-text med → TakenEvent by canonical NAME only (no
+        # regimen evidence → no RESULTS_FROM, no adherence impact).
+        project_daily_meds_taken(
+            db, patient_id, medication_event,
+            medication.medication_name, medication.dosage_value,
+            medication.dosage_unit, _visit,
         )
 
     # =========================================================================
@@ -633,15 +661,7 @@ def submit_daily_checkin(
         db.add(note_event)
         db.flush()
 
-        enqueue_clinical_event(
-            db,
-            event_id=note_event.event_id,
-            patient_id=patient_id,
-            event_type=note_event.event_type,
-            source_type=note_event.source_type,
-            verification_status=note_event.verification_status,
-            event_time=note_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, note_event, _visit)
 
         db.add(
             PatientNotePayload(
@@ -649,6 +669,9 @@ def submit_daily_checkin(
                 safe_notes=result.text,
             )
         )
+
+        # P3: journal note → PatientStatement (verbatim, USER_REPORTED).
+        project_notes_statement(db, patient_id, result.text, _visit, event=note_event)
 
     # =========================================================================
     # Store idempotency key INSIDE the transaction before commit
@@ -719,13 +742,10 @@ def submit_daily_checkin(
         ),
     }
 
-    # Store idempotency key if provided
-    if idempotency_key:
-        store_idempotency_key(
-            db, patient_id, idempotency_key, "submit_daily_checkin",
-            request_hash, 200, response,
-        )
-        db.commit()
+    # P7: the idempotency key was already stored pre-commit above (atomic
+    # with the mutation; store is ON CONFLICT DO NOTHING). Do not store or
+    # commit twice — the second write was redundant and added a failure
+    # window after the response was built.
 
     return response
 
@@ -999,10 +1019,57 @@ def update_daily_checkin(
             detail="Cannot replace events that have anatomical observations.",
         )
 
+    # P4 correction consistency: dependent first-class rows keyed 1:1 to the
+    # replaced events are removed here so the delete below cannot hit FK
+    # violations (Measurement.source_event_id has no CASCADE) and cannot
+    # leave orphaned projections. They are recreated by the section logic
+    # below. Shared/deduped rows are NOT deleted: ConditionOccurrence rows
+    # are relinked to the replacement event (see symptom section).
+    # P5: collect the doomed Neo4j node ids BEFORE deleting (the scope
+    # deletes below would make them unqueryable); retirement events are
+    # enqueued with the event deletes further down.
+    from models.measurements import Measurement
+    from models.statements import PatientStatement
+
+    _retire_measurement_ids = [
+        m.measurement_id
+        for m in db.query(Measurement).filter(Measurement.source_event_id.in_(event_ids)).all()
+    ]
+    _retire_statement_ids = [
+        s.statement_id
+        for s in db.query(PatientStatement).filter(PatientStatement.source_event_id.in_(event_ids)).all()
+    ]
+    db.query(Measurement).filter(Measurement.source_event_id.in_(event_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(PatientStatement).filter(PatientStatement.source_event_id.in_(event_ids)).delete(
+        synchronize_session=False
+    )
+
     # -----------------------------------------------------------------------
     # Delete existing events in the group
     # (payloads cascade-delete via foreign key on event_id)
+    # P5: enqueue retirement events for the replaced Neo4j nodes so the
+    # worker detaches them instead of leaving orphans. Label mapping mirrors
+    # the projections: domain nodes share the ClinicalEvent id; measurements
+    # and statements carry their own ids (collected above).
     # -----------------------------------------------------------------------
+    from models.outbox import enqueue_graph_node_retired
+
+    _retire_label_by_type = {
+        EventType.SLEEP_LOG: "SleepEpisode",
+        EventType.ACTIVITY_LOG: "ActivityEvent",
+        EventType.NUTRITION_LOG: "NutritionIntake",
+        EventType.MEDICATION_TAKEN: "MedicationTakenEvent",
+    }
+    _retire_ids: list[tuple[str, uuid.UUID]] = [
+        (_retire_label_by_type.get(e.event_type, "TimelineEvent"), e.event_id)
+        for e in existing_events
+    ]
+    _retire_ids += [("Measurement", _mid) for _mid in _retire_measurement_ids]
+    _retire_ids += [("PatientStatement", _sid) for _sid in _retire_statement_ids]
+    for _label, _nid in _retire_ids:
+        enqueue_graph_node_retired(db, patient_id, _label, _nid, reason="daily-log-correction")
     for event in existing_events:
         db.delete(event)
     db.flush()
@@ -1043,6 +1110,20 @@ def update_daily_checkin(
     # update can never fail the commit with an IntegrityError (500).
     _sanitize_daily_checkin(db, payload)
 
+    # P3: same day-visit discipline as the create path (see above).
+    from services.clinical.daily_domains import (
+        checkin_visit,
+        enqueue_checkin_event,
+        project_activity,
+        project_daily_meds_taken,
+        project_notes_statement,
+        project_nutrition,
+        project_sleep,
+        project_symptom_condition,
+    )
+
+    _visit = checkin_visit(db, patient_id, timestamp)
+
     # Wellbeing
     if any(value is not None for value in (payload.overall_wellbeing, payload.energy_level, payload.stress_level)):
         event_id = uuid.uuid4()
@@ -1054,11 +1135,7 @@ def update_daily_checkin(
         )
         db.add(event)
         db.flush()
-        enqueue_clinical_event(
-            db, event_id=event.event_id, patient_id=patient_id,
-            event_type=event.event_type, source_type=event.source_type,
-            verification_status=event.verification_status, event_time=event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, event, _visit)
         db.add(WellbeingPayload(
             event_id=event_id,
             overall_wellbeing=payload.overall_wellbeing,
@@ -1084,15 +1161,17 @@ def update_daily_checkin(
         )
         db.add(symptom_event)
         db.flush()
-        enqueue_clinical_event(
-            db, event_id=symptom_event.event_id, patient_id=patient_id,
-            event_type=symptom_event.event_type, source_type=symptom_event.source_type,
-            verification_status=symptom_event.verification_status, event_time=symptom_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, symptom_event, _visit, concept_id=symptom.concept_id)
         db.add(SymptomPayload(
             event_id=symptom_event_id, severity=symptom.severity,
             duration_minutes=symptom.duration_minutes, notes=symptom.notes, safe_notes=safe_notes,
         ))
+        # P3 (PUT parity): symptom → ConditionOccurrence.
+        project_symptom_condition(
+            db, patient_id, symptom_event, symptom.concept_id,
+            symptom.severity, symptom.duration_minutes, safe_notes, _visit,
+            relink=True,
+        )
 
     # Vitals
     for vital in payload.vitals:
@@ -1105,12 +1184,28 @@ def update_daily_checkin(
         )
         db.add(vital_event)
         db.flush()
-        enqueue_clinical_event(
-            db, event_id=vital_event.event_id, patient_id=patient_id,
-            event_type=vital_event.event_type, source_type=vital_event.source_type,
-            verification_status=vital_event.verification_status, event_time=vital_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, vital_event, _visit, concept_id=vital.concept_id)
         db.add(VitalSignPayload(event_id=vital_event_id, value=vital.value, unit=vital.unit))
+        # P4: POST parity — the replacement vital gets a fresh Measurement
+        # (the old row was scope-deleted above; same-day dedup is by
+        # series_key + measured_at at read time, not by row identity).
+        from services.clinical.measurements import create_vital_measurement as _create_vital
+
+        _concept = db.get(MedicalConcept, vital.concept_id) if vital.concept_id else None
+        _create_vital(
+            db,
+            patient_id=patient_id,
+            name=_concept.display_name if _concept else "vital",
+            concept_display=_concept.display_name if _concept else None,
+            value_number=vital.value,
+            value_text=str(vital.value) if vital.value is not None else "",
+            unit=vital.unit,
+            terminology=_concept.terminology if _concept else None,
+            code=_concept.code if _concept else None,
+            measured_at=timestamp,
+            source_event_id=vital_event.event_id,
+            visit_id=_visit.visit_id,
+        )
 
     # Pain
     for pain in payload.pain:
@@ -1123,11 +1218,7 @@ def update_daily_checkin(
         )
         db.add(pain_event)
         db.flush()
-        enqueue_clinical_event(
-            db, event_id=pain_event.event_id, patient_id=patient_id,
-            event_type=pain_event.event_type, source_type=pain_event.source_type,
-            verification_status=pain_event.verification_status, event_time=pain_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, pain_event, _visit)
         db.add(PainPayload(
             event_id=pain_event_id, body_location_id=pain.body_location_id,
             severity=pain.severity, pain_type=pain.pain_type,
@@ -1165,15 +1256,17 @@ def update_daily_checkin(
         )
         db.add(sleep_event)
         db.flush()
-        enqueue_clinical_event(
-            db, event_id=sleep_event.event_id, patient_id=patient_id,
-            event_type=sleep_event.event_type, source_type=sleep_event.source_type,
-            verification_status=sleep_event.verification_status, event_time=sleep_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, sleep_event, _visit)
         db.add(SleepPayload(
             event_id=sleep_event_id, duration_minutes=payload.sleep.duration_minutes,
             sleep_quality=payload.sleep.sleep_quality, awakenings=payload.sleep.awakenings,
         ))
+        # P3 (PUT parity): SleepEpisode.
+        project_sleep(
+            db, patient_id, sleep_event,
+            payload.sleep.duration_minutes, payload.sleep.sleep_quality,
+            payload.sleep.awakenings, _visit,
+        )
 
     # Activities
     for activity in payload.activities:
@@ -1186,15 +1279,17 @@ def update_daily_checkin(
         )
         db.add(activity_event)
         db.flush()
-        enqueue_clinical_event(
-            db, event_id=activity_event.event_id, patient_id=patient_id,
-            event_type=activity_event.event_type, source_type=activity_event.source_type,
-            verification_status=activity_event.verification_status, event_time=activity_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, activity_event, _visit)
         db.add(ActivityPayload(
             event_id=activity_event_id, activity_type=activity.activity_type,
             duration_minutes=activity.duration_minutes, calories_burned=activity.calories_burned,
         ))
+        # P3 (PUT parity): ActivityEvent.
+        project_activity(
+            db, patient_id, activity_event,
+            activity.activity_type, activity.duration_minutes,
+            activity.calories_burned, _visit,
+        )
 
     # Nutrition
     if payload.nutrition is not None:
@@ -1207,11 +1302,7 @@ def update_daily_checkin(
         )
         db.add(nutrition_event)
         db.flush()
-        enqueue_clinical_event(
-            db, event_id=nutrition_event.event_id, patient_id=patient_id,
-            event_type=nutrition_event.event_type, source_type=nutrition_event.source_type,
-            verification_status=nutrition_event.verification_status, event_time=nutrition_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, nutrition_event, _visit)
         db.add(NutritionPayload(
             event_id=nutrition_event_id, water_ml=payload.nutrition.water_ml,
             meals_count=payload.nutrition.meals_count, appetite_level=payload.nutrition.appetite_level,
@@ -1219,6 +1310,15 @@ def update_daily_checkin(
             food_label=(payload.nutrition.food_label or None)
             and payload.nutrition.food_label[:255],
         ))
+        # P3 (PUT parity): NutritionIntake.
+        project_nutrition(
+            db, patient_id, nutrition_event,
+            payload.nutrition.water_ml, payload.nutrition.meals_count,
+            payload.nutrition.appetite_level, payload.nutrition.calories_kcal,
+            (payload.nutrition.food_label or None)
+            and payload.nutrition.food_label[:255],
+            _visit,
+        )
 
     # Medications
     for medication in payload.medications:
@@ -1231,15 +1331,17 @@ def update_daily_checkin(
         )
         db.add(medication_event)
         db.flush()
-        enqueue_clinical_event(
-            db, event_id=medication_event.event_id, patient_id=patient_id,
-            event_type=medication_event.event_type, source_type=medication_event.source_type,
-            verification_status=medication_event.verification_status, event_time=medication_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, medication_event, _visit)
         db.add(MedicationTakenPayload(
             event_id=medication_event_id, medication_name=medication.medication_name,
             dosage_value=medication.dosage_value, dosage_unit=medication.dosage_unit,
         ))
+        # P3 (PUT parity): daily free-text med → name-linked TakenEvent.
+        project_daily_meds_taken(
+            db, patient_id, medication_event,
+            medication.medication_name, medication.dosage_value,
+            medication.dosage_unit, _visit,
+        )
 
     # Daily Note
     daily_note = getattr(payload, "notes", None)
@@ -1256,12 +1358,10 @@ def update_daily_checkin(
         )
         db.add(note_event)
         db.flush()
-        enqueue_clinical_event(
-            db, event_id=note_event.event_id, patient_id=patient_id,
-            event_type=note_event.event_type, source_type=note_event.source_type,
-            verification_status=note_event.verification_status, event_time=note_event.event_time,
-        )
+        enqueue_checkin_event(db, patient_id, note_event, _visit)
         db.add(PatientNotePayload(event_id=note_event_id, safe_notes=result.text))
+        # P3 (PUT parity): journal note → PatientStatement.
+        project_notes_statement(db, patient_id, result.text, _visit, event=note_event)
 
     # Store idempotency key INSIDE the transaction before commit
     # This ensures atomicity: either both the mutation and idempotency key

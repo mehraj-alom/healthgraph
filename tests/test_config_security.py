@@ -38,6 +38,9 @@ class TestProductionGates:
         monkeypatch.setenv("APP_ENV", "production")
         _clear_firebase_json(monkeypatch)
         monkeypatch.setenv("FIREBASE_CREDENTIALS_PATH", str(creds))
+        # P7 gates: production also requires non-local DB + real USDA key.
+        monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@db.internal:5432/medgraph_db")
+        monkeypatch.setenv("USDA_API_KEY", "prod-key")
         s = Settings(secret_key="a-real-secret-not-the-default")
         assert s.APP_ENV == "production"
 
@@ -45,8 +48,33 @@ class TestProductionGates:
         monkeypatch.setenv("APP_ENV", "production")
         monkeypatch.setenv("FIREBASE_CREDENTIALS_JSON", '{"type": "service_account"}')
         monkeypatch.delenv("FIREBASE_CREDENTIALS_PATH", raising=False)
+        monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@db.internal:5432/medgraph_db")
+        monkeypatch.setenv("USDA_API_KEY", "prod-key")
         s = Settings(secret_key="a-real-secret-not-the-default")
         assert s.APP_ENV == "production"
+
+    def test_production_refuses_localhost_database(self, monkeypatch, tmp_path):
+        creds = tmp_path / "creds.json"
+        creds.write_text("{}")
+        monkeypatch.setenv("APP_ENV", "production")
+        _clear_firebase_json(monkeypatch)
+        monkeypatch.setenv("FIREBASE_CREDENTIALS_PATH", str(creds))
+        monkeypatch.setenv("DATABASE_URL", "postgresql://medgraph:password@localhost:5432/medgraph_db")
+        monkeypatch.setenv("USDA_API_KEY", "prod-key")
+        with pytest.raises(RuntimeError) as exc:
+            Settings(secret_key="a-real-secret-not-the-default")
+        assert "localhost" not in str(exc.value)
+
+    def test_production_refuses_demo_usda_key(self, monkeypatch, tmp_path):
+        creds = tmp_path / "creds.json"
+        creds.write_text("{}")
+        monkeypatch.setenv("APP_ENV", "production")
+        _clear_firebase_json(monkeypatch)
+        monkeypatch.setenv("FIREBASE_CREDENTIALS_PATH", str(creds))
+        monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@db.internal:5432/medgraph_db")
+        monkeypatch.setenv("USDA_API_KEY", "DEMO_KEY")
+        with pytest.raises(RuntimeError):
+            Settings(secret_key="a-real-secret-not-the-default")
 
     def test_dev_secret_allowed_in_local_and_preview(self, monkeypatch):
         monkeypatch.setenv("FIREBASE_CREDENTIALS_PATH", "/nonexistent/creds.json")

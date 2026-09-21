@@ -154,6 +154,17 @@ class Settings(BaseSettings):
     USDA_API_KEY: str = "DEMO_KEY"
 
     # ─────────────────────────────────────────────────────────────────────
+    # P0 knowledge-graph flags.
+    #
+    # GRAPH_CONCEPT_EDGES_ENABLED: when True, the graph_sync worker also
+    # projects (Event)-[:HAS_CODE]->(Concept {system, code}) edges for
+    # normalized mentions. Concept nodes are shared reference data (like
+    # AnatomicalStructure) and are TERMINAL for traversal — see
+    # app/api/v1/health_graph.py. Default False until terminology coverage
+    # is validated.
+    # ─────────────────────────────────────────────────────────────────────
+    GRAPH_CONCEPT_EDGES_ENABLED: bool = False
+    # ─────────────────────────────────────────────────────────────────────
     # Production start-up gates.
     #
     # The development fallbacks (secret_key="dev-secret-key", missing
@@ -199,6 +210,20 @@ class Settings(BaseSettings):
                 "credentials are not configured. Set FIREBASE_CREDENTIALS_JSON "
                 "(inline service-account JSON) or FIREBASE_CREDENTIALS_PATH "
                 "(path to the mounted service-account file)."
+            )
+
+        # P7: development database/lookup defaults must never reach
+        # production (localhost PG, USDA demo key). Messages name variables
+        # only — never values.
+        if "localhost" in (self.DATABASE_URL or "") or "127.0.0.1" in (self.DATABASE_URL or ""):
+            _production_validation_error(
+                "Production startup refused: DATABASE_URL points at a local "
+                "database. Set the managed production DATABASE_URL."
+            )
+        if (self.USDA_API_KEY or "").strip().upper() in ("", "DEMO_KEY"):
+            _production_validation_error(
+                "Production startup refused: USDA_API_KEY is unset or the "
+                "demo key. Set a production USDA_API_KEY."
             )
 
 

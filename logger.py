@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
@@ -11,10 +12,16 @@ formatter = logging.Formatter(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+# P7: DEBUG file+console logging is a local-development posture (verbose
+# disk growth, higher PHI-adjacent spill risk). Non-local environments log
+# at INFO. Determined once at import from APP_ENV (no settings import to
+# avoid a config cycle at logger load time).
+_LOG_LEVEL = logging.DEBUG if os.getenv("APP_ENV", "local") == "local" else logging.INFO
+
 # Console handler 
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(formatter)
-console_handler.setLevel(logging.DEBUG)
+console_handler.setLevel(_LOG_LEVEL)
 
 #Main system log (ALL logs) 
 main_file_handler = RotatingFileHandler(
@@ -24,11 +31,11 @@ main_file_handler = RotatingFileHandler(
     encoding="utf-8"
 )
 main_file_handler.setFormatter(formatter)
-main_file_handler.setLevel(logging.DEBUG)
+main_file_handler.setLevel(_LOG_LEVEL)
 
 #Root logger ==
 logger = logging.getLogger("healthline")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(_LOG_LEVEL)
 logger.addHandler(console_handler)
 logger.addHandler(main_file_handler)
 logger.propagate = False

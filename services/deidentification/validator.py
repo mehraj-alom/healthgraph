@@ -14,12 +14,20 @@ class LeakageValidator:
         "SSN": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
     }
 
-    def validate(self, text: str) -> ValidationResult:
+    def validate(self, text: str, extra_names: list[str] | None = None) -> ValidationResult:
         errors = []
         for name, pattern in self.PATTERNS.items():
             if pattern.search(text):
                 errors.append(f"Potential {name} detected")
-        
+        # P8.1: known-identifier backstop. Values never enter error
+        # strings (callers log them); a hit means redaction missed.
+        for variant in extra_names or []:
+            if not variant:
+                continue
+            if re.search(re.escape(variant), text, re.IGNORECASE):
+                errors.append("Potential known-identifier leakage detected")
+                break
+
         return ValidationResult(
             passed=len(errors) == 0,
             errors=errors,

@@ -1,9 +1,36 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
 
+export type GraphNodeType =
+  | 'patient'
+  | 'body_structure'
+  | 'observation'
+  | 'document'
+  | 'timeline_event'
+  | 'medication'
+  | 'medication_taken_event'
+  // P0 Concept-lite (shared terminology reference, terminal for traversal).
+  | 'concept'
+  // P1 clinical graph expansion.
+  | 'medication_request'
+  | 'condition_occurrence'
+  | 'visit'
+  | 'patient_statement'
+  | 'medication_canonical'
+  // P2 measurement split + regimen versions.
+  | 'measurement'
+  | 'medication_version'
+  // P3 longitudinal personal-health domains.
+  | 'sleep_episode'
+  | 'activity_event'
+  | 'nutrition_intake'
+  | 'food_scan'
+  | 'food_entry'
+  | 'ppg_measurement';
+
 export interface GraphNode {
   id: string;
-  type: 'patient' | 'body_structure' | 'observation' | 'document' | 'timeline_event' | 'medication' | 'medication_taken_event';
+  type: GraphNodeType | string;
   label: string;
   properties: Record<string, any>;
 }
@@ -26,10 +53,60 @@ export interface HealthGraphData {
   has_more: boolean;
 }
 
+/** Provenance object attached to clinical answers (mirrors backend Citation). */
+export interface GraphCitation {
+  node_id?: string | null;
+  observation_id?: string | null;
+  event_id?: string | null;
+  document_id?: string | null;
+  page_number?: number | null;
+  quote?: string | null;
+  verification_status?: string | null;
+  source_type?: string | null;
+  evidence_level?: string | null;
+  concept_display_name?: string | null;
+  prescriber?: string | null;
+  storage_url?: string | null;
+}
+
+/** Evidence tier badge. The UI must render these distinctly — AI-inferred
+ *  content must never look equivalent to source facts. */
+export type EvidenceBadge =
+  | 'CONFIRMED / SOURCE-STATED'
+  | 'USER-REPORTED'
+  | 'SYSTEM-DERIVED'
+  | 'AI-INFERRED'
+  | 'UNVERIFIED'
+  | 'SOURCE_FACT'
+  | 'NORMALIZED'
+  | string;
+
+/** Rich node-detail contract (mirrors backend NodeDetailPayload). Absent
+ *  fields are null — never invented. Rendered when present; the legacy
+ *  property passthrough remains the fallback when detail is null. */
+export interface NodeDetailPayload {
+  summary?: string | null;
+  canonical_name?: string | null;
+  original_text?: string | null;
+  structured_fields?: Record<string, any>;
+  status?: Record<string, any>;
+  verification?: Record<string, any>;
+  timestamps?: Record<string, any>;
+  relationships?: Array<{ predicate?: string; target_id?: string; target_type?: string; evidence_level?: string }>;
+  source?: Record<string, any>;
+  evidence?: Record<string, any>;
+  confidence?: number | null;
+  provenance?: Record<string, any>;
+  evidence_badge?: EvidenceBadge | null;
+  citations?: GraphCitation[];
+  linked?: Record<string, { id: string; label: string }[]>;
+}
+
 export interface GraphNodeDetail {
   node: GraphNode;
   connected_nodes: GraphNode[];
   connected_edges: GraphEdge[];
+  detail?: NodeDetailPayload | null;
 }
 
 export function useHealthGraph(options?: {

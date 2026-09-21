@@ -94,6 +94,23 @@ def record_anatomical_observation(db: Session, observation: AnatomicalObservatio
     
     db.execute(stmt)
 
+    # P1: carry P0 assertion fields into the outbox payload (previously
+    # dropped here, so projected Observations defaulted to positive) and
+    # attach the deterministic Visit for OCCURRED_DURING grouping.
+    from models.visits import VisitType
+    from services.clinical.occurrences import get_or_create_visit
+
+    _source = observation.source_type.value if hasattr(observation.source_type, "value") else str(observation.source_type)
+    _visit_type = (
+        VisitType.DOCUMENT
+        if _source in ("LAB_REPORT", "lab_report", "IMAGING_REPORT", "imaging_report")
+        else VisitType.DAILY_CHECKIN
+        if _source == "PATIENT_REPORTED"
+        else VisitType.MANUAL
+    )
+    _visit_source = str(observation.document_id) if observation.document_id else _source
+    visit = get_or_create_visit(db, observation.patient_id, observation.recorded_at, _visit_type, source=_visit_source)
+
     payload = {
         "patient_id": str(observation.patient_id),
         "observation_id": str(observation.observation_id),
@@ -103,6 +120,10 @@ def record_anatomical_observation(db: Session, observation: AnatomicalObservatio
         "recorded_at": observation.recorded_at.isoformat(),
         "source_type": observation.source_type.value,
         "level_number": int(observation.recorded_at.strftime("%Y%m%d")),
+        "polarity": observation.polarity or "positive",
+        "experiencer": observation.experiencer or "patient",
+        "source_snippet": observation.source_snippet,
+        "visit_id": str(visit.visit_id),
     }
     if observation.document_id is not None:
         payload["document_id"] = str(observation.document_id)

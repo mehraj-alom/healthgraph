@@ -256,7 +256,19 @@ def create_medication(
     
     db.add(medication)
     db.flush()
-    
+
+    # P1: derive purpose condition + reason statement (prescribed purpose
+    # != patient-stated reason — see services/clinical/occurrences.py).
+    from services.clinical.occurrences import sync_medication_graph_context
+
+    sync_medication_graph_context(db, medication)
+    _purpose_name = None
+    if medication.purpose_condition_id is not None:
+        from models.conditions import ConditionOccurrence as _ConditionOccurrence
+
+        _cond = db.get(_ConditionOccurrence, medication.purpose_condition_id)
+        _purpose_name = _cond.name if _cond else medication.purpose
+
     # Enqueue for graph sync
     enqueue_medication(
         db,
@@ -281,6 +293,11 @@ def create_medication(
         prn=medication.prn,
         reminder_enabled=medication.reminder_enabled,
         notes=medication.notes,
+        source_document_id=medication.source_document_id,
+        purpose_condition_id=medication.purpose_condition_id,
+        purpose_condition_name=_purpose_name,
+        reason_statement_id=medication.reason_statement_id,
+        pg_updated_at=medication.updated_at.isoformat() if medication.updated_at else None,
     )
     
     # Store idempotency key INSIDE the transaction before commit
@@ -339,12 +356,30 @@ def update_medication(
     
     if not medication:
         raise HTTPException(status_code=404, detail="Medication not found")
-    
+
+    # P2: snapshot the pre-change regimen first (append-only history; the
+    # live row keeps its identity so existing graph edges stay valid).
+    from services.clinical.versions import snapshot_before_mutation
+
+    snapshot_before_mutation(db, medication, change_reason="update")
+
     # Update fields that are provided
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(medication, field, value)
-    
+
+    # P1: re-sync purpose condition / reason statement (purpose may change;
+    # stale links are unlinked, history rows kept).
+    from services.clinical.occurrences import sync_medication_graph_context
+
+    sync_medication_graph_context(db, medication)
+    _purpose_name = None
+    if medication.purpose_condition_id is not None:
+        from models.conditions import ConditionOccurrence as _ConditionOccurrence
+
+        _cond = db.get(_ConditionOccurrence, medication.purpose_condition_id)
+        _purpose_name = _cond.name if _cond else medication.purpose
+
     # Enqueue for graph sync
     enqueue_medication(
         db,
@@ -369,6 +404,11 @@ def update_medication(
         prn=medication.prn,
         reminder_enabled=medication.reminder_enabled,
         notes=medication.notes,
+        source_document_id=medication.source_document_id,
+        purpose_condition_id=medication.purpose_condition_id,
+        purpose_condition_name=_purpose_name,
+        reason_statement_id=medication.reason_statement_id,
+        pg_updated_at=medication.updated_at.isoformat() if medication.updated_at else None,
     )
     
     db.commit()
@@ -395,10 +435,26 @@ def delete_medication(
     
     if not medication:
         raise HTTPException(status_code=404, detail="Medication not found")
-    
+
+    # P2: snapshot the active regimen before discontinuing.
+    from services.clinical.versions import snapshot_before_mutation
+
+    snapshot_before_mutation(db, medication, change_reason="discontinued")
+
     medication.status = MedicationStatus.DISCONTINUED
     medication.end_date = date.today()
-    
+
+    # P1: re-sync graph context (status change re-projects the request).
+    from services.clinical.occurrences import sync_medication_graph_context
+
+    sync_medication_graph_context(db, medication)
+    _purpose_name = None
+    if medication.purpose_condition_id is not None:
+        from models.conditions import ConditionOccurrence as _ConditionOccurrence
+
+        _cond = db.get(_ConditionOccurrence, medication.purpose_condition_id)
+        _purpose_name = _cond.name if _cond else medication.purpose
+
     # Enqueue for graph sync
     enqueue_medication(
         db,
@@ -423,6 +479,11 @@ def delete_medication(
         prn=medication.prn,
         reminder_enabled=medication.reminder_enabled,
         notes=medication.notes,
+        source_document_id=medication.source_document_id,
+        purpose_condition_id=medication.purpose_condition_id,
+        purpose_condition_name=_purpose_name,
+        reason_statement_id=medication.reason_statement_id,
+        pg_updated_at=medication.updated_at.isoformat() if medication.updated_at else None,
     )
     
     db.commit()
@@ -509,7 +570,13 @@ def record_medication_taken(
     
     # Link the taken event to the clinical event
     taken_event.clinical_event_id = clinical_event.event_id
-    
+
+    # P1: deterministic daily-checkin Visit for OCCURRED_DURING grouping.
+    from models.visits import VisitType
+    from services.clinical.occurrences import get_or_create_visit
+
+    _taken_visit = get_or_create_visit(db, patient_id, taken_at, VisitType.DAILY_CHECKIN, source="medication-taken")
+
     # Enqueue for graph sync
     enqueue_clinical_event(
         db,
@@ -519,8 +586,12 @@ def record_medication_taken(
         source_type=clinical_event.source_type,
         verification_status=clinical_event.verification_status,
         event_time=clinical_event.event_time,
+        polarity="positive",
+        assertion_verification="unconfirmed",
+        experiencer="patient",
+        visit_id=_taken_visit.visit_id,
     )
-    
+
     # Also enqueue the medication taken event for richer graph
     enqueue_medication_taken(
         db,
@@ -533,6 +604,7 @@ def record_medication_taken(
         dose_unit=taken_event.dose_unit,
         status=taken_event.status.value,
         notes=taken_event.notes,
+        visit_id=_taken_visit.visit_id,
     )
     
     # Store idempotency key INSIDE the transaction before commit

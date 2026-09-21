@@ -156,6 +156,11 @@ activemq-data/
 # Environments
 .env
 .envrc
+# P7: Firebase service-account credentials must never be accidentally
+# staged (production auth material lives here on disk but untracked).
+firebase_credentials.json
+firebase-adminsdk.json
+*-adminsdk.json
 .venv
 env/
 venv/
@@ -248,3 +253,8 @@ storage/documents/
 tests/__pycache__/
 .claude
 agent/skills/*
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.csv

@@ -25,5 +25,11 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        # P7: never return a failed transaction to the pool without
+        # rolling back — a failed flush/commit would otherwise poison the
+        # next borrower of this pooled connection.
+        db.rollback()
+        raise
     finally:
         db.close()

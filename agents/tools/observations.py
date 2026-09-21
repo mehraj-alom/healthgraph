@@ -8,6 +8,14 @@ from sqlalchemy.orm import Session
 from core.db import SessionLocal
 from core.neo4j_client import neo4j_driver
 from models.anatomy import AnatomicalObservation, AnatomicalStructure
+# P15 / D2: statements live in the template registry and are executed through
+# the runtime safety gate, so inline Cypher cannot bypass terminal-label
+# protection.
+from services.retrieval.templates import (
+    CYPHER_OBS_FOR_STRUCTURE,
+    CYPHER_OBS_FOR_STRUCTURE_EXACT,
+    run_patient_cypher,
+)
 
 def _get_related_observations(
     patient_id: uuid.UUID, 
@@ -30,22 +38,20 @@ def _get_related_observations(
 
     patient_id_str = str(patient_id)
     
-    #Topological Routing (Neo4j)
+    # Topological Routing (Neo4j)
     if include_descendants:
-        cypher = """
-        MATCH (p:Patient {id: $patient_id})-[:HAS_OBSERVATION]->(o:Observation)-[:AFFECTS]->(struct:AnatomicalStructure)
-        MATCH (target:AnatomicalStructure {id: $structure_id})-[:CONTAINS*0..]->(struct)
-        RETURN DISTINCT o.id AS observation_id
-        """
+        cypher, statement_id = CYPHER_OBS_FOR_STRUCTURE, "T-OBS"
     else:
-        cypher = """
-        MATCH (p:Patient {id: $patient_id})-[:HAS_OBSERVATION]->(o:Observation)-[:AFFECTS]->(struct:AnatomicalStructure {id: $structure_id})
-        RETURN DISTINCT o.id AS observation_id
-        """
-    
+        cypher, statement_id = CYPHER_OBS_FOR_STRUCTURE_EXACT, "T-OBS-EXACT"
+
     obs_ids = []
     with driver.session() as session:
-        result = session.run(cypher, patient_id=patient_id_str, structure_id=structure_id)
+        result = run_patient_cypher(
+            session,
+            cypher,
+            {"patient_id": patient_id_str, "structure_id": structure_id},
+            statement_id=statement_id,
+        )
         obs_ids = [uuid.UUID(record["observation_id"]) for record in result]
         
     if not obs_ids:
@@ -63,20 +69,29 @@ def _get_related_observations(
     )
     
     observations = db.execute(stmt).scalars().all()
-    
+
+    # P7: per-row citation so the synthesizer can cite rows from this
+    # tool without inventing references (list shape unchanged).
     return [
-        {
-            "observation_id": str(obs.observation_id),
-            "structure_id": obs.structure_id,
-            "finding_code": obs.finding_code,
-            "finding_display_name": obs.finding_display_name,
-            "visual_severity_score": obs.visual_severity_score,
-            "trend": obs.trend.value,
-            "source_type": obs.source_type.value,
-            "clinical_summary": obs.clinical_summary,
-            "recorded_at": obs.recorded_at.isoformat()
-        }
-        for obs in observations
+            {
+                "observation_id": str(obs.observation_id),
+                "structure_id": obs.structure_id,
+                "finding_code": obs.finding_code,
+                "finding_display_name": obs.finding_display_name,
+                "visual_status": obs.visual_status.value,
+                "visual_severity_score": obs.visual_severity_score,
+                "trend": obs.trend.value,
+                "source_type": obs.source_type.value,
+                "clinical_summary": obs.clinical_summary,
+                "recorded_at": obs.recorded_at.isoformat() if obs.recorded_at else None,
+                "event_id": str(obs.event_id) if obs.event_id else None,
+                "document_id": str(obs.document_id) if obs.document_id else None,
+                "polarity": obs.polarity,
+                "experiencer": obs.experiencer,
+                "citations": [{"node_id": f"observation:{obs.observation_id}",
+                               "observation_id": str(obs.observation_id)}],
+            }
+            for obs in observations
     ]
 
 @tool

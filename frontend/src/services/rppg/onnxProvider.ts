@@ -59,20 +59,8 @@ export interface OnnxRppgProviderOptions {
 
 /**
  * Metro requires statically-analyzable require calls: every runtime
- * dependency below uses a LITERAL specifier inside try/catch. Bundling
- * always includes them; on runtimes without the native side (Expo Go,
- * web, node tests) the native-module presence probe fails first and the
- * provider degrades to unavailable without ever requiring the ORT
- * package — the app never crashes.
+ * dependency below uses a LITERAL specifier inside try/catch.
  */
-function loadExpoAsset(): unknown {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('expo-asset');
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Expo Go hosts no custom native modules: onnxruntime-react-native's JS
@@ -225,62 +213,31 @@ export function isOnnxRuntimeSupported(): boolean {
  * Resolve the bundled FP16 model to a local file path ONNX Runtime can open.
  * Uses expo-asset (same pattern as the existing .glb/.wasm asset loading).
  */
+/**
+ * Resolve the PhysFormer model path via the on-demand model manager.
+ *
+ * The .onnx is NOT bundled (no require() — Metro would package 17 MB).
+ * First rPPG use downloads + verifies it; every later use reuses the cache,
+ * including fully offline. Throws RppgInferenceError with a distinct
+ * "not installed" message when no valid cache exists so the UI can route
+ * to download instead of reporting a model failure.
+ */
 async function defaultResolveModelPath(): Promise<string> {
-  const expoAsset = loadExpoAsset() as {
-    Asset?: {
-      loadAsync(
-        moduleId: number,
-      ): Promise<
-        Array<{
-          localUri?: string | null;
-          uri: string;
-          downloadAsync?: () => Promise<unknown>;
-        }>
-      >;
-    };
-  } | null;
-  if (!expoAsset || !expoAsset.Asset) {
-    throw new RppgInferenceError(
-      'expo-asset is unavailable, so the bundled rPPG model cannot be resolved.',
-    );
-  }
-  // Bundled source of truth: frontend/assets/models/rppg/ (Option 1 — Metro
-  // can only bundle files under the project root, so the repo-root
-  // rppg_models/ copy cannot be referenced here). Filename must match
-  // RPPG_MODEL_ASSET in types.ts; literal require: Metro must see the path
-  // statically to bundle the .onnx (no variables/interpolation allowed).
-  let assetId: number;
+  let manager: typeof import('./modelManager');
   try {
-    assetId =
-      require('../../../assets/models/rppg/physformer_rppg_fp16.onnx') as number;
+    // Lazy: keeps node-test imports of this module free of expo-file-system.
+    manager = await import('./modelManager');
   } catch {
     throw new RppgInferenceError(
-      'the bundled rPPG model asset (physformer_rppg_fp16.onnx) could not be resolved.',
+      'the on-device model manager could not be loaded in this runtime.',
     );
   }
-  if (typeof assetId !== 'number') {
-    throw new RppgInferenceError(
-      'the bundled rPPG model asset did not resolve to a Metro asset id.',
-    );
-  }
-  const loaded = await expoAsset.Asset.loadAsync(assetId);
-  const resolved = loaded[0];
-  if (!resolved) {
-    throw new RppgInferenceError(
-      'expo-asset returned no entry for the bundled rPPG model.',
-    );
-  }
+  let uri: string;
   try {
-    await resolved.downloadAsync?.();
+    uri = await manager.getLocalRppgModelPath();
   } catch {
     throw new RppgInferenceError(
-      'the bundled rPPG model could not be downloaded to device storage.',
-    );
-  }
-  const uri = resolved.localUri ?? resolved.uri;
-  if (!uri) {
-    throw new RppgInferenceError(
-      'expo-asset produced no usable URI for the bundled rPPG model.',
+      'MODEL_NOT_INSTALLED: the PhysFormer model is not on this device yet.',
     );
   }
   // ONNX Runtime opens plain filesystem paths; strip the file:// scheme.

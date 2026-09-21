@@ -53,6 +53,35 @@ def submit_ppg_measurement(
         reliable=reliable,
     )
     db.add(row)
+    db.flush()
+    # P3: project the session into the graph (scalars + provenance only;
+    # raw waveforms/RR lists stay in PostgreSQL). Sessions group under the
+    # day's daily-checkin Visit for temporal queries ("PPG around med X").
+    from models.outbox import enqueue_ppg
+    from models.visits import VisitType
+    from services.clinical.occurrences import get_or_create_visit
+
+    _ppg_visit = get_or_create_visit(
+        db, patient_id, payload.measuredAt, VisitType.DAILY_CHECKIN, source="ppg",
+    )
+    enqueue_ppg(
+        db,
+        measurement_id=row.measurement_id,
+        patient_id=patient_id,
+        measurement_type=payload.measurementType,
+        heart_rate_bpm=payload.heartRateBpm,
+        rmssd_ms=payload.rmssdMs,
+        sdnn_ms=payload.sdnnMs,
+        signal_quality=payload.signalQuality,
+        reliable=reliable,
+        duration_seconds=payload.durationSeconds,
+        algorithm_version=payload.algorithmVersion,
+        model_version=payload.modelVersion,
+        sampling_rate_hz=payload.samplingRateHz,
+        measured_at=payload.measuredAt.isoformat() if payload.measuredAt else None,
+        has_rr_intervals=bool(payload.rrIntervalsMs),
+        visit_id=_ppg_visit.visit_id,
+    )
     db.commit()
     db.refresh(row)
     # Log identifiers only — never health values.

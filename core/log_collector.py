@@ -7,9 +7,22 @@ from typing import Optional
 
 import redis
 
+from core.redis_client import build_redis_client
+
 
 _LOG_KEY = "medgraph:pipeline:logs"
 _LOG_MAX = 500
+
+# Payload key under which a log entry's owning document id is exposed by
+# to_dict(). Callers that scope logs to a patient (app/api/v1/logs.py) MUST
+# filter on this key — P15 / D4: the endpoint filtered on a "document_id"
+# key that to_dict() never emitted, so every scoped lookup returned nothing.
+# It is defined once here so the emit side and the filter side cannot drift
+# apart again.
+LOG_DOC_KEY = "doc"
+
+# Value used when an entry is not tied to any document.
+LOG_DOC_UNSCOPED = "-"
 
 
 @dataclass
@@ -23,7 +36,7 @@ class LogEntry:
         return {
             "time": time.strftime("%H:%M:%S", time.localtime(self.timestamp)),
             "level": self.level,
-            "doc": self.document_id or "-",
+            LOG_DOC_KEY: self.document_id or LOG_DOC_UNSCOPED,
             "msg": self.message,
         }
 
@@ -58,20 +71,13 @@ class LogCollector:
 
     def _get_redis(self):
         if self._redis is None:
-            import os
             # Production (Voroa) uses the same Redis as the Celery broker
             # (Upstash rediss:// with TLS + password). Reuse it so pipeline
             # logs stream across the API and worker processes with no extra
             # configuration. Fall back to REDIS_HOST/REDIS_PORT for local dev.
-            broker_url = os.getenv("CELERY_BROKER_URL")
-            if broker_url:
-                self._redis = redis.from_url(
-                    broker_url, decode_responses=True, db=0
-                )
-            else:
-                host = os.getenv("REDIS_HOST", "redis")
-                port = int(os.getenv("REDIS_PORT", "6379"))
-                self._redis = redis.Redis(host=host, port=port, db=0, decode_responses=True)
+            # core.redis_client normalises ssl_cert_reqs for redis-py >= 8
+            # (P15 / D7) so this no longer fails on the deployment URL.
+            self._redis = build_redis_client(decode_responses=True, db=0)
         return self._redis
 
     def append(self, level: str, message: str, document_id: Optional[str] = None):

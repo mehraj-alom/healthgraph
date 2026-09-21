@@ -258,6 +258,29 @@ export function relationshipLabel(edge: GraphEdge, neighborLabel: string): strin
     case 'ACTIVE_MEDICATION': return 'Active medication';
     case 'HAS_MEDICATION_TAKEN': return 'Dose taken';
     case 'TAKEN_FROM': return 'From medication';
+    // P0–P3 clinical + lifestyle topology (human labels; colors in
+    // HealthGraphScreen.edgeBaseColor).
+    case 'DOCUMENTED_IN': return 'Documented in';
+    case 'HAS_CONDITION': return 'Has condition';
+    case 'HAS_VISIT': return 'During visit';
+    case 'OCCURRED_DURING': return 'During visit';
+    case 'HAS_STATEMENT': return 'Patient statement';
+    case 'HAS_MEDICATION_REQUEST': return 'Medication request';
+    case 'PRESCRIBES': return 'Prescribes';
+    case 'PRESCRIBED_FOR': return 'Prescribed for';
+    case 'REASON_STATED_BY_PATIENT': return 'Patient takes it for';
+    case 'ABOUT': return 'About';
+    case 'RESULTS_FROM': return 'Dose of';
+    case 'HAS_MEASUREMENT': return 'Measurement';
+    case 'HAS_CODE': return 'Coded as';
+    case 'HAS_VERSION': return 'Regimen version';
+    case 'SUPERSEDES': return 'Replaces';
+    case 'HAS_SLEEP': return 'Sleep log';
+    case 'HAS_ACTIVITY': return 'Activity log';
+    case 'HAS_NUTRITION': return 'Nutrition log';
+    case 'HAS_FOOD_SCAN': return 'Food scan';
+    case 'HAS_ENTRY': return 'Food item';
+    case 'HAS_BIOMETRIC': return 'Heart session';
     default: return String(edge.relationship).replace(/_/g, ' ').toLowerCase();
   }
 }

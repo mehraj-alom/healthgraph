@@ -8,13 +8,21 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from qdrant_client import QdrantClient
-from qdrant_client.http import models
 
 from core.db import SessionLocal
 from core.neo4j_client import neo4j_driver
 from services.vectorization.qdrant_client import vector_db
-from services.vectorization.embeddings import EmbeddingService 
+from services.vectorization.embeddings import EmbeddingService
+from services.vectorization.vector_indexing import (
+    live_document_ids,
+    search_evidence_chunks,
+)
 from models.anatomy import AnatomicalObservation
+# P15 / D2: statement registered in the template registry + runtime safety gate.
+from services.retrieval.templates import (
+    CYPHER_DOCUMENT_PROVENANCE,
+    run_patient_cypher,
+)
 
 
 
@@ -41,34 +49,37 @@ async def _get_document_evidence(
             raise ValueError("OPENAI_API_KEY is not set.")
         base_url = os.getenv("EMBEDDING_BASE_URL") or os.getenv("OPENAI_API_BASE")
         embedding_service = EmbeddingService(api_key=api_key, base_url=base_url)
-        query_vector = (await embedding_service.generate_embeddings([query]))[0]
-        tenant_filter = models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="patient_id",
-                    match=models.MatchValue(value=str(patient_id))
-                ),
-            ]
-        )
-        
-        results = client.query_points(
-            collection_name=vector_db.collection_name,
-            query=query_vector,
-            query_filter=tenant_filter,
-            limit=5,
-            with_payload=True,
-        ).points
+        # P7: vector outage degrades to an explicit message (PG evidence
+        # stays reachable via other tools) instead of a chat 500.
+        try:
+            query_vector = (await embedding_service.generate_embeddings([query]))[0]
+            # P8.1: shared backend search. Mandatory tenant filter; PG
+            # allow-list excludes DELETED documents (PG authoritative).
+            results = search_evidence_chunks(
+                client=client,
+                collection_name=vector_db.collection_name,
+                query_vector=query_vector,
+                patient_id=patient_id,
+                allowed_document_ids=live_document_ids(db, patient_id),
+                limit=5,
+            )
+        except Exception:
+            return [{"message": "Document search is temporarily unavailable; structured records and provenance remain available."}]
         
         if not results:
             return [{"message": "No relevant evidence found across patient's documents for the given query."}]
         
         return [
             {
-                "chunk_id": str(hit.id),
-                "text": hit.payload.get("text") or hit.payload.get("chunk_text", ""),
-                "document_id": hit.payload.get("document_id", ""),
-                "page_number": hit.payload.get("page_number", 1),
-                "similarity_score": round(hit.score, 4),
+                "chunk_id": hit["chunk_id"],
+                "text": hit["text"],
+                "document_id": hit["document_id"],
+                "page_number": hit["page_number"],
+                "similarity_score": hit["similarity_score"],
+                # P7: Citation-compatible keys (additive; existing keys kept).
+                "node_id": hit["node_id"],
+                "quote": hit["quote"],
+                "evidence_level": hit["evidence_level"],
             }
             for hit in results
         ]
@@ -91,15 +102,15 @@ async def _get_document_evidence(
         return [{"error": "DOCUMENT_NOT_FOUND: This document does not belong to the current patient or does not exist."}]
 
     # 2. Neo4j Provenance Check (Graph Topology)
-    cypher = """
-    MATCH (p:Patient {id: $patient_id})
-          -[:HAS_OBSERVATION]->(o:Observation)
-          -[:SOURCE_DOCUMENT]->(d:Document {id: $document_id})
-    RETURN d.id
-    LIMIT 1
-    """
+    # P2 retirement prep: accept both the legacy SOURCE_DOCUMENT link and
+    # the canonical DOCUMENTED_IN link (dual-written since P0).
     with driver.session() as session:
-        result = session.run(cypher, patient_id=str(patient_id), document_id=str(document_id))
+        result = run_patient_cypher(
+            session,
+            CYPHER_DOCUMENT_PROVENANCE,
+            {"patient_id": str(patient_id), "document_id": str(document_id)},
+            statement_id="T-DOC-PROVENANCE",
+        )
         if not result.single():
             return [{"error": "DOCUMENT_NOT_PROJECTED: Document exists but lacks clinical graph provenance."}]
     
@@ -108,38 +119,36 @@ async def _get_document_evidence(
         raise ValueError("OPENAI_API_KEY is not set.")
     base_url = os.getenv("EMBEDDING_BASE_URL") or os.getenv("OPENAI_API_BASE")
     embedding_service = EmbeddingService(api_key=api_key, base_url=base_url)
-    # Qdrant Semantic Search (Mandatory Tenant Isolation Filter)
-    query_vector = (await embedding_service.generate_embeddings([query]))[0]
-    tenant_filter = models.Filter(
-        must=[
-            models.FieldCondition(
-                key="patient_id",
-                match=models.MatchValue(value=str(patient_id))
-            ),
-            models.FieldCondition(
-                key="document_id",
-                match=models.MatchValue(value=str(document_id))
-            )
-        ]
-    )
-    
-    results = client.query_points(
-        collection_name=vector_db.collection_name,
-        query=query_vector,
-        query_filter=tenant_filter,
-        limit=5,
-        with_payload=True,
-    ).points
+
+    # P7: same degraded-mode handling as the cross-doc path above.
+    try:
+        query_vector = (await embedding_service.generate_embeddings([query]))[0]
+        # P8.1: shared backend search (single-document scope).
+        results = search_evidence_chunks(
+            client=client,
+            collection_name=vector_db.collection_name,
+            query_vector=query_vector,
+            patient_id=patient_id,
+            document_id=str(document_id),
+            limit=5,
+        )
+    except Exception:
+        return [{"message": "Document search is temporarily unavailable; structured records and provenance remain available."}]
     
     if not results:
         return [{"message": "No relevant evidence found in this document for the given query."}]
     
     return [
         {
-            "chunk_id": str(hit.id),
-            "text": hit.payload.get("text") or hit.payload.get("chunk_text", ""),
-            "page_number": hit.payload.get("page_number", 1),
-            "similarity_score": round(hit.score, 4),
+            "chunk_id": hit["chunk_id"],
+            "text": hit["text"],
+            "page_number": hit["page_number"],
+            "similarity_score": hit["similarity_score"],
+            # P7: Citation-compatible keys (additive; existing keys kept).
+            "node_id": hit["node_id"],
+            "document_id": hit["document_id"],
+            "quote": hit["quote"],
+            "evidence_level": hit["evidence_level"],
         }
         for hit in results
     ]

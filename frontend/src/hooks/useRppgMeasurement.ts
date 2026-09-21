@@ -55,6 +55,8 @@ export interface UseRppgMeasurement {
   progressFrames: number;
   /** 0..1 live face stability for guidance. Null when unknown. */
   liveStability: number | null;
+  /** 0..100 model download progress. Null when not downloading. */
+  modelProgress: number | null;
   synced: boolean | null;
   error: string | null;
   permissionBlocked: boolean;
@@ -69,6 +71,7 @@ export const RPPG_ALGORITHM_VERSION = 'rppg-1.0.0';
 const HINTS: Record<RppgScreenState, string> = {
   IDLE: 'Measure your pulse with a short face scan.',
   PREPARING: 'Preparing the camera…',
+  MODEL_DOWNLOAD: 'Downloading required model — 16.7 MB…',
   FIND_FACE: 'Show your face in the frame.',
   POSITION_FACE: 'Hold still, face centered in the guide.',
   ACQUIRING: 'Capturing… keep still.',
@@ -93,11 +96,13 @@ export function useRppgMeasurement(): UseRppgMeasurement {
   const [result, setResult] = useState<RppgMeasurementResult | null>(null);
   const [progressFrames, setProgressFrames] = useState(0);
   const [liveStability, setLiveStability] = useState<number | null>(null);
+  const [modelProgress, setModelProgress] = useState<number | null>(null);
   const [synced, setSynced] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
   const mounted = useRef(true);
   const settled = useRef(false);
+  const modelAbortRef = useRef<AbortController | null>(null);
   // Throttle high-frequency capture telemetry into UI updates: the native
   // analyzer emits per-frame callbacks (tens/sec) but the progress bar and
   // stability label cannot meaningfully move that fast. State transitions
@@ -133,6 +138,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     setSynced(null);
     setProgressFrames(0);
     setLiveStability(null);
+    setModelProgress(null);
     uiTelemetry.current = { frames: -1, stability: -1, at: 0 };
     setPermissionBlocked(false);
     settled.current = false;
@@ -170,6 +176,47 @@ export function useRppgMeasurement(): UseRppgMeasurement {
       );
       return;
     }
+
+    // Model gate (on-demand asset): the provider only tells us whether the
+    // RUNTIME can run inference. The 17 MB model itself downloads here, with
+    // explicit progress, before the camera ever opens. Cached installs skip
+    // instantly (works fully offline). Nothing about inference changes.
+    setState('MODEL_DOWNLOAD');
+    setModelProgress(0);
+    modelAbortRef.current = new AbortController();
+    let modelManager: typeof import('@/services/rppg/modelManager') | null = null;
+    try {
+      modelManager = await import('@/services/rppg/modelManager');
+      await modelManager.ensureRppgModelAvailable(
+        (p) => {
+          if (mounted.current && !settled.current) setModelProgress(p.percent);
+        },
+        modelAbortRef.current.signal,
+      );
+    } catch (e: unknown) {
+      modelAbortRef.current = null;
+      if (!mounted.current || settled.current) return;
+      const code =
+        e instanceof Error && e.name === 'RppgModelError'
+          ? (e as { code?: string }).code
+          : undefined;
+      if (code === 'cancelled') {
+        settled.current = true;
+        setModelProgress(null);
+        setState('IDLE');
+        return;
+      }
+      setModelProgress(null);
+      fail(
+        modelManager
+          ? modelManager.friendlyRppgModelMessage(code)
+          : 'The pulse model could not be prepared. Try again.',
+      );
+      return;
+    }
+    modelAbortRef.current = null;
+    if (!mounted.current || settled.current) return;
+    setModelProgress(null);
     const permission = await ensureRppgCameraPermission();
     console.log('rppg stage: RPPG_PERMISSION_CHECK result=' + permission);
     if (!mounted.current || settled.current) return;
@@ -353,12 +400,19 @@ export function useRppgMeasurement(): UseRppgMeasurement {
 
   const cancel = useCallback(async () => {
     try {
+      modelAbortRef.current?.abort();
+    } catch {
+      // Abort is best-effort.
+    }
+    modelAbortRef.current = null;
+    try {
       await frameSource.cancel();
     } catch {
       // Cancel is best-effort.
     }
     if (!mounted.current) return;
     settled.current = true;
+    setModelProgress(null);
     setState('IDLE');
     setProgressFrames(0);
     setLiveStability(null);
@@ -370,6 +424,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     setResult(null);
     setProgressFrames(0);
     setLiveStability(null);
+    setModelProgress(null);
     setSynced(null);
     setError(null);
     setPermissionBlocked(false);
@@ -381,6 +436,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     result,
     progressFrames,
     liveStability,
+    modelProgress,
     synced,
     error,
     permissionBlocked,

@@ -12,6 +12,7 @@
 import { Paths, File, Directory } from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { getAssetBaseUrl } from './assetHost';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,34 +53,38 @@ export interface DownloadProgress {
 // ---------------------------------------------------------------------------
 
 /**
- * Base URL for remote GLB assets.
+ * Base URL for remote GLB assets (download root — filenames are unique, so
+ * no gender/version subpath is appended; see getRemoteUrl).
  *
- * Priority:
- * 1. EXPO_PUBLIC_ANATOMY_CDN_URL (explicit override, production CDN)
- * 2. Derived from EXPO_PUBLIC_API_URL host + port 8081 (Expo Go dev server)
- * 3. localhost:8081 (web browser on dev machine)
- *
- * On physical Android via Expo Go, localhost refers to the device itself,
- * NOT the development machine. We must use the LAN IP.
+ * Priority (shared with the rPPG model manager via assetHost):
+ * 1. EXPO_PUBLIC_ANATOMY_CDN_URL (legacy explicit override, used as-is)
+ * 2. EXPO_PUBLIC_ASSET_CDN_URL (unified host)
+ * 3. __DEV__: derived Metro host + /anatomy (local frontend/public)
+ * 4. Public GitHub Release healthgraph-assets-v1 (default).
  */
 function resolveRemoteBase(): string {
-  // Explicit override always wins
+  // Explicit legacy override always wins, used verbatim.
   if (process.env.EXPO_PUBLIC_ANATOMY_CDN_URL) {
     return process.env.EXPO_PUBLIC_ANATOMY_CDN_URL;
   }
 
-  // Derive host from the existing API URL (which already uses LAN IP for dev)
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL || '';
-  if (apiUrl) {
-    try {
-      const url = new URL(apiUrl);
-      // Metro dev server runs on port 8081, API on 8000
-      return `${url.protocol}//${url.hostname}:8081/anatomy`;
-    } catch { /* ignore parse errors */ }
+  if (__DEV__) {
+    // Derive host from the existing API URL (which already uses LAN IP).
+    // Metro dev server runs on port 8081.
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL || '';
+    if (apiUrl) {
+      try {
+        const url = new URL(apiUrl);
+        return `${url.protocol}//${url.hostname}:8081/anatomy`;
+      } catch { /* ignore parse errors */ }
+    }
+    return 'http://localhost:8081/anatomy';
   }
 
-  // Fallback for web browser on dev machine
-  return 'http://localhost:8081/anatomy';
+  // Release assets live in a flat namespace (see getRemoteUrl) — the base
+  // IS the download root. (ASSET_ANATOMY_PATH documents the logical
+  // versioned layout, not a URL prefix.)
+  return getAssetBaseUrl();
 }
 
 const REMOTE_BASE = resolveRemoteBase();
@@ -139,8 +144,10 @@ function getManifest(gender: Gender): GenderManifest {
   return gender === 'male' ? MALE_MANIFEST : FEMALE_MANIFEST;
 }
 
-function getRemoteUrl(gender: Gender, filename: string): string {
-  return `${REMOTE_BASE}/${gender}/${filename}`;
+function getRemoteUrl(_gender: Gender, filename: string): string {
+  // Release assets live in a flat namespace (filenames are unique across
+  // genders); gender only selects the local cache directory + manifest.
+  return `${REMOTE_BASE}/${filename}`;
 }
 
 // ---------------------------------------------------------------------------

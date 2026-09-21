@@ -48,6 +48,12 @@ interface ChatMessage {
     mesh_node_name: string | null;
     visual_status: string | null;
   }[];
+  citations?: {
+    node_id?: string | null;
+    document_id?: string | null;
+    quote?: string | null;
+    evidence_level?: string | null;
+  }[];
 }
 
 interface ChatResponse {
@@ -776,6 +782,13 @@ export default function ChatScreen() {
       const nextConversationId: string | null =
         typeof body?.conversation_id === 'string' ? body.conversation_id : null;
       const uiActions = Array.isArray(body?.ui_actions) ? body.ui_actions : [];
+      // P7: citations are part of the chat contract (schemas/chat.py).
+      // Only well-formed entries with a node or document reference render.
+      const citations = Array.isArray(body?.citations)
+        ? body.citations.filter(
+            (c: any) => c && (typeof c.node_id === 'string' || typeof c.document_id === 'string'),
+          ).slice(0, 5)
+        : [];
 
       if (__DEV__) console.log(`[Chat] responseParsed=${assistantText.length > 0}`);
       if (__DEV__) console.log(`[Chat] assistantTextLength=${assistantText.length}`);
@@ -786,6 +799,7 @@ export default function ChatScreen() {
         content: assistantText.length > 0 ? assistantText : 'Processing incomplete.',
         timestamp: new Date(),
         ui_actions: uiActions,
+        citations,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -875,6 +889,9 @@ export default function ChatScreen() {
     if (item.role !== 'assistant' || sending) return null;
     const actions = item.ui_actions ?? [];
     const structures = actions.filter((a) => a.structure_id);
+    // P7: validated citations from the backend (filtered server-side to
+    // tool-output references). Document rows deep-link to the record.
+    const citations = (item.citations ?? []).filter((c) => c.node_id || c.document_id);
     return (
       <View style={styles.msgActions}>
         {structures.slice(0, 2).map((a, i) => (
@@ -899,6 +916,38 @@ export default function ChatScreen() {
           >
             <Text style={styles.regenText}>↻ Regenerate</Text>
           </Pressable>
+        ) : null}
+        {citations.length > 0 ? (
+          <View style={styles.citeBlock}>
+            <Text style={styles.citeTitle}>Sources ({citations.length})</Text>
+            {citations.slice(0, 3).map((c, i) => {
+              const label = c.document_id ? 'Open source document' : (c.node_id ?? 'Evidence');
+              const key = `${c.document_id ?? c.node_id ?? i}`;
+              const sub = typeof c.quote === 'string' && c.quote.length > 0
+                ? (c.quote.length > 90 ? `${c.quote.slice(0, 90)}…` : c.quote)
+                : null;
+              const row = (
+                <View style={styles.citeRowInner}>
+                  <Text style={styles.citeLabel} numberOfLines={1}>{label}</Text>
+                  {sub ? <Text style={styles.citeQuote} numberOfLines={2}>{sub}</Text> : null}
+                </View>
+              );
+              return c.document_id ? (
+                <Pressable
+                  key={key}
+                  style={styles.citeRow}
+                  onPress={() => navigation.navigate('DocumentDetail', { documentId: c.document_id })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open source document"
+                >
+                  {row}
+                  <Text style={styles.citeGo}>›</Text>
+                </Pressable>
+              ) : (
+                <View key={key} style={styles.citeRow}>{row}</View>
+              );
+            })}
+          </View>
         ) : null}
       </View>
     );
@@ -1220,6 +1269,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   regenText: { ...TYPE.chip, color: GV.fog, fontSize: 13 },
+  // P7: validated citation rows (backend-filtered to tool references).
+  citeBlock: { flexBasis: '100%', marginTop: 4, gap: 4 },
+  citeTitle: { ...TYPE.caption, color: GV.fog, fontSize: 11 },
+  citeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  citeRowInner: { flex: 1, gap: 1 },
+  citeLabel: { ...TYPE.body, color: GV.ink, fontSize: 13 },
+  citeQuote: { ...TYPE.caption, color: GV.fog, fontSize: 11, fontStyle: 'italic' },
+  citeGo: { ...TYPE.title, color: GV.fog },
 
   followRow: { flexDirection: 'row', gap: 8, paddingHorizontal: SPACE.screenH, paddingBottom: 8 },
   followChip: {

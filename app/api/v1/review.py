@@ -86,7 +86,35 @@ def resolve_pending_event(
         #Update the event timeline record
         event.concept_id = request.concept_id
         event.verification_status = VerificationStatus.HUMAN_VERIFIED
-        
+
+        db.flush()
+        # P5: re-project the same event id so the Neo4j TimelineEvent picks
+        # up the verified concept (HAS_CODE) instead of staying stale.
+        # Same-id MERGE keeps this an update, not a duplicate. pg_updated_at
+        # guards against regressing newer projections.
+        from models.outbox import enqueue_clinical_event
+
+        db.refresh(event)
+        enqueue_clinical_event(
+            db,
+            event_id=event.event_id,
+            patient_id=patient_id,
+            event_type=event.event_type,
+            source_type=event.source_type,
+            verification_status=event.verification_status,
+            event_time=event.event_time,
+            polarity=event.polarity,
+            assertion_verification=event.assertion_verification,
+            experiencer=event.experiencer,
+            clinical_status=event.clinical_status,
+            source_snippet=event.source_snippet,
+            concept_id=event.concept_id,
+            concept_system=concept.terminology,
+            concept_code=concept.code,
+            concept_display=concept.display_name,
+            pg_updated_at=event.updated_at.isoformat() if event.updated_at else None,
+        )
+
         db.commit()
         return {"status": "success", "message": f"Learned alias '{request.raw_term}' for concept {concept.display_name}"}
         

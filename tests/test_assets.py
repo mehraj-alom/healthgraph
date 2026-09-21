@@ -3,8 +3,10 @@ Phase 0 / Increment 6 — anatomy GLB asset-reference integrity tests.
 
 Guards the Increment-6 asset cleanup and the canonical-reference contract:
 
-  - frontend/assets/anatomy/ is the bundled (native require()) source of
-    truth; every file referenced from the app must exist.
+  - frontend/assets/anatomy/ holds the anatomy meshes. As of P16 these are
+    NOT bundled: they are downloaded on demand (services/anatomyDownload.ts),
+    so the contract under test is the download manifest (every declared file
+    exists and satisfies the manifest's size tolerance), not require() calls.
   - frontend/public/anatomy/ mirrors those files so the web downloader can
     serve byte-identical meshes by name (verified via checksums in I6);
     every non-meshopt asset must have a mirror.
@@ -24,6 +26,10 @@ PUBLIC = FRONTEND / "public" / "anatomy"
 
 GLBFILE_RE = re.compile(r"glbFile:\s*'([^']+\.glb)'")
 REQUIRE_RE = re.compile(r"require\('([^']+\.glb)'\)")
+# P16: anatomy/rPPG assets moved to on-demand download, so the contract is
+# now the download manifest rather than static require() calls.
+MANIFEST_ENTRY_RE = re.compile(r"filename: '([^']+\.glb)',\s*size: (\d+)")
+ANATOMY_DOWNLOAD = FRONTEND / "src" / "services" / "anatomyDownload.ts"
 
 
 def _gender_dir(gender: str) -> Path:
@@ -52,17 +58,53 @@ class TestAnatomyReferencesResolve:
         }
         assert not missing, f"anatomyMap references missing GLBs: {missing}"
 
-    def test_every_body_screen_require_resolves(self):
-        body_file = FRONTEND / "src" / "screens" / "Body" / "BodyScreen.tsx"
-        body_src = body_file.read_text()
-        require_paths = REQUIRE_RE.findall(body_src)
-        assert require_paths, "expected BodyScreen to require anatomy GLBs"
+    def test_body_screen_does_not_bundle_anatomy_glbs(self):
+        """P16: the bundled-require contract was replaced by on-demand download.
 
-        # require() paths are relative to the importing file's directory.
-        missing = [
-            p for p in require_paths if not (body_file.parent / p).resolve().is_file()
-        ]
-        assert not missing, f"require() paths missing: {missing}"
+        Metro only packages statically require()d assets, so the *absence* of
+        any .glb require() in BodyScreen is the deliberate invariant that keeps
+        the anatomy meshes (~45 MB) out of the binary. Runtime loads resolve
+        through services/anatomyDownload.ts instead.
+        """
+        body_file = FRONTEND / "src" / "screens" / "Body" / "BodyScreen.tsx"
+        found = REQUIRE_RE.findall(body_file.read_text())
+        assert not found, (
+            "BodyScreen must not statically require anatomy GLBs — assets are "
+            f"downloaded on demand (found: {found})"
+        )
+
+    def test_every_downloaded_anatomy_asset_satisfies_its_manifest(self):
+        """Every manifest entry must have a file inside the accepted size band.
+
+        anatomyDownload.ts treats the manifest size as an estimate and only
+        accepts a file whose size ratio is within 0.9-1.1 (rejecting a fresh
+        download outright below 0.9). A manifest entry whose real file falls
+        outside that band can never install, so 3D Body would break at
+        runtime — and nothing else in the suite would notice.
+        """
+        entries = MANIFEST_ENTRY_RE.findall(ANATOMY_DOWNLOAD.read_text())
+        assert entries, "expected an anatomy download manifest"
+
+        problems = []
+        for filename, raw_size in entries:
+            size = int(raw_size)
+            path = next(
+                (
+                    p
+                    for p in (ASSETS / "male" / filename, ASSETS / "female" / filename)
+                    if p.is_file()
+                ),
+                None,
+            )
+            if path is None:
+                problems.append(f"{filename}: no asset file on disk")
+                continue
+            ratio = path.stat().st_size / size
+            if not 0.9 <= ratio <= 1.1:
+                problems.append(
+                    f"{filename}: size ratio {ratio:.4f} outside the 0.9-1.1 band"
+                )
+        assert not problems, problems
 
     def test_meshopt_only_assets_variant_has_no_web_mirror(self):
         # skeletal_male_meshopt.glb is bundled-only (native compression
@@ -100,6 +142,8 @@ RPPG_BUNDLED = FRONTEND / "assets" / "models" / "rppg"
 RPPG_CANONICAL = REPO / "rppg_models"
 RPPG_REQUIRE_RE = re.compile(r"require\('([^']+\.onnx)'\)")
 RPPG_ASSET_CONST_RE = re.compile(r"RPPG_MODEL_ASSET\s*=\s*'([^']+)'")
+RPPG_MANIFEST_FILENAME_RE = re.compile(r"filename:\s*'([^']+\.onnx)'")
+RPPG_MANIFEST_SIZE_RE = re.compile(r"size:\s*(\d+)")
 
 
 def _md5(path: Path) -> str:
@@ -125,19 +169,45 @@ class TestRppgModelAsset:
             f"bundled asset {m.group(1)!r} missing under {RPPG_BUNDLED}"
         )
 
-    def test_onnx_require_resolves_inside_frontend(self):
+    def test_onnx_model_is_not_bundled(self):
+        """P16: the 17 MB model is downloaded on demand, never bundled.
+
+        Metro would package a statically require()d .onnx into the binary, so
+        onnxProvider.ts must contain no such require (see modelManager.ts).
+        """
         provider_src = (
             FRONTEND / "src" / "services" / "rppg" / "onnxProvider.ts"
         ).read_text()
-        required = RPPG_REQUIRE_RE.findall(provider_src)
-        assert required, "expected a static .onnx require in onnxProvider.ts"
-        provider_dir = FRONTEND / "src" / "services" / "rppg"
-        for rel in required:
-            resolved = (provider_dir / rel).resolve()
-            assert str(resolved).startswith(str(FRONTEND.resolve())), (
-                f"model require escapes the Metro project root: {rel}"
-            )
-            assert resolved.is_file(), f"required model file missing: {rel}"
+        found = RPPG_REQUIRE_RE.findall(provider_src)
+        assert not found, (
+            "onnxProvider.ts must not statically require the model — it is "
+            f"downloaded on demand (found: {found})"
+        )
+
+    def test_manifest_size_is_exact_and_matches_the_canonical_model(self):
+        """modelManager verifies size AND checksum exactly (not by tolerance),
+        so the manifest in modelMeta.ts must equal the real file exactly.
+        """
+        meta_src = (FRONTEND / "src" / "services" / "rppg" / "modelMeta.ts").read_text()
+        name = RPPG_MANIFEST_FILENAME_RE.search(meta_src)
+        size = RPPG_MANIFEST_SIZE_RE.search(meta_src)
+        assert name and size, "RPPG_MODEL_MANIFEST filename/size missing"
+
+        canonical = RPPG_CANONICAL / name.group(1)
+        assert canonical.is_file(), f"canonical model missing: {canonical}"
+        assert int(size.group(1)) == canonical.stat().st_size, (
+            f"manifest size {size.group(1)} != actual {canonical.stat().st_size} "
+            "(the exact-size check would reject every download)"
+        )
+
+    def test_asset_host_is_pinned_to_a_release_tag(self):
+        """All on-demand assets share one configurable base; with no env
+        override a production build must fall back to a pinned public host.
+        """
+        host_src = (FRONTEND / "src" / "services" / "assetHost.ts").read_text()
+        assert "ASSET_RELEASE_TAG = 'healthgraph-assets-v1'" in host_src
+        assert "EXPO_PUBLIC_ASSET_CDN_URL" in host_src
+        assert "getAssetBaseUrl" in host_src
 
     def test_bundled_copy_matches_canonical(self):
         for bundled in RPPG_BUNDLED.glob("*.onnx"):

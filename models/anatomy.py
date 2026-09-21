@@ -86,6 +86,13 @@ class AnatomicalObservation(Base):
 
     clinical_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     
+    # P0 assertion foundation (additive, nullable). Mirrors ClinicalEvent so
+    # observation-level mentions carry polarity/experiencer into Neo4j.
+    # See models/clinical_assertion.py.
+    polarity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    experiencer: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_snippet: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Strict Chronology Separation
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False) 

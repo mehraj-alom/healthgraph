@@ -8,10 +8,24 @@ from app.api.dependencies import get_authenticated_patient_id
 from app.services.nutrition import usda, vlm
 from app.services.nutrition.vlm import NutritionError, VlmItem
 from core.config import settings
+from core.db import get_db
 from core.rate_limiter import RateLimiter
 from core.security_events import log_security_event
 from logger import logger
-from schemas.nutrition import AnalyzeResponse, ScanItem
+from models.food import FoodEntry, FoodScan, FoodScanStatus
+from models.outbox import enqueue_food_scan
+from models.privacy import log_audit
+from models.visits import VisitType
+from schemas.nutrition import (
+    AnalyzeResponse,
+    FoodCorrectIn,
+    FoodScanLog,
+    FoodScanOut,
+    FoodEntryOut,
+    ScanItem,
+)
+from services.clinical.occurrences import get_or_create_visit
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/v1/nutrition", tags=["nutrition"])
 
@@ -198,3 +212,179 @@ def analyze_photo(photo: PhotoDep, patient_id: PatientIdDep) -> AnalyzeResponse:
         confidence=confidence,
         note=note,
     )
+
+
+def _scan_out(scan: FoodScan) -> FoodScanOut:
+    return FoodScanOut(
+        scan_id=scan.scan_id,
+        status=scan.status,
+        total_kcal=scan.total_kcal,
+        entries=[
+            FoodEntryOut(
+                entry_id=e.entry_id,
+                label=e.label,
+                portion_g=e.portion_g,
+                kcal=e.kcal,
+                protein_g=e.protein_g,
+                carbs_g=e.carbs_g,
+                fat_g=e.fat_g,
+                confidence=e.confidence,
+                corrected=e.corrected,
+                corrected_label=e.corrected_label,
+            )
+            for e in (scan.entries or [])
+        ],
+    )
+
+
+def _enqueue_scan(db: Session, scan: FoodScan, visit_id) -> None:
+    enqueue_food_scan(
+        db,
+        scan_id=scan.scan_id,
+        patient_id=scan.patient_id,
+        entries=[
+            {
+                "entry_id": str(e.entry_id),
+                "label": e.label,
+                "portion_g": e.portion_g,
+                "volume_ml": e.volume_ml,
+                "kcal": e.kcal,
+                "protein_g": e.protein_g,
+                "carbs_g": e.carbs_g,
+                "fat_g": e.fat_g,
+                "confidence": e.confidence,
+                "corrected": e.corrected,
+                "corrected_label": e.corrected_label,
+            }
+            for e in (scan.entries or [])
+        ],
+        total_kcal=scan.total_kcal,
+        overall_confidence=scan.overall_confidence,
+        status=scan.status,
+        model=scan.model,
+        model_version=scan.model_version,
+        meal_type=scan.meal_type,
+        recorded_at=scan.recorded_at.isoformat() if scan.recorded_at else None,
+        visit_id=visit_id,
+    )
+
+
+@router.post("/log", response_model=FoodScanOut, status_code=201)
+def log_food_scan(
+    body: FoodScanLog,
+    patient_id: PatientIdDep,
+    db: Session = Depends(get_db),
+):
+    """Persist a food scan's identified items (scan result or manual entry).
+
+    Photo bytes are never accepted here — only structured item metadata plus
+    an optional photo hash reference. Per-item AI estimates stay labeled as
+    such until the user confirms/corrects (see /correct, /confirm).
+    """
+    from datetime import datetime, timezone as _tz
+
+    scan = FoodScan(
+        patient_id=patient_id,
+        log_date=body.log_date,
+        meal_type=body.meal_type,
+        photo_hash=body.photo_hash,
+        model=body.model,
+        model_version=body.model_version,
+        overall_confidence=body.overall_confidence,
+        total_kcal=body.total_kcal,
+        status=body.status,
+    )
+    db.add(scan)
+    db.flush()
+    for item in body.items:
+        db.add(FoodEntry(
+            scan_id=scan.scan_id,
+            label=item.label.strip(),
+            portion_g=item.portion_g,
+            volume_ml=item.volume_ml,
+            kcal=item.kcal,
+            protein_g=item.protein_g,
+            carbs_g=item.carbs_g,
+            fat_g=item.fat_g,
+            confidence=item.confidence,
+            fdc_id=item.fdc_id,
+        ))
+    db.flush()
+    db.refresh(scan, attribute_names=["entries"])
+    visit = get_or_create_visit(
+        db, patient_id,
+        body.log_date or datetime.now(_tz.utc).date(),
+        VisitType.DAILY_CHECKIN, source="food-scan",
+    )
+    _enqueue_scan(db, scan, visit.visit_id)
+    log_audit(db, action="food_scan_logged", patient_id=patient_id,
+              entity_type="food_scan", entity_id=str(scan.scan_id),
+              meta={"items": len(body.items), "status": scan.status})
+    db.commit()
+    db.refresh(scan, attribute_names=["entries"])
+    return _scan_out(scan)
+
+
+@router.post("/scans/{scan_id}/correct", response_model=FoodScanOut)
+def correct_food_entry(
+    scan_id: uuid.UUID,
+    body: FoodCorrectIn,
+    patient_id: PatientIdDep,
+    db: Session = Depends(get_db),
+):
+    """Correct one AI-identified entry. The original label is preserved
+    (corrected=true + corrected_label); the AI estimate is never overwritten."""
+    from sqlalchemy import select
+
+    scan = db.scalar(select(FoodScan).where(
+        FoodScan.scan_id == scan_id, FoodScan.patient_id == patient_id,
+    ))
+    if scan is None:
+        raise HTTPException(status_code=404, detail="Food scan not found.")
+    entry = db.scalar(select(FoodEntry).where(
+        FoodEntry.entry_id == body.entry_id, FoodEntry.scan_id == scan_id,
+    ))
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Food entry not found.")
+    entry.corrected = True
+    entry.corrected_label = body.corrected_label.strip()
+    scan.status = FoodScanStatus.USER_CORRECTED
+    db.flush()
+    db.refresh(scan, attribute_names=["entries"])
+    visit = get_or_create_visit(
+        db, patient_id, scan.recorded_at, VisitType.DAILY_CHECKIN, source="food-scan",
+    )
+    _enqueue_scan(db, scan, visit.visit_id)
+    log_audit(db, action="food_entry_corrected", patient_id=patient_id,
+              entity_type="food_entry", entity_id=str(entry.entry_id))
+    db.commit()
+    db.refresh(scan, attribute_names=["entries"])
+    return _scan_out(scan)
+
+
+@router.post("/scans/{scan_id}/confirm", response_model=FoodScanOut)
+def confirm_food_scan(
+    scan_id: uuid.UUID,
+    patient_id: PatientIdDep,
+    db: Session = Depends(get_db),
+):
+    """Mark a scan user-confirmed (estimates accepted as logged)."""
+    from sqlalchemy import select
+
+    scan = db.scalar(select(FoodScan).where(
+        FoodScan.scan_id == scan_id, FoodScan.patient_id == patient_id,
+    ))
+    if scan is None:
+        raise HTTPException(status_code=404, detail="Food scan not found.")
+    scan.status = FoodScanStatus.USER_CONFIRMED
+    db.flush()
+    db.refresh(scan, attribute_names=["entries"])
+    visit = get_or_create_visit(
+        db, patient_id, scan.recorded_at, VisitType.DAILY_CHECKIN, source="food-scan",
+    )
+    _enqueue_scan(db, scan, visit.visit_id)
+    log_audit(db, action="food_scan_confirmed", patient_id=patient_id,
+              entity_type="food_scan", entity_id=str(scan.scan_id))
+    db.commit()
+    db.refresh(scan, attribute_names=["entries"])
+    return _scan_out(scan)

@@ -121,10 +121,23 @@ export interface UIAction {
   visual_status: string | null;
 }
 
+export interface ChatCitation {
+  node_id?: string | null;
+  observation_id?: string | null;
+  event_id?: string | null;
+  document_id?: string | null;
+  page_number?: number | null;
+  quote?: string | null;
+  verification_status?: string | null;
+  source_type?: string | null;
+  evidence_level?: string | null;
+}
+
 export interface ChatResponse {
   conversation_id: string;
   response_text: string;
   ui_actions: UIAction[];
+  citations?: ChatCitation[];
 }
 
 export interface DocumentUploadResponse {

@@ -29,4 +29,9 @@ RUN mkdir -p /app/storage/documents
 
 EXPOSE 8000
 
+# P7: liveness probe for orchestrators (cheap static endpoint; readiness
+# gating is the separate /ready endpoint).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)"
+
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

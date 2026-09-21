@@ -48,6 +48,7 @@ class QdrantManager:
             self.client = QdrantClient(
                 host=self.host,
                 port=self.port,
+                timeout=15,  # P7: same bound as the cloud path above.
             )
 
     def setup_collection(self):
@@ -94,6 +95,19 @@ class QdrantManager:
                 f"Collection '{self.collection_name}' "
                 "already exists."
             )
+            # P0: ensure the document_id payload index exists on
+            # pre-existing collections (single-doc evidence filter in
+            # agents/tools/evidence.py is otherwise an unindexed scan).
+            # Best-effort: never fail startup over an index.
+            for field in ("patient_id", "document_id"):
+                try:
+                    self.client.create_payload_index(
+                        collection_name=self.collection_name,
+                        field_name=field,
+                        field_schema=PayloadSchemaType.KEYWORD,
+                    )
+                except Exception as e:
+                    logger.info(f"Payload index '{field}' already present or unavailable: {e}")
 
         logger.info("DONE qdrant.setup_collection")
         return self.client

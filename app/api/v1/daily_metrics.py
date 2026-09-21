@@ -16,6 +16,20 @@ from schemas.daily_metrics import ActivityMetric, DailyMetricsResponse, LatestVi
 router = APIRouter(prefix="/api/v1/daily-metrics", tags=["daily_metrics"])
 
 
+def select_wellbeing_hit(hits: list[tuple], payload_by_id: dict):
+    """P5: explicit WELLBEING_LOG selection semantics (pure, tested).
+
+    WELLBEING_LOG rows are shared by score check-ins (WellbeingPayload)
+    and free-text notes (PatientNotePayload). Returns the first hit, in
+    scan order, that actually HAS scores — a note must never shadow real
+    scores. Returns (event_id, event_time) or None.
+    """
+    for event_id, event_time in hits:
+        if payload_by_id.get(event_id) is not None:
+            return event_id, event_time
+    return None
+
+
 @router.get("", response_model=DailyMetricsResponse)
 def get_daily_metrics(
     db: Session = Depends(get_db),
@@ -46,7 +60,11 @@ def get_daily_metrics(
     # event IDs; payloads/concepts are then fetched with bulk IN queries
     # (PK-indexed) instead of one db.get per event.
     vital_hits: list[tuple] = []  # (event_id, concept_id, event_time), scan order
-    wellbeing_hit = None  # (event_id, event_time)
+    # P4: WELLBEING_LOG is shared by score check-ins AND free-text notes
+    # (which carry PatientNotePayload instead of WellbeingPayload). Collect
+    # every candidate and select the first one that actually HAS scores —
+    # latching the first row blindly lets a note shadow real scores.
+    wellbeing_hits: list[tuple] = []  # (event_id, event_time), scan order
     pain_hit = None  # (event_id, event_time)
     sleep_hit = None  # (event_id, event_time)
     activity_event_ids: list = []
@@ -63,8 +81,8 @@ def get_daily_metrics(
         if event.event_type == EventType.VITAL_SIGN:
             vital_hits.append((event.event_id, event.concept_id, event.event_time))
 
-        if event.event_type == EventType.WELLBEING_LOG and wellbeing_hit is None and event_date == today:
-            wellbeing_hit = (event.event_id, event.event_time)
+        if event.event_type == EventType.WELLBEING_LOG and event_date == today:
+            wellbeing_hits.append((event.event_id, event.event_time))
 
         if event.event_type == EventType.PAIN_LOG and pain_hit is None:
             pain_hit = (event.event_id, event.event_time)
@@ -107,14 +125,23 @@ def get_daily_metrics(
             if concept_id:
                 seen_concepts.add(concept_id)
 
-    if wellbeing_hit is not None:
-        payload = db.get(WellbeingPayload, wellbeing_hit[0])
-        if payload:
+    if wellbeing_hits:
+        _wb_payloads = (
+            {p.event_id: p for p in db.scalars(
+                select(WellbeingPayload).where(
+                    WellbeingPayload.event_id.in_([h[0] for h in wellbeing_hits])
+                )
+            ).all()}
+        )
+        _wb_hit = select_wellbeing_hit(wellbeing_hits, _wb_payloads)
+        if _wb_hit is not None:
+            _eid, _etime = _wb_hit
+            payload = _wb_payloads[_eid]
             today_wellbeing = WellbeingMetric(
                 overall_wellbeing=payload.overall_wellbeing,
                 energy_level=payload.energy_level,
                 stress_level=payload.stress_level,
-                event_time=wellbeing_hit[1],
+                event_time=_etime,
             )
 
     if pain_hit is not None:
