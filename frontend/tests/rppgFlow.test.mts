@@ -170,7 +170,11 @@ test('offline-first service: derived payload only, pending retry, no raw data', 
   // only to forbid them — match assignment/upload shapes, not prose).
   assert.ok(!/windowUri:|bgr:|base64|FormData|multipart/i.test(s), 'no raw data in service');
   assert.ok(s.includes("stays 'pending'"), 'offline rows stay pending');
-  assert.ok(s.includes('stop on first failure'), 'retry stops on first failure');
+  // Phase 4: independent rows continue past a single failure instead of
+  // head-of-line blocking behind it (one poison row must not stall later
+  // measurements; failed rows stay pending for the next trigger).
+  assert.ok(s.includes('continue;'), 'retry continues past single failures');
+  assert.ok(!s.includes('stop on first failure'), 'head-of-line break removed');
   assert.ok(s.includes('markRppgSynced'), 'synced marking');
   const q = src('src/db/queries/rppg.ts');
   assert.ok(q.includes('rppg_measurements'), 'separate modality table');

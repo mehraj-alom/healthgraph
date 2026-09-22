@@ -195,9 +195,12 @@ test('migrations are idempotent on re-run', async () => {
   const log = await db.getAllAsync<{ version: number }>(
     `SELECT version FROM _migration_log ORDER BY version`,
   );
+  // Expected versions derive from the schema — never a hardcoded list, so
+  // adding a migration cannot stale this assertion (regressed at v8).
+  const expected = Array.from({ length: CURRENT_SCHEMA_VERSION }, (_, i) => i + 1);
   assert.deepEqual(
     log.map((r) => r.version),
-    [1, 2, 3, 4, 5, 6, 7],
+    expected,
     'guarded migration log must not insert duplicates',
   );
 });
@@ -219,9 +222,10 @@ test('stale checkpoint is repaired back to a complete schema', async () => {
   const log = await db.getAllAsync<{ version: number }>(
     `SELECT version FROM _migration_log ORDER BY version`,
   );
+  const expected = Array.from({ length: CURRENT_SCHEMA_VERSION }, (_, i) => i + 1);
   assert.deepEqual(
     log.map((r) => r.version),
-    [1, 2, 3, 4, 5, 6, 7],
+    expected,
   );
 });
 
