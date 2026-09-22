@@ -2,11 +2,15 @@ import { useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { useToast } from '@/components/Toast';
+import { Chip } from '@/components';
 import {
   logScannedMeal,
   type FoodScanConfidence,
   type FoodScanResult,
 } from '@/services/nutritionService';
+import { MEAL_TYPES, suggestMealType, type MealType } from './mealTypes';
+import { getCachedPatientId } from '@/services/patientIdentity';
+import { saveFoodScanBreakdown } from '@/db/queries/foodScans';
 
 void FONT;
 
@@ -52,6 +56,10 @@ export default function ScanResultSheet({
   const [grams, setGrams] = useState<number[]>(() =>
     result.items.map((item) => item.grams),
   );
+  // Consumption classification: a scan identifies food, it never becomes a
+  // meal on its own. Suggested from time of day; the user confirms or
+  // changes it before anything is logged. Retake (reset) cancels outright.
+  const [mealType, setMealType] = useState<MealType>(() => suggestMealType());
   const [logging, setLogging] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
 
@@ -89,9 +97,39 @@ export default function ScanResultSheet({
     setLogError(null);
     const label = result.items.map((item) => item.label).join(', ').slice(0, 200) || 'Scanned meal';
     try {
-      const { serverSaved } = await logScannedMeal(totalKcal, label);
+      const { serverSaved } = await logScannedMeal(totalKcal, label, mealType);
+      // Persist the per-item estimate so the timeline can show exactly
+      // what the camera saw. Best-effort and local-only: a failure here
+      // never fails the meal log itself.
+      try {
+        const pid = getCachedPatientId();
+        if (pid) {
+          const now = new Date();
+          const logDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+          await saveFoodScanBreakdown(pid, {
+            logDate,
+            mealLabel: label,
+            mealType,
+            items: rows.map((r) => ({
+              label: r.item.label,
+              grams: r.grams,
+              kcal: r.kcal,
+              protein_g: r.protein,
+              carbs_g: r.carbs,
+              fat_g: r.fat,
+              confidence: result.confidence,
+            })),
+            totalKcal,
+            confidence: result.confidence,
+          });
+        }
+      } catch {
+        // Timeline detail is a bonus — the logged totals are already safe.
+      }
       toast.success(
-        serverSaved ? 'Meal logged.' : 'Saved on this device. It will sync when you are back online.',
+        serverSaved
+          ? `${mealType} logged.`
+          : 'Saved on this device. It will sync when you are back online.',
       );
       onLogged(serverSaved);
     } catch (err) {
@@ -131,9 +169,10 @@ export default function ScanResultSheet({
         {totalKcal} kcal
       </Text>
       <Text style={styles.range}>
-        {kcalRange(totalKcal, result.confidence)} · estimate, not exact
+        {kcalRange(totalKcal, result.confidence)}. Estimate, not exact.
       </Text>
 
+      <Text style={styles.sectionLabel}>Items</Text>
       <View style={styles.items}>
         {rows.map((row, i) => (
           <View key={`${row.item.label}-${i}`} style={styles.itemRow}>
@@ -176,13 +215,32 @@ export default function ScanResultSheet({
       </View>
 
       {result.note ? <Text style={styles.note}>{result.note}</Text> : null}
+
+      <Text style={styles.sectionLabel}>Log as</Text>
+      <Text style={styles.sectionHint}>
+        A scan identifies food. You decide what this was.
+      </Text>
+      <View style={styles.chips} accessibilityRole="list">
+        {MEAL_TYPES.map((type) => (
+          <Chip
+            key={type}
+            label={type}
+            selected={mealType === type}
+            onPress={() => setMealType(type)}
+            size="medium"
+            color={GV.cta}
+            accessibilityLabel={`Log as ${type}`}
+          />
+        ))}
+      </View>
+
       {logError ? <Text style={styles.error}>{logError}</Text> : null}
 
       <Pressable
         onPress={() => void logMeal()}
         disabled={logging}
         accessibilityRole="button"
-        accessibilityLabel="Log meal"
+        accessibilityLabel={`Log ${mealType.toLowerCase()}`}
         accessibilityState={{ disabled: logging, busy: logging }}
         style={({ pressed }) => [
           styles.cta,
@@ -190,7 +248,7 @@ export default function ScanResultSheet({
           logging && { opacity: 0.6 },
         ]}
       >
-        <Text style={styles.ctaText}>{logging ? 'Logging…' : 'Log meal'}</Text>
+        <Text style={styles.ctaText}>{logging ? 'Logging…' : `Log ${mealType.toLowerCase()}`}</Text>
       </Pressable>
     </View>
   );
@@ -258,6 +316,23 @@ const styles = StyleSheet.create({
     ...TYPE.caption,
     color: GV.muted,
     textAlign: 'center',
+  },
+  sectionLabel: {
+    fontFamily: FONT.semi,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 2,
+    color: GV.teal,
+    marginTop: 4,
+  },
+  sectionHint: {
+    ...TYPE.caption,
+    color: GV.muted,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   items: {
     gap: 8,

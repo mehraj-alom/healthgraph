@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = 15;
 
 /**
  * Migration function type.
@@ -665,6 +665,195 @@ const migrations: Record<number, MigrationFn> = {
       10,
     );
   },
+
+  // ========================================================================
+  // Migration 11: sync_queue patient ownership (additive)
+  // ========================================================================
+  // The offline queue predates multi-account use on one device: rows carry
+  // no owner, so after logout → login as another user, the previous user's
+  // pending rows would sync under the new user's token (the backend
+  // attributes every write to the token identity and ignores any payload
+  // patient_id). Stamping the acting patient at enqueue plus filtering at
+  // dequeue closes the hole; legacy NULL rows are governed by the payload
+  // backstop in shouldSyncQueueItem and are never synced blindly.
+  // No backfill: payload shapes differ per table (child rows carry no
+  // patient_id), so ownership is stamped going forward and healed
+  // opportunistically (COALESCE) when a row is next touched.
+  11: async (db: SQLiteDatabase) => {
+    const cols = await db.getAllAsync<{ name: string }>(
+      `SELECT name FROM pragma_table_info('sync_queue')`,
+    );
+    const names = new Set(cols.map((c) => c.name));
+    if (!names.has('patient_id')) {
+      await db.execAsync(
+        `ALTER TABLE sync_queue ADD COLUMN patient_id TEXT`,
+      );
+    }
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_sync_patient ON sync_queue (patient_id, status);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      11,
+      'Offline queue: sync_queue patient_id ownership column',
+      11,
+    );
+  },
+
+  // ========================================================================
+  // Migration 12: onboarding personalization state (additive)
+  // ========================================================================
+  // Per-patient onboarding record: completion flag plus the goals/focus
+  // selections from the setup flow. Patient-scoped primary key (never leaks
+  // across accounts); selections are JSON arrays of stable option ids.
+  // No server sync — onboarding personalization is device-local only.
+  12: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS onboarding_state (
+        patient_id TEXT PRIMARY KEY,
+        completed INTEGER NOT NULL DEFAULT 0,
+        goals_json TEXT NOT NULL DEFAULT '[]',
+        focus_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      12,
+      'Onboarding: onboarding_state table',
+      12,
+    );
+  },
+
+  // ========================================================================
+  // Migration 13: substance + cycle tracking (additive, device-only)
+  // ========================================================================
+  // Neutral tracking tables (alcohol/tobacco/other; cycle start/end/notes).
+  // Device-local only: no sync_status column, no queue rows — the UI labels
+  // this data accordingly. Amounts are user-entered value+unit pairs; no
+  // conversion formulas live anywhere in the pipeline.
+  13: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS substance_entries (
+        entry_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        label TEXT,
+        occurred_at TEXT NOT NULL,
+        amount_value REAL,
+        amount_unit TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS cycle_entries (
+        entry_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        date TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_substance_patient_time ON substance_entries (patient_id, occurred_at);
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_cycle_patient_date ON cycle_entries (patient_id, date);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      13,
+      'Substance + cycle tracking tables (device-only)',
+      13,
+    );
+  },
+
+  // ========================================================================
+  // Migration 15: food-scan item breakdown (additive, device-only)
+  // ========================================================================
+  // The daily log keeps day totals only (meals_count, calories_kcal,
+  // food_label). The per-item estimate behind a scan (food name, grams,
+  // kcal, protein/carbs/fat, confidence) lands here so the timeline can
+  // show exactly what the camera saw when a nutrition row is tapped.
+  // Device-local only: no sync_status column, no queue rows — the UI
+  // labels this data accordingly. Estimates stay estimates: nothing
+  // here is measured nutrition.
+  15: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS food_scan_items (
+        scan_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        log_date TEXT NOT NULL,
+        meal_label TEXT NOT NULL,
+        meal_type TEXT,
+        items_json TEXT NOT NULL DEFAULT '[]',
+        total_kcal INTEGER NOT NULL DEFAULT 0,
+        confidence TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_foodscan_patient_date ON food_scan_items (patient_id, log_date);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      15,
+      'Food scan: food_scan_items breakdown table (device-only)',
+      15,
+    );
+  },
+  // ========================================================================
+  // Migration 14: Priority intro exposure on onboarding_state (additive)
+  // ========================================================================
+  // The Priority intro card shows at most three lifetime exposures (first
+  // three eligible calendar days). The counter + last-shown date live on
+  // the patient's existing onboarding row: patient-scoped by primary key,
+  // wiped with the row on deletion, never synced, never graphed. Guarded
+  // ALTERs keep re-runs safe on repaired databases.
+  14: async (db: SQLiteDatabase) => {
+    const cols = await db.getAllAsync<{ name: string }>(
+      `SELECT name FROM pragma_table_info('onboarding_state')`,
+    );
+    const names = new Set(cols.map((c) => c.name));
+    if (!names.has('priority_intro_count')) {
+      await db.execAsync(
+        `ALTER TABLE onboarding_state ADD COLUMN priority_intro_count INTEGER NOT NULL DEFAULT 0`,
+      );
+    }
+    if (!names.has('priority_intro_last_date')) {
+      await db.execAsync(
+        `ALTER TABLE onboarding_state ADD COLUMN priority_intro_last_date TEXT`,
+      );
+    }
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      14,
+      'Priority intro exposure columns on onboarding_state',
+      14,
+    );
+  },
 };
 
 /**
@@ -717,6 +906,13 @@ const REQUIRED_TABLES = [
   'hydration_state',
   // Prescription scan sessions (migration 10)
   'scan_sessions',
+  // Onboarding personalization state (migration 12)
+  'onboarding_state',
+  // Substance + cycle tracking (migration 13, device-only)
+  'substance_entries',
+  'cycle_entries',
+  // Food-scan item breakdown (migration 15, device-only)
+  'food_scan_items',
 ];
 
 /**

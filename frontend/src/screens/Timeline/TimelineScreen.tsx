@@ -16,6 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '@/services/api';
 import { Button, Chip } from '@/components';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { perfStart } from '@/utils/perfLog';
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
@@ -24,8 +25,13 @@ import {
   getDailyLogEvents as dbGetDailyLogEvents,
 } from '@/db/queries/dailyLogs';
 import { getMedications as dbGetMedications } from '@/db/queries/medications';
+import { HealthFact } from '@/components/HealthFact';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getRecentRppgMeasurements } from '@/db/queries/rppg';
+import {
+  listFoodScanBreakdowns,
+  type FoodScanBreakdown,
+} from '@/db/queries/foodScans';
 import {
   storyItemFromLogEvent,
   localDateString,
@@ -444,10 +450,68 @@ function RowShell({
   );
 }
 
+/**
+ * What the camera saw, per saved scan for the day: food names, grams,
+ * kcal and macros, newest scan first. Estimates, labelled as estimates.
+ * Rendered only inside an expanded nutrition row (loads on expand).
+ */
+function NutritionScanDetails({ dayKey }: { dayKey: string }) {
+  const [scans, setScans] = useState<FoodScanBreakdown[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const patientId = getCachedPatientId();
+        if (!patientId) {
+          if (live) setScans([]);
+          return;
+        }
+        const rows = await listFoodScanBreakdowns(patientId, dayKey).catch(() => []);
+        if (live) setScans(rows);
+      } catch {
+        if (live) setScans([]);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [dayKey]);
+  if (!scans || scans.length === 0) return null;
+  return (
+    <View style={styles.scanBlock}>
+      {scans.map((scan) => (
+        <View key={scan.scan_id} style={styles.scanMeal}>
+          <View style={styles.dataRow}>
+            <Text style={styles.dataLabel} numberOfLines={1}>
+              {scan.meal_label}
+            </Text>
+            <Text style={styles.dataValue}>~{scan.total_kcal} kcal</Text>
+          </View>
+          {scan.items.map((food, i) => (
+            <View key={`${scan.scan_id}-${i}`} style={styles.dataRow}>
+              <Text style={styles.dataLabel} numberOfLines={1}>
+                {food.label} · {food.grams}g
+              </Text>
+              <Text style={styles.dataValue} numberOfLines={1}>
+                {food.kcal} kcal · P {food.protein_g}g · C {food.carbs_g}g · F {food.fat_g}g
+              </Text>
+            </View>
+          ))}
+        </View>
+      ))}
+      <Text style={styles.scanNote}>Estimate, not exact. Saved on this device.</Text>
+    </View>
+  );
+}
+
 function LoggedCard({ item, time }: { item: HomeStoryItem; time: string }) {
   const category = localCategory(item);
   const { color, bg } = localAccent(item);
   const { hero, sub } = splitHero(item.title, item.detail);
+  const [open, setOpen] = useState(false);
+  // Local rows are user-entered on this device (never server-inferred):
+  // the expanded detail says so explicitly, matching the source badges on
+  // server rows. Vitals measured by the camera appear on the dial, not here.
   return (
     <RowShell
       color={color}
@@ -457,8 +521,28 @@ function LoggedCard({ item, time }: { item: HomeStoryItem; time: string }) {
       value={hero}
       subline={sub ? `${time} · ${sub}` : time}
       a11yLabel={`${item.title}, ${hero}`}
-      expanded={null}
-    />
+      expanded={open}
+      onToggle={() => setOpen((o) => !o)}
+    >
+      <View style={styles.badgeRow}>
+        <View style={styles.sourceBadge}>
+          <Text style={styles.sourceBadgeText}>On this device</Text>
+        </View>
+        <View style={styles.sourceBadge}>
+          <Text style={styles.sourceBadgeText}>
+            {item.category === 'vital' ? 'Entered by you' : 'You logged'}
+          </Text>
+        </View>
+      </View>
+      {item.detail ? (
+        <View style={styles.noteBlock}>
+          <Text style={styles.noteText}>{item.detail}</Text>
+        </View>
+      ) : null}
+      {item.category === 'nutrition' && open ? (
+        <NutritionScanDetails dayKey={item.dayKey} />
+      ) : null}
+    </RowShell>
   );
 }
 
@@ -594,7 +678,7 @@ function EventCard({
             onPress={() => onDocumentPress(event.evidence!.document_id)}
             style={({ pressed }) => [styles.docLink, pressed && { opacity: 0.7 }]}
           >
-            <Text style={styles.docLinkText}>View document →</Text>
+            <Text style={styles.docLinkText}>View document</Text>
           </Pressable>
         )}
       </View>
@@ -633,7 +717,7 @@ function EventCard({
           style={({ pressed }) => [styles.evidenceBlock, pressed && { opacity: 0.7 }]}
           onPress={() => onDocumentPress(event.evidence!.document_id)}
         >
-          <Text style={styles.evidenceTitle}>SOURCE EVIDENCE</Text>
+          <Text style={styles.evidenceTitle}>Source evidence</Text>
           <Text style={styles.evidenceText} numberOfLines={3}>
             {event.evidence.extracted_text}
           </Text>
@@ -705,6 +789,24 @@ function enrichLocalItem(
       typeof sev === 'number' ? `${sev}/10` : null,
     ].filter(Boolean);
     return { ...item, detail: bits.join(' · ') };
+  }
+  // Nutrition carries the day's food story in the payload (food_label like
+  // "Lunch — eggs, toast" plus the summed estimate): surface food names and
+  // calories on the collapsed row so a scan is visible without expanding.
+  if (item.category === 'nutrition') {
+    const bits: string[] = [];
+    const foodLabel =
+      typeof payload['food_label'] === 'string' && payload['food_label'].trim()
+        ? payload['food_label'].trim()
+        : null;
+    const kcal =
+      typeof payload['calories_kcal'] === 'number' &&
+      Number.isFinite(payload['calories_kcal'])
+        ? Math.round(payload['calories_kcal'])
+        : null;
+    if (foodLabel) bits.push(foodLabel);
+    if (kcal != null && kcal > 0) bits.push(`~${kcal} kcal`);
+    if (bits.length > 0) return { ...item, detail: `${item.detail} · ${bits.join(' · ')}` };
   }
   return item;
 }
@@ -1111,7 +1213,8 @@ export default function TimelineScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
           <ActivityIndicator size="large" color={GV.teal} />
-          <Text style={styles.centerText}>Loading your clinical timeline…</Text>
+          <Text style={styles.centerText}>Loading timeline…</Text>
+          <HealthFact style={styles.factText} />
         </View>
       </SafeAreaView>
     );
@@ -1134,6 +1237,7 @@ export default function TimelineScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StageGradient />
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.key}
@@ -1162,7 +1266,7 @@ export default function TimelineScreen() {
             <Text style={styles.emptyText}>
               {filter === 'all'
                 ? 'Saved daily logs, medical records, observations, and verified records will appear here.'
-                : 'Try another filter — or log something today and come back.'}
+                : 'Try another filter, or log something today and come back.'}
             </Text>
           </View>
         }
@@ -1205,9 +1309,15 @@ const styles = StyleSheet.create({
     color: GV.fog,
     textAlign: 'center',
   },
+  factText: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+    maxWidth: 300,
+  },
   content: {
     paddingHorizontal: SPACE.screenH,
-    paddingBottom: 48,
+    paddingBottom: 32,
   },
 
   // Header content lives in the list header (scrolls away together).
@@ -1308,7 +1418,6 @@ const styles = StyleSheet.create({
   dateCountText: {
     ...TYPE.chip,
     color: GV.ink,
-    fontSize: 11,
     fontVariant: ['tabular-nums'],
   },
   dateRule: {
@@ -1502,6 +1611,26 @@ const styles = StyleSheet.create({
     ...TYPE.caption,
     color: GV.body,
     lineHeight: 20,
+  },
+
+  // Scanned-meal breakdown (nutrition rows, on-device estimates)
+  scanBlock: {
+    marginTop: 8,
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: GV.line,
+    backgroundColor: GV.wash,
+    borderRadius: 8,
+    gap: 4,
+  },
+  scanMeal: {
+    gap: 0,
+  },
+  scanNote: {
+    ...TYPE.caption,
+    fontSize: 12,
+    color: GV.muted,
+    marginTop: 4,
   },
 
   // Evidence — flat wash slip on white
