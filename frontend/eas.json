@@ -10,6 +10,9 @@
       "environment": "development",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_ASSET_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1"
       }
     },
     "preview": {
@@ -17,10 +20,16 @@
       "environment": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_ASSET_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_ASSET_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1"
+      }
     }
   },
   "submit": {

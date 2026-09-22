@@ -29,6 +29,11 @@ public class HealthGraphRPPGModule: Module {
   private var isCapturing = false
   private var cancelRequested = false
   private var runId = 0
+  /// The in-flight startCapture promise. cancelCapture must settle it
+  /// (CANCELLED) — otherwise the JS await hangs forever holding its closure.
+  /// Nulled on every terminal path so a later cancel never touches a settled
+  /// promise.
+  private var pendingPromise: Promise?
   private let queue = DispatchQueue(label: "com.healthgraph.rppg")
   private var timeoutWork: DispatchWorkItem?
 
@@ -53,6 +58,7 @@ public class HealthGraphRPPGModule: Module {
       self.cancelRequested = false
       self.runId += 1
       let myRun = self.runId
+      self.pendingPromise = promise
       self.sendEvent("HealthGraphRPPGState", ["state": "STARTING"])
       self.start(timeoutSeconds: timeoutSeconds, promise: promise, myRun: myRun)
     }
@@ -63,6 +69,11 @@ public class HealthGraphRPPGModule: Module {
       self.timeoutWork?.cancel()
       self.stop()
       self.isCapturing = false
+      // Settle the in-flight start (its JS await would otherwise hang).
+      if let pending = self.pendingPromise {
+        self.pendingPromise = nil
+        pending.reject("CANCELLED", "Capture cancelled")
+      }
       self.sendEvent("HealthGraphRPPGState", ["state": "CANCELLED"])
       promise.resolve(nil)
     }
@@ -115,6 +126,11 @@ public class HealthGraphRPPGModule: Module {
         func failRun(code: String, reason: String, message: String) {
           guard myRun == self.runId else { return }
           self.stop(); self.isCapturing = false
+          // Invalidate the generation: late session callbacks for this run
+          // must observe a stale myRun and bind nothing (otherwise the camera
+          // stays running with no JS owner after a timeout failure).
+          self.runId += 1
+          self.pendingPromise = nil
           self.sendEvent("HealthGraphRPPGState", ["state": "FAILED", "reason": reason, "message": message])
           promise.reject(code, message)
         }
@@ -163,6 +179,7 @@ public class HealthGraphRPPGModule: Module {
             return
           }
           self.stop(); self.isCapturing = false
+          self.pendingPromise = nil
           self.sendEvent("HealthGraphRPPGState", ["state": "COMPLETE", "framesCollected": ring.count])
           promise.resolve([
             "windowUri": outUrl.path,
@@ -254,7 +271,10 @@ public class HealthGraphRPPGModule: Module {
   private func finishFail(_ promise: Promise, myRun: Int, code: String, reason: String, message: String) {
     guard myRun == self.runId else { return }
     stop(); isCapturing = false
-    sendEvent("HealthGraphRPPGState", ["state": "FAILED", "reason": reason])
+    // Same generation invalidation as failRun: no late bind after failure.
+    runId += 1
+    pendingPromise = nil
+    sendEvent("HealthGraphRPPGState", ["state": "FAILED", "reason": reason, "message": message])
     promise.reject(code, message)
   }
 

@@ -7,7 +7,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
-      "assets/models/rppg/*",
       "assets/app-load.mp4"
     ],
     "ios": {
@@ -28,6 +27,8 @@
     "plugins": [
       "expo-secure-store",
       "./modules/healthgraph-ppg/app.plugin.js",
+      "./modules/healthgraph-rppg/app.plugin.js",
+      "onnxruntime-react-native",
       [
         "expo-sqlite",
         {

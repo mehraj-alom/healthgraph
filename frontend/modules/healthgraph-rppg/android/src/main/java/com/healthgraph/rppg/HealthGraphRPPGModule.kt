@@ -71,6 +71,13 @@ class HealthGraphRPPGModule : Module() {
   private val mainHandler = Handler(Looper.getMainLooper())
   private val cancelRequested = AtomicBoolean(false)
   private val runId = AtomicLong(0)
+  /**
+   * The in-flight startCapture promise. cancelCapture must settle it
+   * (CANCELLED) — otherwise the JS await hangs forever holding its closure.
+   * Nulled on every terminal path (seal/fail/cancel) so a later cancel never
+   * touches an already-settled promise.
+   */
+  @Volatile private var pendingPromise: Promise? = null
 
   private fun dlog(msg: String) {
     if (BuildConfig.DEBUG) Log.d(TAG, msg)
@@ -107,6 +114,11 @@ class HealthGraphRPPGModule : Module() {
       cancelRequested.set(true)
       stopCamera()
       isCapturing.set(false)
+      // Settle the in-flight start (its JS await would otherwise hang).
+      try {
+        pendingPromise?.reject("CANCELLED", "Capture cancelled", null)
+      } catch (_: Exception) { }
+      pendingPromise = null
       sendEvent("HealthGraphRPPGState", mapOf("state" to "CANCELLED"))
       promise.resolve(null)
     }
@@ -116,6 +128,7 @@ class HealthGraphRPPGModule : Module() {
 
   @SuppressLint("UnsafeOptInUsageError")
   private fun startCaptureRun(timeoutSeconds: Int, promise: Promise, myRun: Long) {
+    pendingPromise = promise
     fun settleStale() {
       try {
         promise.reject("CANCELLED", "Capture superseded by a newer run", null)
@@ -204,6 +217,11 @@ class HealthGraphRPPGModule : Module() {
       if (myRun != runId.get()) return
       stopCamera()
       isCapturing.set(false)
+      // Invalidate the generation: a late camera-provider callback for this
+      // run must observe a stale myRun and bind nothing (otherwise the camera
+      // stays bound with no JS owner after a timeout failure).
+      runId.incrementAndGet()
+      pendingPromise = null
       try {
         sendEvent("HealthGraphRPPGState", mapOf("state" to "FAILED", "reason" to reason, "message" to message))
       } catch (_: Exception) { }
@@ -276,6 +294,7 @@ class HealthGraphRPPGModule : Module() {
       try {
         promise.resolve(summary)
       } catch (_: Exception) { }
+      pendingPromise = null
     }
 
     val analysis = ImageAnalysis.Builder()
