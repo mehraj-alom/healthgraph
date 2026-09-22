@@ -26,6 +26,12 @@ COPY . .
 
 RUN mkdir -p /app/storage/documents
 
+# Production hygiene: never run the API as root. The app only needs to read
+# its own code, write the storage scratch dir, and bind $PORT (>1024).
+RUN useradd -m -u 10001 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 
 EXPOSE 8000
 

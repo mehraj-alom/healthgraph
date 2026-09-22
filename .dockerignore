@@ -26,11 +26,27 @@ __pycache__/
 firebase_credentials.json
 firebase-adminsdk*.json
 
+# Agent/tooling configuration (opencode.json carries live third-party API
+# keys — never bake tooling config into the image)
+opencode.json
+skills-lock.json
+.agent/
+.agents/
+.claude/
+.opencode/
+agent/
+
 # Build artifacts
 dist/
 build/
+frontend/node_modules/
+frontend/dist/
+frontend/.expo/
+frontend/android/build/
+frontend/android/.gradle/
+frontend/ios/build/
 *.egg-info/
-*.whl
+*.whl/
 *.tar.gz
 *.egg
 

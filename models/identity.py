@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy import String, Float
+from sqlalchemy import String, Float, Text
 from models.base import Base, TimestampMixin
 
 class Patient(Base, TimestampMixin):
@@ -15,6 +15,13 @@ class Patient(Base, TimestampMixin):
     phone_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
     height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Onboarding preferences (device-owned, server-mirrored for backup).
+    # Stored as JSON arrays of stable option ids; the device is the source
+    # of truth and overwrites these on every profile save. Nullable so
+    # pre-existing rows need no backfill.
+    goals_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    focus_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 class Provider(Base, TimestampMixin):
     __tablename__ = "providers"

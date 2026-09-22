@@ -40,8 +40,24 @@ jobs:
         working-directory: frontend
         run: npx expo-doctor
 
-      - name: Frontend unit tests (sqlite migrations + sync classification)
-        run: node --experimental-sqlite --experimental-strip-types --test frontend/tests/migrations.test.mts frontend/tests/syncClassification.test.mts
+      - name: Frontend unit tests (all runnable suites, no device needed)
+        # Runnable in stock Node 22: pure + SQLite-backed suites. Deliberately
+        # excluded: rppgContract / rppgPipeline / ppgContract / ppgProviders —
+        # they use Metro-style extensionless imports and need the documented
+        # staging+tsc recipe (see each file header); verified manually.
+        run: >
+          node --experimental-sqlite --experimental-strip-types --test
+          frontend/tests/migrations.test.mts
+          frontend/tests/syncClassification.test.mts
+          frontend/tests/rppgBuildConfig.test.mts
+          frontend/tests/rppgModelManager.test.mts
+          frontend/tests/rppgFlow.test.mts
+          frontend/tests/rppgRuntimePhase2.test.mts
+          frontend/tests/heartRateSync.test.mts
+          frontend/tests/storageSyncPhase4.test.mts
+          frontend/tests/patientErase.test.mts
+          frontend/tests/ppgLive.test.mts
+          frontend/tests/ppgSignal.test.mts
 
   backend:
     name: Backend (dev env · compile · pytest · ruff)
@@ -62,6 +78,9 @@ jobs:
 
       - name: Compile all packages
         run: python -m compileall -q app agents alembic core models schemas scripts services workers
+
+      - name: Alembic single head (no migration branches)
+        run: python -m alembic heads
 
       - name: Run backend tests
         # Dummy, non-secret Celery broker/backend env so app modules importing
@@ -143,7 +162,10 @@ jobs:
           fail=0
 
           # Genuine secret shapes — scanned EVERYWHERE (incl. index.html).
-          GENUINE='(ghp_[0-9A-Za-z]{30,}|sk-[0-9A-Za-z]{20,}|-----BEGIN (RSA |OPENSSH |EC |DSA |)PRIVATE KEY-----|firebase.?admin.?private_key)'
+          # atr_/thk_live_ cover third-party token prefixes present in local
+          # (gitignored) tooling config — prefixes only, no values; this fires
+          # only if such a file is ever force-added to tracking.
+          GENUINE='(ghp_[0-9A-Za-z]{30,}|sk-[0-9A-Za-z]{20,}|atr_[0-9A-Za-z_-]{10,}|thk_live_[0-9A-Za-z_-]{10,}|-----BEGIN (RSA |OPENSSH |EC |DSA |)PRIVATE KEY-----|firebase.?admin.?private_key)'
           if git grep -nE "$GENUINE" -- . ; then
             echo "::error::Genuine credential shape found in tracked files."
             fail=1

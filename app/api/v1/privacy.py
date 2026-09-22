@@ -11,8 +11,13 @@ Explicitly NOT included (require policy/legal ownership):
   counsel must approve the text behind each version)
 - SLA clock interpretation (due_at defaults to +90d; GDPR 1-month vs DPDP
   90-day is a policy decision)
-- automatic account erasure (intake only in P0; fulfillment is manual until
-  the erasure orchestrator lands in P1)
+
+Erasure fulfillment (P1): the erasure orchestrator in services/erasure.py
+fulfills deletion via DELETE /privacy/data (all health records, account
+kept) and DELETE /privacy/account (records + identity). Erasure-type DSRs
+are marked fulfilled by the data endpoint; the endpoints report an honest
+per-subsystem completed/partial status and are idempotent, so retries
+converge.
 
 Grandfathering rule: patients without any receipt keep existing
 functionality; those calls are audit-logged as consent_unknown so policy
@@ -331,3 +336,70 @@ def export_data(
             for r in receipts
         ],
     }
+
+
+class ErasureReport(BaseModel):
+    status: str = Field(description="completed | partial (see subsystem reports; retry converges)")
+    delete_account: bool
+    postgres: dict
+    dsr_fulfilled: list = Field(default_factory=list)
+    neo4j: dict
+    qdrant: dict
+    firebase: dict
+
+
+def _run_erasure(
+    db: Session,
+    patient_id: uuid.UUID,
+    *,
+    delete_account: bool,
+) -> ErasureReport:
+    from core.neo4j_client import neo4j_driver
+    from models.identity import Patient
+    from services.erasure import orchestrate_erasure
+
+    firebase_uid: str | None = None
+    if delete_account:
+        row = db.query(Patient).filter(Patient.patient_id == patient_id).first()
+        firebase_uid = row.firebase_uid if row else None
+
+    report = orchestrate_erasure(
+        db,
+        patient_id,
+        delete_account=delete_account,
+        neo4j_driver=neo4j_driver,
+        firebase_uid=firebase_uid,
+    )
+    return ErasureReport(**report)
+
+
+@router.delete("/data", response_model=ErasureReport)
+def delete_all_health_data(
+    db: Session = Depends(get_db),
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+):
+    """Delete ALL of the caller's health records; the account remains.
+
+    Covers PostgreSQL (ordered, FK-safe, incl. the graph outbox so workers
+    cannot resurrect projections), Neo4j patient subgraph, Qdrant vectors,
+    LangGraph checkpoints, idempotency keys, and fulfills this patient's
+    OPEN erasure DSRs. Consent receipts stay (the account relationship
+    continues). Overall status is 'completed' only when every subsystem
+    completed — otherwise 'partial' with explicit residuals; the operation
+    is idempotent, so retrying converges.
+    """
+    return _run_erasure(db, patient_id, delete_account=False)
+
+
+@router.delete("/account", response_model=ErasureReport)
+def delete_account(
+    db: Session = Depends(get_db),
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+):
+    """Delete the caller's account: all health data (see DELETE /data) plus
+    consent/DSR rows, the Patient row, and the Firebase Auth user.
+
+    The client must sign out locally afterwards (its token dies with the
+    Firebase user). Same completion semantics as DELETE /data.
+    """
+    return _run_erasure(db, patient_id, delete_account=True)

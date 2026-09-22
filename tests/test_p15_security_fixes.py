@@ -580,15 +580,14 @@ class TestD4SystemLogFilter:
 
 
 class TestD6ErasureContractIsExplicit:
-    """P15 / D6 deliberately adds NO erasure endpoint.
-
-    The audit found DSR intake but no fulfillment, and no patient-level
-    deletion path anywhere. Rather than invent an unsafe ad-hoc deletion API,
-    the boundary is pinned here so that a future half-implementation is
-    caught and the lifecycle contract has to be updated deliberately.
+    """P15 / D6 pinned intake-only erasure; Phase 5 deliberately supersedes
+    it with reviewed fulfillment (services/erasure.py + the two DELETE
+    endpoints below). The tripwire stays, inverted: erasure logic must live
+    in exactly that one orchestrator module — never scattered ad-hoc across
+    app/services/workers.
     """
 
-    def test_no_erasure_fulfillment_function_exists(self):
+    def test_erasure_fulfillment_lives_only_in_orchestrator(self):
         import re
 
         pattern = re.compile(
@@ -601,10 +600,10 @@ class TestD6ErasureContractIsExplicit:
                 for lineno, line in enumerate(path.read_text().splitlines(), 1):
                     if pattern.search(line):
                         hits.append(f"{path.relative_to(project_root)}:{lineno}")
-        assert hits == [], (
-            "erasure fulfillment appeared without an updated contract: "
-            f"{hits}"
-        )
+        assert hits != [], "erasure fulfillment regressed to intake-only"
+        assert all(
+            h.startswith("services/erasure.py") for h in hits
+        ), f"erasure logic outside the orchestrator: {hits}"
 
     def test_privacy_router_exposes_intake_only(self):
         from app.api.v1 import privacy
@@ -621,16 +620,19 @@ class TestD6ErasureContractIsExplicit:
             ("/api/v1/privacy/requests", "GET"),
             ("/api/v1/privacy/requests", "POST"),
             ("/api/v1/privacy/export", "GET"),
+            ("/api/v1/privacy/data", "DELETE"),
+            ("/api/v1/privacy/account", "DELETE"),
         }, "privacy surface changed; update the D6 contract statement"
 
-    def test_module_documents_manual_fulfillment(self):
+    def test_module_documents_fulfillment_orchestrator(self):
         import inspect
 
         from app.api.v1 import privacy
 
         src = inspect.getsource(privacy)
-        assert "fulfillment is manual" in src
-        assert "automatic account erasure" in src
+        assert "erasure orchestrator" in src
+        assert "DELETE /privacy/data" in src
+        assert "DELETE /privacy/account" in src
 
     def test_document_deletion_stays_patient_scoped(self):
         """The lifecycle we DO have must remain scoped (D6 verification)."""

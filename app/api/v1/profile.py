@@ -1,3 +1,4 @@
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,7 +8,19 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_authenticated_patient_id
 from core.db import get_db
 from models.identity import Patient
-from schemas.profile import PatientProfileResponse, PatientProfileUpdate
+from schemas.profile import PatientProfileResponse, PatientProfileUpdate, clean_id_list
+
+
+def _decode_ids(raw: str | None) -> list[str] | None:
+    """Parse a stored preference JSON array; corrupt data reads as unset."""
+    if not raw:
+        return None
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    cleaned = clean_id_list(value if isinstance(value, list) else None)
+    return cleaned if cleaned else None
 
 
 router = APIRouter(
@@ -46,6 +59,8 @@ def get_profile(
         phone_number=patient.phone_number,
         height_cm=patient.height_cm,
         weight_kg=patient.weight_kg,
+        goals=_decode_ids(patient.goals_json),
+        focus=_decode_ids(patient.focus_json),
     )
 
 
@@ -78,6 +93,17 @@ def update_profile(
     if "weight_kg" in provided:
         patient.weight_kg = payload.weight_kg
 
+    # Device-owned preference mirrors: the device overwrites these on
+    # every profile save (last-write-wins from the device). Explicit null
+    # clears the mirror; omitted fields are left unchanged.
+    if "goals" in provided:
+        cleaned = clean_id_list(payload.goals)
+        patient.goals_json = json.dumps(cleaned) if cleaned is not None else None
+
+    if "focus" in provided:
+        cleaned = clean_id_list(payload.focus)
+        patient.focus_json = json.dumps(cleaned) if cleaned is not None else None
+
     try:
         db.commit()
     except Exception:
@@ -92,4 +118,6 @@ def update_profile(
         phone_number=patient.phone_number,
         height_cm=patient.height_cm,
         weight_kg=patient.weight_kg,
+        goals=_decode_ids(patient.goals_json),
+        focus=_decode_ids(patient.focus_json),
     )
