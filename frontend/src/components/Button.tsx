@@ -40,9 +40,10 @@ const HEIGHT: Record<ControlSize, number> = {
 };
 
 /**
- * Guava-flat button — deep-green pill (primary), white pill (secondary),
- * hairline pill (outline), quiet text (ghost). Flat fills, no shadows.
- * API unchanged so existing call sites keep working.
+ * Guava button — deep-green pill (primary), white pill (secondary),
+ * hairline pill (outline), quiet text (ghost). Solid variants carry a
+ * same-hue drop shadow for premium depth (violet stage behind them);
+ * quiet variants stay flat. API unchanged so existing call sites work.
  */
 export const Button = ({
   title,
@@ -60,6 +61,34 @@ export const Button = ({
 }: ButtonProps) => {
   const height = HEIGHT[size];
   const isDisabled = disabled || loading;
+
+  // Same-hue depth for solid fills only — quiet variants stay flat.
+  const depthMap: Record<ButtonVariant, ViewStyle> = {
+    primary: {
+      shadowColor: '#06392A',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.35,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    secondary: {},
+    outline: {},
+    ghost: {},
+    danger: {
+      shadowColor: '#7A1F1F',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.35,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    success: {
+      shadowColor: '#06392A',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.35,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+  };
 
   const surfaceMap: Record<ButtonVariant, ViewStyle> = {
     primary: {
@@ -116,6 +145,7 @@ export const Button = ({
         styles.container,
         { minHeight: height, borderRadius: pill || variant === 'primary' ? radius.pill : radius.md },
         surfaceMap[variant],
+        !isDisabled && depthMap[variant],
         isDisabled && styles.disabled,
         pressed && !isDisabled && { ...pressedMap[variant], transform: [{ scale: 0.975 }] },
         fullWidth && styles.fullWidth,

@@ -1,6 +1,7 @@
 import { StyleSheet, View, Text, type ViewStyle } from 'react-native';
 import { spacing } from '@/theme/tokens';
 import { GV, TYPE } from '@/theme/guava';
+import { MarkerHighlight } from '@/components/MarkerHighlight';
 
 interface SectionHeaderProps {
   title: string;
@@ -11,9 +12,11 @@ interface SectionHeaderProps {
   /** Guava-style centered section titles ("Your tracked factors"). */
   align?: 'left' | 'center';
   style?: ViewStyle;
+  /** Sketchpen shade behind the title (default on — the kid-highlight). */
+  marked?: boolean;
 }
 
-/** Guava-flat section heading — Poppins SemiBold, optional centered. */
+/** Section heading — Poppins SemiBold with a sketchpen-shaded tagline. */
 export const SectionHeader = ({
   title,
   subtitle,
@@ -21,6 +24,7 @@ export const SectionHeader = ({
   right,
   align = 'left',
   style,
+  marked = true,
 }: SectionHeaderProps) => {
   const centered = align === 'center';
   return (
@@ -29,9 +33,19 @@ export const SectionHeader = ({
         <View style={[styles.dot, { backgroundColor: accent }]} />
       ) : null}
       <View style={styles.text}>
-        <Text style={[styles.title, centered && styles.titleCentered]}>
-          {title}
-        </Text>
+        {marked ? (
+          <MarkerHighlight
+            color={accent ?? undefined}
+            textStyle={[styles.title, centered && styles.titleCentered]}
+            center={centered}
+          >
+            {title}
+          </MarkerHighlight>
+        ) : (
+          <Text style={[styles.title, centered && styles.titleCentered]}>
+            {title}
+          </Text>
+        )}
         {subtitle ? (
           <Text style={[styles.subtitle, centered && styles.titleCentered]}>
             {subtitle}

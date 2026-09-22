@@ -31,12 +31,20 @@ interface CardProps {
 }
 
 /**
- * Guava-flat card — pure white, radius 20, no shadow, no border, no accent
- * lanes. Separation comes from the dark stage behind it.
+ * Guava card — white surface with hierarchy through depth, not decoration.
+ *
+ * - standard: quiet flat card with a hairline violet-tinted edge so it
+ *   holds together on the neon stage.
+ * - elevated: soft violet shadow for feature surfaces.
+ * - highlighted: deeper shadow + a 3px top accent lane (hero/featured).
+ * - metric: top accent lane, flat body (health metric surface).
+ * - interactive: standard surface with press feedback.
+ * - compact: dense, reduced padding + radius.
  *
  * All legacy selectors (`kind`, `level`, `elevated`, `variant`, `tone`,
- * `accentColor`) are accepted and intentionally render the SAME flat card
- * so existing screens converge without rewrites breaking.
+ * `accentColor`) feed the same resolver, so existing screens upgrade
+ * without rewrites. Shadows are violet-tinted (never generic grey) and
+ * carry Android elevation to match.
  */
 export const Card = ({
   children,
@@ -73,13 +81,42 @@ export const Card = ({
               ? 'elevated'
               : 'standard');
 
-  // Every legacy kind converges on the same flat white card.
+  // Depth per kind: quiet flat → soft violet shadow → hero shadow +
+  // accent lane. One shadow family everywhere (deep violet, never grey).
+  const SHADOW = 'rgba(46, 16, 101, 1)';
+  // Warm paper default (caller `style` still wins — it merges last).
   const surface: ViewStyle = {
-    backgroundColor: GV.card,
+    backgroundColor: GV.paper,
   };
-  void resolvedKind;
-  void tone;
-  void accentColor;
+  if (resolvedKind === 'standard' || resolvedKind === 'interactive' || resolvedKind === 'compact') {
+    surface.borderWidth = 1;
+    surface.borderColor = tone ?? '#E7E1F5';
+  }
+  if (resolvedKind === 'elevated') {
+    surface.borderWidth = 1;
+    surface.borderColor = tone ?? '#E2D9F6';
+    surface.shadowColor = SHADOW;
+    surface.shadowOffset = { width: 0, height: 8 };
+    surface.shadowOpacity = 0.16;
+    surface.shadowRadius = 16;
+    surface.elevation = 6;
+  }
+  if (resolvedKind === 'highlighted') {
+    surface.borderWidth = 1;
+    surface.borderColor = tone ?? '#D9CFF3';
+    surface.shadowColor = SHADOW;
+    surface.shadowOffset = { width: 0, height: 12 };
+    surface.shadowOpacity = 0.22;
+    surface.shadowRadius = 20;
+    surface.elevation = 8;
+  }
+  if (resolvedKind === 'metric') {
+    surface.borderWidth = 1;
+    surface.borderColor = tone ?? '#E7E1F5';
+  }
+
+  const showLane = resolvedKind === 'highlighted' || resolvedKind === 'metric';
+  const laneColor = accentColor ?? GV.violet;
 
   const Container = onPress ? Pressable : View;
 
@@ -103,12 +140,15 @@ export const Card = ({
         {
           borderRadius: resolvedKind === 'compact' ? radius.lg : 20,
           padding: paddingMap[padding],
+          paddingTop: showLane ? 0 : paddingMap[padding],
+          overflow: showLane ? 'hidden' : undefined,
         },
         pressStyle as any,
         style,
       ]}
     >
-      {children}
+      {showLane ? <View style={[styles.lane, { backgroundColor: laneColor }]} /> : null}
+      {showLane ? <View style={{ padding: paddingMap[padding], paddingTop: 12 }}>{children}</View> : children}
     </Container>
   );
 };
@@ -116,5 +156,9 @@ export const Card = ({
 const styles = StyleSheet.create({
   container: {
     borderWidth: 0,
+  },
+  lane: {
+    height: 3,
+    width: '100%',
   },
 });

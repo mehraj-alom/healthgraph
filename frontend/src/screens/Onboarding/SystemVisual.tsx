@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Line } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Stop } from 'react-native-svg';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -36,6 +36,7 @@ const DIMENSIONS: Dimension[] = [
   { label: 'Nutrition', fx: 0.06, fy: 0.5, dot: '#7CF5D3' },
   { label: 'Activity', fx: 0.94, fy: 0.5, dot: '#8FC1E8' },
   { label: 'Wellbeing', fx: 0.16, fy: 0.9, dot: '#F5C99B' },
+  { label: 'Medications', fx: 0.5, fy: 0.9, dot: '#34D399' },
   { label: 'Records', fx: 0.84, fy: 0.9, dot: '#A7B8B2' },
 ];
 
@@ -173,6 +174,23 @@ export function SystemVisual({
         viewBox={`0 0 ${size} ${height}`}
         style={StyleSheet.absoluteFill}
       >
+        {/* Green → teal gradient ring around the hub (official
+            react-native-svg LinearGradient-in-Defs pattern, Guava hues). */}
+        <Defs>
+          <LinearGradient id="hg-hub-grad" x1="0" y1="1" x2="1" y2="0">
+            <Stop offset="0" stopColor="#0B7A55" stopOpacity={1} />
+            <Stop offset="0.55" stopColor="#4FD1C5" stopOpacity={1} />
+            <Stop offset="1" stopColor="#7CF5D3" stopOpacity={1} />
+          </LinearGradient>
+        </Defs>
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={62}
+          fill="none"
+          stroke="url(#hg-hub-grad)"
+          strokeWidth={2.5}
+        />
         {DIMENSIONS.map((d, i) => {
           if (count <= i) return null;
           const p = pillCenter(d);

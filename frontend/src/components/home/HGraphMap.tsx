@@ -49,6 +49,7 @@ import Animated, {
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { spring } from '@/theme/motion';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { MARKER_COLOR, scribblePaths } from '@/components/markerScribble';
 import { BottomSheet } from '@/components/BottomSheet';
 import type { MetricTrend } from '@/screens/Dashboard/correlations';
 
@@ -665,9 +666,38 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
             {`${spokes.length} SIGNAL${spokes.length === 1 ? '' : 'S'}`}
           </SvgText>
 
-          {/* rim: value printed directly (no tap needed) + short name */}
-          {spokes.map((s) => (
+          {/* rim: value printed directly (no tap needed) + short name.
+              The name carries a sketchpen shade (marker scribble behind
+              the tagline, sized from the label itself). */}
+          {spokes.map((s) => {
+            const name = s.m.label.toUpperCase().slice(0, 14);
+            const markW = name.length * 6.8 + 8;
+            const markH = 12;
+            const markX =
+              s.anchor === 'middle'
+                ? s.labelX - markW / 2
+                : s.anchor === 'start'
+                  ? s.labelX - 4
+                  : s.labelX - markW + 4;
+            const mark = scribblePaths(markX, s.labelY + 13 - 11, markW, markH);
+            return (
             <G key={`lb-${s.m.id}`}>
+              <Path
+                d={mark.main}
+                stroke={MARKER_COLOR}
+                strokeWidth={mark.mainWidth}
+                opacity={0.5}
+                fill="none"
+                strokeLinecap="round"
+              />
+              <Path
+                d={mark.over}
+                stroke={MARKER_COLOR}
+                strokeWidth={mark.overWidth}
+                opacity={0.45}
+                fill="none"
+                strokeLinecap="round"
+              />
               <SvgText
                 x={s.labelX}
                 y={s.labelY - 1}
@@ -687,10 +717,11 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
                 fill={SUB}
                 letterSpacing={0.5}
               >
-                {s.m.label.toUpperCase().slice(0, 14)}
+                {name}
               </SvgText>
             </G>
-          ))}
+            );
+          })}
 
           {/* sector rim labels: one per family, always visible */}
           {sectorArcs.map((g) => (

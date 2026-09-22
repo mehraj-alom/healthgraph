@@ -29,6 +29,7 @@ import Svg, {
 } from 'react-native-svg';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { MarkerHighlight } from '@/components/MarkerHighlight';
 
 export interface TimeSeriesPoint {
   date: string;
@@ -468,7 +469,16 @@ export default function CorrelationGraphCard({
               {subtitle ? subtitle.toUpperCase() : 'LIVE'}
             </Text>
           </View>
-          <Text style={styles.title} numberOfLines={2} selectable>{title}</Text>
+          {/* Sketchpen shade behind the tagline: the metric hue when the
+              graph has one, highlighter yellow otherwise (never ink — a
+              dark shade would muddy the text instead of lifting it). */}
+          <MarkerHighlight
+            color={lineColor === GV.ink ? undefined : lineColor}
+            textStyle={styles.title}
+            numberOfLines={2}
+          >
+            {title}
+          </MarkerHighlight>
         </View>
         {r != null && Number.isFinite(r) && data.kind === 'correlation' ? (
           <View style={styles.pillCol}>
@@ -582,7 +592,7 @@ export default function CorrelationGraphCard({
 const styles = StyleSheet.create({
   // Guava-flat: white card, radius 20, padding 20, no border, no shadow.
   card: {
-    backgroundColor: GV.card,
+    backgroundColor: GV.paper,
     borderRadius: SPACE.rCard,
     padding: SPACE.cardPad,
   },
