@@ -14,7 +14,7 @@
  * - Wellness copy only: no diagnosis / disease / BP / treatment claims.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   AppState,
   Linking,
@@ -28,8 +28,10 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, ErrorState, ProgressBar } from '@/components';
 import { useRppgMeasurement } from '@/hooks/useRppgMeasurement';
+import { isRppgBusyState } from '@/services/rppg';
 import { RppgCameraPreview, RppgCameraPreviewBoundary } from 'healthgraph-rppg';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import type { RootStackParamList } from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'RppgMeasure'>;
@@ -71,17 +73,7 @@ export default function RppgMeasureScreen() {
     reset,
   } = useRppgMeasurement();
 
-  const busy = [
-    'PREPARING',
-    'MODEL_DOWNLOAD',
-    'FIND_FACE',
-    'POSITION_FACE',
-    'ACQUIRING',
-    'MEASURING',
-    'SIGNAL_WEAK',
-    'FACE_LOST',
-    'COMPLETING',
-  ].includes(state);
+  const busy = isRppgBusyState(state);
   const hr = result?.heartRateBpm ?? null;
   const hasResult = state === 'COMPLETE' && result != null && hr != null;
   const isModelDownload = state === 'MODEL_DOWNLOAD';
@@ -91,17 +83,21 @@ export default function RppgMeasureScreen() {
       ? 100
       : Math.max(0, Math.min(100, (progressFrames / WINDOW_FRAMES) * 100));
 
-  // Leaving the screen or backgrounding ends capture (no orphan camera).
+  // Leaving the screen or backgrounding ends an ACTIVE capture (no orphan
+  // camera). Guarded by busy: cancelling while IDLE would emit a spurious
+  // native CANCELLED and its telemetry for a run that never started.
+  const busyRef = useRef(false);
+  busyRef.current = busy;
   useEffect(() => {
     const sub = navigation.addListener('beforeRemove', () => {
-      void cancel();
+      if (busyRef.current) void cancel();
     });
     return sub;
   }, [navigation, cancel]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'background') void cancel();
+      if (next === 'background' && busyRef.current) void cancel();
     });
     return () => sub.remove();
   }, [cancel]);
@@ -112,6 +108,7 @@ export default function RppgMeasureScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <StageGradient />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Face pulse scan</Text>
         <Text style={styles.hint}>{hint}</Text>
@@ -140,7 +137,7 @@ export default function RppgMeasureScreen() {
 
         {isModelDownload && (
           <Text style={styles.stability}>
-            First use downloads the pulse model once — afterwards it works offline.
+            First use downloads the pulse model once. Afterwards it works offline.
           </Text>
         )}
 

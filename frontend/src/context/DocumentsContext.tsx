@@ -153,11 +153,11 @@ const isTerminal = (stage: ProcessingStage): boolean =>
 
 /** Upload 503: the document row is saved, only the queue handoff failed. */
 const PAUSED_AFTER_SAVE_MSG =
-  'Saved on your account. Processing is paused right now and will start automatically — nothing you need to do.';
+  'Saved on your account. Processing is paused and will start automatically. No action needed.';
 
 /** Poll gave up while the document was still mid-pipeline. */
 const STILL_QUEUED_MSG =
-  'Still in the queue — processing will finish automatically. You can leave; nothing is lost.';
+  'Still in the queue. Processing will finish automatically. You can leave; nothing is lost.';
 
 // ---------------------------------------------------------------------------
 // Context

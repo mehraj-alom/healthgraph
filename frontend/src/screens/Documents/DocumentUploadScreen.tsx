@@ -25,6 +25,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import { Button, Card } from '@/components';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import {
   useDocuments,
   type ProcessingStage,
@@ -60,12 +61,12 @@ const STAGE_ORDER: Record<string, number> = {
 function stageInfo(stage: string): { label: string; color: string } {
   switch (stage) {
     case 'uploading':
-      return { label: 'Uploading...', color: GV.fx.sky };
+      return { label: 'Uploading', color: GV.fx.sky };
     case 'uploaded':
       return { label: 'Uploaded', color: GV.fx.green };
     case 'processing':
       return {
-        label: 'Processing (OCR & extraction)...',
+        label: 'Processing',
         color: GV.fx.amber,
       };
     case 'extracted':
@@ -213,6 +214,7 @@ export default function DocumentUploadScreen() {
 
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        <StageGradient />
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>
@@ -324,7 +326,7 @@ export default function DocumentUploadScreen() {
             </View>
           ) : (
             <Text style={styles.hint}>
-              You can navigate away — processing continues automatically.
+              You can navigate away. Processing continues automatically.
             </Text>
           )}
         </ScrollView>
@@ -337,6 +339,7 @@ export default function DocumentUploadScreen() {
   // =====================================================================
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StageGradient />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>Add Medical Record</Text>
@@ -417,7 +420,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: GV.stage },
   content: {
     paddingHorizontal: SPACE.screenH,
-    paddingBottom: 48,
+    paddingBottom: 32,
     gap: SPACE.cardGap,
   },
   header: { paddingVertical: 16 },

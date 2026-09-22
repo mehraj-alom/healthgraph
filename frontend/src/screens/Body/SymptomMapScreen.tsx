@@ -91,7 +91,7 @@ export default function SymptomMapScreen() {
               />
             </Card>
             <Text style={styles.sampleNote}>
-              Sample markings — connect your own symptom data to replace them.
+              Sample markings. Connect your own symptom data to replace them.
             </Text>
           </>
         ) : (
@@ -155,7 +155,7 @@ export default function SymptomMapScreen() {
               {loading
                 ? 'Reading your logs…'
                 : isSample
-                  ? 'Sample history — log pain for a few days to see your own.'
+                  ? 'Sample history. Log pain for a few days to see your own.'
                   : unmapped > 0
                     ? `${unmapped} entr${unmapped === 1 ? 'y' : 'ies'} had no mappable location and ${unmapped === 1 ? 'was' : 'were'} skipped.`
                     : 'From your logged pain entries.'}

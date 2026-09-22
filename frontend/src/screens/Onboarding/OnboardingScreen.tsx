@@ -19,18 +19,20 @@ import { useAuth } from '@/context/AuthContext';
 import { BrandLogo, Button, Card, Input } from '@/components';
 import { Reveal } from '@/components/home/Reveal';
 import { FONT, GV, SPACE, TYPE } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 
 import { MEDICAL_DISCLAIMER } from '@/constants';
 
 import { IntroVisual } from './IntroVisual';
-import { SystemVisual } from './SystemVisual';
+import { ProgressGraphVisual } from './ProgressGraphVisual';
 
 /**
  * Onboarding — two premium value screens, then the existing sign-in.
  *
  * Pages (horizontal pager):
- *  0. Introduction — "Your health, connected."
- *  1. One-health-system — "Everything about your health. In one place."
+ *  0. Introduction — "Your health, connected." (connected-hub visual)
+ *  1. Bigger picture — "See the bigger picture." (illustrative 7-day
+ *     progress graph; fixed artwork, never patient data)
  *  2. Authentication — the existing email/password form, unchanged logic.
  *
  * Visuals are pure code (Views + react-native-svg + Reanimated): no image
@@ -205,8 +207,8 @@ export default function OnboardingScreen() {
         </Reveal>
         <Reveal>
           <Text style={styles.sub}>
-            Understand your health, track what matters, and see how
-            everything connects — all in one place.
+            Track what matters and see how everything connects in one
+            place.
           </Text>
         </Reveal>
       </View>
@@ -219,20 +221,19 @@ export default function OnboardingScreen() {
       showsVerticalScrollIndicator={false}
       bounces={false}
     >
-      <SystemVisual size={visualSize} active={active} />
+      <ProgressGraphVisual size={visualSize} active={active} />
       <View key={active ? 'system-copy-on' : 'system-copy-off'} style={styles.copy}>
         <Reveal>
           <Text style={styles.overline}>ONE HEALTH SYSTEM</Text>
         </Reveal>
         <Reveal>
           <Text style={styles.headline}>
-            {'Everything about your health.\nIn one place.'}
+            {'See the bigger picture.'}
           </Text>
         </Reveal>
         <Reveal>
           <Text style={styles.sub}>
-            Connect your health information, measurements, habits and
-            daily life into one personal HealthGraph.
+            Connect your health data and understand how everything changes over time.
           </Text>
         </Reveal>
       </View>
@@ -255,21 +256,21 @@ export default function OnboardingScreen() {
         <View style={styles.header}>
           <BrandLogo height={24} tint="#FFFFFF" />
           <Text style={styles.tagline}>
-            Your Health Intelligence
+            Health overview
           </Text>
         </View>
 
         <Card style={styles.formCard}>
           <Text style={styles.formTitle}>
             {isLogin
-              ? 'Welcome Back'
+              ? 'Welcome back'
               : 'Create Account'}
           </Text>
 
           <Text style={styles.formSubtitle}>
             {isLogin
-              ? 'Sign in to access your health dashboard'
-              : 'Start your wellness journey today'}
+              ? 'Sign in to open your dashboard'
+              : 'Create an account to start'}
           </Text>
 
           {error ? (
@@ -407,6 +408,7 @@ export default function OnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StageGradient />
       {/* Top bar: progress on story pages, back on auth. */}
       <View style={styles.topBar}>
         {onAuth ? (
@@ -483,7 +485,7 @@ export default function OnboardingScreen() {
             size="large"
             accessibilityLabel={
               step === 0
-                ? 'Continue to the one health system'
+                ? 'Continue to see the bigger picture'
                 : 'Continue to sign in'
             }
             style={styles.cta}

@@ -35,6 +35,7 @@ import {
 } from 'expo-camera';
 import { Button, Card } from '@/components';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import { useSteadyShutter } from '@/hooks/useSteadyShutter';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { uploadDocument } from '@/services/documents';
@@ -51,7 +52,7 @@ import {
 
 const GUIDE_TIPS = [
   'Fill the frame with the prescription page',
-  'Move to brighter light — avoid shadows and glare',
+  'Move to brighter light. Avoid shadows and glare',
   'Hold steady for a sharp photo',
   'Lay the page flat and keep edges inside the frame',
 ];
@@ -181,7 +182,7 @@ export default function PrescriptionScannerScreen() {
         total: pages.length,
         error:
           httpStatus === 503
-            ? 'Saved on your account. Processing is paused right now and will start automatically — uploaded pages are safe.'
+            ? 'Saved on your account. Processing is paused and will start automatically. Uploaded pages are safe.'
             : err instanceof Error
               ? err.message
               : 'Upload failed. Check your connection and try again.',
@@ -193,6 +194,7 @@ export default function PrescriptionScannerScreen() {
   if (!permission?.granted) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <StageGradient />
         <View style={styles.center}>
           <Text style={styles.title}>Scan prescription</Text>
           <Text style={styles.body}>
@@ -228,8 +230,8 @@ export default function PrescriptionScannerScreen() {
                   : `${uploadState.total} pages uploaded`}
               </Text>
               <Text style={styles.body}>
-                Review it under Medications → Scanned. When reading finishes,
-                confirm each medicine to add it — nothing is added automatically.
+                Review it under Medications, in Scanned. When reading finishes,
+                confirm each medicine to add it. Nothing is added automatically.
               </Text>
               <Button title="Done" onPress={goBack} fullWidth />
             </>
@@ -267,7 +269,7 @@ export default function PrescriptionScannerScreen() {
           accessibilityLabel="Toggle flashlight"
         >
           <Text style={[styles.torch, torchOn && styles.torchOn]}>
-            {torchOn ? '🔦 on' : '🔦 off'}
+            {torchOn ? 'Flash on' : 'Flash off'}
           </Text>
         </Pressable>
       </View>
@@ -299,15 +301,15 @@ export default function PrescriptionScannerScreen() {
           <Text style={styles.autoLabel}>
             {autoCapture
               ? steady
-                ? 'Steady — capturing…'
-                : 'Auto-capture on: hold steady inside the frame'
-              : 'Auto-capture off — use the shutter button'}
+                ? 'Steady. Capturing…'
+                : 'Auto-capture on. Hold steady inside the frame'
+              : 'Auto-capture off. Use the shutter button'}
           </Text>
         </Pressable>
         <Text style={styles.pageCount}>
           {pages.length === 0
             ? 'Page 1 of prescription'
-            : `${pages.length} page${pages.length > 1 ? 's' : ''} captured — add the next page`}
+              : `${pages.length} page${pages.length > 1 ? 's' : ''} captured. Add the next page`}
         </Text>
 
         {pages.length > 0 && (
@@ -349,7 +351,7 @@ export default function PrescriptionScannerScreen() {
 
         {pages.length > 0 && (
           <Card padding="md" style={styles.doneCard}>
-            <Button title={`Done — upload ${pages.length} page${pages.length > 1 ? 's' : ''}`} onPress={() => void uploadPages()} fullWidth />
+            <Button title={`Done. Upload ${pages.length} page${pages.length > 1 ? 's' : ''}`} onPress={() => void uploadPages()} fullWidth />
           </Card>
         )}
       </View>

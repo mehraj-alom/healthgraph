@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,11 +19,13 @@ import { Button, Card, Chip, DialInput, Input, LogCelebration, SectionHeader, Sl
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useReducedMotion } from '@/theme';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 void FONT;
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { requestDataRefresh } from '@/services/dataRefresh';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
+import { usePriority } from '@/hooks/usePriority';
 import { useActiveMedications } from '@/hooks/useMedications';
 import {
   getDailyLogDetail as dbGetDailyLogDetail,
@@ -234,6 +237,7 @@ function Section({
   index = 0,
   animate = true,
   children,
+  onLayout,
 }: {
   title: string;
   subtitle?: string;
@@ -242,12 +246,14 @@ function Section({
   index?: number;
   animate?: boolean;
   children: React.ReactNode;
+  /** Exposes the section's Y offset for Priority-log scroll targets. */
+  onLayout?: (e: LayoutChangeEvent) => void;
 }) {
   void index;
   void animate;
   const accent = category ? SECTION_ACCENTS[category] : null;
   return (
-    <View style={styles.section}>
+    <View style={styles.section} onLayout={onLayout}>
       <Card style={styles.sectionCard}>
         <SectionHeader title={title} subtitle={subtitle} accent={accent?.color} />
         <View style={styles.sectionBody}>{children}</View>
@@ -615,7 +621,7 @@ function FeverTempDial({
         color={GV.cta}
         accessibilityLabel="Fever temperature"
       />
-      <Text style={styles.dialHint}>Saved into your symptom notes — visible on your timeline.</Text>
+      <Text style={styles.dialHint}>Saved into your symptom notes. Visible on your timeline.</Text>
     </View>
   );
 }
@@ -1121,15 +1127,78 @@ export default function VitalsLoggerScreen() {
       { id: Date.now(), conceptId: concept.id, value: '', unit },
     ]);
   };
-  const quickAddSymptom = (code: string) => {
-    const concept = concepts.find((c) => c.code === code);
-    if (!concept) return;
-    setSymptoms((items) => [
-      ...items,
-      { id: nextId, conceptId: concept.id, severity: '', duration: '', notes: '' },
-    ]);
-    setNextId((n) => n + 1);
-  };
+  // --- Priority log: shortcuts from the user's chosen engines ------------
+  // Stress + Vitals are always present; every other chip appears only
+  // when its engine is selected. Tapping jumps to the section's mode and
+  // scrolls to it (prefilling a draft row where the pattern exists).
+  // Replaces the old fixed quick-add buttons (pulse/glucose/fever).
+  type PriorityTarget = 'essentials' | 'sleep' | 'activity' | 'nutrition' | 'vitals' | 'feel';
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionY = useRef<Partial<Record<PriorityTarget, number>>>({});
+  const { entries: priorityEntries } = usePriority();
+  const priorityIds = useMemo(
+    () => new Set(priorityEntries.map((e) => e.id)),
+    [priorityEntries],
+  );
+
+  const scrollToSection = useCallback((target: PriorityTarget) => {
+    requestAnimationFrame(() => {
+      const y = sectionY.current[target];
+      if (y == null) return;
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+    });
+  }, []);
+
+  const recordSectionY =
+    (target: PriorityTarget) =>
+    (e: LayoutChangeEvent): void => {
+      sectionY.current[target] = e.nativeEvent.layout.y;
+    };
+
+  interface PriorityChip {
+    key: string;
+    label: string;
+    target: PriorityTarget;
+    mode: 'quick' | 'normal';
+    prefill?: () => void;
+  }
+
+  const priorityChips: PriorityChip[] = useMemo(() => {
+    const chips: PriorityChip[] = [
+      { key: 'stress', label: 'Stress', target: 'feel', mode: 'normal' },
+      { key: 'vitals', label: 'Vitals', target: 'vitals', mode: 'normal' },
+    ];
+    const push = (chip: PriorityChip): void => {
+      chips.push(chip);
+    };
+    if (priorityIds.has('sleep')) push({ key: 'sleep', label: 'Sleep', target: 'sleep', mode: 'normal' });
+    if (priorityIds.has('nutrition'))
+      push({ key: 'meals', label: 'Meals', target: 'nutrition', mode: 'normal' });
+    if (priorityIds.has('fitness'))
+      push({
+        key: 'activity',
+        label: 'Activity',
+        target: 'activity',
+        mode: 'normal',
+        prefill: () => addActivity(),
+      });
+    if (priorityIds.has('wellbeing'))
+      push({ key: 'mood', label: 'Mood', target: 'feel', mode: 'normal' });
+    if (priorityIds.has('weight'))
+      push({ key: 'weight', label: 'Weight', target: 'vitals', mode: 'normal' });
+    if (priorityIds.has('discipline'))
+      push({ key: 'doses', label: 'Doses', target: 'essentials', mode: 'quick' });
+    if (priorityIds.has('heart'))
+      push({
+        key: 'pulse',
+        label: 'Pulse',
+        target: 'vitals',
+        mode: 'normal',
+        prefill: () => quickAddVital('LOINC', '8867-4', 'bpm'),
+      });
+    return chips;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priorityIds]);
 
   // --- Validation ---
   const validate = (): boolean => {
@@ -1199,7 +1268,7 @@ export default function VitalsLoggerScreen() {
     if (missing.length > 0) {
       setFeedback({
         type: 'error',
-        message: `Essentials need your ${missing.join(' and ')} first — add ${missing.length > 1 ? 'them' : 'it'} above, then tap again.`,
+        message: `Essentials need your ${missing.join(' and ')} first. Add ${missing.length > 1 ? 'them' : 'it'} above, then tap again.`,
       });
       return;
     }
@@ -1249,7 +1318,9 @@ export default function VitalsLoggerScreen() {
   // =========================================================================
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StageGradient />
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         onScroll={onTabScroll}
@@ -1269,13 +1340,13 @@ export default function VitalsLoggerScreen() {
           <Text style={styles.title}>Daily Log</Text>
           <Text style={styles.subtitle}>
             {!todayCheckinQuery.isLoading && editingGroupId != null
-              ? 'This day is logged — change anything below to update it.'
+              ? 'This day is logged. Change anything below to update it.'
               : 'How are you feeling today?'}
           </Text>
           {!todayCheckinQuery.isLoading && editingGroupId != null ? (
             <View style={styles.editingPill}>
               <Text style={styles.editingPillText}>
-                {selectedDate === dateToday() ? "●  VIEWING · EDIT TODAY'S LOG" : '●  VIEWING · EDIT THIS LOG'}
+                {selectedDate === dateToday() ? "Viewing · Edit today's log" : 'Viewing · Edit this log'}
               </Text>
             </View>
           ) : null}
@@ -1348,6 +1419,29 @@ export default function VitalsLoggerScreen() {
         {/* ── Form error ── */}
         {errors.form ? <Text style={styles.formError}>{errors.form}</Text> : null}
 
+        {/* ── Priority log: engine-driven shortcuts (Stress + Vitals fixed,
+            the rest follows the user's chosen priorities) ── */}
+        <Card style={styles.modeCard}>
+          <Text style={styles.priorityTitle}>Priority log</Text>
+          <Text style={styles.prioritySub}>Jump to what you focus on. Your engines decide.</Text>
+          <View style={styles.priorityChips}>
+            {priorityChips.map((chip) => (
+              <Chip
+                key={chip.key}
+                label={chip.label}
+                selected={false}
+                onPress={() => {
+                  chip.prefill?.();
+                  if (logMode !== chip.mode) setLogMode(chip.mode);
+                  // Let the mode switch lay out before scrolling to it.
+                  setTimeout(() => scrollToSection(chip.target), logMode !== chip.mode ? 150 : 0);
+                }}
+                accessibilityLabel={`Log ${chip.label}`}
+              />
+            ))}
+          </View>
+        </Card>
+
         {/* ── Log mode: Quick essentials vs full log ── */}
         <Card style={styles.modeCard}>
           <View
@@ -1375,7 +1469,7 @@ export default function VitalsLoggerScreen() {
         {/* Quick mode: essentials only (all rows share the main form's
             state, so switching modes never loses input). */}
         {logMode === 'quick' && (
-          <Section index={0} category="wellbeing" title="Essentials" subtitle="Only what turns today green — customize below.">
+          <Section index={0} category="wellbeing" title="Essentials" subtitle="Only what turns today green. Customize below." onLayout={recordSectionY('essentials')}>
             <View style={styles.fieldWrap}>
               {showEssential('mood') && (
                 <>
@@ -1460,7 +1554,7 @@ export default function VitalsLoggerScreen() {
                           style={[styles.essMedToggle, staged ? styles.essMedToggleOn : styles.essMedToggleOff]}
                           accessibilityRole="checkbox"
                           accessibilityState={{ checked: staged }}
-                          accessibilityLabel={staged ? `${med.name} staged — tap to remove` : `Stage ${med.name} dose`}
+                          accessibilityLabel={staged ? `${med.name} staged. Tap to remove` : `Stage ${med.name} dose`}
                           hitSlop={8}
                         >
                           <Text style={[styles.essMedToggleGlyph, staged ? styles.essMedToggleGlyphOn : styles.essMedToggleGlyphOff]}>
@@ -1521,7 +1615,7 @@ export default function VitalsLoggerScreen() {
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* SLEEP                                                             */}
         {/* ══════════════════════════════════════════════════════════════════ */}
-        <Section index={0} category="sleep" title="Sleep" subtitle="How much did you sleep last night?">
+        <Section index={0} category="sleep" title="Sleep" subtitle="How much did you sleep last night?" onLayout={recordSectionY('sleep')}>
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Duration</Text>
             <SleepDurationPicker
@@ -1627,7 +1721,7 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section index={2} category="symptomsPain" title="Body map" subtitle="Log pain on a real anatomical structure — saved to your body state and timeline.">
+        <Section index={2} category="symptomsPain" title="Body map" subtitle="Log pain on a real anatomical structure. Saved to your body state and timeline.">
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Where does it hurt?</Text>
             <View style={styles.chipGrid}>
@@ -1688,7 +1782,7 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section index={2} category="activity" title="Activity" subtitle="Exercise type, duration, and calories.">
+        <Section index={2} category="activity" title="Activity" subtitle="Exercise type, duration, and calories." onLayout={recordSectionY('activity')}>
           <View style={styles.fieldWrap}>
             {activities.map((item) => (
               <View
@@ -1724,7 +1818,7 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section index={3} category="nutrition" title="Hydration & nutrition" subtitle="Use the fields recorded by HealthGraph.">
+        <Section index={3} category="nutrition" title="Hydration & nutrition" subtitle="Use the fields recorded by HealthGraph." onLayout={recordSectionY('nutrition')}>
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Water</Text>
             <Slider
@@ -1790,30 +1884,10 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section index={6} category="vitals" title="Vitals" subtitle="Pick a vital — the right device-style input appears.">
+        <Section index={6} category="vitals" title="Vitals" subtitle="Pick a vital. The right device-style input appears." onLayout={recordSectionY('vitals')}>
           <View style={styles.fieldWrap}>
-            <View style={styles.quickRow}>
-              <Pressable
-                onPress={() => quickAddVital('LOINC', '8867-4', 'bpm')}
-                style={styles.quickBtn}
-                disabled={mutation.isPending || conceptsQuery.isLoading}
-                accessibilityRole="button"
-                accessibilityLabel="Quick log heart rate"
-              >
-                <Text style={styles.quickBtnText}>Quick: Pulse</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => quickAddVital('LOINC', '2339-0', 'mg/dL')}
-                style={styles.quickBtn}
-                disabled={mutation.isPending || conceptsQuery.isLoading}
-                accessibilityRole="button"
-                accessibilityLabel="Quick log blood glucose"
-              >
-                <Text style={styles.quickBtnText}>Quick: Glucose</Text>
-              </Pressable>
-            </View>
             {conceptsQuery.isError ? (
-              <Text style={styles.dialHint}>Options need a connection — typing still works.</Text>
+              <Text style={styles.dialHint}>Options need a connection. Typing still works.</Text>
             ) : null}
             {vitals.map((item) => {
               const selectedConcept = concepts.find((c) => c.id === item.conceptId);
@@ -1912,6 +1986,7 @@ export default function VitalsLoggerScreen() {
           category="wellbeing"
           title="How you feel"
           subtitle="Rate your mood, energy, and stress today."
+          onLayout={recordSectionY('feel')}
         >
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Mood</Text>
@@ -2070,18 +2145,6 @@ export default function VitalsLoggerScreen() {
             </View>
             );
           })}
-
-          <View style={styles.quickRow}>
-            <Pressable
-              onPress={() => quickAddSymptom('386661006')}
-              style={styles.quickBtn}
-              disabled={mutation.isPending || conceptsQuery.isLoading}
-              accessibilityRole="button"
-              accessibilityLabel="Quick log fever"
-            >
-              <Text style={styles.quickBtnText}>Quick: Fever</Text>
-            </Pressable>
-          </View>
 
           <Pressable
             onPress={addSymptom}
@@ -2659,27 +2722,22 @@ const styles = StyleSheet.create({
     ...TYPE.button,
     color: GV.ink,
   },
-  quickRow: {
-    flexDirection: 'row',
-    gap: 8,
+  // Priority log chips live in a wrapping row inside the Priority card.
+  priorityTitle: {
+    ...TYPE.title,
+    fontSize: 17,
+    color: GV.ink,
+  },
+  prioritySub: {
+    ...TYPE.caption,
+    color: GV.muted,
+    marginTop: 2,
     marginBottom: 8,
   },
-  quickBtn: {
-    flex: 1,
-    minHeight: 44,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: GV.line,
-    borderRadius: 12,
-    backgroundColor: GV.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickBtnText: {
-    ...TYPE.chip,
-    color: GV.ink,
-    textAlign: 'center',
+  priorityChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   scanFoodCta: {
     flexDirection: 'row',

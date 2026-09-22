@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import { SPOKE_GUIDANCE, GUIDANCE_FALLBACK } from '@/components/home/HGraphMap';
 import type { ImproveMetric, RootStackParamList } from '@/types';
 
@@ -83,6 +84,7 @@ export default function ImproveScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StageGradient />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Pressable
           onPress={() => navigation.goBack()}
@@ -97,8 +99,8 @@ export default function ImproveScreen() {
         <Text style={styles.title}>{focus === 'improve' ? 'Improve' : 'Keep going'}</Text>
         <Text style={styles.subtitle}>
           {focus === 'improve'
-            ? 'Based on your dial right now — what to move.'
-            : 'What is holding steady — and what sustains it.'}
+            ? 'Based on your dial right now. What to move.'
+            : 'What is holding steady. What sustains it.'}
         </Text>
 
         {primary.length === 0 ? (
@@ -108,11 +110,11 @@ export default function ImproveScreen() {
                 <Text style={styles.celebrateGlyph}>✓</Text>
               </View>
               <Text style={styles.emptyTitle}>
-                Congratulations — nothing to improve!
+                Nothing to improve.
               </Text>
               <Text style={styles.emptyText}>
                 Every signal is sitting in its healthy zone. Whatever you are
-                doing is working — keep it up, and check back after your next
+                doing is working. Keep it up, and check back after your next
                 few logs.
               </Text>
               <Pressable
@@ -128,7 +130,7 @@ export default function ImproveScreen() {
           ) : (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>
-                Nothing steady yet — let&apos;s build it
+                Nothing steady yet. You can build it.
               </Text>
               <Text style={styles.emptyText}>
                 Signals show up here once they have a few days of history.
@@ -161,7 +163,7 @@ export default function ImproveScreen() {
         ) : null}
 
         <Text style={styles.foot}>
-          Wellness nudges from your own averages — not medical advice.
+          Wellness nudges from your own averages. Not medical advice.
         </Text>
       </ScrollView>
     </SafeAreaView>

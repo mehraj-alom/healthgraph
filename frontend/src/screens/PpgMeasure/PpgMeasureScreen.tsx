@@ -37,6 +37,7 @@ import { Button, ErrorState, ProgressBar } from '@/components';
 import { usePpgMeasurement } from '@/hooks/usePpgMeasurement';
 import { useReducedMotion } from '@/theme';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import type { MainTabParamList, RootStackParamList } from '@/types';
 import { PpgCameraPreview } from 'healthgraph-ppg';
 import type { CompositeNavigationProp } from '@react-navigation/native';
@@ -68,15 +69,15 @@ function qualityBand(quality: number | null): QualityBand | null {
 const QUALITY_COPY: Record<QualityBand, { label: string; guidance: string }> = {
   good: {
     label: 'Signal looks good',
-    guidance: 'Hold still — almost there.',
+    guidance: 'Hold still. Almost there.',
   },
   weak: {
     label: 'Signal is weak',
-    guidance: 'Signal is weak — adjust your finger so the camera and flash are fully covered.',
+    guidance: 'Signal is weak. Adjust your finger so the camera and flash are fully covered.',
   },
   poor: {
     label: 'No reliable signal',
-    guidance: 'Unable to get a reliable signal. Keep your finger still and make sure the camera and flash are fully covered.',
+    guidance: 'No reliable signal. Keep your finger still and make sure the camera and flash are fully covered.',
   },
 };
 
@@ -242,6 +243,7 @@ export default function PpgMeasureScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StageGradient />
       {/* Header: back affordance + simulation badge. */}
       <View style={styles.header}>
         <Pressable
@@ -271,15 +273,14 @@ export default function PpgMeasureScreen() {
       >
         {simulated ? (
           <Text style={styles.simNote}>
-            Simulation mode — synthetic numbers for preview only. Never saved,
-            never synced, never health data.
+            Simulation mode. Synthetic numbers for preview only. Not saved,
+            not synced, not health data.
           </Text>
         ) : null}
 
         {/* ── READY ─────────────────────────────────────────── */}
         {!busy && !hasResult && !failed ? (
           <View style={styles.phase}>
-            <Text style={styles.overline}>Heart Rate</Text>
             <Text style={styles.screenTitle}>Heart Rate</Text>
             <Text style={styles.screenSubtitle}>
               Measure your pulse using your phone&apos;s camera.
@@ -359,7 +360,7 @@ export default function PpgMeasureScreen() {
                             : state === 'SIGNAL_WEAK'
                               ? 'Keep your finger still'
                               : state === 'FINGER_REMOVED'
-                                ? 'Finger removed — place your finger over the camera'
+                                ? 'Finger removed. Place your finger over the camera'
                                 : 'Measuring…'}
                       </Text>
                     </View>
@@ -552,7 +553,7 @@ export default function PpgMeasureScreen() {
             {result.rmssdMs != null || result.sdnnMs != null ? (
               <View style={styles.hrvCard}>
                 <Text style={styles.hrvLabel}>
-                  HEART RATE VARIABILITY
+                  Heart rate variability
                 </Text>
                 <Text style={styles.hrvValue}>
                   {result.rmssdMs != null
@@ -599,7 +600,7 @@ export default function PpgMeasureScreen() {
             </Text>
             {result.simulated === true ? (
               <Text style={styles.elapsed}>
-                Simulation — not saved, not synced.
+                Simulation. Not saved, not synced.
               </Text>
             ) : (
               <Text style={styles.elapsed}>
@@ -614,7 +615,7 @@ export default function PpgMeasureScreen() {
               <View style={styles.qualityCard}>
                 <View style={styles.qualityText}>
                   <Text style={styles.saveError}>
-                    Couldn&apos;t save this measurement yet — it will retry
+                    Couldn&apos;t save this measurement yet. It will retry
                     automatically.
                   </Text>
                 </View>

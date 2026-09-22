@@ -44,6 +44,7 @@ import Animated, {
 import Svg, { Path, Rect, Circle, G, Line } from 'react-native-svg';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import { domainHueForStream } from '@/theme/dashboardApple';
 
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
@@ -60,15 +61,19 @@ import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
 
 import { BrandLogo } from '@/components/BrandLogo';
 import { consumeDataRefreshRequest } from '@/services/dataRefresh';
+import { useLocalHeartRate } from '@/hooks/useLocalHeartRate';
+import { useDialMetrics } from '@/hooks/useDialMetrics';
+import { usePriorityIntro } from '@/hooks/usePriorityIntro';
+import { PriorityIntroCard } from '@/screens/Priority/PriorityIntroCard';
 import { reportTabScroll } from '@/components/tabBarVisibility';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { useProfilePhoto } from '@/hooks/useProfilePhoto';
 import { recordMedicationTaken, useMedications } from '@/hooks/useMedications';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { useTrends } from '@/hooks/useTrends';
-import { detectHeartRate, formatSleepMinutes, formatWaterMl, formatDurationMinutes, localDateString } from '@/screens/Dashboard/homeData';
+import { localDateString } from '@/screens/Dashboard/homeData';
 import { useHomeStory } from '@/screens/Dashboard/useHomeStory';
-import { useCorrelationFeed, trendStreams, localStreams, vitalLabelMap, assessMetric, assessSeries, pairToFeedItem, correlationPairKey, getPair, type CorrelationFeedItem, type CorrelationPair, type StreamSeries } from '@/screens/Dashboard/correlations';
+import { useCorrelationFeed, pairToFeedItem, correlationPairKey, getPair, type CorrelationFeedItem, type CorrelationPair, type StreamSeries } from '@/screens/Dashboard/correlations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BottomSheet } from '@/components/BottomSheet';
 import { ProfileSheet } from '@/components/ProfileSheet';
@@ -79,12 +84,7 @@ type Nav = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-// ─── Line-glyph icons (inline svg, Guava colors — no icon lib) ────────────────
-
-/** Shift a YYYY-MM-DD day-key by whole days ( noon-anchored, DST-safe ). */
-function shiftDay(dateStr: string, delta: number): string {
-  return localDateString(new Date(new Date(`${dateStr}T12:00:00`).getTime() + delta * 86400000));
-}
+// ─── Line-glyph icons (inline svg, Guava colors — no icon lib) ────────────────}
 
 function BellGlyph({ size = 18, color = GV.ink }) {
   return (
@@ -164,12 +164,14 @@ function HeaderBlock({
   onAvatarPress,
   onBellPress,
   onBodyPress,
+  onPriorityPress,
 }: {
   photoUri: string | null;
   hasActivity: boolean;
   onAvatarPress: () => void;
   onBellPress: () => void;
   onBodyPress: () => void;
+  onPriorityPress: () => void;
 }) {
   return (
     <View style={styles.header}>
@@ -187,11 +189,19 @@ function HeaderBlock({
           )}
         </Pressable>
         <View style={styles.headerWordmark}>
-          <BrandLogo height={23} tint={GV.card} />
+          <BrandLogo height={23} tint={GV.ink} />
         </View>
       </View>
 
       <View style={styles.headerRight}>
+        <Pressable
+          style={({ pressed }) => [styles.headerPriority, pressed && { opacity: 0.7 }]}
+          onPress={onPriorityPress}
+          accessibilityRole="button"
+          accessibilityLabel="Open my priorities"
+        >
+          <Text style={styles.headerPriorityText}>P</Text>
+        </Pressable>
         <Pressable
           style={({ pressed }) => [styles.headerBell, pressed && { opacity: 0.7 }]}
           onPress={onBodyPress}
@@ -350,17 +360,17 @@ function ActionRowBlock({
             <View style={styles.statusRow}>
               <View style={[styles.statusDot, { backgroundColor: fullyDone ? GV.cta : GV.muted }]} />
               <Text style={styles.statusText}>
-                {loggedToday ? 'TODAY' : "TODAY'S CHECK-IN"}
+                {loggedToday ? 'Today' : "Today's check-in"}
               </Text>
               <Text style={styles.statusCount}>{`${doneCount}/${signals.length}`}</Text>
             </View>
             <View style={styles.titleRow}>
               <Text style={styles.todayTitle}>
                 {fullyDone
-                  ? "You're all caught up"
+                  ? 'Complete'
                   : doneCount > 0
-                    ? 'Almost there'
-                    : "Time to check in"}
+                    ? 'Partial'
+                    : 'Check in needed'}
               </Text>
               <DupDup done={fullyDone} />
             </View>
@@ -386,7 +396,7 @@ function ActionRowBlock({
         </View>
         <View style={styles.medRowText}>
           <Text style={styles.medRowEyebrow}>
-            {medActive ? 'MEDICATION · UP NEXT' : 'MEDICATION'}
+            {medActive ? 'Medication, up next' : 'Medication'}
           </Text>
           <Text style={styles.medRowName} numberOfLines={1}>
             {medActive ? medNames[0] : 'Nothing scheduled'}
@@ -414,7 +424,7 @@ function ActionRowBlock({
             accessibilityState={{ checked: upNextTaken }}
             accessibilityLabel={
               upNextTaken
-                ? `${medNames[0]} taken — already recorded`
+                ? `${medNames[0]} taken, already recorded`
                 : `Mark ${medNames[0]} taken`
             }
             hitSlop={8}
@@ -452,7 +462,7 @@ function ImproveKeepDuo({
           try { Vibration.vibrate(12); } catch { /* best-effort */ }
           onImprove('improve');
         }}
-        accessibilityLabel="Improve — see actions based on your dial"
+        accessibilityLabel="Improve: actions based on your dial"
         style={styles.duoBtn}
       />
       <Button
@@ -462,7 +472,7 @@ function ImproveKeepDuo({
           try { Vibration.vibrate(12); } catch { /* best-effort */ }
           onImprove('keep');
         }}
-        accessibilityLabel="Keep — see what is holding steady"
+        accessibilityLabel="Keep: what is holding steady"
         style={styles.duoBtn}
       />
     </View>
@@ -491,7 +501,7 @@ function InsightPanelBlock({
   return (
     <View style={styles.section}>
       <View style={styles.insightHead}>
-        <Text style={styles.insightEyebrow}>INSIGHT</Text>
+        <Text style={styles.insightEyebrow}>Insight</Text>
       </View>
 
       {hMetrics.length > 0 ? (
@@ -617,7 +627,7 @@ function MapFullscreen({
         <Animated.View style={[styles.modalCard, cardStyle]}>
           <View style={styles.modalHeader}>
             <View style={styles.modalTitleBlock}>
-              <Text style={styles.modalTitle}>Your health at a glance</Text>
+              <Text style={styles.modalTitle}>Your health overview</Text>
             </View>
             <IconButton kind="solid" glyph="✕" accessibilityLabel="Close insights" onPress={onClose} />
           </View>
@@ -641,7 +651,7 @@ function CorrelationHeading({ count }: { count: number }) {
   const { range, setRange } = useTrendRange();
   return (
     <View style={[styles.section, styles.corrHeadingWrap]}>
-      <SectionHeader title="How your health connects" subtitle={`${count} graphs`} />
+      <SectionHeader title="Health connections" subtitle={`${count} graphs`} />
       <View style={styles.rangeRow}>
         {TREND_RANGE_ORDER.map((key) => (
           <Chip
@@ -853,7 +863,7 @@ function FeedCustomSheet({
     <BottomSheet visible={visible} onClose={onClose} title="Build your correlation">
       <View style={feedSheet.body}>
         <Text style={feedSheet.sectionTitle}>Pick two metrics</Text>
-        <Text style={feedSheet.sectionSub}>A · first metric</Text>
+        <Text style={feedSheet.sectionSub}>A, first metric</Text>
         <View style={feedSheet.chips}>
           {pickable.map((s) => {
             const on = activeA === s.def.id;
@@ -875,7 +885,7 @@ function FeedCustomSheet({
             );
           })}
         </View>
-        <Text style={feedSheet.sectionSub}>B · second metric</Text>
+        <Text style={feedSheet.sectionSub}>B, second metric</Text>
         <View style={feedSheet.chips}>
           {pickable.map((s) => {
             const on = activeB === s.def.id;
@@ -919,7 +929,7 @@ function FeedCustomSheet({
                 accessibilityLabel={previewAdded ? 'Remove this correlation' : 'Add this correlation to your feed'}
               >
                 <Text style={[feedSheet.previewBtnText, previewAdded && feedSheet.previewBtnTextAdded]}>
-                  {previewAdded ? 'Added ✓ — tap to remove' : 'Add to my feed'}
+                  {previewAdded ? 'Added ✓. Tap to remove' : 'Add to my feed'}
                 </Text>
               </Pressable>
             </View>
@@ -927,11 +937,11 @@ function FeedCustomSheet({
             <Text style={feedSheet.hint}>
               {activeA === activeB
                 ? 'Pick two different metrics to compare them.'
-                : 'Not enough shared days yet — log both metrics together and this unlocks at 3 paired days.'}
+                : 'Not enough shared days yet. Log both metrics together and this unlocks at 3 paired days.'}
             </Text>
           )
         ) : pickable.length === 0 ? (
-          <Text style={feedSheet.hint}>Log a few days first — metrics you track show up here as pickable options.</Text>
+          <Text style={feedSheet.hint}>Log a few days first. Metrics you track show up here as pickable options.</Text>
         ) : null}
 
         {poolItems.length > 0 ? (
@@ -1054,6 +1064,18 @@ export default function HealthDashboardScreen() {
 
   const feedQuery = useCorrelationFeed(trends.data, metrics.data, Math.min(trendDays, 60));
 
+  // Local-first camera heart rate (PPG fingertip + RPPG face, SQLite-direct).
+  // Lets a fresh measurement move the dial without any server round trip.
+  const localHr = useLocalHeartRate();
+
+  // Priority layer (post-Batch-6): intro exposures only — the Priority
+  // itself lives behind the header P button, not in the feed.
+  const priorityIntro = usePriorityIntro();
+  const goToPrioritySettings = useCallback(() => {
+    priorityIntro.dismiss();
+    navigation.navigate('Settings');
+  }, [navigation, priorityIntro]);
+
   // ── Correlations curation: unusual system streams are dropped, the feed
   // shows 6–8 core cards by default, and the user can build custom
   // correlations + add more (persisted in AsyncStorage).
@@ -1081,8 +1103,9 @@ export default function HealthDashboardScreen() {
       void story.refetch();
       void metrics.refetch();
       void medications.refetch();
+      void localHr.refetch();
       feedQuery.refetchLocal();
-    }, [story.refetch, metrics.refetch, medications.refetch, feedQuery.refetchLocal]),
+    }, [story.refetch, metrics.refetch, medications.refetch, localHr.refetch, feedQuery.refetchLocal]),
   );
 
   const onRefresh = useCallback(async () => {
@@ -1092,169 +1115,24 @@ export default function HealthDashboardScreen() {
       medications.refetch(),
       trends.refetch(),
       story.refetch(),
+      localHr.refetch(),
       feedQuery.refetchLocal(),
     ]);
     setRefreshing(false);
-  }, [metrics.refetch, medications.refetch, trends.refetch, story.refetch, feedQuery.refetchLocal]);
+  }, [metrics.refetch, medications.refetch, trends.refetch, story.refetch, localHr.refetch, feedQuery.refetchLocal]);
 
   // ── Derived data ──
 
-  // Day scrubber: the dial shows ONE day at a time. dayOffset 0 = latest
-  // day with data, up to 6 back. Spoke values are that day's log
-  // (carried forward when a day was skipped); verdicts use the window
-  // ENDING on that day, so the past reads exactly as it did. No static
-  // multi-day averages anywhere on this screen.
-  const [dayOffset, setDayOffset] = useState(0);
-  /** How many days back the scrubber reaches — user picks 7 / 14 / 30. */
-  const [dayRange, setDayRange] = useState(7);
-
-  const dialDay = useMemo(() => {
-    const byId = new Map<string, { date: string; value: number }[]>();
-    for (const s of [...trendStreams(trends.data), ...localStreams(feedQuery.localDetails, vitalLabelMap(metrics.data))]) {
-      // Day-keys only: an ISO datetime would poison string comparison.
-      byId.set(
-        s.def.id,
-        [...s.points]
-          .map((p) => ({ date: p.date.slice(0, 10), value: p.value }))
-          .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
-      );
-    }
-    let latest = '';
-    let earliest = '';
-    for (const pts of byId.values()) {
-      for (const p of pts) {
-        if (!latest || p.date > latest) latest = p.date;
-        if (!earliest || p.date < earliest) earliest = p.date;
-      }
-    }
-    const span = latest && earliest
-      ? Math.max(0, Math.round((new Date(`${latest}T12:00:00`).getTime() - new Date(`${earliest}T12:00:00`).getTime()) / 86400000))
-      : 0;
-    const max = Math.min(Math.max(dayRange - 1, 0), span);
-    // Fractional scrub position: lo/hi are the bracketing whole days, f the
-    // blend between them. Spoke VALUES interpolate (the dial glides); the
-    // good/bad verdict rides the nearest whole day (verdicts don't blend).
-    const pos = Math.min(Math.max(dayOffset, 0), max);
-    const lo = Math.min(Math.floor(pos + 1e-6), max);
-    const hi = Math.min(lo + 1, max);
-    const f = Math.min(1, Math.max(0, pos - lo));
-    const dateLo = latest ? shiftDay(latest, -lo) : '';
-    const dateHi = latest ? shiftDay(latest, -hi) : '';
-    const dateNear = f < 0.5 ? dateLo : dateHi;
-    const out: HMetric[] = [];
-    const uptoNear = (id: string) => (byId.get(id) ?? []).filter((p) => p.date <= dateNear).map((p) => p.value);
-    const atDate = (id: string, dateStr: string) => {
-      const pts = (byId.get(id) ?? []).filter((p) => p.date <= dateStr);
-      return pts.length > 0 ? pts[pts.length - 1].value : null;
-    };
-    const dayVal = (id: string) => {
-      const a = atDate(id, dateLo);
-      if (f === 0 || dateHi === dateLo) return a;
-      const b = atDate(id, dateHi);
-      if (a == null) return b;
-      if (b == null) return a;
-      return a + (b - a) * f;
-    };
-    const round1 = (v: number) => Math.round(v * 10) / 10;
-
-    const push = (
-      id: string,
-      label: string,
-      min: number,
-      max: number,
-      bandLo: number,
-      bandHi: number,
-      higherBetter: boolean,
-      eps: number,
-      fmt: (avg: number) => string,
-    ) => {
-      const day = dayVal(id);
-      if (day == null) return;
-      const a = assessMetric(uptoNear(id), higherBetter, eps, bandLo, bandHi);
-      out.push({
-        id, label,
-        valueText: fmt(day),
-        value: Math.max(min, Math.min(max, day)),
-        min, max, bandLo, bandHi,
-        good: !a.bad, trend: a.trend, avgDays: a.days,
-      });
-    };
-
-    push('sleepDur', 'Sleep', 0, 600, 420, 540, true, 8, (a) => formatSleepMinutes(Math.round(a)));
-    push('energy', 'Energy', 1, 5, 4, 5, true, 0.08, (a) => `${round1(a)}/5`);
-    push('water', 'Water', 0, 3000, 2000, 2500, true, 60, (a) => formatWaterMl(Math.round(a)));
-    push('stress', 'Stress', 1, 5, 1, 2, false, 0.08, (a) => `Lv ${Math.round(a)}`);
-    push('activity', 'Move', 0, 90, 30, 60, true, 3, (a) => formatDurationMinutes(Math.round(a)));
-    push('wellbeing', 'Wellbeing', 1, 5, 4, 5, true, 0.08, (a) => `${round1(a)}/5`);
-    push('pain', 'Pain', 0, 10, 0, 2, false, 0.15, (a) => `${round1(a)}/10`);
-    push('meals', 'Meals', 0, 4, 2, 3, true, 0.08, (a) => `${round1(a)}`);
-
-    // Heart: red when the average leaves the resting band or the trend walks
-    // away from it (distance from 80bpm growing).
-    const hrPts = uptoNear('hr');
-    if (hrPts.length > 0) {
-      const day = dayVal('hr') ?? hrPts[hrPts.length - 1];
-      const a = assessSeries(hrPts, 1);
-      const inBand = day >= 60 && day <= 100;
-      const walkingAway = a.enough && Math.abs(hrPts[hrPts.length - 1] - 80) > Math.abs(hrPts[0] - 80) + 2;
-      out.push({
-        id: 'heart', label: 'Heart', valueText: `${Math.round(day)} bpm`,
-        value: Math.max(40, Math.min(120, day)), min: 40, max: 120, bandLo: 60, bandHi: 100,
-        good: inBand && !walkingAway, trend: a.trend, avgDays: a.days,
-      });
-    } else if (dateNear === latest) {
-      const hr = detectHeartRate(metrics.data ?? null);
-      if (hr) {
-        out.push({
-          id: 'heart', label: 'Heart', valueText: `${hr.value} bpm`, value: hr.value,
-          min: 40, max: 120, bandLo: 60, bandHi: 100,
-          good: hr.value >= 60 && hr.value <= 100, trend: 'flat', avgDays: 1,
-        });
-      }
-    }
-
-    // Doses: 7-day adherence — taken (TAKEN) per local day vs the expected
-    // schedule; today blends local counts with the server-aware summary.
-    const med = story.medSummary;
-    if (med?.hasSchedule && med.dosesExpected > 0 && dateNear) {
-      // Adherence windows end on the scrubbed days; the shown pct blends
-      // between the bracketing days so scrubbing never steps.
-      const pctsFor = (endDate: string) => {
-        const dayKeys: string[] = [];
-        for (let i = 6; i >= 0; i--) dayKeys.push(shiftDay(endDate, -i));
-        return dayKeys.map((d) => Math.min(100, ((takenByDay.get(d) ?? 0) / med.dosesExpected) * 100));
-      };
-      const todayK = localDateString();
-      const takenByDay = new Map<string, number>();
-      for (const e of feedQuery.takenEvents) {
-        if (e.status !== 'TAKEN') continue;
-        const k = localDateString(new Date(e.taken_at));
-        takenByDay.set(k, (takenByDay.get(k) ?? 0) + 1);
-      }
-      if (dateNear === todayK) takenByDay.set(todayK, Math.max(takenByDay.get(todayK) ?? 0, med.dosesTaken));
-      const pctsLo = pctsFor(dateLo);
-      const pctsHi = dateHi === dateLo ? pctsLo : pctsFor(dateHi);
-      const pctsNear = f < 0.5 ? pctsLo : pctsHi;
-      const a = assessMetric(pctsNear, true, 2, 80, 100);
-      const dayPct = pctsLo[pctsLo.length - 1] + (pctsHi[pctsHi.length - 1] - pctsLo[pctsLo.length - 1]) * f;
-      out.push({
-        id: 'doses', label: 'Doses', valueText: `${Math.round(dayPct)}%`,
-        value: Math.max(0, Math.min(100, dayPct)), min: 0, max: 100, bandLo: 80, bandHi: 100,
-        good: !a.bad, trend: a.trend, avgDays: a.days,
-      });
-    }
-    const todayK = localDateString();
-    const label = !dateNear
-      ? 'Log your first day'
-      : dateNear === todayK
-        ? 'Today'
-        : shiftDay(todayK, -1) === dateNear
-          ? 'Yesterday'
-          : new Date(`${dateNear}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    return { metrics: out.slice(0, 10), off: pos, max, label, range: dayRange };
-  }, [trends.data, metrics.data, feedQuery.localDetails, feedQuery.takenEvents, story.medSummary, dayOffset, dayRange]);
-
-  const hMetrics = dialDay.metrics;
+  // Shared dial pipeline (also drives the Priority world): same inputs,
+  // same memo, same output — this screen renders exactly what it did.
+  const { dialDay, hMetrics, setDayOffset, setDayRange } = useDialMetrics({
+    trendsData: trends.data,
+    metricsData: metrics.data,
+    localDetails: feedQuery.localDetails,
+    takenEvents: feedQuery.takenEvents,
+    medSummary: story.medSummary,
+    hrPoints: localHr.points,
+  });
 
   // Primitive projections keep the memoized header stable across focus refetches.
   // loggedToday trusts local SQLite AND server state: a log that exists on the
@@ -1314,6 +1192,9 @@ export default function HealthDashboardScreen() {
   const goToTimeline = useCallback(() => navigation.navigate('Timeline'), [navigation]);
   const goToBody = useCallback(() => navigation.navigate('Body'), [navigation]);
   const goToSettings = useCallback(() => navigation.navigate('Settings'), [navigation]);
+  // Priority shortcut: Health Areas pins the user's selected engines at
+  // the top, so it IS the Priority view — one tap guides them there.
+  const goToPriority = useCallback(() => navigation.navigate('HealthAreas'), [navigation]);
   const { photoUri } = useProfilePhoto();
   const goToFullGraph = useCallback(
     () => navigation.navigate('HealthGraph', { source: 'graph' }),
@@ -1357,13 +1238,14 @@ export default function HealthDashboardScreen() {
         onMedications={goToMedications}
         onToggleUpNextTaken={() => void toggleUpNextTaken()}
       />
+      {/* Priority lives behind the header P button — no feed card. */}
       <InsightPanelBlock hMetrics={hMetrics} day={{ off: dialDay.off, max: dialDay.max, label: dialDay.label, range: dialDay.range, onChange: setDayOffset, onRange: setDayRange }} onOpenFullGraph={goToFullGraph} onImprove={(focus) => navigation.navigate('Improve', { focus, metrics: hMetrics })} />
       <CorrelationHeading count={feed.length} />
     </View>
   ), [
     loggedToday, metrics.data?.today_wellbeing, waterMl, medNames, activeMeds.length, medTaken, medExpected, medActive,
     upNextMed, upNextTaken, toggleUpNextTaken,
-    hMetrics, dialDay, feed.length, goToDailyLog, goToMedications, goToFullGraph,
+    hMetrics, dialDay, feed.length, goToDailyLog, goToMedications, goToFullGraph, goToSettings,
     todayLine, navigation,
   ]);
 
@@ -1397,7 +1279,7 @@ export default function HealthDashboardScreen() {
           <Text style={styles.addTitle}>Build your own correlation</Text>
           <Text style={styles.addSub}>
             {poolItems.length > 0
-              ? `Pick two metrics — or add from ${poolItems.length} more`
+              ? `Pick two metrics, or add from ${poolItems.length} more`
               : 'Pick any two metrics you track'}
           </Text>
         </View>
@@ -1427,7 +1309,7 @@ export default function HealthDashboardScreen() {
         <Card style={styles.feedEmpty} accessibilityLabel="No health graphs yet">
           <Text style={styles.feedEmptyTitle}>Not enough history yet</Text>
           <Text style={styles.feedEmptyText}>
-            Log a few more days — daily curves unlock with 1 day, comparisons with 3 paired days.
+            Log a few more days. Daily curves unlock with 1 day, comparisons with 3 paired days.
           </Text>
         </Card>
       )}
@@ -1436,12 +1318,14 @@ export default function HealthDashboardScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
+      <StageGradient variant="dawn" />
       <HeaderBlock
         photoUri={photoUri}
         hasActivity={story.story.length > 0}
         onAvatarPress={() => setProfileOpen(true)}
         onBellPress={goToTimeline}
         onBodyPress={goToBody}
+        onPriorityPress={goToPriority}
       />
 
       <Animated.FlatList
@@ -1476,6 +1360,13 @@ export default function HealthDashboardScreen() {
         photoUri={photoUri}
         onOpen={(route, params) => (navigation.navigate as (r: string, p?: object) => void)(route, params)}
       />
+      {/* Priority intro: at most once per day for the first three eligible days. */}
+      <PriorityIntroCard
+        visible={priorityIntro.visible}
+        day={priorityIntro.day}
+        onDone={goToPrioritySettings}
+        onDismiss={priorityIntro.dismiss}
+      />
     </SafeAreaView>
   );
 }
@@ -1504,12 +1395,17 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: GV.wash,
+    backgroundColor: GV.card,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: GV.stageline,
+    borderWidth: 1,
+    borderColor: '#E7E1F5',
     overflow: 'hidden',
+    shadowColor: 'rgba(46, 16, 101, 1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   avatarPhoto: {
     width: '100%',
@@ -1533,8 +1429,31 @@ const styles = StyleSheet.create({
     backgroundColor: GV.card,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E7E1F5',
+    shadowColor: 'rgba(46, 16, 101, 1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  headerRight: {
+  // Priority shortcut — orange disc with a white P, same 40pt chrome as
+  // its header neighbours. Leads to Health Areas, where the user's
+  // selected (pinned) engines are their Priority.
+  headerPriority: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: GV.fx.amber,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerPriorityText: {
+    fontFamily: FONT.semi,
+    fontSize: 20,
+    lineHeight: 24,
+    color: '#FFFFFF',
+  },  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -1557,13 +1476,13 @@ const styles = StyleSheet.create({
   },
   titleEyebrow: {
     ...TYPE.caption,
-    color: GV.fog,
+    color: GV.violet,
     textAlign: 'center',
     marginBottom: 4,
   },
   titleDisplay: {
     ...TYPE.display,
-    color: GV.card,
+    color: GV.ink,
     textAlign: 'center',
   },
 
@@ -1685,12 +1604,12 @@ const styles = StyleSheet.create({
   },
   insightEyebrow: {
     ...TYPE.caption,
-    color: GV.fog,
+    color: GV.violet,
   },
   // One quiet status line straight from the dial values — nothing invented.
   verdictLine: {
     ...TYPE.body,
-    color: GV.fog,
+    color: GV.body,
     fontVariant: ['tabular-nums'],
     marginBottom: 12,
     paddingHorizontal: 4,

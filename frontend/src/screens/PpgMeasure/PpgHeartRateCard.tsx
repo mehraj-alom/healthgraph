@@ -103,7 +103,7 @@ export default function PpgHeartRateCard() {
             >
               <Text style={styles.iconGlyph}>♥</Text>
             </View>
-            <Text style={styles.eyebrow}>HEART RATE</Text>
+            <Text style={styles.eyebrow}>Heart rate</Text>
           </View>
           <Text style={styles.cta}>Measure →</Text>
         </View>

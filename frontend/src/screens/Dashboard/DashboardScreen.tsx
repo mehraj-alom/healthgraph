@@ -388,9 +388,9 @@ export default function DashboardScreen() {
 
   // ── Banner (offline / sync attention) ──
   const banner = !online
-    ? { text: "You're offline — changes are saved locally and sync soon." }
+    ? { text: "You're offline. Changes are saved locally and sync soon." }
     : syncStatus.status === 'SYNC_FAILED'
-      ? { text: `${getSyncStatusMessage(syncStatus.status)} — retrying in the background.` }
+      ? { text: `${getSyncStatusMessage(syncStatus.status)}. Retrying in the background.` }
       : null;
 
   const avatarList: Avatar[] = [];
@@ -406,7 +406,7 @@ export default function DashboardScreen() {
       <CenteredNotice
         icon="🌱"
         title="Welcome to your health dashboard"
-        message="Log your first check-in to start seeing your day bloom."
+        message="Log your first check-in to start."
         onRetry={goToDailyLog}
         actionLabel="Log today"
       />
@@ -545,7 +545,7 @@ export default function DashboardScreen() {
             ))
           ) : (
             <Text style={[mvType.caption, { color: mv.textOnLightSecondary, paddingVertical: 6 }]}>
-              Nothing here yet — log your day to start your timeline.
+              Nothing here yet. Log your day to start your timeline.
             </Text>
           )}
         </MovementsCard>
@@ -633,7 +633,7 @@ export default function DashboardScreen() {
             Today
           </Text>
           <Text style={[amType.body, { color: AM.secondary, marginTop: 4 }]}>
-            Your health at a glance
+            Your health overview
           </Text>
         </View>
 

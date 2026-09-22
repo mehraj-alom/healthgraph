@@ -25,6 +25,7 @@ import { getCachedPatientId } from '@/services/patientIdentity';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getRecentRppgMeasurements } from '@/db/queries/rppg';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import type { MainTabParamList, RootStackParamList } from '@/types';
 
 type Nav = CompositeNavigationProp<
@@ -140,6 +141,7 @@ export default function PulseMethodScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <StageGradient />
       <ScrollView
         contentContainerStyle={styles.content}
         onScroll={onTabScroll}
