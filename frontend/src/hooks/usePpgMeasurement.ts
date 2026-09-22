@@ -56,6 +56,11 @@ export function usePpgMeasurement(): UsePpgMeasurement {
   const [error, setError] = useState<string | null>(null);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
   const mounted = useRef(true);
+  // Re-entrancy guard: a second Start press while a measurement is in flight
+  // must be a no-op — otherwise two concurrent runs each insert their own
+  // local row (and POST twice, which the server cannot dedupe). Mirrors the
+  // rPPG hook's startInFlightRef. Cleared on every exit via finally below.
+  const startInFlightRef = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -118,6 +123,8 @@ export function usePpgMeasurement(): UsePpgMeasurement {
       }
     }
     try {
+      if (startInFlightRef.current) return;
+      startInFlightRef.current = true;
       const r = await provider.measure({ durationSeconds });
       if (!mounted.current) return;
       setResult(r);
@@ -210,6 +217,8 @@ export function usePpgMeasurement(): UsePpgMeasurement {
           setError(e?.message ?? 'Measurement could not be completed. Try again.');
         }
       }
+    } finally {
+      startInFlightRef.current = false;
     }
   }, [provider]);
 
@@ -218,6 +227,7 @@ export function usePpgMeasurement(): UsePpgMeasurement {
   }, [provider]);
 
   const reset = useCallback(() => {
+    startInFlightRef.current = false;
     setState('IDLE');
     setResult(null);
     setLiveQuality(null);

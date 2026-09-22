@@ -29,6 +29,22 @@ export const RPPG_MODEL_MANIFEST: RppgModelManifest = {
   remotePath: 'physformer_rppg_fp16.onnx',
 };
 
+/** Suffix for in-progress model downloads (never loaded by inference). */
+export const RPPG_DOWNLOAD_SUFFIX = '.download';
+
+/**
+ * Unique temp filename for one download attempt: concurrent ensure() calls
+ * must never share a temp file (one caller's clean-slate delete would
+ * corrupt the other's in-flight bytes). Basename only — no directories, so
+ * no path traversal regardless of input. Pure: safe for node unit tests.
+ */
+export function tempDownloadName(filename: string, nonce: string): string {
+  const base = filename.split('/').pop()?.split('\\').pop() ?? filename;
+  const clean = base.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 128) || 'model';
+  const tag = nonce.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || 'x';
+  return `${clean}${RPPG_DOWNLOAD_SUFFIX}.${tag}`;
+}
+
 /**
  * User-facing copy per model failure code. Pure: the hook shows exactly
  * what this returns.

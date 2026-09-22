@@ -22,8 +22,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assetUrl } from '../assetHost';
 import {
   RPPG_MODEL_MANIFEST,
+  RPPG_DOWNLOAD_SUFFIX,
   base64Encode,
   friendlyRppgModelMessage,
+  tempDownloadName,
   type RppgModelManifest,
 } from './modelMeta';
 
@@ -69,8 +71,43 @@ function modelFile(): File {
   return new File(modelDir(), RPPG_MODEL_MANIFEST.filename);
 }
 
-function tempFile(): File {
-  return new File(modelDir(), `${RPPG_MODEL_MANIFEST.filename}.download`);
+/**
+ * Unique temp file for ONE download attempt. Concurrent ensure() calls must
+ * never share a temp path: the old shared name let one caller's clean-slate
+ * delete corrupt another caller's in-flight bytes (surfacing later as a
+ * bogus checksum failure). The install stays atomic: verify temp, then
+ * move over the destination.
+ */
+function attemptTempFile(): File {
+  const nonce =
+    typeof Math !== 'undefined'
+      ? Math.random().toString(36).slice(2, 10) +
+        Date.now().toString(36)
+      : 'fallback';
+  return new File(modelDir(), tempDownloadName(RPPG_MODEL_MANIFEST.filename, nonce));
+}
+
+/** Remove stale temp files from interrupted attempts (bounded storage). */
+async function sweepStaleTempFiles(dir: Directory): Promise<void> {
+  let entries: Array<Directory | File>;
+  try {
+    entries = dir.list();
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    try {
+      if (
+        entry instanceof File &&
+        (entry.name.endsWith(RPPG_DOWNLOAD_SUFFIX) ||
+          entry.name.includes(`${RPPG_DOWNLOAD_SUFFIX}.`))
+      ) {
+        await entry.delete();
+      }
+    } catch {
+      /* best-effort per file */
+    }
+  }
 }
 
 async function ensureDir(dir: Directory): Promise<void> {
@@ -196,17 +233,20 @@ export async function ensureRppgModelAvailable(
   }
 
   const dir = modelDir();
-  await ensureDir(dir);
-  const finalFile = modelFile();
-  const tmp = tempFile();
-
-  // Clean slate: never resume into a suspect temp file.
   try {
-    const tmpInfo = await tmp.info();
-    if (tmpInfo.exists) await tmp.delete();
+    await ensureDir(dir);
   } catch {
-    /* ignore */
+    throw new RppgModelError(
+      'storage',
+      'Could not prepare storage for the pulse model. Check free space and try again.',
+    );
   }
+  // Sweep interrupted attempts first (bounded storage, includes the legacy
+  // shared temp name), then download to a unique temp path so concurrent
+  // callers can never share — or delete — each other's bytes.
+  await sweepStaleTempFiles(dir);
+  const finalFile = modelFile();
+  const tmp = attemptTempFile();
 
   const url = getRppgModelUrl();
   try {

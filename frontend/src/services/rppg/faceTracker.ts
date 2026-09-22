@@ -196,6 +196,45 @@ export function mapNativeCaptureState(
   }
 }
 
+/** States in which a measurement run is in flight (camera and/or model may
+ *  be active). Single source of truth for progress UI, cancel guards, and
+ *  background-interruption handling — screens must not duplicate this list.
+ */
+export const RPPG_BUSY_STATES: readonly RppgScreenState[] = [
+  'PREPARING',
+  'MODEL_DOWNLOAD',
+  'FIND_FACE',
+  'POSITION_FACE',
+  'ACQUIRING',
+  'MEASURING',
+  'SIGNAL_WEAK',
+  'FACE_LOST',
+  'COMPLETING',
+];
+
+/** Resting states: no run in flight, safe to start a new one or leave. */
+export const RPPG_REST_STATES: readonly RppgScreenState[] = [
+  'IDLE',
+  'COMPLETE',
+  'FAILED',
+];
+
+export function isRppgBusyState(state: RppgScreenState): boolean {
+  return (RPPG_BUSY_STATES as readonly string[]).includes(state);
+}
+
+export function isRppgRestState(state: RppgScreenState): boolean {
+  return (RPPG_REST_STATES as readonly string[]).includes(state);
+}
+
+/**
+ * States from which a new run may start. COMPLETE requires reset() first so
+ * a finished result is never silently discarded by an overlapping run.
+ */
+export function canStartRppgFrom(state: RppgScreenState): boolean {
+  return state === 'IDLE' || state === 'FAILED';
+}
+
 /** Build a deterministic telemetry fixture for tests (not face data). */
 export function buildTelemetryFixture(
   count: number,

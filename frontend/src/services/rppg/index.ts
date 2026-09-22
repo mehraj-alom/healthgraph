@@ -2,7 +2,10 @@
  * rPPG provider selection.
  *
  * - Custom dev/production build with onnxruntime-react-native → ONNX provider
- *   running the bundled PhysFormer FP16 model fully on-device.
+ *   running the PhysFormer FP16 model fully on-device. The .onnx itself is
+ *   NOT bundled: it downloads once on first use (modelManager, size + SHA
+ *   verified) and every later run reuses the on-device cache, including
+ *   fully offline.
  * - Any runtime without ONNX Runtime (Expo Go, web, failed init) →
  *   unavailable provider (explicit, never crashes, never falls back to
  *   fingertip PPG or simulated data).
@@ -28,7 +31,7 @@ export { buildRppgSmokeTensor, runRppgDevValidation } from './devValidate';
 export type { RppgDevValidationResult } from './devValidate';
 export { parseRppgWindow, readRppgWindowFile, buildRppgWindowForTests, RppgWindowError } from './frameWindow';
 export type { RppgWindowFile, RppgWindowBytesReader } from './frameWindow';
-export { FaceTracker, buildTelemetryFixture, mapNativeCaptureState } from './faceTracker';
+export { FaceTracker, buildTelemetryFixture, mapNativeCaptureState, RPPG_BUSY_STATES, RPPG_REST_STATES, isRppgBusyState, isRppgRestState, canStartRppgFrom } from './faceTracker';
 export type { RppgTelemetrySample, FaceTrackState, FaceTrackSnapshot, FaceTrackerOptions, RppgScreenState } from './faceTracker';
 export { preprocessWindow, preprocessWindowYielding, measuredFps, RppgPreprocessError } from './preprocessor';
 export type { PreprocessedWindow } from './preprocessor';

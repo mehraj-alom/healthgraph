@@ -2,7 +2,8 @@
  * On-device PhysFormer inference via ONNX Runtime (`onnxruntime-react-native`).
  *
  * Architecture:  React Native TS → RppgProvider → ONNX Runtime →
- * bundled physformer_rppg_fp16.onnx → Float32 [1,160] waveform.
+ * on-demand physformer_rppg_fp16.onnx (downloaded once via modelManager,
+ * verified, cached on device) → Float32 [1,160] waveform.
  *
  * No server inference: camera frames / tensors never leave the device in
  * this layer, and no network calls are made here. Logs (if any, by callers)
@@ -209,10 +210,6 @@ export function isOnnxRuntimeSupported(): boolean {
   }
 }
 
-/**
- * Resolve the bundled FP16 model to a local file path ONNX Runtime can open.
- * Uses expo-asset (same pattern as the existing .glb/.wasm asset loading).
- */
 /**
  * Resolve the PhysFormer model path via the on-demand model manager.
  *

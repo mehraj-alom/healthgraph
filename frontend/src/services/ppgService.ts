@@ -11,6 +11,7 @@
 
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import { requestDataRefresh } from '@/services/dataRefresh';
 import {
   getPendingPpgMeasurements,
   insertPpgMeasurement,
@@ -38,6 +39,10 @@ export async function saveAndSyncPpgResult(
 
   const savedLocalId = await insertPpgMeasurement(patientId, input);
 
+  // Local-first propagation: the dial reads SQLite directly, so announce
+  // the write NOW — never gated on the POST below succeeding.
+  requestDataRefresh();
+
   let syncedToServer = false;
   try {
     await api.post('/api/v1/ppg/measurements', {
@@ -64,6 +69,8 @@ export async function saveAndSyncPpgResult(
 export async function syncPendingPpg(): Promise<{ synced: number; remaining: number }> {
   const patientId = getCachedPatientId();
   if (!patientId) return { synced: 0, remaining: 0 };
+  // Independent rows: one failure never stalls the rest (continue, not
+  // break) — a single poison row must not head-of-line block later rows.
   const pending: LocalPpgMeasurement[] = await getPendingPpgMeasurements(patientId);
   let synced = 0;
   for (const row of pending) {
@@ -82,7 +89,8 @@ export async function syncPendingPpg(): Promise<{ synced: number; remaining: num
       await markPpgSynced(row.measurement_id);
       synced += 1;
     } catch {
-      break; // stop on first failure; retry next time (offline-first)
+      // Stay pending; the next trigger retries (offline-first).
+      continue;
     }
   }
   return { synced, remaining: pending.length - synced };

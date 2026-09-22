@@ -12,6 +12,7 @@
 
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import { requestDataRefresh } from '@/services/dataRefresh';
 import {
   getPendingRppgMeasurements,
   insertRppgMeasurement,
@@ -33,6 +34,10 @@ export async function saveAndSyncRppgResult(
   if (!patientId) throw new Error('Your session has expired. Please sign in again.');
 
   const savedLocalId = await insertRppgMeasurement(patientId, input);
+
+  // Local-first propagation: the dial reads SQLite directly, so announce
+  // the write NOW — never gated on the POST below succeeding.
+  requestDataRefresh();
 
   let syncedToServer = false;
   try {
@@ -82,7 +87,9 @@ export async function syncPendingRppg(): Promise<{ synced: number; remaining: nu
       await markRppgSynced(row.measurement_id);
       synced += 1;
     } catch {
-      break; // stop on first failure; retry next time (offline-first)
+      // Stay pending; the next trigger retries. Independent rows: continue,
+      // never break — one bad row must not stall later measurements.
+      continue;
     }
   }
   return { synced, remaining: pending.length - synced };

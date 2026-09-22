@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RppgNativeEvent } from 'healthgraph-rppg';
 import {
   RPPG_MODEL_METADATA,
+  canStartRppgFrom,
   estimateRppgHeartRate,
   gateRppgQuality,
   getRppgFrameSource,
@@ -68,6 +69,11 @@ export interface UseRppgMeasurement {
 /** Pipeline version for capture+HR+quality (model identity stays separate). */
 export const RPPG_ALGORITHM_VERSION = 'rppg-1.0.0';
 
+/** Stalled-download watchdog: a hung connection must fail loudly, never
+ *  wedge the UI in MODEL_DOWNLOAD (user Cancel stays the only other exit).
+ */
+const RPPG_MODEL_DOWNLOAD_TIMEOUT_MS = 120_000;
+
 const HINTS: Record<RppgScreenState, string> = {
   IDLE: 'Measure your pulse with a short face scan.',
   PREPARING: 'Preparing the camera…',
@@ -103,6 +109,15 @@ export function useRppgMeasurement(): UseRppgMeasurement {
   const mounted = useRef(true);
   const settled = useRef(false);
   const modelAbortRef = useRef<AbortController | null>(null);
+  // Watchdog for a stalled model download (no timeout in the FS API itself).
+  const modelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Native listener unsubscribe for the CURRENT run. Stored in a ref (not a
+  // start()-local) so unmount/cancel always detach, even mid-capture —
+  // otherwise the subscription leaks and keeps firing setState after teardown.
+  const listenerOffRef = useRef<(() => void) | null>(null);
+  // Re-entrancy guard: a second Start press (double-tap) while a run is in
+  // flight must be a no-op, never a second model download + camera capture.
+  const startInFlightRef = useRef(false);
   // Throttle high-frequency capture telemetry into UI updates: the native
   // analyzer emits per-frame callbacks (tens/sec) but the progress bar and
   // stability label cannot meaningfully move that fast. State transitions
@@ -117,6 +132,26 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     return () => {
       console.log('rppg stage: measure screen unmounted');
       mounted.current = false;
+      // Detach the run listener so no telemetry lands after teardown.
+      try {
+        listenerOffRef.current?.();
+      } catch {
+        // Detach is best-effort.
+      }
+      listenerOffRef.current = null;
+      // Abort an in-flight model download (temp file is discarded by the
+      // manager; a later run restarts cleanly) and disarm its watchdog.
+      try {
+        modelAbortRef.current?.abort();
+      } catch {
+        // Abort is best-effort.
+      }
+      modelAbortRef.current = null;
+      if (modelTimeoutRef.current !== null) {
+        clearTimeout(modelTimeoutRef.current);
+        modelTimeoutRef.current = null;
+      }
+      startInFlightRef.current = false;
       // Drop the cached ONNX session so native model resources can be
       // reclaimed when the flow is torn down. In-flight infer() calls hold
       // their own session reference; the next measurement re-initializes
@@ -128,6 +163,15 @@ export function useRppgMeasurement(): UseRppgMeasurement {
   const fail = useCallback((message: string) => {
     if (!mounted.current || settled.current) return;
     settled.current = true;
+    startInFlightRef.current = false;
+    // Terminal: detach the run listener (fail can fire from inside the
+    // listener itself on native FAILED — detach is re-entrant safe).
+    try {
+      listenerOffRef.current?.();
+    } catch {
+      // Detach is best-effort.
+    }
+    listenerOffRef.current = null;
     setError(message);
     setState('FAILED');
   }, []);
@@ -143,6 +187,13 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     setPermissionBlocked(false);
     settled.current = false;
     if (!mounted.current) return;
+    // Double-Start (double-tap) guard: exactly one run at a time. Terminal
+    // paths (fail/complete/cancel/unmount) clear this; see fail() above.
+    if (startInFlightRef.current) return;
+    // A finished result is never silently discarded by an overlapping run:
+    // COMPLETE requires reset() first; only IDLE/FAILED may start.
+    if (!canStartRppgFrom(state)) return;
+    startInFlightRef.current = true;
 
     if (!frameSource.isAvailable) {
       // Tell the user the REAL cause: Expo Go (or a build predating the
@@ -184,6 +235,20 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     setState('MODEL_DOWNLOAD');
     setModelProgress(0);
     modelAbortRef.current = new AbortController();
+    // Watchdog: expo-file-system downloads have no built-in timeout, so a
+    // stalled connection would wedge MODEL_DOWNLOAD until the user cancels.
+    // On fire, the abort below makes ensure() reject; downloadTimedOut routes
+    // to an explicit timeout failure (never misreported as user-cancelled).
+    let downloadTimedOut = false;
+    const downloadTimer = setTimeout(() => {
+      downloadTimedOut = true;
+      try {
+        modelAbortRef.current?.abort();
+      } catch {
+        // Abort is best-effort.
+      }
+    }, RPPG_MODEL_DOWNLOAD_TIMEOUT_MS);
+    modelTimeoutRef.current = downloadTimer;
     let modelManager: typeof import('@/services/rppg/modelManager') | null = null;
     try {
       modelManager = await import('@/services/rppg/modelManager');
@@ -196,12 +261,20 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     } catch (e: unknown) {
       modelAbortRef.current = null;
       if (!mounted.current || settled.current) return;
+      if (downloadTimedOut) {
+        setModelProgress(null);
+        fail(
+          'The pulse model download timed out. Connect to a stable network and try again.',
+        );
+        return;
+      }
       const code =
         e instanceof Error && e.name === 'RppgModelError'
           ? (e as { code?: string }).code
           : undefined;
       if (code === 'cancelled') {
         settled.current = true;
+        startInFlightRef.current = false;
         setModelProgress(null);
         setState('IDLE');
         return;
@@ -213,6 +286,11 @@ export function useRppgMeasurement(): UseRppgMeasurement {
           : 'The pulse model could not be prepared. Try again.',
       );
       return;
+    } finally {
+      clearTimeout(downloadTimer);
+      if (modelTimeoutRef.current === downloadTimer) {
+        modelTimeoutRef.current = null;
+      }
     }
     modelAbortRef.current = null;
     if (!mounted.current || settled.current) return;
@@ -231,6 +309,13 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     }
 
     setState('PREPARING');
+    // Replace any stale subscription before attaching the run listener.
+    try {
+      listenerOffRef.current?.();
+    } catch {
+      // Detach is best-effort.
+    }
+    listenerOffRef.current = null;
     const off = frameSource.addListener((e) => {
       if (!mounted.current || settled.current) return;
       // UI throttle: progress moves in >=4-frame steps (or >=250 ms), and
@@ -275,6 +360,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
       console.log('rppg stage: starting native camera capture');
       const capture = await frameSource.capture({ timeoutSeconds: 30 });
       off();
+      listenerOffRef.current = null;
       if (!mounted.current || settled.current) return;
       console.log('rppg stage: capture complete frames=' + capture.frameCount);
       setState('MEASURING');
@@ -367,21 +453,25 @@ export function useRppgMeasurement(): UseRppgMeasurement {
         });
         if (!mounted.current || settled.current) return;
         settled.current = true;
+        startInFlightRef.current = false;
         setSynced(out.syncedToServer);
         setState('COMPLETE');
       } catch (e: any) {
         if (!mounted.current || settled.current) return;
         settled.current = true;
+        startInFlightRef.current = false;
         setError(e?.message ?? 'Measurement could not be saved. Try again.');
         setState('FAILED');
       }
     } catch (e: any) {
       off();
+      listenerOffRef.current = null;
       if (!mounted.current || settled.current) return;
       const cancelled =
         e?.code === 'CANCELLED' || /cancel/i.test(String(e?.message ?? ''));
       if (cancelled) {
         settled.current = true;
+        startInFlightRef.current = false;
         setState('IDLE');
         return;
       }
@@ -396,7 +486,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
         fail(e?.message ?? 'Measurement could not be completed. Try again.');
       }
     }
-  }, [frameSource, fail]);
+  }, [frameSource, fail, state]);
 
   const cancel = useCallback(async () => {
     try {
@@ -405,6 +495,16 @@ export function useRppgMeasurement(): UseRppgMeasurement {
       // Abort is best-effort.
     }
     modelAbortRef.current = null;
+    if (modelTimeoutRef.current !== null) {
+      clearTimeout(modelTimeoutRef.current);
+      modelTimeoutRef.current = null;
+    }
+    try {
+      listenerOffRef.current?.();
+    } catch {
+      // Detach is best-effort.
+    }
+    listenerOffRef.current = null;
     try {
       await frameSource.cancel();
     } catch {
@@ -412,6 +512,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     }
     if (!mounted.current) return;
     settled.current = true;
+    startInFlightRef.current = false;
     setModelProgress(null);
     setState('IDLE');
     setProgressFrames(0);
@@ -420,6 +521,8 @@ export function useRppgMeasurement(): UseRppgMeasurement {
 
   const reset = useCallback(() => {
     settled.current = false;
+    startInFlightRef.current = false;
+    listenerOffRef.current = null;
     setState('IDLE');
     setResult(null);
     setProgressFrames(0);
