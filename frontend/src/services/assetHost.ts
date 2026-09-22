@@ -25,7 +25,6 @@ const RELEASE_BASE =
   'https://github.com/mehraj-alom/healthgraph-assets/releases/download';
 
 export const ASSET_ANATOMY_PATH = 'anatomy/v1';
-export const ASSET_RPPG_MODEL_PATH = 'models/rppg/v1';
 
 declare const __DEV__: boolean | undefined;
 

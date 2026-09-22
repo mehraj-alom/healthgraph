@@ -32,6 +32,7 @@ import {
   getRetryAfterMs,
   isRetryableCategory,
   shouldExhaustRetries,
+  shouldSyncQueueItem,
 } from './syncClassification';
 import { markOnline, markOffline } from './networkMonitor';
 import { perfStart } from '../utils/perfLog';
@@ -150,26 +151,33 @@ function releaseLock(): void {
 // ============================================================================
 
 /**
- * Get pending mutations from the sync queue, oldest first.
- * Bounded per pass (SYNC_BATCH_LIMIT); callers loop while a full batch was
- * returned so a single flush still drains everything without ever holding
- * an unbounded queue in memory.
+ * Get pending mutations owned by the current patient, oldest first.
+ *
+ * Patient isolation: sync_queue rows carry patient_id (migration 11), but
+ * legacy rows predate the column. The SQL prefilter takes owned + legacy
+ * rows; the flush loop applies the shouldSyncQueueItem backstop per item so
+ * a legacy row whose payload resolves to ANOTHER patient is never synced
+ * blindly under this session's token (the backend attributes every write
+ * to the token identity).
  */
 async function getPendingMutations(limit = SYNC_BATCH_LIMIT): Promise<SyncQueueItem[]> {
   const db = await getDatabase();
+  const patientId = getCachedPatientId();
+  if (!patientId) return [];
 
   return db.getAllAsync<SyncQueueItem>(
     `
     SELECT
       id, table_name, record_id, mutation_id, operation, payload_json,
-      created_at, attempt_count, last_error, status
+      created_at, attempt_count, last_error, status, patient_id
     FROM sync_queue
     WHERE status = 'pending'
       AND table_name != '_hydration'
+      AND (patient_id = ? OR patient_id IS NULL)
     ORDER BY created_at ASC, id ASC
     LIMIT ?
     `,
-    [limit],
+    [patientId, limit],
   );
 }
 
@@ -182,8 +190,8 @@ async function getQueueItem(id: number): Promise<SyncQueueItem | null> {
   return db.getFirstAsync<SyncQueueItem>(
     `
     SELECT
-      id, table_name, record_id, operation, payload_json,
-      created_at, attempt_count, last_error, status
+      id, table_name, record_id, mutation_id, operation, payload_json,
+      created_at, attempt_count, last_error, status, patient_id
     FROM sync_queue
     WHERE id = ?
     `,
@@ -696,6 +704,13 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
           break;
         }
 
+        // Ownership backstop for legacy queue rows: skip (leave pending)
+        // anything that does not resolve to this patient. Never sync blindly.
+        const ownerId = getCachedPatientId();
+        if (!ownerId || !shouldSyncQueueItem(item, ownerId)) {
+          continue;
+        }
+
         const result = await processQueueItem(item);
         results.push(result);
 
@@ -740,10 +755,27 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
 }
 
 /**
- * Get current sync state.
+ * Get current sync state, scoped to the current patient.
+ *
+ * Logged out (or pre-migration rows without an owner): counts are zeroed /
+ * owner-scoped so one user's pending badge can never leak into another
+ * session. Legacy NULL rows are excluded from the badge but still governed
+ * by the ownership backstop at flush time.
  */
 export async function getSyncState(): Promise<SyncState> {
   const db = await getDatabase();
+  const patientId = getCachedPatientId();
+  if (!patientId) {
+    return {
+      pendingCount: 0,
+      processingCount: 0,
+      completedCount: 0,
+      failedCount: 0,
+      lastSyncAttempt: null,
+      lastSyncSuccess: null,
+      isSyncing: syncMutex,
+    };
+  }
 
   const counts = await db.getFirstAsync<{
     pending: number;
@@ -759,7 +791,9 @@ export async function getSyncState(): Promise<SyncState> {
       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
     FROM sync_queue
     WHERE table_name != '_hydration'
+      AND patient_id = ?
     `,
+    [patientId],
   );
 
   return {
@@ -774,11 +808,13 @@ export async function getSyncState(): Promise<SyncState> {
 }
 
 /**
- * Retry failed sync items.
+ * Retry failed sync items owned by the current patient.
  * Resets attempt count and sets status back to pending.
  */
 export async function retryFailedSyncs(): Promise<number> {
   const db = await getDatabase();
+  const patientId = getCachedPatientId();
+  if (!patientId) return 0;
 
   const result = await db.runAsync(
     `
@@ -786,7 +822,9 @@ export async function retryFailedSyncs(): Promise<number> {
     SET status = 'pending', attempt_count = 0
     WHERE status = 'failed'
       AND table_name != '_hydration'
+      AND (patient_id = ? OR patient_id IS NULL)
     `,
+    [patientId],
   );
 
   return result.changes;

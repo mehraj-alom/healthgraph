@@ -28,6 +28,8 @@ export const GV = {
   stage: '#0B4A3F',
   /** Cards, sheets, dock. Always pure white. */
   card: '#FFFFFF',
+  /** Warm paper for cards on light stages — definition without heaviness. */
+  paper: '#FFF9F1',
   /** Headings on white. */
   ink: '#14201D',
   /** Body copy on white. */

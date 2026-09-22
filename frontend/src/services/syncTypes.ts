@@ -29,6 +29,8 @@ export interface SyncQueueItem {
   attempt_count: number;
   last_error: string | null;
   status: SyncStatus;
+  /** Owning patient (migration 11; null for legacy rows — see shouldSyncQueueItem). */
+  patient_id: string | null;
 }
 
 // ============================================================================

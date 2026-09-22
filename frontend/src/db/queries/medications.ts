@@ -212,8 +212,13 @@ export async function insertMedication(
   const localId = generateLocalId();
   const now = nowIso();
 
-  await db.runAsync(
-    `INSERT INTO medications (
+  // Atomic: the row and its queue entry commit together. A crash between
+  // them would leave a pending_create row with no queue entry — stuck
+  // unsynced forever, since the engine only processes queue rows and
+  // hydration skips non-synced rows.
+  await withSerializedTransaction(db, async () => {
+    await db.runAsync(
+      `INSERT INTO medications (
       medication_id, patient_id, name, generic_name, brand_name,
       strength, strength_unit, dose_amount, dose_unit, route,
       frequency, scheduled_times, scheduled_weekdays, start_date, end_date,
@@ -249,16 +254,22 @@ export async function insertMedication(
       now,
       localId,
     ],
-  );
+    );
 
-  // Add to sync queue
-  await addToSyncQueue('medications', localId, 'create', {
-    ...medication,
-    medication_id: localId,
-    patient_id: patientId,
-    created_at: now,
-    updated_at: now,
+    // Queue row joins the SAME transaction (never a nested one — nested
+    // serialized transactions deadlock the chain mutex).
+    await writeQueueRow(db, patientId, 'medications', localId, 'create', {
+      ...medication,
+      medication_id: localId,
+      patient_id: patientId,
+      created_at: now,
+      updated_at: now,
+    });
   });
+
+  // Side effects only after commit: badge + engine trigger must never run
+  // inside the transaction.
+  announceQueueWrite();
 
   return localId;
 }
@@ -311,22 +322,27 @@ export async function updateMedication(
 
   params.push(patientId, medicationId);
 
-  await db.runAsync(
-    `UPDATE medications SET ${setClauses.join(', ')} WHERE patient_id = ? AND medication_id = ?`,
-    params,
-  );
+  let queued = false;
+  await withSerializedTransaction(db, async () => {
+    await db.runAsync(
+      `UPDATE medications SET ${setClauses.join(', ')} WHERE patient_id = ? AND medication_id = ?`,
+      params,
+    );
 
-  // Add to sync queue
-  const current = await getMedicationById(patientId, medicationId);
-  if (current) {
-    await addToSyncQueue('medications', medicationId, 'update', {
-      ...current,
-      ...updates,
-      medication_id: medicationId,
-      patient_id: patientId,
-      updated_at: now,
-    });
-  }
+    // Add to sync queue (same transaction as the row write)
+    const current = await getMedicationById(patientId, medicationId);
+    if (current) {
+      await writeQueueRow(db, patientId, 'medications', medicationId, 'update', {
+        ...current,
+        ...updates,
+        medication_id: medicationId,
+        patient_id: patientId,
+        updated_at: now,
+      });
+      queued = true;
+    }
+  });
+  if (queued) announceQueueWrite();
 }
 
 /**
@@ -340,17 +356,20 @@ export async function deleteMedication(
   const db = await getDatabase();
   const now = nowIso();
 
-  await db.runAsync(
-    `UPDATE medications
-     SET status = 'DISCONTINUED',
-         updated_at = ?,
-         sync_status = CASE WHEN sync_status = 'pending_create' THEN 'pending_create' ELSE 'pending_delete' END
-     WHERE patient_id = ? AND medication_id = ?`,
-    [now, patientId, medicationId],
-  );
+  await withSerializedTransaction(db, async () => {
+    await db.runAsync(
+      `UPDATE medications
+       SET status = 'DISCONTINUED',
+           updated_at = ?,
+           sync_status = CASE WHEN sync_status = 'pending_create' THEN 'pending_create' ELSE 'pending_delete' END
+       WHERE patient_id = ? AND medication_id = ?`,
+      [now, patientId, medicationId],
+    );
 
-  // Add to sync queue
-  await addToSyncQueue('medications', medicationId, 'delete', null);
+    // Add to sync queue (same transaction as the row write)
+    await writeQueueRow(db, patientId, 'medications', medicationId, 'delete', null);
+  });
+  announceQueueWrite();
 }
 
 /**
@@ -451,14 +470,22 @@ export async function hydrateMedications(
 
 // ─── Sync Queue ──────────────────────────────────────────────────────────────
 
-async function addToSyncQueue(
+type SyncDb = Awaited<ReturnType<typeof getDatabase>>;
+
+/**
+ * Queue-row SQL only (no side effects): safe to call INSIDE a serialized
+ * transaction alongside the row write. Side effects (badge + engine trigger)
+ * go through announceQueueWrite() AFTER the transaction commits — never
+ * inside it.
+ */
+async function writeQueueRow(
+  db: SyncDb,
+  patientId: string,
   tableName: string,
   recordId: string,
   operation: 'create' | 'update' | 'delete',
   payload: Record<string, unknown> | null,
 ): Promise<void> {
-  const db = await getDatabase();
-
   // Generate a unique mutation_id for this specific mutation
   // This is distinct from record_id (business record ID)
   const mutationId = `mut_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -473,17 +500,21 @@ async function addToSyncQueue(
     // Update existing entry instead of creating duplicate.
     // Rotate mutation_id: it is used as the Idempotency-Key, and the
     // server 409s when a reused key carries a different payload hash.
+    // Heal ownership for legacy rows that predate the patient_id column.
     await db.runAsync(
-      'UPDATE sync_queue SET operation = ?, mutation_id = ?, payload_json = ?, created_at = datetime(\'now\') WHERE id = ?',
-      [operation, mutationId, payload ? JSON.stringify(payload) : null, existing.id],
+      "UPDATE sync_queue SET operation = ?, mutation_id = ?, payload_json = ?, created_at = datetime('now'), patient_id = COALESCE(patient_id, ?) WHERE id = ?",
+      [operation, mutationId, payload ? JSON.stringify(payload) : null, patientId, existing.id],
     );
   } else {
     await db.runAsync(
-      'INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, payload_json) VALUES (?, ?, ?, ?, ?)',
-      [tableName, recordId, mutationId, operation, payload ? JSON.stringify(payload) : null],
+      'INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, payload_json, patient_id) VALUES (?, ?, ?, ?, ?, ?)',
+      [tableName, recordId, mutationId, operation, payload ? JSON.stringify(payload) : null, patientId],
     );
   }
+}
 
+/** Post-commit side effects for a queued mutation (badge + engine trigger). */
+function announceQueueWrite(): void {
   // Mark mutation as queued for UI display
   import('@/services/syncState').then(({ markMutationQueued }) => {
     markMutationQueued();

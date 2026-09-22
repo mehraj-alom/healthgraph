@@ -7,6 +7,7 @@
 
 import { getDatabase, withSerializedTransaction } from '@/db/connection';
 import type { MedicationTakenEvent, DoseTakenStatus, ActiveMedicationForDailyLog, DailyMedicationSchedule } from '@/types';
+import { groupTakenByMinute, matchTakenToSlot } from '@/utils/medicationSchedule';
 
 // ─── Row → Event Mapping ─────────────────────────────────────────────────────
 
@@ -115,16 +116,6 @@ function todayLocalDateString(): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-/**
- * Extract HH:MM from an ISO datetime string using local time.
- */
-function extractTimeOfDay(isoString: string): string {
-  const date = new Date(isoString);
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
 }
 
 /**
@@ -242,6 +233,30 @@ export async function getMedicationTakenEventsForDate(
 }
 
 /**
+ * Get taken events inside an instant range, scoped to patient.
+ *
+ * Single bounded read for windowed metrics (the Discipline Engine reads a
+ * trailing-14-day window here instead of one query per day). taken_at is a
+ * UTC ISO-8601 string so lexical comparison is chronological; callers map
+ * instants to local calendar days themselves. Ordered ascending.
+ */
+export async function getTakenEventsInRange(
+  patientId: string,
+  startIso: string,
+  endIso: string,
+): Promise<MedicationTakenEvent[]> {
+  const db = await getDatabase();
+  const result = await db.getAllAsync<TakenEventRow>(
+    `SELECT * FROM medication_taken_events
+     WHERE patient_id = ?
+       AND taken_at >= ? AND taken_at < ?
+     ORDER BY taken_at ASC`,
+    [patientId, startIso, endIso],
+  );
+  return result.map(rowToEvent);
+}
+
+/**
  * Get taken events for a specific medication on a specific date.
  */
 export async function getTakenEventsForMedicationOnDate(
@@ -263,6 +278,30 @@ export async function getTakenEventsForMedicationOnDate(
   return result.map(rowToEvent);
 }
 
+/**
+ * Pending (never-synced) taken events older than a cutoff, oldest first.
+ *
+ * Feeds the offline retry flusher: rows the engine can never upload itself
+ * (taken_events have no generic sync path — the engine marks their queue
+ * rows completed without posting). Patient-scoped; the cutoff keeps rows
+ * whose originating direct POST may still be in flight out of the retry set.
+ */
+export async function getPendingTakenEvents(
+  patientId: string,
+  olderThanIso: string,
+): Promise<MedicationTakenEvent[]> {
+  const db = await getDatabase();
+  const result = await db.getAllAsync<TakenEventRow>(
+    `SELECT * FROM medication_taken_events
+     WHERE patient_id = ?
+       AND sync_status = 'pending_create'
+       AND taken_at < ?
+     ORDER BY taken_at ASC`,
+    [patientId, olderThanIso],
+  );
+  return result.map(rowToEvent);
+}
+
 // ─── Write Operations ────────────────────────────────────────────────────────
 
 /**
@@ -278,37 +317,41 @@ export async function insertMedicationTakenEvent(
   const localId = generateLocalId();
   const now = nowIso();
 
-  await db.runAsync(
-    `INSERT INTO medication_taken_events (
+  // Atomic: row + queue entry commit together (see medications.ts).
+  await withSerializedTransaction(db, async () => {
+    await db.runAsync(
+      `INSERT INTO medication_taken_events (
       event_id, medication_id, patient_id, taken_at, scheduled_for,
       dose_taken, dose_unit, status, notes, clinical_event_id,
       created_at, updated_at, local_id, sync_status
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_create')`,
-    [
-      localId,
-      event.medication_id,
-      patientId,
-      event.taken_at,
-      event.scheduled_for,
-      event.dose_taken,
-      event.dose_unit,
-      event.status,
-      event.notes,
-      event.clinical_event_id,
-      now,
-      now,
-      localId,
-    ],
-  );
+      [
+        localId,
+        event.medication_id,
+        patientId,
+        event.taken_at,
+        event.scheduled_for,
+        event.dose_taken,
+        event.dose_unit,
+        event.status,
+        event.notes,
+        event.clinical_event_id,
+        now,
+        now,
+        localId,
+      ],
+    );
 
-  // Add to sync queue
-  await addToSyncQueue('medication_taken_events', localId, 'create', {
-    ...event,
-    event_id: localId,
-    patient_id: patientId,
-    created_at: now,
-    updated_at: now,
+    // Add to sync queue (same transaction as the row write)
+    await writeQueueRow(db, patientId, 'medication_taken_events', localId, 'create', {
+      ...event,
+      event_id: localId,
+      patient_id: patientId,
+      created_at: now,
+      updated_at: now,
+    });
   });
+  announceQueueWrite();
 
   return localId;
 }
@@ -345,21 +388,26 @@ export async function updateMedicationTakenEvent(
 
   params.push(patientId, eventId);
 
-  await db.runAsync(
-    `UPDATE medication_taken_events SET ${setClauses.join(', ')} WHERE patient_id = ? AND event_id = ?`,
-    params,
-  );
+  let queued = false;
+  await withSerializedTransaction(db, async () => {
+    await db.runAsync(
+      `UPDATE medication_taken_events SET ${setClauses.join(', ')} WHERE patient_id = ? AND event_id = ?`,
+      params,
+    );
 
-  const current = await getMedicationTakenEventById(patientId, eventId);
-  if (current) {
-    await addToSyncQueue('medication_taken_events', eventId, 'update', {
-      ...current,
-      ...updates,
-      event_id: eventId,
-      patient_id: patientId,
-      updated_at: now,
-    });
-  }
+    const current = await getMedicationTakenEventById(patientId, eventId);
+    if (current) {
+      await writeQueueRow(db, patientId, 'medication_taken_events', eventId, 'update', {
+        ...current,
+        ...updates,
+        event_id: eventId,
+        patient_id: patientId,
+        updated_at: now,
+      });
+      queued = true;
+    }
+  });
+  if (queued) announceQueueWrite();
 }
 
 /**
@@ -387,14 +435,17 @@ export async function deleteMedicationTakenEvent(
       [patientId, eventId],
     );
   } else {
-    // Synced — soft delete
-    await db.runAsync(
-      `UPDATE medication_taken_events
-       SET updated_at = ?, sync_status = 'pending_delete'
-       WHERE patient_id = ? AND event_id = ?`,
-      [nowIso(), patientId, eventId],
-    );
-    await addToSyncQueue('medication_taken_events', eventId, 'delete', null);
+    // Synced — soft delete (row + queue entry commit together)
+    await withSerializedTransaction(db, async () => {
+      await db.runAsync(
+        `UPDATE medication_taken_events
+         SET updated_at = ?, sync_status = 'pending_delete'
+         WHERE patient_id = ? AND event_id = ?`,
+        [nowIso(), patientId, eventId],
+      );
+      await writeQueueRow(db, patientId, 'medication_taken_events', eventId, 'delete', null);
+    });
+    announceQueueWrite();
   }
 }
 
@@ -700,21 +751,15 @@ export async function computeLocalSchedule(
       .slice()
       .sort((a, b) => (a.taken_at < b.taken_at ? -1 : a.taken_at > b.taken_at ? 1 : 0));
 
-    // Build a map of taken times (HH:MM) to events
-    const takenByTime = new Map<string, { event_id: string; taken_at: string }>();
-    for (const event of takenEvents) {
-      // Match by scheduled_for.HH:MM or taken_at.HH:MM
-      const timeKey = event.scheduled_for
-        ? extractTimeOfDay(event.scheduled_for)
-        : extractTimeOfDay(event.taken_at);
-      if (!takenByTime.has(timeKey)) {
-        takenByTime.set(timeKey, { event_id: event.event_id, taken_at: event.taken_at });
-      }
-    }
+    // Grouped by clock minute. Two legitimate events can share one minute
+    // (unscheduled + scheduled dose, correction re-tap): the map keeps both
+    // and the slot below prefers the one scheduled for it, so neither dose
+    // silently disappears from the schedule.
+    const takenByMinute = groupTakenByMinute(takenEvents);
 
     // Build schedule items
     for (const time of scheduledTimes) {
-      const takenEvent = takenByTime.get(time);
+      const takenEvent = matchTakenToSlot(takenByMinute.get(time) ?? [], time);
       schedule.push({
         medication: {
           medication_id: med.medication_id,
@@ -744,14 +789,23 @@ export async function computeLocalSchedule(
 
 // ─── Sync Queue ──────────────────────────────────────────────────────────────
 
-async function addToSyncQueue(
+type SyncDb = Awaited<ReturnType<typeof getDatabase>>;
+
+/**
+ * Queue-row SQL only (no side effects): safe to call INSIDE a serialized
+ * transaction alongside the row write. Side effects (badge + engine trigger)
+ * go through announceQueueWrite() AFTER the transaction commits. Mutation
+ * rotation matches medications.ts so a coalesced edit never reuses an
+ * Idempotency-Key with a different payload hash (server 409s those).
+ */
+async function writeQueueRow(
+  db: SyncDb,
+  patientId: string,
   tableName: string,
   recordId: string,
   operation: 'create' | 'update' | 'delete',
   payload: Record<string, unknown> | null,
 ): Promise<void> {
-  const db = await getDatabase();
-
   // Generate a unique mutation_id for this specific mutation
   // This is distinct from record_id (business record ID)
   const mutationId = `mut_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -763,16 +817,19 @@ async function addToSyncQueue(
 
   if (existing) {
     await db.runAsync(
-      "UPDATE sync_queue SET operation = ?, payload_json = ?, created_at = datetime('now') WHERE id = ?",
-      [operation, payload ? JSON.stringify(payload) : null, existing.id],
+      "UPDATE sync_queue SET operation = ?, mutation_id = ?, payload_json = ?, created_at = datetime('now'), patient_id = COALESCE(patient_id, ?) WHERE id = ?",
+      [operation, mutationId, payload ? JSON.stringify(payload) : null, patientId, existing.id],
     );
   } else {
     await db.runAsync(
-      'INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, payload_json) VALUES (?, ?, ?, ?, ?)',
-      [tableName, recordId, mutationId, operation, payload ? JSON.stringify(payload) : null],
+      'INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, payload_json, patient_id) VALUES (?, ?, ?, ?, ?, ?)',
+      [tableName, recordId, mutationId, operation, payload ? JSON.stringify(payload) : null, patientId],
     );
   }
+}
 
+/** Post-commit side effects for a queued mutation (badge + engine trigger). */
+function announceQueueWrite(): void {
   // Mark mutation as queued for UI display
   import('@/services/syncState').then(({ markMutationQueued }) => {
     markMutationQueued();

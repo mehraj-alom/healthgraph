@@ -7,9 +7,19 @@ import axios, {
 import { auth } from '@/context/AuthContext';
 import { waitForIdentityReady } from '@/services/backendIdentity';
 
-const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  'http://10.22.93.11:8000';
+/**
+ * Backend base URL. Production builds MUST configure EXPO_PUBLIC_API_URL:
+ * silently falling back to a developer-LAN address would send authenticated
+ * health traffic to the wrong server, so non-dev builds fail fast instead.
+ */
+const API_URL = (() => {
+  const configured = process.env.EXPO_PUBLIC_API_URL;
+  if (configured) return configured;
+  if (typeof __DEV__ !== 'undefined' && __DEV__) return 'http://10.22.93.11:8000';
+  throw new Error(
+    'EXPO_PUBLIC_API_URL is not configured. Production builds require the backend URL.',
+  );
+})();
 
 if (__DEV__) console.log('[MedGraph] API_URL:', API_URL);
 

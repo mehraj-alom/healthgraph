@@ -193,3 +193,46 @@ export function deriveSyncStatus(counts: {
   if (counts.pendingCount > 0) return 'SAVED_LOCALLY';
   return 'SYNCED';
 }
+
+// ============================================================================
+// Queue ownership (patient isolation for the offline queue)
+// ============================================================================
+// The sync_queue table predates multi-account use (migration 11 stamps new
+// rows). Ownership resolution is column-first with a payload backstop for
+// legacy rows; rows with no resolvable owner are NEVER synced blindly —
+// they stay pending until healed (COALESCE on next touch) or cleared.
+
+export interface QueueOwnershipItem {
+  patient_id?: string | null;
+  payload_json?: string | null;
+}
+
+/** Owner resolution: stamped column first, payload backstop for legacy rows. */
+export function queueItemPatientId(item: QueueOwnershipItem): string | null {
+  if (typeof item.patient_id === 'string' && item.patient_id.length > 0) {
+    return item.patient_id;
+  }
+  if (typeof item.payload_json === 'string' && item.payload_json.length > 0) {
+    try {
+      const payload = JSON.parse(item.payload_json) as { patient_id?: unknown };
+      if (typeof payload?.patient_id === 'string' && payload.patient_id.length > 0) {
+        return payload.patient_id;
+      }
+    } catch {
+      // Unparsable payload carries no owner.
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether a queue row may sync under the given patient. Fail-closed: an
+ * unknown owner never matches, so one user's pending rows can never be
+ * written into another user's account after logout → login.
+ */
+export function shouldSyncQueueItem(item: QueueOwnershipItem, patientId: string): boolean {
+  if (!patientId) return false;
+  const owner = queueItemPatientId(item);
+  if (owner === null) return false;
+  return owner === patientId;
+}

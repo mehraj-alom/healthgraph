@@ -283,6 +283,9 @@ export interface PatientProfile {
   phone_number: string | null;
   height_cm: number | null;
   weight_kg: number | null;
+  /** Server mirror of device-owned onboarding preferences (backup only). */
+  goals?: string[] | null;
+  focus?: string[] | null;
 }
 
 // ============================================================================
@@ -373,6 +376,30 @@ export interface PendingReviewItem {
 
 export type RootStackParamList = {
   Onboarding: undefined;
+  /** Post-auth personalization (goals → focus → momentum → done), once per patient. */
+  OnboardingSetup: undefined;
+  /** Health-area hub (real-data availability per area). */
+  HealthAreas: undefined;
+  /** Neutral substance-use tracking (device-only). */
+  Substance: undefined;
+  /** Explicit cycle tracking (device-only, no predictions). */
+  Cycle: undefined;
+  /** Sleep goal engine (device check-in data, tracking only). */
+  SleepEngine: undefined;
+  /** Weight goal engine (profile weight shell, tracking only). */
+  WeightEngine: undefined;
+  /** Discipline goal engine (tracked-action counts, tracking only). */
+  DisciplineEngine: undefined;
+  /** Fitness goal engine (logged activity, tracking only). */
+  FitnessEngine: undefined;
+  /** Nutrition goal engine (logged meals, tracking only). */
+  NutritionEngine: undefined;
+  /** Wellbeing goal engine (user-entered ratings, tracking only). */
+  WellbeingEngine: undefined;
+  /** Heart goal engine (camera measurements, tracking only). */
+  HeartEngine: undefined;
+  /** Priority world (selected engines + shared dial, tracking only). */
+  Priority: undefined;
   Main: { screen?: string } | undefined;
   DailyLog: undefined;
   Timeline: undefined;

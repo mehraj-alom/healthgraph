@@ -10,6 +10,7 @@ import {
 import {
   getMedicationTakenEvents as dbGetTakenEvents,
   getMedicationTakenEventsForDate as dbGetTakenEventsForDate,
+  getPendingTakenEvents as dbGetPendingTakenEvents,
   insertMedicationTakenEvent as dbInsertTakenEvent,
   reconcileTakenEvent as dbReconcileTakenEvent,
   hydrateTakenEvents as dbHydrateTakenEvents,
@@ -256,13 +257,18 @@ export function useMedicationSchedule(targetDate: string) {
       const hydrated = await areTakenEventsHydrated(patientId);
 
       if (!hydrated) {
-        // Step 2: Hydrate taken events from server
+        // Step 2: Hydrate taken events from server. The hydrated flag is set
+        // ONLY when at least one fetch+store round actually succeeded: a
+        // failed (e.g. offline) first launch must NOT poison hydration, or
+        // server doses would stay invisible until the flag is reset.
+        let hydratedOk = false;
         try {
           const takenResult = await api.get<{ events: MedicationTakenEvent[]; total: number }>(
             `/api/v1/medications/schedule/${targetDate}/taken`,
           );
           if (mountedRef.current && takenResult.events) {
             await dbHydrateTakenEvents(patientId, takenResult.events);
+            hydratedOk = true;
           }
         } catch {
           // If the combined endpoint doesn't exist, try fetching all taken events
@@ -277,6 +283,7 @@ export function useMedicationSchedule(targetDate: string) {
                   );
                   if (mountedRef.current && events.events) {
                     await dbHydrateTakenEvents(patientId, events.events);
+                    hydratedOk = true;
                   }
                 } catch {
                   // Skip failed medication fetch
@@ -289,7 +296,15 @@ export function useMedicationSchedule(targetDate: string) {
         }
 
         // Mark as hydrated (even if fetch failed — prevents repeated fetches)
-        await markTakenEventsHydrated(patientId);
+        if (hydratedOk) {
+          await markTakenEventsHydrated(patientId);
+        }
+
+        // Flush any taken doses recorded while offline: the generic engine
+        // cannot upload taken_events (no endpoint mapping, its queue rows
+        // complete without posting), so without this pass an offline dose
+        // would sit pending_create locally forever.
+        await syncPendingTakenEvents(patientId).catch(() => {});
       }
 
       // Step 3: Compute schedule locally from SQLite
@@ -456,6 +471,53 @@ export function useMedicationTakenEvents(medicationId: string) {
   };
 }
 
+// ─── syncPendingTakenEvents ──────────────────────────────────────────────
+
+// Rows younger than this are left for their originating direct POST to
+// reconcile (avoids double-posting a dose whose POST is still in flight).
+const TAKEN_FLUSH_FRESH_MS = 30_000;
+let takenFlushInFlight = false;
+
+/**
+ * Retry-upload taken doses stuck in pending_create (recorded offline).
+ *
+ * The generic engine cannot upload taken_events (no endpoint mapping — its
+ * queue rows complete without posting), so without this pass an offline
+ * dose would sit pending locally forever. Independent rows: one failure
+ * never stalls the rest (continue, not break). Reconciled rows leave the
+ * pending set, so a later pass cannot duplicate them.
+ */
+export async function syncPendingTakenEvents(
+  patientId: string,
+): Promise<{ synced: number; remaining: number }> {
+  if (takenFlushInFlight || !patientId) return { synced: 0, remaining: 0 };
+  takenFlushInFlight = true;
+  try {
+    const cutoff = new Date(Date.now() - TAKEN_FLUSH_FRESH_MS).toISOString();
+    const pending = await dbGetPendingTakenEvents(patientId, cutoff);
+    let synced = 0;
+    for (const row of pending) {
+      try {
+        const res = await api.post<{ event_id: string }>('/api/v1/medications/taken', {
+          medication_id: row.medication_id,
+          taken_at: row.taken_at,
+          scheduled_for: row.scheduled_for,
+          dose_taken: row.dose_taken,
+          dose_unit: row.dose_unit,
+          status: row.status,
+        });
+        const ok = await dbReconcileTakenEvent(patientId, row.event_id, res.event_id);
+        if (ok) synced += 1;
+      } catch {
+        // Stay pending; the next trigger retries.
+      }
+    }
+    return { synced, remaining: pending.length - synced };
+  } finally {
+    takenFlushInFlight = false;
+  }
+}
+
 // ─── recordMedicationTaken ───────────────────────────────────────────────────
 
 /**
@@ -479,6 +541,10 @@ export async function recordMedicationTaken(
   scheduledTime: string,
 ): Promise<{ localEventId: string; serverEventId: string | null }> {
   const now = new Date();
+
+  // Flush any backlog first (sequential: the new row below cannot overlap
+  // this pass, so neither path can double-post the other one's rows).
+  await syncPendingTakenEvents(patientId).catch(() => {});
 
   // Build scheduled_for as today + scheduledTime (local time)
   const [hours, minutes] = scheduledTime.split(':').map(Number);

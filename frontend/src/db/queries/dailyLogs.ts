@@ -122,6 +122,200 @@ export async function getDailyLogs(
   );
 }
 
+/** One logged night: group-level sleep columns for a single date. */
+export interface SleepNightRow {
+  log_date: string;
+  sleep_duration_minutes: number;
+  sleep_quality: number | null;
+  sleep_awakenings: number | null;
+}
+
+/**
+ * Bounded sleep history for the Sleep Engine: nights with a real logged
+ * duration inside [startDate, endDate] (inclusive, YYYY-MM-DD), oldest
+ * first. Patient-scoped; no fallback values — a night without a logged
+ * duration is not a night. One row per date (latest updated_at wins —
+ * the table carries no uniqueness constraint, so a hydrated server copy
+ * can shadow a local row; same rule as getDailyLog).
+ */
+export async function getSleepNights(
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<SleepNightRow[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<
+    SleepNightRow & { log_date: string; updated_at: string }
+  >(
+    `SELECT log_date, sleep_duration_minutes, sleep_quality, sleep_awakenings, updated_at
+     FROM daily_logs
+     WHERE patient_id = ?
+       AND log_date >= ? AND log_date <= ?
+       AND sleep_duration_minutes IS NOT NULL
+     ORDER BY updated_at DESC`,
+    [patientId, startDate, endDate],
+  );
+  const seen = new Set<string>();
+  const nights: SleepNightRow[] = [];
+  for (const r of rows) {
+    const day = r.log_date.slice(0, 10);
+    if (seen.has(day)) continue;
+    seen.add(day);
+    nights.push({
+      log_date: day,
+      sleep_duration_minutes: r.sleep_duration_minutes,
+      sleep_quality: r.sleep_quality,
+      sleep_awakenings: r.sleep_awakenings,
+    });
+  }
+  return nights.sort((a, b) => (a.log_date < b.log_date ? -1 : a.log_date > b.log_date ? 1 : 0));
+}
+
+/**
+ * Bounded activity history for the Fitness Engine: ACTIVITY_LOG events
+ * inside [startDate, endDate] (inclusive, YYYY-MM-DD on the group's
+ * log_date — the local calendar day the check-in belongs to), oldest
+ * first. Patient-scoped through the group's patient_id. duration_minutes
+ * and calories_burned are user-logged and optional; a session without a
+ * duration is still a session, never zero minutes.
+ */
+export interface ActivityLogRow {
+  log_date: string;
+  activity_type: string;
+  duration_minutes: number | null;
+  calories_burned: number | null;
+}
+
+export async function getActivityLogs(
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<ActivityLogRow[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ log_date: string; payload_json: string }>(
+    `SELECT g.log_date AS log_date, e.payload_json AS payload_json
+     FROM daily_log_events e
+     INNER JOIN daily_logs g ON e.group_id = g.group_id
+     WHERE g.patient_id = ?
+       AND e.event_type = 'ACTIVITY_LOG'
+       AND g.log_date >= ? AND g.log_date <= ?
+     ORDER BY g.log_date ASC, e.created_at ASC`,
+    [patientId, startDate, endDate],
+  );
+  return rows.map((r) => {
+    const payload = parseJsonPayload(r.payload_json);
+    const duration =
+      typeof payload.duration_minutes === 'number' && Number.isFinite(payload.duration_minutes)
+        ? payload.duration_minutes
+        : null;
+    const calories =
+      typeof payload.calories_burned === 'number' && Number.isFinite(payload.calories_burned)
+        ? payload.calories_burned
+        : null;
+    return {
+      log_date: r.log_date.slice(0, 10),
+      activity_type:
+        typeof payload.activity_type === 'string' && payload.activity_type.trim()
+          ? payload.activity_type
+          : 'Activity',
+      duration_minutes: duration,
+      calories_burned: calories,
+    };
+  });
+}
+/**
+ * Bounded nutrition history for the Nutrition Engine: group-level meal
+ * columns inside [startDate, endDate] (inclusive, YYYY-MM-DD), oldest
+ * first. Patient-scoped. Only days with at least one nutrition field are
+ * returned — a day without logged meals, estimated calories, or a food
+ * label is not a nutrition day. calories_kcal on this device is written
+ * only by the food-scan flow (AI-estimated, summed per day); macros are
+ * not persisted anywhere and are therefore not returned here.
+ */
+export interface NutritionDayRow {
+  log_date: string;
+  meals_count: number | null;
+  calories_kcal: number | null;
+  food_label: string | null;
+}
+
+export async function getNutritionDays(
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<NutritionDayRow[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<NutritionDayRow & { updated_at: string }>(
+    `SELECT log_date, meals_count, calories_kcal, food_label, updated_at
+     FROM daily_logs
+     WHERE patient_id = ?
+       AND log_date >= ? AND log_date <= ?
+       AND (meals_count IS NOT NULL OR calories_kcal IS NOT NULL OR food_label IS NOT NULL)
+     ORDER BY updated_at DESC`,
+    [patientId, startDate, endDate],
+  );
+  // One row per date (latest updated_at wins — see getSleepNights).
+  const seen = new Set<string>();
+  const days: NutritionDayRow[] = [];
+  for (const r of rows) {
+    const day = r.log_date.slice(0, 10);
+    if (seen.has(day)) continue;
+    seen.add(day);
+    days.push({
+      log_date: day,
+      meals_count: r.meals_count,
+      calories_kcal: r.calories_kcal,
+      food_label: r.food_label,
+    });
+  }
+  return days.sort((a, b) => (a.log_date < b.log_date ? -1 : a.log_date > b.log_date ? 1 : 0));
+}
+/**
+ * Bounded wellbeing history for the Wellbeing Engine: group-level
+ * user-entered 1–5 ratings inside [startDate, endDate] (inclusive,
+ * YYYY-MM-DD), oldest first. Patient-scoped. Only days with at least one
+ * rating are returned — a day without mood, energy, or stress is not a
+ * wellbeing day. No questionnaires, journals, or inferred signals exist
+ * on device, so none are returned here.
+ */
+export interface WellbeingDayRow {
+  log_date: string;
+  overall_wellbeing: number | null;
+  energy_level: number | null;
+  stress_level: number | null;
+}
+
+export async function getWellbeingDays(
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<WellbeingDayRow[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<WellbeingDayRow & { updated_at: string }>(
+    `SELECT log_date, overall_wellbeing, energy_level, stress_level, updated_at
+     FROM daily_logs
+     WHERE patient_id = ?
+       AND log_date >= ? AND log_date <= ?
+       AND (overall_wellbeing IS NOT NULL OR energy_level IS NOT NULL OR stress_level IS NOT NULL)
+     ORDER BY updated_at DESC`,
+    [patientId, startDate, endDate],
+  );
+  // One row per date (latest updated_at wins — see getSleepNights).
+  const seen = new Set<string>();
+  const days: WellbeingDayRow[] = [];
+  for (const r of rows) {
+    const day = r.log_date.slice(0, 10);
+    if (seen.has(day)) continue;
+    seen.add(day);
+    days.push({
+      log_date: day,
+      overall_wellbeing: r.overall_wellbeing,
+      energy_level: r.energy_level,
+      stress_level: r.stress_level,
+    });
+  }
+  return days.sort((a, b) => (a.log_date < b.log_date ? -1 : a.log_date > b.log_date ? 1 : 0));
+}
 /**
  * Get all events for a daily log group, scoped to patient via the group's patient_id.
  */
@@ -174,6 +368,11 @@ export async function upsertDailyLog(
   // Check for existing log on this date
   const existing = await getDailyLog(patientId, request.log_date);
   const groupId = existing?.group_id ?? generateLocalId();
+
+  // Post-commit announcement count: declared outside the transaction because
+  // the announce loop runs after commit (one announcement per queue entry,
+  // preserving the previous behavior).
+  let queued = 0;
 
   await withSerializedTransaction(db, async () => {
     // Upsert the daily_logs row
@@ -252,9 +451,11 @@ export async function upsertDailyLog(
       );
     }
 
-    // Add sync_queue entries
+    // Add sync_queue entries (same transaction as the rows above).
+    // Side effects fire after commit below (announceQueueWrite), preserving
+    // the previous one-announcement-per-entry behavior.
     const hasServerGroupId = existing?.sync_status === 'synced';
-    await addToSyncQueue(db, 'daily_logs', groupId, hasServerGroupId ? 'update' : 'create', {
+    await writeQueueRow(db, patientId, 'daily_logs', groupId, hasServerGroupId ? 'update' : 'create', {
       group_id: groupId,
       patient_id: patientId,
       log_date: request.log_date,
@@ -270,15 +471,18 @@ export async function upsertDailyLog(
       activities: request.activities ?? null,
       medications: request.medications ?? null,
     });
+    queued += 1;
 
     for (const event of events) {
-      await addToSyncQueue(db, 'daily_log_events', event.event_id, 'create', {
+      await writeQueueRow(db, patientId, 'daily_log_events', event.event_id, 'create', {
         event_id: event.event_id,
         group_id: groupId,
         event_type: event.event_type,
       });
+      queued += 1;
     }
   });
+  for (let i = 0; i < queued; i++) announceQueueWrite();
 
   return groupId;
 }
@@ -305,19 +509,23 @@ export async function insertDailyLogEvent(
   );
   if (!group) throw new Error('Daily log group not found');
 
-  await db.runAsync(
-    `INSERT INTO daily_log_events (
+  // Atomic: event row + queue entry commit together.
+  await withSerializedTransaction(db, async () => {
+    await db.runAsync(
+      `INSERT INTO daily_log_events (
       event_id, group_id, event_type, concept_id,
       event_time, payload_json, created_at, sync_status
     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_create')`,
-    [localId, groupId, eventType, conceptId, eventTime, JSON.stringify(payload), now],
-  );
+      [localId, groupId, eventType, conceptId, eventTime, JSON.stringify(payload), now],
+    );
 
-  await addToSyncQueue(db, 'daily_log_events', localId, 'create', {
-    event_id: localId,
-    group_id: groupId,
-    event_type: eventType,
+    await writeQueueRow(db, patientId, 'daily_log_events', localId, 'create', {
+      event_id: localId,
+      group_id: groupId,
+      event_type: eventType,
+    });
   });
+  announceQueueWrite();
 
   return localId;
 }
@@ -342,17 +550,21 @@ export async function updateDailyLogEvent(
   );
   if (!event) return;
 
-  await db.runAsync(
-    `UPDATE daily_log_events
-     SET payload_json = ?, sync_status = 'pending_update'
-     WHERE event_id = ?`,
-    [JSON.stringify(payload), eventId],
-  );
+  // Atomic: event update + queue entry commit together.
+  await withSerializedTransaction(db, async () => {
+    await db.runAsync(
+      `UPDATE daily_log_events
+      SET payload_json = ?, sync_status = 'pending_update'
+      WHERE event_id = ?`,
+      [JSON.stringify(payload), eventId],
+    );
 
-  await addToSyncQueue(db, 'daily_log_events', eventId, 'update', {
-    event_id: eventId,
-    group_id: event.group_id,
+    await writeQueueRow(db, patientId, 'daily_log_events', eventId, 'update', {
+      event_id: eventId,
+      group_id: event.group_id,
+    });
   });
+  announceQueueWrite();
 }
 
 /**
@@ -380,12 +592,15 @@ export async function deleteDailyLogEvent(
       [eventId],
     );
   } else {
-    // Synced — soft delete via sync_queue
-    await db.runAsync(
-      "UPDATE daily_log_events SET sync_status = 'pending_delete' WHERE event_id = ?",
-      [eventId],
-    );
-    await addToSyncQueue(db, 'daily_log_events', eventId, 'delete', null);
+    // Synced — soft delete (row + queue entry commit together)
+    await withSerializedTransaction(db, async () => {
+      await db.runAsync(
+        "UPDATE daily_log_events SET sync_status = 'pending_delete' WHERE event_id = ?",
+        [eventId],
+      );
+      await writeQueueRow(db, patientId, 'daily_log_events', eventId, 'delete', null);
+    });
+    announceQueueWrite();
   }
 }
 
@@ -1005,8 +1220,16 @@ function reconstructDetail(
 
 // ─── Sync Queue ──────────────────────────────────────────────────────────────
 
-async function addToSyncQueue(
-  db: Awaited<ReturnType<typeof getDatabase>>,
+type SyncDb = Awaited<ReturnType<typeof getDatabase>>;
+
+/**
+ * Queue-row SQL only (no side effects): safe to call INSIDE a serialized
+ * transaction alongside the row writes. Side effects (badge + engine
+ * trigger) go through announceQueueWrite() AFTER the transaction commits.
+ */
+async function writeQueueRow(
+  db: SyncDb,
+  patientId: string,
   tableName: string,
   recordId: string,
   operation: 'create' | 'update' | 'delete',
@@ -1028,15 +1251,15 @@ async function addToSyncQueue(
       // Rotate the mutation_id: the sync engine uses it as the
       // Idempotency-Key, and the server 409s when a reused key carries a
       // different payload hash. A coalesced edit IS a different payload,
-      // so it needs a fresh key.
+      // so it needs a fresh key. Heal ownership for legacy rows.
       await db.runAsync(
-        "UPDATE sync_queue SET operation = ?, mutation_id = ?, payload_json = ?, created_at = datetime('now') WHERE id = ?",
-        [operation, mutationId, payload ? JSON.stringify(payload) : null, existing.id],
+        "UPDATE sync_queue SET operation = ?, mutation_id = ?, payload_json = ?, created_at = datetime('now'), patient_id = COALESCE(patient_id, ?) WHERE id = ?",
+        [operation, mutationId, payload ? JSON.stringify(payload) : null, patientId, existing.id],
       );
     } else {
       await db.runAsync(
-        'INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, payload_json) VALUES (?, ?, ?, ?, ?)',
-        [tableName, recordId, mutationId, operation, payload ? JSON.stringify(payload) : null],
+        'INSERT INTO sync_queue (table_name, record_id, mutation_id, operation, payload_json, patient_id) VALUES (?, ?, ?, ?, ?, ?)',
+        [tableName, recordId, mutationId, operation, payload ? JSON.stringify(payload) : null, patientId],
       );
     }
   } catch (error) {
@@ -1049,7 +1272,10 @@ async function addToSyncQueue(
     throw error;
   }
   console.log(`[DailyLog] QUEUE_SUCCESS table=${tableName} op=${operation}`);
+}
 
+/** Post-commit side effects for queued mutations (badge + engine trigger). */
+function announceQueueWrite(): void {
   // Mark mutation as queued for UI display
   import('@/services/syncState').then(({ markMutationQueued }) => {
     markMutationQueued();

@@ -13,6 +13,9 @@ import type {
   DailyCheckInRequest,
   DailyCheckInResponse,
 } from '@/types';
+// Pure meal classification (screens/FoodScan/mealTypes has zero imports, so
+// no layer cycle: the scan UI and this pipeline share one definition).
+import { isMealType, stripMealPrefix } from '@/screens/FoodScan/mealTypes';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -185,17 +188,29 @@ function detailToRequest(
  * Pure extension of the nutrition block: meals_count + 1, calories summed,
  * food label appended. Water / appetite and every other section are
  * preserved byte-for-byte.
+ *
+ * The mealType classification ("Lunch", "Snack", …) is required: a scan
+ * identifies food, it never becomes a meal on its own. The type travels
+ * inside the existing food_label pipeline ("<Type> — <items>") so no
+ * schema or backend change is needed.
  */
 export async function logScannedMeal(
   totalKcal: number,
   label: string,
+  mealType?: string,
 ): Promise<{ groupId: string; serverSaved: boolean }> {
   const patientId = getCachedPatientId();
   if (!patientId) {
     throw new Error('Your session has expired. Please sign in again.');
   }
   const kcal = Math.max(0, Math.round(totalKcal));
-  const cleanLabel = label.trim().slice(0, 200) || 'Scanned meal';
+  const rawLabel = label.trim().slice(0, 200) || 'Scanned meal';
+  // Re-classification safe: strip a previous "<Type> — " prefix first so a
+  // corrected type never stacks ("Lunch — Dinner — …").
+  const unprefixed = stripMealPrefix(rawLabel);
+  const cleanLabel = (
+    mealType && isMealType(mealType) ? `${mealType} — ${unprefixed}` : unprefixed
+  ).slice(0, 250);
   const logDate = todayLocal();
 
   // Read today's existing log so nothing already saved is lost.
