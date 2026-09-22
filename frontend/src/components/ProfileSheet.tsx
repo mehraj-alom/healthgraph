@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback, type ComponentRef } from 'react';
 import {
+  AccessibilityInfo,
   Alert,
+  Easing,
+  findNodeHandle,
   Image,
   Modal as RNModal,
   PanResponder,
@@ -13,6 +16,16 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Constants from 'expo-constants';
+import { BlurView } from 'expo-blur';
+import ReAnimated, {
+  Easing as ReEasing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
+import { useReducedMotion } from '@/theme';
+import { usePriority } from '@/hooks/usePriority';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { useDocuments } from '@/context/DocumentsContext';
 import { useAuth } from '@/context/AuthContext';
@@ -27,23 +40,23 @@ import { useToast } from '@/components/Toast';
 interface FeatureDef {
   title: string;
   sub: string;
-  dot: string;
   route: string;
   params?: Record<string, unknown>;
 }
 
-const FEATURES: FeatureDef[] = [
-  { title: 'Chat', sub: 'Ask about your health', dot: GV.fx.purple, route: 'Chat' },
-  { title: 'Daily Log', sub: 'Log today', dot: GV.fx.green, route: 'DailyLog' },
-  { title: 'Timeline', sub: 'Your history', dot: GV.fx.blue, route: 'Timeline' },
-  { title: 'Medications', sub: 'Schedule & doses', dot: GV.fx.sky, route: 'Medications' },
-  { title: 'Symptom Map', sub: 'Mark where it hurts', dot: GV.fx.pink, route: 'SymptomMap' },
-  { title: '3D Body', sub: 'Explore your body', dot: GV.teal, route: 'Body' },
-  { title: 'Health Graph', sub: 'Full overview', dot: GV.cta, route: 'HealthGraph', params: { source: 'graph' } },
-  { title: 'Measure Pulse', sub: 'Check heart rate', dot: GV.pulse, route: 'PpgMeasure' },
-  { title: 'Upload Record', sub: 'Add a document', dot: GV.fx.amber, route: 'DocumentUpload' },
-  { title: 'Scan Food', sub: 'Estimate meal calories', dot: GV.fx.amber, route: 'FoodScan' },
-  { title: 'Account', sub: 'Settings & sign out', dot: GV.fx.brown, route: 'Settings' },
+const TRACK_FEATURES: FeatureDef[] = [
+  { title: 'Daily Log', sub: 'Log today', route: 'DailyLog' },
+  { title: 'Measure Pulse', sub: 'Check heart rate', route: 'PpgMeasure' },
+  { title: 'Scan Food', sub: 'Estimate meal calories', route: 'FoodScan' },
+  { title: 'Upload Record', sub: 'Add a document', route: 'DocumentUpload' },
+  { title: 'Symptom Map', sub: 'Mark where it hurts', route: 'SymptomMap' },
+];
+
+const EXPLORE_FEATURES: FeatureDef[] = [
+  { title: 'Chat', sub: 'Ask about your health', route: 'Chat' },
+  { title: 'Timeline', sub: 'Your history', route: 'Timeline' },
+  { title: '3D Body', sub: 'Explore your body', route: 'Body' },
+  { title: 'Health Graph', sub: 'Full overview', route: 'HealthGraph', params: { source: 'graph' } },
 ];
 
 const TERMS_COPY =
@@ -56,6 +69,87 @@ function fmtDocDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
+ * WaveRow — a drawer row that opens with an expanding wave: on tap a
+ * circle blooms from the row center and fades (opening wave), then the
+ * destination opens as the wave dissolves (closing wave). Reduced motion
+ * skips the wave and navigates immediately. Double-taps are guarded so
+ * one press opens exactly one screen.
+ */
+function WaveRow({
+  title,
+  sub,
+  label,
+  last,
+  onPress,
+}: {
+  title: string;
+  sub: string;
+  label: string;
+  last: boolean;
+  onPress: () => void;
+}) {
+  const reduced = useReducedMotion();
+  const wave = useSharedValue(0);
+  const busy = useRef(false);
+
+  const waveStyle = useAnimatedStyle(() => ({
+    opacity: 0.35 * (1 - wave.value),
+    transform: [{ scale: 0.1 + wave.value * 3 }],
+  }));
+
+  // Stable JS-thread callback: runOnJS must receive a plain function
+  // reference — an inline arrow here becomes a nested worklet (the Babel
+  // plugin processes nested worklets) and touching the host-side ref from
+  // the UI thread throws "Exception in host function" (red screen).
+  const firePress = useCallback(() => {
+    busy.current = false;
+    onPress();
+  }, [onPress]);
+
+  const handlePress = () => {
+    if (busy.current) return;
+    if (reduced) {
+      onPress();
+      return;
+    }
+    busy.current = true;
+    wave.value = 0;
+    wave.value = withTiming(
+      1,
+      { duration: 340, easing: ReEasing.out(ReEasing.cubic) },
+      (done) => {
+        if (done) runOnJS(firePress)();
+      },
+    );
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.row,
+        !last && styles.rowDivider,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <View style={styles.rowClip}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>{title}</Text>
+          <Text style={styles.rowSub} numberOfLines={2}>{sub}</Text>
+        </View>
+        <Text style={styles.chev}>›</Text>
+        <ReAnimated.View
+          pointerEvents="none"
+          style={[styles.wave, waveStyle]}
+        />
+      </View>
+    </Pressable>
+  );
 }
 
 export function ProfileSheet({
@@ -72,15 +166,25 @@ export function ProfileSheet({
 }) {
   const { width: W } = useWindowDimensions();
   const { documents } = useDocuments();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const toast = useToast();
   const [legalOpen, setLegalOpen] = useState<'terms' | 'privacy' | null>(null);
   const [premiumOpen, setPremiumOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const drawerW = Math.round(W * (2 / 3));
+  // Frosted glass costs a blur pass: collapse to the solid stage when
+  // reduced motion is requested (the transparency-reduction equivalent).
+  const glassOff = useReducedMotion();
 
-  // Slide in from the left on open; resting position is handled by the
-  // drag release below.
+  // Screen-reader focus enters the drawer the moment it opens (no
+  // timers: the slide animation runs underneath while focus is already
+  // home, so ears and eyes land in the same place).
+  const closeBtnRef = useRef<ComponentRef<typeof Pressable>>(null);
+  useEffect(() => {
+    if (!visible) return;
+    const node = findNodeHandle(closeBtnRef.current);
+    if (node) AccessibilityInfo.setAccessibilityFocus(node);
+  }, [visible]);
   const slideX = useRef(new Animated.Value(0)).current;
   const panX = useRef(new Animated.Value(0)).current;
   const closeRef = useRef(onClose);
@@ -90,7 +194,13 @@ export function ProfileSheet({
   useEffect(() => {
     if (visible) {
       slideX.setValue(-drawerW);
-      Animated.timing(slideX, { toValue: 0, duration: 260, useNativeDriver: true }).start();
+      // Fast start, soft landing — a linear 260 ms read as "sticky".
+      Animated.timing(slideX, {
+        toValue: 0,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
       panX.setValue(0);
       setLegalOpen(null);
       setPremiumOpen(false);
@@ -111,17 +221,30 @@ export function ProfileSheet({
           Animated.timing(panX, {
             toValue: -widthRef.current,
             duration: 180,
+            easing: Easing.in(Easing.quad),
             useNativeDriver: true,
           }).start(() => {
             panX.setValue(0);
             closeRef.current();
           });
         } else {
-          Animated.spring(panX, { toValue: 0, useNativeDriver: true, speed: 24, bounciness: 4 }).start();
+          // Damped snap-back: the old speed/bounciness spring overshot and
+          // wobbled, which read as stickiness at the end of the gesture.
+          Animated.spring(panX, {
+            toValue: 0,
+            tension: 140,
+            friction: 20,
+            useNativeDriver: true,
+          }).start();
         }
       },
       onPanResponderTerminate: () => {
-        Animated.spring(panX, { toValue: 0, useNativeDriver: true }).start();
+        Animated.spring(panX, {
+          toValue: 0,
+          tension: 140,
+          friction: 20,
+          useNativeDriver: true,
+        }).start();
       },
     }),
   ).current;
@@ -155,6 +278,11 @@ export function ProfileSheet({
 
   const recentDocs = documents.slice(0, 5);
   const version = Constants.expoConfig?.version ?? '1.0.0';
+  const { entries: priorityEntries } = usePriority();
+  const prioritySub =
+    priorityEntries.length > 0
+      ? priorityEntries.map((e) => e.title).join(' · ')
+      : 'Select what matters to you';
 
   return (
     <RNModal
@@ -166,14 +294,40 @@ export function ProfileSheet({
     >
       <View style={styles.root}>
         <Animated.View style={[styles.slide, { width: drawerW, transform: [{ translateX: slideX }] }]}>
-          <Animated.View style={[styles.sheet, { transform: [{ translateX: panX }] }]} {...drag.panHandlers}>
+          <Animated.View
+            style={[styles.sheet, { transform: [{ translateX: panX }] }]}
+            accessibilityViewIsModal
+            {...drag.panHandlers}
+          >
+          {/* Liquid-glass sheet: live blur over the content beneath (the
+              mirror-on-water surface), tinted with the stage brand color
+              for depth, bright hairline on the leading edge where light
+              catches the material. Solid stage fallback under reduced
+              motion. White content cards stay solid for legibility. */}
+          {glassOff ? (
+            <View style={styles.glassSolid} />
+          ) : (
+            <BlurView tint="dark" intensity={84} style={[styles.glass, styles.glassTint]} />
+          )}
+          {!glassOff ? <View style={styles.edgeLight} pointerEvents="none" /> : null}
           <ScrollView
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.headRow}>
-              <View style={styles.head} />
+            <View style={styles.head}>
+              {photoUri ? (
+                <Image source={{ uri: photoUri }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarEmpty]} />
+              )}
+              <View style={styles.headMeta}>
+                <Text style={styles.title} accessibilityRole="header">Profile</Text>
+                <Text style={styles.headMail} numberOfLines={1}>
+                  {user?.email ?? 'Private account'}
+                </Text>
+              </View>
               <Pressable
+                ref={closeBtnRef}
                 onPress={onClose}
                 accessibilityRole="button"
                 accessibilityLabel="Close profile"
@@ -183,18 +337,28 @@ export function ProfileSheet({
                 <Text style={styles.closeGlyph}>✕</Text>
               </Pressable>
             </View>
-            <View style={styles.head}>
-              {photoUri ? (
-                <Image source={{ uri: photoUri }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.avatar, styles.avatarEmpty]} />
-              )}
-              <Text style={styles.title}>Profile</Text>
+
+            <Text style={styles.sectionLabel}>Health</Text>
+            <View style={styles.card}>
+              <WaveRow
+                title="Medications"
+                sub="Schedule & doses"
+                label="Open medications"
+                last={false}
+                onPress={() => go('Medications')}
+              />
+              <WaveRow
+                title="My Priorities"
+                sub={prioritySub}
+                label="Open my priorities world"
+                last
+                onPress={() => go('Priority')}
+              />
             </View>
 
-            <Text style={styles.sectionLabel}>Features</Text>
+            <Text style={styles.sectionLabel}>Tracking</Text>
             <View style={styles.card}>
-              {FEATURES.map((f, i) => (
+              {TRACK_FEATURES.map((f, i) => (
                 <Pressable
                   key={f.route + f.title}
                   onPress={() => go(f.route, f.params)}
@@ -202,11 +366,33 @@ export function ProfileSheet({
                   accessibilityLabel={`Open ${f.title}`}
                   style={({ pressed }) => [
                     styles.row,
-                    i < FEATURES.length - 1 && styles.rowDivider,
+                    i < TRACK_FEATURES.length - 1 && styles.rowDivider,
                     pressed && { opacity: 0.6 },
                   ]}
                 >
-                  <View style={[styles.dot, { backgroundColor: f.dot }]} />
+                  <View style={styles.rowText}>
+                    <Text style={styles.rowTitle}>{f.title}</Text>
+                    <Text style={styles.rowSub}>{f.sub}</Text>
+                  </View>
+                  <Text style={styles.chev}>›</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.sectionLabel}>Explore</Text>
+            <View style={styles.card}>
+              {EXPLORE_FEATURES.map((f, i) => (
+                <Pressable
+                  key={f.route + f.title}
+                  onPress={() => go(f.route, f.params)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${f.title}`}
+                  style={({ pressed }) => [
+                    styles.row,
+                    i < EXPLORE_FEATURES.length - 1 && styles.rowDivider,
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
                   <View style={styles.rowText}>
                     <Text style={styles.rowTitle}>{f.title}</Text>
                     <Text style={styles.rowSub}>{f.sub}</Text>
@@ -219,7 +405,7 @@ export function ProfileSheet({
             <Text style={styles.sectionLabel}>My records</Text>
             <View style={styles.card}>
               {recentDocs.length === 0 ? (
-                <Text style={styles.emptyText}>No records yet — upload your first report.</Text>
+                <Text style={styles.emptyText}>No records yet. Upload your first report.</Text>
               ) : (
                 recentDocs.map((d, i) => (
                   <Pressable
@@ -262,7 +448,6 @@ export function ProfileSheet({
                 accessibilityLabel="Premium plans and pricing"
                 style={({ pressed }) => [styles.premiumHead, pressed && { opacity: 0.7 }]}
               >
-                <View style={[styles.dot, { backgroundColor: GV.violet }]} />
                 <View style={styles.rowText}>
                   <Text style={styles.rowTitle}>Go Premium</Text>
                   <Text style={styles.rowSub}>3 days free, then from €11 a month</Text>
@@ -276,7 +461,7 @@ export function ProfileSheet({
                       <Text style={styles.tierName}>Free</Text>
                       <Text style={styles.tierPrice}>€0</Text>
                     </View>
-                    <Text style={styles.tierFeat}>General logging and basic graph{'\n'}3 meal scans a month{'\n'}2 AI messages a month</Text>
+                    <Text style={styles.tierFeat}>Daily logging & check-ins{'\n'}Medications & dose tracking{'\n'}Timeline & history{'\n'}3 meal scans a month{'\n'}2 AI messages a month</Text>
                     <View style={styles.tierCurrent}>
                       <Text style={styles.tierCurrentText}>Your current plan</Text>
                     </View>
@@ -286,7 +471,7 @@ export function ProfileSheet({
                       <Text style={styles.tierName}>General</Text>
                       <Text style={styles.tierPrice}>€11<Text style={styles.tierPer}>/mo</Text></Text>
                     </View>
-                    <Text style={styles.tierFeat}>4 document scans{'\n'}Limited food scan{'\n'}No voice alarm and call reminders{'\n'}No 3D body</Text>
+                    <Text style={styles.tierFeat}>Everything in Free, unlimited{'\n'}Camera pulse (PPG){'\n'}Health graph & correlations{'\n'}Priority engines{'\n'}4 document scans a month{'\n'}Unlimited food scans</Text>
                     <Pressable
                       onPress={() => toast.info('Subscriptions open soon.')}
                       accessibilityRole="button"
@@ -301,7 +486,7 @@ export function ProfileSheet({
                       <Text style={styles.tierName}>All-in</Text>
                       <Text style={styles.tierPrice}>€18<Text style={styles.tierPer}>/mo</Text></Text>
                     </View>
-                    <Text style={styles.tierFeat}>Everything in General{'\n'}Voice alarm and call reminders{'\n'}3D body included{'\n'}Advanced features, all included</Text>
+                    <Text style={styles.tierFeat}>Everything in General{'\n'}Face pulse (rPPG){'\n'}3D body included{'\n'}Voice alarms & call reminders{'\n'}Unlimited AI chat{'\n'}Unlimited document scans</Text>
                     <Pressable
                       onPress={() => toast.info('Subscriptions open soon.')}
                       accessibilityRole="button"
@@ -311,6 +496,30 @@ export function ProfileSheet({
                       <Text style={styles.tierBtnText}>Choose All-in</Text>
                     </Pressable>
                   </View>
+                  <Text style={styles.compareTitle}>Compare every feature</Text>
+                  {(
+                    [
+                      ['Daily logging & check-ins', '✓', '✓', '✓'],
+                      ['Medications & reminders', '✓', '✓', '✓'],
+                      ['Timeline & history', '✓', '✓', '✓'],
+                      ['Priority engines', '✓', '✓', '✓'],
+                      ['Health graph & correlations', '–', '✓', '✓'],
+                      ['Camera pulse (fingertip PPG)', '–', '✓', '✓'],
+                      ['Face pulse (rPPG)', '–', '–', '✓'],
+                      ['3D body', '–', '–', '✓'],
+                      ['Food scans', '3 / mo', 'Unlimited', 'Unlimited'],
+                      ['Document scans', '–', '4 / mo', 'Unlimited'],
+                      ['AI chat messages', '2 / mo', 'Limited', 'Unlimited'],
+                      ['Voice alarms & call reminders', '–', '–', '✓'],
+                    ] as Array<[string, string, string, string]>
+                  ).map(([feature, free, general, allIn], i, arr) => (
+                    <View key={feature} style={[styles.compareRow, i < arr.length - 1 && styles.rowDivider]}>
+                      <Text style={styles.compareFeature} numberOfLines={2}>{feature}</Text>
+                      <Text style={[styles.compareCell, free === '–' && styles.compareNo]}>{free}</Text>
+                      <Text style={[styles.compareCell, general === '–' && styles.compareNo]}>{general}</Text>
+                      <Text style={[styles.compareCell, styles.compareBest, allIn === '–' && styles.compareNo]}>{allIn}</Text>
+                    </View>
+                  ))}
                   <Text style={styles.renewNote}>Start with 3 days free. Then your plan auto-renews every month. Cancel anytime and keep access until the period ends.</Text>
                 </View>
               ) : null}
@@ -318,6 +527,22 @@ export function ProfileSheet({
 
             <Text style={styles.sectionLabel}>About</Text>
             <View style={styles.card}>
+              <Pressable
+                onPress={() => go('Settings')}
+                accessibilityRole="button"
+                accessibilityLabel="Open account settings"
+                style={({ pressed }) => [
+                  styles.row,
+                  styles.rowDivider,
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <View style={styles.rowText}>
+                  <Text style={styles.rowTitle}>Account</Text>
+                  <Text style={styles.rowSub}>Settings and sign out</Text>
+                </View>
+                <Text style={styles.chev}>›</Text>
+              </Pressable>
               {(
                 [
                   { key: 'terms', title: 'Terms & Conditions', copy: TERMS_COPY },
@@ -375,20 +600,44 @@ export function ProfileSheet({
 
 const styles = StyleSheet.create({
   root: { flex: 1, flexDirection: 'row' },
-  scrim: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)' } as const,
+  scrim: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)' } as const,
   slide: { height: '100%' },
   sheet: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: 'transparent',
     borderTopRightRadius: 28,
     borderBottomRightRadius: 28,
     paddingTop: 8,
+    overflow: 'hidden',
   },
-  headRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 8,
+  // Frost layers sit behind the scroll content (absolute fill, clipped to
+  // the sheet's rounded shape by overflow hidden above).
+  glass: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  glassTint: {
+    backgroundColor: 'rgba(11, 74, 63, 0.62)',
+  },
+  glassSolid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: GV.stage,
+  },
+  // Bright leading edge: 1px of caught light down the rounded side.
+  edgeLight: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
   },
   closeBtn: {
     width: 40,
@@ -396,7 +645,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: GV.stageline,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
   },
   closeGlyph: {
     color: GV.card,
@@ -409,33 +658,51 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   head: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
     paddingVertical: 12,
   },
+  headMeta: {
+    flex: 1,
+    gap: 2,
+  },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   avatarEmpty: {
-    backgroundColor: GV.stageline,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
   title: {
     ...TYPE.display,
-    color: GV.card,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
+    color: '#FFFFFF',
+    textAlign: 'left',
+  },
+  headMail: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'left',
   },
   sectionLabel: {
-    ...TYPE.chip,
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0.5,
     color: GV.fog,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
     marginTop: 16,
     marginBottom: 8,
     paddingHorizontal: 4,
   },
+  // Glass modules (Control Center pattern): translucent panels on the
+  // blur, white primary text, fog secondary, hairline light dividers.
+  // Nothing solid white ever sits on the glass.
   card: {
-    backgroundColor: GV.card,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 20,
     paddingHorizontal: 20,
     paddingVertical: 8,
@@ -447,33 +714,49 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: 56,
   },
+  // Clips the press wave inside the row bounds.
+  rowClip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    overflow: 'hidden',
+    borderRadius: 12,
+    position: 'relative',
+  },
+  // The expanding press wave: neutral light bloom on glass.
+  wave: {
+    position: 'absolute',
+    left: '35%',
+    top: -32,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  },
   rowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: GV.line,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    borderBottomColor: 'rgba(255, 255, 255, 0.12)',
   },
   rowText: { flex: 1, gap: 1 },
   rowTitle: {
-    ...TYPE.button,
-    fontSize: 15,
-    color: GV.ink,
+    fontFamily: FONT.medium,
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#FFFFFF',
   },
   rowSub: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
   },
   chev: {
     fontSize: 20,
-    color: GV.muted,
+    color: 'rgba(255, 255, 255, 0.45)',
     fontWeight: '400',
   },
   emptyText: {
     ...TYPE.body,
-    color: GV.muted,
+    color: GV.fog,
     paddingVertical: 12,
   },
   uploadBtn: {
@@ -504,14 +787,14 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   tier: {
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 14,
     padding: 16,
     gap: 8,
   },
   tierBest: {
     borderWidth: 1.5,
-    borderColor: GV.violet,
+    borderColor: GV.teal,
   },
   tierHead: {
     flexDirection: 'row',
@@ -521,24 +804,24 @@ const styles = StyleSheet.create({
   tierName: {
     ...TYPE.button,
     fontSize: 16,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   tierPrice: {
     fontFamily: FONT.bold,
     fontSize: 20,
-    color: GV.ink,
+    color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
   tierPer: {
     fontFamily: FONT.regular,
     fontSize: 13,
-    color: GV.muted,
+    color: GV.fog,
   },
   tierFeat: {
     ...TYPE.body,
     fontSize: 13.5,
     lineHeight: 21,
-    color: GV.body,
+    color: GV.fog,
   },
   tierBtn: {
     backgroundColor: GV.cta,
@@ -555,25 +838,62 @@ const styles = StyleSheet.create({
   tierCurrent: {
     borderRadius: 9999,
     borderWidth: 1,
-    borderColor: GV.line,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     paddingVertical: 10,
     marginTop: 4,
   },
   tierCurrentText: {
     ...TYPE.chip,
-    color: GV.muted,
+    color: GV.fog,
   },
   renewNote: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     lineHeight: 18,
     paddingHorizontal: 4,
+  },
+  // Full feature-comparison matrix (Free / General / All-in).
+  compareTitle: {
+    ...TYPE.button,
+    fontSize: 15,
+    color: '#FFFFFF',
+    marginTop: 16,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+  compareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: 4,
+  },
+  compareFeature: {
+    flex: 1.4,
+    fontSize: 13,
+    lineHeight: 17,
+    color: GV.fog,
+  },
+  compareCell: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: FONT.semi,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
+  compareNo: {
+    color: 'rgba(255, 255, 255, 0.45)',
+    fontFamily: FONT.regular,
+  },
+  compareBest: {
+    color: GV.teal,
   },
   legalCopy: {
     ...TYPE.body,
     fontSize: 14,
-    color: GV.body,
+    color: GV.fog,
     lineHeight: 21,
     paddingBottom: 12,
     paddingRight: 8,
