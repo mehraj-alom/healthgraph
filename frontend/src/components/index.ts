@@ -8,6 +8,7 @@ export { SectionHeader } from './SectionHeader';
 export { Badge } from './Badge';
 export { Toggle } from './Toggle';
 export { EmptyState } from './EmptyState';
+export { StageGradient } from './StageGradient';
 export { LoadingState } from './LoadingState';
 export { Modal } from './Modal';
 export { BottomSheet } from './BottomSheet';
@@ -28,10 +29,13 @@ export { PressScale } from './PressScale';
 export { ToastProvider, useToast } from './Toast';
 // ── Boot splash (video loading animation) ───────────────────────────────────
 export { BootSplash } from './BootSplash';
+// ── Rotating wellness facts for loading screens ─────────────────────────────
+export { HealthFact, HEALTH_FACTS } from './HealthFact';
 
 // ── Health metric primitives ────────────────────────────────────────────────
 export { MetricValue } from './MetricValue';
 export { TrendIndicator } from './TrendIndicator';
+export { HealthAreaCard } from './health/HealthAreaCard';
 export { StatusLabel } from './StatusLabel';
 export { MetricCard } from './MetricCard';
 export { ProgressBar } from './ProgressBar';

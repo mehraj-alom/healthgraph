@@ -40,7 +40,10 @@ import { useReducedMotion } from '@/theme';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { Chip } from '@/components';
+import { HealthFact } from '@/components/HealthFact';
 import { useHealthGraph, useGraphNodeDetail, type GraphNode, type GraphEdge, type NodeDetailPayload, type GraphCitation } from '@/hooks/useHealthGraph';
+import { useDeviceHeartNodes } from '@/hooks/useDeviceHeartNodes';
+import { isDeviceHeartNode } from '@/screens/Body/deviceNodes';
 import { useTrends } from '@/hooks/useTrends';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { useCorrelationFeed } from '@/screens/Dashboard/correlations';
@@ -1427,6 +1430,55 @@ function genSource(n: GraphNode): string | null {
 // Detail Panel
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Detail view for device-local graph nodes (unsynced camera readings).
+ * Rendered from local SQLite properties only: measured value, time, and
+ * method — plus explicit device/pending badges. No citations, no waveform,
+ * no inferred relationships: the node carries no edges by design.
+ */
+function DeviceNodeDetail({ node }: { node: GraphNode }) {
+  const props = node.properties ?? {};
+  const bpm = props.heart_rate_bpm;
+  const at = String(props.measured_at ?? props.event_time ?? '');
+  const when = (() => {
+    const ms = new Date(at).getTime();
+    if (!Number.isFinite(ms)) return at || 'Unknown time';
+    const d = new Date(ms);
+    const today = new Date();
+    const sameDay =
+      d.getFullYear() === today.getFullYear() &&
+      d.getMonth() === today.getMonth() &&
+      d.getDate() === today.getDate();
+    const clock = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    if (sameDay) return `Today · ${clock}`;
+    return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${clock}`;
+  })();
+  const method = props.method === 'face' ? 'Face scan' : 'Fingertip';
+  return (
+    <View>
+      <Text style={styles.heroValue} numberOfLines={2}>
+        {typeof bpm === 'number' && Number.isFinite(bpm) ? `${Math.round(bpm)} bpm` : '—'}
+      </Text>
+      <Text style={styles.heroLabel}>Heart rate · {method}</Text>
+      <View style={styles.evBadgeRow}>
+        <View style={styles.evBadge}>
+          <Text style={styles.evBadgeText}>On this device</Text>
+        </View>
+        <View style={styles.evBadge}>
+          <Text style={styles.evBadgeText}>Pending sync</Text>
+        </View>
+      </View>
+      <View style={styles.heroRow}>
+        <Text style={styles.heroRowKey}>Measured</Text>
+        <Text style={styles.heroRowVal}>{when}</Text>
+      </View>
+      <Text style={styles.nbRel} numberOfLines={3}>
+        From your latest unsynced measurement. It joins the synced graph automatically once uploaded.
+      </Text>
+    </View>
+  );
+}
+
 /** Event type → glance spoke (for zones + guidance language). */
 const EVENT_SPOKE: Record<string, string> = {
   SLEEP_LOG: 'sleepDur',
@@ -2278,7 +2330,22 @@ export default function HealthGraphScreen({
   const [embedSize, setEmbedSize] = useState({ w: SCREEN_WIDTH, h: SCREEN_HEIGHT - 120 });
 
   const { data: graphData, isLoading, error, refetch } = useHealthGraph({ depth: 2, limit: 100, category: activeFilter ?? undefined });
-  const { data: nodeDetail } = useGraphNodeDetail(selectedNodeId);
+
+  // Device-local heart nodes: pending camera readings the server graph
+  // cannot contain yet. Merged here (single point) so every consumer below
+  // — layout, labels, neighbors, canvas, detail — sees one node list.
+  // Server rows keep their server nodes; prefixed ids cannot collide.
+  const deviceHeartNodes = useDeviceHeartNodes();
+  const graphNodes: GraphNode[] = useMemo(
+    () => [...(graphData?.nodes ?? []), ...deviceHeartNodes],
+    [graphData, deviceHeartNodes],
+  );
+  const selectedNode = useMemo(
+    () => graphNodes.find((n) => n.id === selectedNodeId) ?? null,
+    [graphNodes, selectedNodeId],
+  );
+  const isDeviceNode = isDeviceHeartNode(selectedNode);
+  const { data: nodeDetail } = useGraphNodeDetail(isDeviceNode ? null : selectedNodeId);
 
   // Cross-metric knowledge for semantic edges (sleep↔wellbeing, …) — same
   // feeds the dashboard already loads; no extra backend calls.
@@ -2290,8 +2357,8 @@ export default function HealthGraphScreen({
     trends: trendsQ.data ?? null,
     dailyMetrics: metricsQ.data ?? null,
     localDetails: feedQ.localDetails,
-    nodes: graphData?.nodes ?? [],
-  }), [trendsQ.data, metricsQ.data, feedQ.localDetails, graphData]);
+    nodes: graphNodes,
+  }), [trendsQ.data, metricsQ.data, feedQ.localDetails, graphNodes]);
 
   const allEdges = useMemo<GraphEdge[]>(
     () => [...(graphData?.edges ?? []), ...semanticEdges],
@@ -2312,14 +2379,14 @@ export default function HealthGraphScreen({
 
   // Verdict per 1-hop neighbor — drives badge dots + the neighbor card.
   const focusVerdicts = useMemo(() => {
-    const v = neighborVerdictsFor(selectedNodeId, graphData?.nodes ?? [], allEdges, feedQ.localDetails);
+    const v = neighborVerdictsFor(selectedNodeId, graphNodes, allEdges, feedQ.localDetails);
     if (__DEV__ && selectedNodeId) {
       // Prove the data chain: details loaded? event_time present? dates match?
       let sampleTime: string | null = null;
       for (const e of allEdges) {
         const other = e.source === selectedNodeId ? e.target : e.target === selectedNodeId ? e.source : null;
         if (other) {
-          sampleTime = String(graphData?.nodes.find((n) => n.id === other)?.properties?.event_time ?? null);
+          sampleTime = String(graphNodes.find((n) => n.id === other)?.properties?.event_time ?? null);
           break;
         }
       }
@@ -2327,16 +2394,11 @@ export default function HealthGraphScreen({
       console.log('[HealthGraphVerdicts] details=', (feedQ.localDetails ?? []).length, 'dates=[', dateKeys, '] sampleNeighborEventTime=', sampleTime);
     }
     return v;
-  }, [selectedNodeId, graphData, allEdges, feedQ.localDetails]);
-
-  const selectedNode = useMemo(
-    () => graphData?.nodes.find((n) => n.id === selectedNodeId) ?? null,
-    [graphData, selectedNodeId],
-  );
+  }, [selectedNodeId, graphNodes, allEdges, feedQ.localDetails]);
 
   const nodesById = useMemo(
-    () => new Map((graphData?.nodes ?? []).map((n) => [n.id, n] as [string, GraphNode])),
-    [graphData],
+    () => new Map(graphNodes.map((n) => [n.id, n] as [string, GraphNode])),
+    [graphNodes],
   );
 
   // Floating labels: patient → structures → observations → meds, capped so
@@ -2367,7 +2429,7 @@ export default function HealthGraphScreen({
       concept: 8,
     };
     const cap = embedded ? 8 : 24;
-    return [...graphData.nodes]
+    return [...graphNodes]
       .sort((a, b) => (rank[a.type] ?? 9) - (rank[b.type] ?? 9))
       .slice(0, cap)
       .map((n) => ({
@@ -2375,7 +2437,7 @@ export default function HealthGraphScreen({
         text: (n.label || CATEGORY_LABELS[n.type] || n.type).slice(0, 22),
         color: nodeDomainColor(n),
       }));
-  }, [graphData, embedded]);
+  }, [graphNodes, embedded]);
 
   // In focus mode the dimmed nodes' labels dim with them.
   const labelDimIds = useMemo<Set<string> | null>(() => {
@@ -2388,14 +2450,14 @@ export default function HealthGraphScreen({
   }, [selectedNodeId, focusVerdicts, labelDefs]);
 
   const availableCategories = useMemo(() => {
-    if (!graphData) return [];
-    return Array.from(new Set(graphData.nodes.map((n) => n.type))).filter((t) => t !== 'patient');
-  }, [graphData]);
+    if (graphNodes.length === 0) return [];
+    return Array.from(new Set(graphNodes.map((n) => n.type))).filter((t) => t !== 'patient');
+  }, [graphNodes]);
 
   const layout = useMemo(() => {
-    if (!graphData) return new Map();
-    return computeLayout(graphData.nodes, allEdges);
-  }, [graphData, allEdges]);
+    if (graphNodes.length === 0) return new Map();
+    return computeLayout(graphNodes, allEdges);
+  }, [graphNodes, allEdges]);
 
   useEffect(() => {
     if (hasAppliedFocus.current || !focusStructureId || !graphData) return;
@@ -2482,11 +2544,11 @@ export default function HealthGraphScreen({
   if (isLoading) return embedded ? (
     <View style={[styles.embeddedState, styles.embeddedStateLight]}>
       <ActivityIndicator size="small" color="#FFFFFF" />
-      <Text style={styles.embeddedHintDark}>Building graph…</Text>
+      <Text style={styles.embeddedHintDark}>Loading graph…</Text>
     </View>
   ) : (
     <SafeAreaView style={styles.container}>
-      <View style={styles.loading}><ActivityIndicator size="large" color="#FFFFFF" /><Text style={styles.loadingTxt}>Building your Health Graph…</Text></View>
+      <View style={styles.loading}><ActivityIndicator size="large" color="#FFFFFF" /><Text style={styles.loadingTxt}>Loading Health Graph…</Text><HealthFact style={styles.factText} /></View>
     </SafeAreaView>
   );
 
@@ -2505,7 +2567,10 @@ export default function HealthGraphScreen({
     </SafeAreaView>
   );
 
-  const isEmpty = !graphData || graphData.nodes.length <= 1;
+  // Empty only when neither server nor device-local nodes exist: pending
+  // camera readings alone are enough to show the canvas (local-first).
+  const serverBare = !graphData || graphData.nodes.length <= 1;
+  const isEmpty = serverBare && deviceHeartNodes.length === 0;
 
   return (
     <View
@@ -2530,7 +2595,7 @@ export default function HealthGraphScreen({
         )
       ) : (
         <NativeCanvas
-          nodes={graphData!.nodes}
+          nodes={graphNodes}
           edges={allEdges}
           layout={layout}
           selectedNodeId={selectedNodeId}
@@ -2550,7 +2615,7 @@ export default function HealthGraphScreen({
         <View style={styles.overlayHeader}>
           <View style={styles.headerL}>
             <Text style={styles.headerTitle}>Health Graph</Text>
-            <Text style={styles.headerSub}>{focusSource === 'body' && focusStructureId ? `Focused on ${focusStructureId.replace(/_/g, ' ').toLowerCase()}` : 'Tap a node for links · hold for details'}</Text>
+            <Text style={styles.headerSub}>{focusSource === 'body' && focusStructureId ? `Focused on ${focusStructureId.replace(/_/g, ' ').toLowerCase()}` : 'Tap a node for links. Hold for details'}</Text>
           </View>
           <Pressable style={styles.resetBtn} onPress={handleReset}><Text style={styles.resetTxt}>Reset</Text></Pressable>
         </View>
@@ -2583,7 +2648,7 @@ export default function HealthGraphScreen({
       {!embedded && patternCounts.total > 0 && !selectedNodeId && (
         <View style={styles.patternStrip} pointerEvents="none">
           <Text style={styles.patternStripText}>
-            {patternCounts.bad} strained · {patternCounts.good} healthy · {patternCounts.total} patterns
+            {patternCounts.bad} strained, {patternCounts.good} healthy, {patternCounts.total} patterns
           </Text>
         </View>
       )}
@@ -2599,7 +2664,7 @@ export default function HealthGraphScreen({
             {sheetMode === 'neighbors' ? (
               <NeighborFocusCard
                 node={selectedNode}
-                nodes={graphData?.nodes ?? []}
+                nodes={graphNodes}
                 edges={allEdges}
                 verdicts={focusVerdicts}
                 onSelectNode={handleSelectNode}
@@ -2615,6 +2680,10 @@ export default function HealthGraphScreen({
                 allEdges={allEdges}
                 nodesById={nodesById}
               />
+            ) : isDeviceNode && selectedNode ? (
+              // Device-local nodes have no server detail payload (the query
+              // is skipped for them): render straight from local properties.
+              <DeviceNodeDetail node={selectedNode} />
             ) : (
               <ActivityIndicator size="small" color="#FFFFFF" />
             )}
@@ -2642,6 +2711,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: GV.stage },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: GV.stage },
   loadingTxt: { ...TYPE.body, color: GV.fog },
+  factText: { ...TYPE.caption, color: GV.fog, textAlign: 'center', maxWidth: 300 },
   errTitle: { ...TYPE.title, color: '#FFFFFF', marginBottom: 8 },
   errTxt: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginBottom: 24 },
   retry: { backgroundColor: GV.cta, paddingHorizontal: 32, paddingVertical: 8, borderRadius: SPACE.rPill },

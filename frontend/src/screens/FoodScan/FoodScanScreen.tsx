@@ -23,6 +23,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
+import { HealthFact } from '@/components/HealthFact';
 import { useReducedMotion } from '@/theme';
 import { useFoodScan } from '@/hooks/useFoodScan';
 import type { RootStackParamList } from '@/types';
@@ -42,7 +44,7 @@ const SWEEP_MS = 2800;
 const AIM_TIPS = [
   'Hold steady for a clear shot',
   'Move closer to fill the frame',
-  'Use good light for the best estimate',
+  'Use good light for the estimate',
 ] as const;
 
 /** Typing-dots indicator (functional motion only; static under reduced motion). */
@@ -158,6 +160,7 @@ export default function FoodScanScreen() {
   if (stage === 'done' && result && photoUri) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <StageGradient />
         <ScrollView
           contentContainerStyle={styles.resultContent}
           keyboardShouldPersistTaps="handled"
@@ -181,7 +184,7 @@ export default function FoodScanScreen() {
             onLogged={goBack}
           />
           <Text style={styles.disclaimer}>
-            Estimates only — not exact nutrition advice.
+            Estimates only. Not exact nutrition advice.
           </Text>
         </ScrollView>
       </SafeAreaView>
@@ -195,6 +198,7 @@ export default function FoodScanScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <StageGradient />
       <View style={styles.header}>
         <Pressable
           onPress={goBack}
@@ -213,6 +217,7 @@ export default function FoodScanScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={GV.teal} />
           <Text style={styles.hint}>Preparing camera…</Text>
+          <HealthFact style={styles.factText} />
         </View>
       ) : !granted ? (
         <View style={styles.center}>
@@ -304,7 +309,7 @@ export default function FoodScanScreen() {
           )}
 
           <Text style={styles.disclaimer}>
-            Estimates only — not exact nutrition advice.
+            Estimates only. Not exact nutrition advice.
           </Text>
         </View>
       )}
@@ -433,6 +438,14 @@ const styles = StyleSheet.create({
     ...TYPE.body,
     color: GV.fog,
     textAlign: 'center',
+  },
+  factText: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+    alignSelf: 'center',
+    maxWidth: 300,
+    marginTop: 8,
   },
   captureRow: {
     alignItems: 'center',

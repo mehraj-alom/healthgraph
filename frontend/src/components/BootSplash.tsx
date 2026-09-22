@@ -7,14 +7,16 @@ import { useAuth } from '@/context/AuthContext';
  * BootSplash — video loading animation shown while the app opens.
  *
  * Plays the bundled boot video (muted, looping) fullscreen while internal
- * startup work finishes (auth restore, providers, first navigation). Lifts
- * only when auth is ready AND a minimum show time has passed, then fades
- * out. Never blocks the app: a video error or an absolute timeout lifts
- * it immediately (the regular loading spinner underneath takes over).
+ * startup work finishes (auth restore, providers, first navigation). The
+ * cover deliberately outlasts the raw init so the user never watches the
+ * app assemble itself: it lifts only when auth is ready AND a minimum
+ * show time has passed, then fades out. Never blocks the app: a video
+ * error or an absolute timeout lifts it immediately (the regular
+ * loading spinner underneath takes over).
  */
 
-const MIN_SHOW_MS = 2500;
-const MAX_SHOW_MS = 10000;
+const MIN_SHOW_MS = 4000;
+const MAX_SHOW_MS = 12000;
 const FADE_MS = 450;
 
 // Metro literal require so the file is bundled (see assetBundlePatterns).

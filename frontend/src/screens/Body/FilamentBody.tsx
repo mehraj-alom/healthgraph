@@ -39,6 +39,7 @@ import {
 } from 'react-native-filament';
 import type { Entity } from 'react-native-filament';
 import { COLORS, SPACING, TYPOGRAPHY } from '@/constants';
+import { HealthFact } from '@/components/HealthFact';
 import { getMapping, buildNodeToStructureMap } from '@/assets/anatomy/anatomyMap';
 import type { LayerLoadState } from './BodyScreen';
 import type { Gender } from '@/services/anatomyDownload';
@@ -370,6 +371,7 @@ function LoadingFallback() {
     <View style={styles.loadingOverlay}>
       <ActivityIndicator size="large" color={COLORS.primary} />
       <Text style={styles.loadingText}>Initializing 3D engine…</Text>
+      <HealthFact style={styles.factText} />
     </View>
   );
 }
@@ -399,6 +401,13 @@ const styles = StyleSheet.create({
   loadingText: {
     ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
+    marginTop: SPACING.sm,
+  },
+  factText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    maxWidth: 300,
     marginTop: SPACING.sm,
   },
 });

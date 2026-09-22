@@ -10,7 +10,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Skeleton, Card, Chip, SectionHeader } from '@/components';
+import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import { useTrends } from '@/hooks/useTrends';
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
 import type {
@@ -389,6 +391,7 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
 
   return (
     <SafeAreaView style={embedded ? styles.embeddedContainer : styles.container} edges={embedded ? [] : ['top']} >
+      <StageGradient />
       {!embedded && (
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Trends</Text>
@@ -420,6 +423,7 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={GV.teal} />
           <Text style={styles.loadingText}>Loading trends…</Text>
+          <HealthFact style={styles.factText} />
         </View>
       ) : error && !hasContent ? (
         <View style={styles.emptyState}>
@@ -725,6 +729,7 @@ const styles = StyleSheet.create({
 
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   loadingText: { ...TYPE.body, color: GV.fog },
+  factText: { ...TYPE.caption, color: GV.fog, textAlign: 'center', maxWidth: 300 },
   // Range-transition layer: stale charts stay mounted underneath while the
   // new range loads; the flat stage + white skeleton card sits on top and
   // swallows touches so users can't act on stale numbers mid-flight.
@@ -761,7 +766,7 @@ const styles = StyleSheet.create({
   emptyTitle: { ...TYPE.title, color: '#FFFFFF', marginBottom: 8 },
   emptyText: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
 
-  scrollContent: { paddingHorizontal: SPACE.screenH, paddingBottom: 48, gap: SPACE.sectionGap },
+  scrollContent: { paddingHorizontal: SPACE.screenH, paddingBottom: 32, gap: SPACE.sectionGap },
 
   section: { marginTop: SPACE.sectionGap, gap: SPACE.cardGap },
   sectionTitle: { ...TYPE.title, color: '#FFFFFF', marginBottom: 8 },

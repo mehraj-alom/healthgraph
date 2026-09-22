@@ -15,6 +15,9 @@ import { Asset } from 'expo-asset';
 import { File as ExpoFile } from 'expo-file-system';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '@/types';
 import { useBodyState } from '@/hooks/useBodyState';
 import {
   MVP_STRUCTURE_IDS,
@@ -24,6 +27,7 @@ import {
 import type { BodyStateItem } from '@/types';
 import { useAnatomy } from '@/context/AnatomyContext';
 import AnatomyDownloadOverlay, { NotInstalledPrompt } from '@/components/AnatomyDownloadOverlay';
+import { HealthFact } from '@/components/HealthFact';
 import { getLocalModelUri, type Gender } from '@/services/anatomyDownload';
 
 // ── Filament conditional import ──
@@ -1494,6 +1498,7 @@ function NativeCanvas({ gender, onStructureSelected, sceneRef, localFiles }: Nat
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={GV.teal} />
           <Text style={styles.loadingText}>Loading 3D model…</Text>
+          <HealthFact style={styles.factText} />
         </View>
       )}
     </View>
@@ -1689,9 +1694,10 @@ interface InfoPanelProps {
   structureId: string | null;
   bodyStateData: BodyStateItem[] | undefined;
   onClose: () => void;
+  onViewGraph: (structureId: string) => void;
 }
 
-function InfoPanel({ structureId, bodyStateData, onClose }: InfoPanelProps) {
+function InfoPanel({ structureId, bodyStateData, onClose, onViewGraph }: InfoPanelProps) {
   if (!structureId) return null;
 
   const mapping = getMapping(structureId);
@@ -1785,6 +1791,18 @@ function InfoPanel({ structureId, bodyStateData, onClose }: InfoPanelProps) {
           </Text>
         </View>
       )}
+
+      {/* Region → graph wiring: the selected anatomical structure resolves
+          to its HealthGraph node (focusStructureId), reusing the existing
+          anatomical IDs — never invented region ids. */}
+      <TouchableOpacity
+        onPress={() => structureId && onViewGraph(structureId)}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${mapping?.displayName ?? structureId} in HealthGraph`}
+        style={styles.graphLink}
+      >
+        <Text style={styles.graphLinkText}>View in HealthGraph</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -1858,6 +1876,8 @@ function StorageManagementSection() {
 // ---------------------------------------------------------------------------
 
 export default function BodyScreen() {
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {
     selectedGender: ctxGender,
     maleStatus,
@@ -2082,6 +2102,9 @@ export default function BodyScreen() {
         structureId={selectedStructure}
         bodyStateData={bodyStateData}
         onClose={handleClosePanel}
+        onViewGraph={(id) =>
+          navigation.navigate('HealthGraph', { focusStructureId: id })
+        }
       />
 
       {/* Structure Quick-Select */}
@@ -2202,6 +2225,13 @@ const styles = StyleSheet.create({
     color: GV.fog,
     marginTop: 8,
   },
+  factText: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+    maxWidth: 300,
+    marginTop: 8,
+  },
   nativePlaceholder: {
     width: SCREEN_WIDTH,
     height: CANVAS_HEIGHT,
@@ -2259,6 +2289,18 @@ const styles = StyleSheet.create({
   closeButtonText: {
     fontSize: 14,
     color: GV.body,
+  },
+  graphLink: {
+    marginTop: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: SPACE.rPill,
+    backgroundColor: GV.cta,
+  },
+  graphLinkText: {
+    ...TYPE.button,
+    color: '#FFFFFF',
   },
   infoRow: {
     flexDirection: 'row',

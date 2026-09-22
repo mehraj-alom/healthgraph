@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import { Button, Card } from '@/components';
+import { HealthFact } from '@/components/HealthFact';
 import { useDocuments, type DocumentsContextValue } from '@/context/DocumentsContext';
 import {
   getDocument,
@@ -30,6 +31,7 @@ import {
 import { setDocumentLocalUri } from '@/db/queries/documents';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 import type {
   DocumentListItem,
   DocumentExtraction,
@@ -154,6 +156,7 @@ export default function DocumentDetailScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={GV.cta} />
           <Text style={styles.centerText}>Loading document...</Text>
+          <HealthFact style={styles.factText} />
         </View>
       </SafeAreaView>
     );
@@ -191,6 +194,7 @@ export default function DocumentDetailScreen() {
   // -----------------------------------------------------------------------
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StageGradient />
       <ScrollView contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
@@ -250,7 +254,7 @@ export default function DocumentDetailScreen() {
             <View style={styles.processingRow}>
               <ActivityIndicator size="small" color={GV.cta} />
               <Text style={styles.processingText}>
-                Still processing — check back shortly.
+                Still processing. Check back shortly.
               </Text>
             </View>
           </Card>
@@ -505,7 +509,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: SPACE.screenH,
-    paddingBottom: 48,
+    paddingBottom: 32,
     gap: SPACE.cardGap,
   },
   center: {
@@ -519,6 +523,12 @@ const styles = StyleSheet.create({
     ...TYPE.body,
     color: GV.fog,
     textAlign: 'center',
+  },
+  factText: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+    maxWidth: 300,
   },
   header: {
     paddingVertical: 16,
@@ -592,7 +602,6 @@ const styles = StyleSheet.create({
   statusText: {
     ...TYPE.caption,
     fontFamily: FONT.semi,
-    fontSize: 11,
   },
   section: {
     gap: 8,

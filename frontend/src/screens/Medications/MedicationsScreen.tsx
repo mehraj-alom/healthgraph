@@ -39,8 +39,10 @@ import {
 } from '@/db/queries/scanSessions';
 import { api } from '@/services/api';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { StageGradient } from '@/components/StageGradient';
 void FONT;
 import { Button, Card, Chip, Input, SectionHeader } from '@/components';
+import { HealthFact } from '@/components/HealthFact';
 import type { Medication, MedicationFrequency, MedicationRoute, MedicationStatus, DailyMedicationSchedule, MedicationTakenEvent } from '@/types';
 import type { RootStackParamList } from '@/types';
 
@@ -60,6 +62,19 @@ const FREQUENCY_LABELS: Record<MedicationFrequency, string> = {
   WEEKLY: 'Weekly',
   AS_NEEDED: 'As needed',
   CUSTOM: 'Custom',
+};
+
+// ── Route labels (review step — previously collected but never shown/saved) ──
+const ROUTE_LABELS: Record<MedicationRoute, string> = {
+  ORAL: 'Oral',
+  TOPICAL: 'Topical',
+  INJECTION: 'Injection',
+  INHALED: 'Inhaled',
+  SUBLINGUAL: 'Sublingual',
+  RECTAL: 'Rectal',
+  NASAL: 'Nasal',
+  OPHTHALMIC: 'Eye drops',
+  OTHER: 'Other',
 };
 
 // ── Status dot hues — small flat icons inside white cards only ──
@@ -93,13 +108,13 @@ function getStatusLabel(status: MedicationStatus): string {
 function scanStatusCopy(status: ScanSession['status']): string {
   switch (status) {
     case 'capturing':
-      return 'Unfinished scan — pages were never uploaded.';
+      return 'Unfinished scan. Pages were never uploaded.';
     case 'uploading':
       return 'Uploading pages…';
     case 'awaiting_extraction':
-      return 'Saved. Reading finishes automatically — confirm each medicine with + Add med. Nothing is added on its own.';
+      return 'Saved. Reading finishes automatically. Confirm each medicine with Add med. Nothing is added automatically.';
     case 'reviewed':
-      return 'Done — medicines confirmed from this scan.';
+      return 'Done. Medicines confirmed from this scan.';
   }
 }
 
@@ -150,7 +165,7 @@ export default function MedicationsScreen() {
     if (!premiumEntitled) {
       Alert.alert(
         'Premium feature',
-        'The prescription scanner is part of Premium. See Profile → Premium (3 days free) to unlock it.',
+        'Prescription scanner requires Premium. See Profile > Premium (3 days free).',
         [{ text: 'OK' }],
       );
       return;
@@ -203,7 +218,7 @@ export default function MedicationsScreen() {
       refetchSchedule();
 
       if (serverEventId) {
-        Alert.alert('Success', 'Dose recorded successfully');
+        Alert.alert('Saved', 'Dose recorded');
       } else {
         Alert.alert('Saved Locally', 'Dose saved. Will sync when online.');
       }
@@ -264,12 +279,13 @@ export default function MedicationsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <StageGradient />
       <Text style={styles.title}>Medications</Text>
       <Text style={styles.subtitle}>Track doses and daily schedules.</Text>
 
       <View style={styles.addWrap}>
         <Button
-          title="+ Add"
+          title="Add"
           onPress={() => {
             setEditingMedication(null);
             setScanSourceDocId(null);
@@ -278,7 +294,7 @@ export default function MedicationsScreen() {
           accessibilityLabel="Add medication"
         />
         <Button
-          title="⊕ Scan prescription"
+          title="Scan prescription"
           variant="outline"
           onPress={openScanner}
           accessibilityLabel="Scan prescription pages"
@@ -306,7 +322,7 @@ export default function MedicationsScreen() {
                   accessibilityLabel="Add medication from this scan"
                   style={styles.scanAddBtn}
                 >
-                  <Text style={styles.scanAddText}>+ Add med</Text>
+                  <Text style={styles.scanAddText}>Add med</Text>
                 </Pressable>
               )}
               <Pressable
@@ -446,6 +462,7 @@ function ActiveMedicationsTab({
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={GV.cta} />
+        <HealthFact style={styles.medFact} />
       </View>
     );
   }
@@ -587,6 +604,7 @@ function ScheduleTab({
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={GV.cta} />
+        <HealthFact style={styles.medFact} />
       </View>
     );
   }
@@ -716,6 +734,7 @@ function HistoryTab({ medications }: { medications: Medication[] }) {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={GV.cta} />
+          <HealthFact style={styles.medFact} />
         </View>
       ) : history.length === 0 ? (
         <Card style={styles.emptyCard}>
@@ -789,8 +808,6 @@ function AddMedicationModal({
   const [doseAmount, setDoseAmount] = useState(medication?.dose_amount?.toString() || '');
   const [doseUnit, setDoseUnit] = useState(medication?.dose_unit || '');
   const [route, setRoute] = useState<MedicationRoute | ''>(medication?.route || '');
-  void route;
-  void setRoute;
   const [frequency, setFrequency] = useState<MedicationFrequency>(medication?.frequency || 'ONCE_DAILY');
   const [scheduledTimes, setScheduledTimes] = useState(medication?.scheduled_times?.join(', ') || '');
   const [startDate, setStartDate] = useState(medication?.start_date || '');
@@ -859,7 +876,7 @@ function AddMedicationModal({
           </Pressable>
           <Text style={styles.modalTitle}>{medication ? 'Edit Medication' : 'Add Medication'}</Text>
           {sourceDocumentId && !medication ? (
-            <Text style={styles.scanLinkHint}>Linked to your scanned prescription — review each field before saving.</Text>
+            <Text style={styles.scanLinkHint}>Linked to your scanned prescription. Review each field before saving.</Text>
           ) : null}
           <Button
             title={saving ? 'Saving...' : 'Save'}
@@ -942,6 +959,25 @@ function AddMedicationModal({
                   placeholder="e.g., tablet"
                 />
               </View>
+            </View>
+          </Card>
+
+          <Card style={styles.fieldCard}>
+            <Text style={styles.fieldLabel}>Route</Text>
+            <Text style={styles.fieldHint}>
+              How this medicine is taken. Review it before saving.
+            </Text>
+            <View style={styles.frequencyWrap}>
+              {(Object.keys(ROUTE_LABELS) as MedicationRoute[]).map((r) => (
+                <Chip
+                  key={r}
+                  label={ROUTE_LABELS[r]}
+                  size="large"
+                  selected={route === r}
+                  onPress={() => setRoute((prev) => (prev === r ? '' : r))}
+                  accessibilityLabel={`Route ${ROUTE_LABELS[r]}`}
+                />
+              ))}
             </View>
           </Card>
 
@@ -1162,6 +1198,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 40,
     minHeight: 120,
+    gap: 12,
+  },
+  medFact: {
+    ...TYPE.caption,
+    color: GV.muted,
+    textAlign: 'center',
+    maxWidth: 300,
   },
   emptyCard: {
     backgroundColor: GV.card,
@@ -1425,6 +1468,11 @@ const styles = StyleSheet.create({
     padding: SPACE.cardPad,
   },
   fieldLabel: {
+    ...TYPE.caption,
+    color: GV.muted,
+    marginBottom: 8,
+  },
+  fieldHint: {
     ...TYPE.caption,
     color: GV.muted,
     marginBottom: 8,

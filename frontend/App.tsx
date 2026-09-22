@@ -36,9 +36,11 @@ import { DocumentsProvider } from '@/context/DocumentsContext';
 
 import { ThemeProvider } from '@/theme';
 import { BootSplash, ToastProvider } from '@/components';
+import { HealthFact } from '@/components/HealthFact';
 import { UmbrellaTabBar } from '@/components';
 
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
+import OnboardingSetupScreen from '@/screens/Onboarding/OnboardingSetupScreen';
 import HealthDashboardScreen from '@/screens/Dashboard/HealthDashboardScreen';
 import VitalsLoggerScreen from '@/screens/VitalsLogger/VitalsLoggerScreen';
 import TimelineScreen from '@/screens/Timeline/TimelineScreen';
@@ -55,6 +57,17 @@ import RppgMeasureScreen from '@/screens/PpgMeasure/RppgMeasureScreen';
 import ImproveScreen from '@/screens/Dashboard/ImproveScreen';
 import FoodScanScreen from '@/screens/FoodScan/FoodScanScreen';
 import PrescriptionScannerScreen from '@/screens/Medications/PrescriptionScannerScreen';
+import HealthAreasScreen from '@/screens/HealthAreas/HealthAreasScreen';
+import SubstanceScreen from '@/screens/Substance/SubstanceScreen';
+import CycleScreen from '@/screens/Cycle/CycleScreen';
+import SleepEngineScreen from '@/screens/SleepEngine/SleepEngineScreen';
+import WeightEngineScreen from '@/screens/WeightEngine/WeightEngineScreen';
+import DisciplineEngineScreen from '@/screens/DisciplineEngine/DisciplineEngineScreen';
+import FitnessEngineScreen from '@/screens/FitnessEngine/FitnessEngineScreen';
+import NutritionEngineScreen from '@/screens/NutritionEngine/NutritionEngineScreen';
+import WellbeingEngineScreen from '@/screens/WellbeingEngine/WellbeingEngineScreen';
+import HeartEngineScreen from '@/screens/HeartEngine/HeartEngineScreen';
+import PriorityWorldScreen from '@/screens/Priority/PriorityWorldScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
 // and prevent the WebGL renderer from blocking app startup on Android.
@@ -73,6 +86,9 @@ import type { RootStackParamList, MainTabParamList } from '@/types';
 import { syncPendingMutations, retryFailedSyncs } from '@/services/syncEngine';
 import { initNetworkMonitor, cleanupNetworkMonitor, subscribe as subscribeNetwork, isOnline } from '@/services/networkMonitor';
 import { initSyncState, clearSyncState } from '@/services/syncState';
+import { getCachedPatientId } from '@/services/patientIdentity';
+import { waitForIdentityReady } from '@/services/backendIdentity';
+import { subscribeDataRefresh } from '@/services/dataRefresh';
 import { TrendRangeProvider } from '@/context/TrendRangeContext';
 
 
@@ -136,12 +152,67 @@ function AppNavigator() {
     loading,
   } = useAuth();
 
+  // Account switch isolation: the previous user's server-backed caches must
+  // never serve the next user (query keys are not patient-scoped). Clear
+  // EVERYTHING — not a key subset — and cancel in-flight fetches so a late
+  // response cannot repopulate the cache after logout. SQLite tables stay on
+  // disk (product semantics: pending rows must survive) but are all
+  // patient-scoped at query time, and the sync queue is owner-filtered.
   React.useEffect(() => {
     if (user !== null) return;
-    queryClient.removeQueries({
-      predicate: (query) => ['bodyState', 'daily-metrics', 'timeline'].includes(String(query.queryKey[0])),
-    });
+    queryClient.cancelQueries().catch(() => {});
+    queryClient.clear();
   }, [user]);
+
+  // Post-auth setup gate: first-run patients see the personalization flow
+  // (goals → focus → momentum → done) exactly once; established users are
+  // grandfathered past it (see resolveOnboardingGateDb). Focus-free on
+  // purpose — this runs above NavigationContainer, so no useFocusEffect.
+  // Completion propagates via dataRefresh (same signal the hook uses).
+  const [setupNeeded, setSetupNeeded] = React.useState(false);
+  const [setupChecked, setSetupChecked] = React.useState(false);
+  React.useEffect(() => {
+    if (!user) {
+      setSetupNeeded(false);
+      setSetupChecked(true);
+      return;
+    }
+    let cancelled = false;
+    const check = async () => {
+      try {
+        await waitForIdentityReady().catch(() => {});
+        const patientId = getCachedPatientId();
+        if (!patientId) {
+          if (!cancelled) {
+            setSetupNeeded(false);
+            setSetupChecked(true);
+          }
+          return;
+        }
+        const { resolveOnboardingGateDb } = await import('@/db/queries/onboarding');
+        const gate = await resolveOnboardingGateDb(patientId);
+        if (!cancelled) {
+          setSetupNeeded(gate.needed);
+          setSetupChecked(true);
+        }
+      } catch {
+        // Fail open: onboarding infra must never block the app.
+        if (!cancelled) {
+          setSetupNeeded(false);
+          setSetupChecked(true);
+        }
+      }
+    };
+    void check();
+    const unsubscribe = subscribeDataRefresh(() => {
+      setSetupChecked(false);
+      void check();
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [user?.uid]);
 
   // Initialize network monitor and sync on lifecycle events
   React.useEffect(() => {
@@ -194,10 +265,12 @@ function AppNavigator() {
   }, [user]);
 
   /* --------------------------------------------------------------------------
-   * Firebase authentication state is still restoring.
+   * Firebase authentication state is still restoring, or the per-patient
+   * setup gate has not resolved yet (fast SQLite read — avoids flashing
+   * Main before a first-run patient is routed to setup).
    * ------------------------------------------------------------------------ */
 
-  if (loading) {
+  if (loading || (user && !setupChecked)) {
     return (
       <View
         style={
@@ -216,6 +289,12 @@ function AppNavigator() {
         >
           Loading healthgraph...
         </Text>
+
+        <HealthFact
+          style={
+            styles.factText
+          }
+        />
       </View>
     );
   }
@@ -237,6 +316,11 @@ function AppNavigator() {
           <RootStack.Screen
             name="Onboarding"
             component={OnboardingScreen}
+          />
+        ) : setupNeeded ? (
+          <RootStack.Screen
+            name="OnboardingSetup"
+            component={OnboardingSetupScreen}
           />
         ) : (
           <>
@@ -361,6 +445,105 @@ function AppNavigator() {
                 headerShown: false,
               }}
             />
+            {/* Health-area hub (real-data availability per area). */}
+            <RootStack.Screen
+              name="HealthAreas"
+              component={HealthAreasScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Setup flow is ALSO registered here (not only in the gate
+                branch above): Settings links to it for review, which must
+                work even when the gate resolved "no setup needed". The gate
+                branch controls the automatic first-run routing only. */}
+            <RootStack.Screen
+              name="OnboardingSetup"
+              component={OnboardingSetupScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Neutral substance-use tracking (device-only). */}
+            <RootStack.Screen
+              name="Substance"
+              component={SubstanceScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Explicit cycle tracking (device-only, no predictions). */}
+            <RootStack.Screen
+              name="Cycle"
+              component={CycleScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Sleep goal engine (device check-in data, tracking only). */}
+            <RootStack.Screen
+              name="SleepEngine"
+              component={SleepEngineScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Weight goal engine (profile weight shell, tracking only). */}
+            <RootStack.Screen
+              name="WeightEngine"
+              component={WeightEngineScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Discipline goal engine (tracked-action counts, tracking only). */}
+            <RootStack.Screen
+              name="DisciplineEngine"
+              component={DisciplineEngineScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Fitness goal engine (logged activity, tracking only). */}
+            <RootStack.Screen
+              name="FitnessEngine"
+              component={FitnessEngineScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Nutrition goal engine (logged meals, tracking only). */}
+            <RootStack.Screen
+              name="NutritionEngine"
+              component={NutritionEngineScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Wellbeing goal engine (user-entered ratings, tracking only). */}
+            <RootStack.Screen
+              name="WellbeingEngine"
+              component={WellbeingEngineScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Heart goal engine (camera measurements, tracking only). */}
+            <RootStack.Screen
+              name="HeartEngine"
+              component={HeartEngineScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Priority world (selected engines + shared dial, tracking only). */}
+            <RootStack.Screen
+              name="Priority"
+              component={PriorityWorldScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
           </>
         )}
       </RootStack.Navigator>
@@ -433,5 +616,18 @@ const styles = StyleSheet.create({
 
     color:
       COLORS.textSecondary,
+  },
+
+  factText: {
+    marginTop: 12,
+
+    fontSize: 14,
+
+    color:
+      COLORS.textSecondary,
+
+    textAlign: 'center',
+
+    paddingHorizontal: 24,
   },
 });
