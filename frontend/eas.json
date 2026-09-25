@@ -22,12 +22,14 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.healthgraph.shop",
         "EXPO_PUBLIC_ASSET_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.healthgraph.shop",
         "EXPO_PUBLIC_ASSET_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1"
       }
     }
