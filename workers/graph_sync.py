@@ -181,6 +181,36 @@ class PermanentProjectionError(Exception):
 
 
 
+def _drop_erased_patient_events(db, events):
+    """Drop claimed outbox events whose patient row is gone (erased).
+
+    Returns the live events. Best-effort: if the liveness check itself
+    cannot run, keeps everything (the erasure repass + PG residual gate
+    remain the guarantee).
+    """
+    # P15 erasure fence: never project events for erased patients —
+    # retrying would resurrect graph data the patient deleted, and the
+    # erasure repass sweeps the rows.
+    from models.identity import Patient
+    try:
+        live_ids = {
+            str(row[0]) for row in db.query(Patient.patient_id).all()
+        }
+    except Exception:
+        return events
+    live_events = []
+    for event in events:
+        pid = (event.payload or {}).get("patient_id")
+        if pid is None or str(pid) in live_ids:
+            live_events.append(event)
+        else:
+            event.status = OutboxStatus.DEAD_LETTER
+            event.last_error = "patient erased; projection dropped"
+            event.locked_at = None
+    db.commit()
+    return live_events
+
+
 def _process_outbox_events(db: Session, driver, batch_size: int = 50):
     now = datetime.now(timezone.utc)
     stale_threshold = now - timedelta(minutes=STALE_LEASE_MINUTES)
@@ -205,6 +235,10 @@ def _process_outbox_events(db: Session, driver, batch_size: int = 50):
         event.status = OutboxStatus.PROCESSING
         event.locked_at = now
     db.commit()
+
+    events = _drop_erased_patient_events(db, events)
+    if not events:
+        return
 
     #Process against Neo4j
     # P7: commit per event (not once per batch) so a crash, poison row, or

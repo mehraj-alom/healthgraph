@@ -13,7 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 
-COPY requirements.txt .
+# Production builds pass REQUIREMENTS=requirements.prod.txt (pinned).
+# Default keeps local/dev behavior identical.
+ARG REQUIREMENTS=requirements.txt
+COPY ${REQUIREMENTS} requirements.txt
 
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt

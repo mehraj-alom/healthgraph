@@ -18,9 +18,17 @@ router = APIRouter(prefix="/api/v1/system/logs", tags=["logs"])
 
 
 def _patient_document_ids(db: Session, patient_id: uuid.UUID) -> set[str]:
-    """IDs of documents the patient owns (for scoping operational logs)."""
+    """IDs of live documents the patient owns (for scoping operational logs).
+
+    DELETED documents are excluded: their logs must stop being visible.
+    """
     rows = db.execute(
-        select(Document.document_id).where(Document.patient_id == patient_id).limit(2000)
+        select(Document.document_id)
+        .where(
+            Document.patient_id == patient_id,
+            Document.status != "DELETED",
+        )
+        .limit(2000)
     ).all()
     return {str(r[0]) for r in rows}
 
@@ -78,27 +86,35 @@ async def stream_logs(
     owned = _patient_document_ids(db, _patient_id)
     if document_id and document_id not in owned:
         raise HTTPException(status_code=404, detail="Document not found.")
-    seen = 0
 
     async def event_generator():
-        nonlocal seen
+        # P15: dedup state is per-connection (a module-global set leaks
+        # entries across patients/streams) and ownership is re-scoped every
+        # tick, so a document deleted after connect stops streaming and a
+        # newly added one starts. An explicitly requested document that
+        # leaves scope ends the stream; the client reconnects into a 404.
+        seen_keys: set[str] = set()
         # Send initial connection message
         yield f"data: {json.dumps({'time': time.strftime('%H:%M:%S'), 'level': 'INFO', 'doc': '-', 'msg': 'Log stream connected'})}\n\n"
         try:
             while True:
+                owned = _patient_document_ids(db, _patient_id)
+                if document_id and document_id not in owned:
+                    break
                 logs = pipeline_logs.recent(n=200, document_id=document_id)
                 for entry in logs:
                     if _entry_document_id(entry) not in owned:
                         continue
-                    # Use time+msg as dedup key
-                    key = f"{entry['time']}|{entry['msg']}"
-                    if key not in _seen_keys:
-                        _seen_keys.add(key)
+                    # Scope the key to this stream: identical time|msg on
+                    # another patient's stream must not suppress this one.
+                    key = f"{_patient_id}|{_entry_document_id(entry)}|{entry['time']}|{entry['msg']}"
+                    if key not in seen_keys:
+                        seen_keys.add(key)
                         data = json.dumps(entry)
                         yield f"data: {data}\n\n"
-                # Keep _seen_keys bounded
-                if len(_seen_keys) > 1000:
-                    _seen_keys.clear()
+                # Keep per-stream state bounded
+                if len(seen_keys) > 1000:
+                    seen_keys.clear()
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             pass
@@ -111,6 +127,3 @@ async def stream_logs(
             "X-Accel-Buffering": "no",
         },
     )
-
-
-_seen_keys: set = set()

@@ -57,6 +57,28 @@ def _known_person_names(db, patient_id, extraction: dict) -> list[str]:
             names.append(auth[key])
     return [n for n in names if isinstance(n, str) and n.strip()]
 
+def _document_deleted_or_gone(db, document_id) -> bool:
+    """True when the document row is missing or marked DELETED.
+
+    Re-read from the database (never trust the held ORM object): a delete
+    or erasure landing mid-pipeline must stop further writes. Expired
+    session state is refreshed by the query itself.
+    """
+    try:
+        row = (
+            db.query(Document.status)
+            .filter(Document.document_id == document_id)
+            .first()
+        )
+    except Exception:
+        # On read failure, keep going: the phase commits below will surface
+        # real DB problems, and a transient error must not fake a delete.
+        return False
+    if row is None:
+        return True
+    return row[0] == "DELETED"
+
+
 @celery_app.task(name="ingestion_tasks.process_document", bind=True, max_retries=0)
 def process_document_pipeline(self, document_id_str: str):
     db = SessionLocal()
@@ -109,6 +131,12 @@ def process_document_pipeline(self, document_id_str: str):
         # Database Persistence
         # P0 pipeline versioning: record which models produced this
         # extraction so results stay reproducible across model upgrades.
+        # P15: re-check the delete gate — a delete landing after task entry
+        # must not be undone by the writes below.
+        if _document_deleted_or_gone(db, document.document_id):
+            db.rollback()
+            _log("warning", f"Document {document_id_str} deleted mid-pipeline; aborting before persistence.", document_id_str)
+            return
         ocr_record = RawExtractionData(
             document_id=document.document_id,
             gateway_json=ocr_gateway_result,
@@ -148,6 +176,10 @@ def process_document_pipeline(self, document_id_str: str):
 
         # QDRANT VECTOR INDEXING
         _log("info", f"Starting Qdrant Vector Indexing for Document {document_id_str}...", document_id_str)
+        if _document_deleted_or_gone(db, document.document_id):
+            db.rollback()
+            _log("warning", f"Document {document_id_str} deleted mid-pipeline; skipping vector indexing.", document_id_str)
+            return
         try :
             indexer = VectorIndexer()
             asyncio.run(indexer.index_markdown_file(document.patient_id, document.document_id, safe_markdown))
@@ -159,6 +191,10 @@ def process_document_pipeline(self, document_id_str: str):
 
        # Timeline Mapping 
         _log("info", f"Starting Timeline Mapping for Document {document_id_str}...", document_id_str)
+        if _document_deleted_or_gone(db, document.document_id):
+            db.rollback()
+            _log("warning", f"Document {document_id_str} deleted mid-pipeline; skipping timeline mapping.", document_id_str)
+            return
         events_created, observations_created = ExtractionMapper.map_to_timeline(db, document.document_id)
 
         # Record anatomical observations to populate 3D body state and Neo4j outbox

@@ -21,7 +21,7 @@ from models.medications import (
     DoseTakenStatus,
 )
 from models.outbox import enqueue_clinical_event, enqueue_medication, enqueue_medication_taken
-from models.events import ClinicalEvent, EventType, SourceType, VerificationStatus
+from models.events import ClinicalEvent, Document, EventType, SourceType, VerificationStatus
 from schemas.medications import (
     MedicationCreate,
     MedicationUpdate,
@@ -202,6 +202,25 @@ def get_daily_schedule(
     return schedule
 
 
+def validate_source_document_ownership(
+    db: Session, patient_id: uuid.UUID, source_document_id: uuid.UUID
+) -> bool:
+    """True when the document exists AND belongs to the patient.
+
+    Single indexed lookup; the create endpoint raises 404 on False so a
+    foreign id can never plant a cross-patient graph edge.
+    """
+    owned = (
+        db.query(Document.document_id)
+        .filter(
+            Document.document_id == source_document_id,
+            Document.patient_id == patient_id,
+        )
+        .first()
+    )
+    return owned is not None
+
+
 @router.post("", response_model=MedicationResponse)
 def create_medication(
     payload: MedicationCreate,
@@ -228,6 +247,14 @@ def create_medication(
                 raise HTTPException(status_code=409, detail=existing["error"])
             if existing["status"] == "replay":
                 return existing["response"]
+
+    # P15 security: a client-supplied source_document_id must belong to the
+    # caller — otherwise anyone can plant a DOCUMENTED_IN edge to another
+    # patient's document and pivot through the graph detail endpoint.
+    if payload.source_document_id is not None and not validate_source_document_ownership(
+        db, patient_id, payload.source_document_id
+    ):
+        raise HTTPException(status_code=404, detail="Document not found.")
 
     medication = Medication(
         patient_id=patient_id,

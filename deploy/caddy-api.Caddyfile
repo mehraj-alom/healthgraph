@@ -1,0 +1,32 @@
+# api.healthgraph.shop — HealthGraph FastAPI backend (Caddy snippet).
+#
+# DEPLOY STEPS (on the VPS, deploy user):
+#   1. Create DNS A record: api.healthgraph.shop -> 46.232.234.248
+#      (verify propagation BEFORE enabling this block).
+#   2. Append this file to /etc/caddy/Caddyfile (website block untouched).
+#   3. Validate:  caddy fmt --overwrite /etc/caddy/Caddyfile
+#                 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+#   4. Reload:    sudo systemctl reload caddy
+#   5. Verify:    curl -s https://api.healthgraph.shop/health
+#
+# The API listens on loopback only (compose publishes 127.0.0.1:8000).
+# Nothing else is exposed: no direct public port, no dashboard here.
+
+api.healthgraph.shop {
+	reverse_proxy 127.0.0.1:8000
+
+	header {
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Strict-Transport-Security "max-age=31536000;"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	encode zstd gzip
+
+	log {
+		output file /var/log/caddy/api-healthgraph.log
+		format json
+	}
+}

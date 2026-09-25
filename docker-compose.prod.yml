@@ -1,0 +1,178 @@
+# HealthGraph production compose (2 vCPU / 7.8 GiB VPS).
+#
+# Topology: api + worker-default + worker-ingestion + beat + healthgraph-db
+# + redis on ONE internal network. Only the API is reachable, and only via
+# host Caddy on loopback 127.0.0.1:8000 (same pattern as Umami :3000).
+# PostgreSQL and Redis expose NO ports. Neo4j/Qdrant stay EXTERNAL.
+#
+# Secrets: env_file /opt/healthgraph/backend.env (0600, deploy-owned,
+# created at deploy time from deploy/backend.env.example — NEVER committed).
+# Firebase credentials: /opt/healthgraph/firebase_credentials.json (0600).
+#
+# Resource budget (worst case ~5.4 GiB + Umami/PG ~1.5 GiB + system):
+#   api 1.5 CPU / 2G · worker-ingestion 1 CPU / 2G · worker-default 0.5/512M
+#   beat 0.25/256M · db 0.5/1G · redis 0.25/256M (200M cap, noeviction).
+#
+# Two single-concurrency workers (one per queue) replace the shared pool so
+# a 900s OCR task can never starve the 60s graph-outbox drain.
+
+name: healthgraph
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REQUIREMENTS: requirements.prod.txt
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - /opt/healthgraph/backend.env
+    volumes:
+      - /opt/healthgraph/firebase_credentials.json:/app/firebase_credentials.json:ro
+      - document_storage:/app/storage
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "1.5", memory: 2G }
+        reservations: { cpus: "0.5", memory: 1G }
+
+  worker-default:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REQUIREMENTS: requirements.prod.txt
+    # Latency-sensitive queue only: outbox drain (60s beat) + misc tasks.
+    command: celery -A core.celery_app worker -Q celery --concurrency=1 --loglevel=info
+    env_file:
+      - /opt/healthgraph/backend.env
+    volumes:
+      - document_storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 512M }
+        reservations: { cpus: "0.25", memory: 256M }
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME | grep -q OK"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  worker-ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REQUIREMENTS: requirements.prod.txt
+    # Long OCR/extraction tasks, isolated from the default queue.
+    command: celery -A core.celery_app worker -Q ingestion --concurrency=1 --loglevel=info
+    env_file:
+      - /opt/healthgraph/backend.env
+    volumes:
+      - document_storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 2G }
+        reservations: { cpus: "0.5", memory: 1G }
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME | grep -q OK"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REQUIREMENTS: requirements.prod.txt
+    command: celery -A core.celery_app beat --schedule=/app/beatdata/schedule --loglevel=info
+    env_file:
+      - /opt/healthgraph/backend.env
+    volumes:
+      - beatdata:/app/beatdata
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 256M }
+    healthcheck:
+      test: ["CMD-SHELL", "test -e /app/beatdata/schedule.db"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+  db:
+    image: postgres:15-alpine
+    command: ["postgres", "-c", "max_connections=50", "-c", "shared_buffers=256MB"]
+    env_file:
+      - /opt/healthgraph/backend.env
+    environment:
+      POSTGRES_DB: healthgraph
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 1G }
+        reservations: { cpus: "0.25", memory: 512M }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d healthgraph"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    # Ephemeral broker/cache: rate keys carry TTLs, log list carries a 7-day
+    # TTL, results are ignored. noeviction protects queued tasks from silent
+    # loss; pressure surfaces as errors, and the 200M cap bounds the box.
+    command: ["redis-server", "--appendonly", "no", "--maxmemory", "200mb", "--maxmemory-policy", "noeviction"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 256M }
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  default:
+    name: healthgraph-internal
+
+volumes:
+  pgdata:
+    name: healthgraph-pgdata
+  document_storage:
+    name: healthgraph-documents
+  beatdata:
+    name: healthgraph-beatdata

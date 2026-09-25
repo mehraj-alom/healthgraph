@@ -1,0 +1,30 @@
+# Production pins frozen from a tested local environment.
+# Regenerate: venv/bin/pip freeze, intersected with requirements.txt.
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-multipart==0.0.32
+SQLAlchemy==2.0.52
+alembic==1.19.1
+psycopg2-binary==2.9.12
+celery==5.6.3
+redis==8.1.0
+firebase_admin==7.5.0
+presidio_analyzer==2.2.364
+presidio_anonymizer==2.2.364
+spacy==3.8.16
+langchain-core==1.6.0
+langchain-openai==1.6.0
+langgraph==1.2.11
+langgraph-checkpoint-postgres==3.1.2
+httpx==0.28.1
+thefuzz==0.22.1
+python-Levenshtein==0.27.4
+python-dotenv==1.2.3
+landingai-ade==1.18.1
+qdrant-client==1.19.0
+openai==3.3.1
+pillow==10.4.0
+neo4j==6.2.0
+asyncpg==0.31.0

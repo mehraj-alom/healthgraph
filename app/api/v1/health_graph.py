@@ -2212,8 +2212,13 @@ def get_node_detail(
         # P7: bounded to 50 neighbours — the panel renders a handful and
         # linked caps at 10/group; visits with large OCCURRED_DURING fans
         # must not materialize unbounded rows.
+        # P15 security: the target itself must be reachable from the
+        # caller's Patient node. Verification above already proved a typed
+        # path, but this closes the generic fetch against any current or
+        # future unscoped edge (e.g. a planted DOCUMENTED_IN): unknown ids
+        # fall through to the existing "Not found" response below.
         cypher = """
-        MATCH (target {id: $raw_id})
+        MATCH (p:Patient {id: $patient_id})-[*1..4]-(target {id: $raw_id})
         WITH target ORDER BY CASE WHEN target:Medication THEN 0 ELSE 1 END LIMIT 1
         OPTIONAL MATCH (target)-[r]-(connected)
         WHERE r IS NOT NULL

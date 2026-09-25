@@ -240,13 +240,15 @@ def build_patient_graph_deletes(patient_id: uuid.UUID) -> list[dict[str, Any]]:
         ),
         "params": {"prefix": f"{pid}:"},
     })
-    # Relationship sweep: anything still attached to the patient that is not
-    # shared reference data. Belt-and-braces for node types the per-label
-    # pass missed (e.g. a projection added without a patient_id property).
+    # Relationship sweep: anything still reachable from the patient that is
+    # not shared reference data. Reachability (not just 1-hop children)
+    # because most projectors link owned nodes 2+ hops out (observation via
+    # day, entries via scans, versions via regimens) and most owned nodes
+    # carry no patient_id property at all.
     stmts.append({
         "description": "relationship sweep (excluding shared labels)",
         "cypher": (
-            "MATCH (p:Patient {id: $pid})-[r]->(n) "
+            "MATCH (p:Patient {id: $pid})-[*1..4]->(n) "
             "WHERE NOT n:Concept AND NOT n:AnatomicalStructure "
             "DETACH DELETE n RETURN count(n) AS deleted"
         ),
@@ -261,14 +263,16 @@ def build_patient_graph_deletes(patient_id: uuid.UUID) -> list[dict[str, Any]]:
 
 
 def build_patient_graph_verify() -> dict[str, Any]:
-    """Count any remaining patient-linked nodes (excludes shared labels)."""
+    """Count any remaining patient-linked nodes (excludes shared labels).
+
+    Reachability-based, mirroring the sweep: property-less nodes linked
+    2+ hops out must also count as residual.
+    """
     return {
         "description": "verify no patient nodes remain",
         "cypher": (
-            "MATCH (n) WHERE (n.patient_id = $pid "
-            "OR (n:Day AND n.id STARTS WITH $prefix) "
-            "OR (n:Patient AND n.id = $pid)) "
-            "AND NOT n:Concept AND NOT n:AnatomicalStructure "
+            "MATCH (p:Patient {id: $pid})-[*1..4]->(n) "
+            "WHERE NOT n:Concept AND NOT n:AnatomicalStructure "
             "RETURN count(n) AS residual"
         ),
     }
@@ -517,6 +521,17 @@ def erase_patient_postgres(db, patient_id: uuid.UUID, *, delete_account: bool) -
             req.status = DSRStatus.FULFILLED.value
             dsr_fulfilled.append(str(req.id))
 
+    # P15: purge this patient's pipeline log entries from shared Redis
+    # (best-effort; the list TTL bounds lifetime regardless). Reported in
+    # the per-table counts for audit visibility.
+    try:
+        from core.log_collector import pipeline_logs
+        counts["redis_logs_purged"] = pipeline_logs.purge_patient_logs(
+            {str(d) for d in doc_ids}
+        )
+    except Exception:
+        counts["redis_logs_purged"] = 0
+
     log_audit(
         db, action="erasure_completed", patient_id=None if delete_account else patient_id,
         entity_type="patient",
@@ -563,6 +578,44 @@ def count_outbox_for_patient(db, patient_id: uuid.UUID) -> int:
         .scalar()
         or 0
     )
+
+
+def count_patient_postgres_residual(db, patient_id: uuid.UUID) -> int:
+    """Patient-owned PG rows still present (tripwire for concurrent writes).
+
+    Mirrors the direct patient_id deletes of erase_patient_postgres (plus
+    outbox). A nonzero count means a writer landed after the PG commit —
+    the orchestrator must report partial, never completed.
+    """
+    from models.anatomy import AnatomicalObservation, PatientBodyStateSnapshot
+    from models.chat import ConversationThread
+    from models.conditions import ConditionOccurrence
+    from models.events import ClinicalEvent, Document
+    from models.food import FoodScan
+    from models.measurements import Measurement
+    from models.medication_versions import MedicationVersion
+    from models.medications import Medication, MedicationTakenEvent
+    from models.ppg import PpgMeasurement
+    from models.statements import PatientStatement
+    from models.summaries import PatientDailySummary, PatientHealthSummary
+    from models.visits import Visit
+
+    total = 0
+    for model in (
+        ClinicalEvent, Document, AnatomicalObservation,
+        PatientBodyStateSnapshot, MedicationTakenEvent, MedicationVersion,
+        Medication, ConditionOccurrence, PatientStatement, Measurement,
+        Visit, FoodScan, PpgMeasurement, ConversationThread,
+        PatientDailySummary, PatientHealthSummary,
+    ):
+        total += int(
+            db.query(func.count()).select_from(model)
+            .filter(model.patient_id == patient_id)
+            .scalar()
+            or 0
+        )
+    total += count_outbox_for_patient(db, patient_id)
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -676,6 +729,7 @@ def orchestrate_erasure(
 
     graph: dict[str, Any] = {"status": "unavailable", "deleted": {}, "residual": None}
     vectors: dict[str, Any] = {"status": "unavailable", "before": None, "after": None}
+    pg_residual = 0
     for _ in range(max(1, max_repasses)):
         graph = erase_patient_graph(
             neo4j_driver, patient_id, delete_patient_node=delete_account)
@@ -694,14 +748,23 @@ def orchestrate_erasure(
                 GraphSyncOutbox.payload["patient_id"].astext == str(patient_id)
             ).delete(synchronize_session=False)
             db.commit()
+        # PG tripwire: any surviving patient-owned row (e.g. a concurrent
+        # writer landing after the PG commit) blocks "completed". Retry
+        # converges because the orchestrator is idempotent; exceptions here
+        # mean "not proven clean", never clean.
+        try:
+            pg_residual = count_patient_postgres_residual(db, patient_id)
+        except Exception:
+            logger.warning("PG residual re-check failed; treating as unclean.")
+            pg_residual = -1
         graph_residual = graph.get("residual") or 0
         vectors_after = vectors.get("after")
         vectors_clean = vectors_after == 0
-        if residual_outbox == 0 and graph_residual == 0 and vectors_clean:
+        if residual_outbox == 0 and graph_residual == 0 and vectors_clean and pg_residual == 0:
             break
         logger.warning(
-            "Erasure re-pass needed (outbox=%s graph_residual=%s vectors_after=%s).",
-            residual_outbox, graph_residual, vectors_after,
+            "Erasure re-pass needed (outbox=%s graph_residual=%s vectors_after=%s pg_residual=%s).",
+            residual_outbox, graph_residual, vectors_after, pg_residual,
         )
 
     firebase: dict[str, Any] = {"deleted": False, "status": "skipped"}
@@ -721,12 +784,14 @@ def orchestrate_erasure(
         and (graph.get("residual") or 0) == 0
         and vectors.get("status") == "completed"
         and (vectors.get("after") or 0) == 0
+        and pg_residual == 0
         and (not delete_account or firebase.get("deleted") is True)
     )
     return {
         "status": "completed" if ok else "partial",
         "delete_account": delete_account,
         "postgres": pg["tables"],
+        "pg_residual": pg_residual,
         "dsr_fulfilled": pg["dsr_fulfilled"],
         "neo4j": graph,
         "qdrant": vectors,

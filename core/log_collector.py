@@ -12,6 +12,9 @@ from core.redis_client import build_redis_client
 
 _LOG_KEY = "medgraph:pipeline:logs"
 _LOG_MAX = 500
+# Upper bound on log lifetime independent of churn: even a quiet deployment
+# must not accumulate entries forever. 7 days covers debugging windows.
+_LOG_TTL_SECONDS = 7 * 24 * 3600
 
 # Payload key under which a log entry's owning document id is exposed by
 # to_dict(). Callers that scope logs to a patient (app/api/v1/logs.py) MUST
@@ -91,6 +94,8 @@ class LogCollector:
             r = self._get_redis()
             r.rpush(_LOG_KEY, entry.to_json())
             r.ltrim(_LOG_KEY, -_LOG_MAX, -1)
+            # Time bound on top of the count bound: quiet keys expire.
+            r.expire(_LOG_KEY, _LOG_TTL_SECONDS)
         except Exception:
             pass
 
@@ -125,6 +130,38 @@ class LogCollector:
         with self._sub_lock:
             self._subscribers.append(q)
         return q
+
+    def purge_patient_logs(self, document_ids: set[str]) -> int:
+        """Remove entries scoped to the given document ids. Returns removed count.
+
+        Best-effort: any Redis failure yields 0 and never raises, so erasure
+        reporting treats a purge failure as incompleteness, not a crash.
+        """
+        if not document_ids:
+            return 0
+        try:
+            r = self._get_redis()
+            raw_list = r.lrange(_LOG_KEY, 0, -1)
+            kept = []
+            removed = 0
+            for raw in raw_list:
+                try:
+                    entry = LogEntry.from_json(raw)
+                except Exception:
+                    removed += 1
+                    continue
+                if entry.document_id in document_ids:
+                    removed += 1
+                else:
+                    kept.append(raw)
+            if removed:
+                r.delete(_LOG_KEY)
+                if kept:
+                    r.rpush(_LOG_KEY, *kept)
+                    r.expire(_LOG_KEY, _LOG_TTL_SECONDS)
+            return removed
+        except Exception:
+            return 0
 
 
 pipeline_logs = LogCollector()

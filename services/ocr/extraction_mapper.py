@@ -677,6 +677,12 @@ class ExtractionMapper:
             logger.warning(f"No valid extraction data found for document {document_id}.")
             return 0, []
 
+        # P15: never map a deleted document — the delete endpoint removes
+        # derivatives, and the pipeline must not recreate them afterwards.
+        if document.status == "DELETED":
+            logger.warning(f"Document {document_id} is DELETED; skipping timeline mapping.")
+            return 0, []
+
         doc_json = raw_record.extraction.get("document", {})
         sections = doc_json.get("sections", [])
         pages = doc_json.get("pages", [])
