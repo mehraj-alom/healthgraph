@@ -33,15 +33,16 @@ const firebaseConfig = {
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-import { securePersistence } from '@/services/securePersistence';
+import { secureStorePersistenceForAuth } from '@/services/securePersistence';
 
 function createFirebaseAuth(): Auth {
   if (Platform.OS === 'web') return getAuth(app);
   try {
     // SecureStore-backed persistence (Keychain/Keystore), not plaintext
-    // AsyncStorage. Existing AsyncStorage sessions are not migrated —
-    // affected users sign in once more.
-    return initializeAuth(app, { persistence: securePersistence });
+    // AsyncStorage. Firebase instantiates the entry via `new`, so this
+    // must be a class definition — never a plain object. Existing
+    // AsyncStorage sessions are not migrated; affected users sign in once.
+    return initializeAuth(app, { persistence: secureStorePersistenceForAuth() });
   } catch (error: unknown) {
     if (typeof error === 'object' && error !== null && 'code' in error &&
       (error as { code?: unknown }).code === 'auth/already-initialized') {
