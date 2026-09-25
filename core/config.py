@@ -189,10 +189,17 @@ class Settings(BaseSettings):
         if self.DOC_ENCRYPTION_KEY:
             try:
                 from core.at_rest_crypto import decode_key
-
+            except ImportError:
+                _production_validation_error(
+                    "Production startup refused: the cryptography package "
+                    "is not installed, so DOC_ENCRYPTION_KEY cannot even "
+                    "be validated. Install dependencies from "
+                    "requirements.prod.txt."
+                )
+            try:
                 if decode_key(self.DOC_ENCRYPTION_KEY) is None:
                     raise ValueError("empty")
-            except Exception:
+            except ValueError:
                 _production_validation_error(
                     "Production startup refused: DOC_ENCRYPTION_KEY is set "
                     "but invalid. It must be the base64 encoding of exactly "

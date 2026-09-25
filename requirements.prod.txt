@@ -10,6 +10,7 @@ alembic==1.19.1
 psycopg2-binary==2.9.12
 celery==5.6.3
 redis==8.1.0
+cryptography==48.0.1
 firebase_admin==7.5.0
 presidio_analyzer==2.2.364
 presidio_anonymizer==2.2.364
