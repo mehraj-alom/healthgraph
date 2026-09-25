@@ -69,10 +69,13 @@ jobs:
       - name: Install Android SDK packages (pinned)
         run: |
           set -euo pipefail
-          # `yes` exits 141 (SIGPIPE) once sdkmanager stops reading stdin;
-          # tolerate exactly that so `pipefail` does not fail the step, while
-          # any real sdkmanager failure (exit != 141) still fails fast.
-          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || test $? -eq 141
+          # No `yes |` pipe by design: on the Actions runner SIGPIPE is
+          # ignored up the process tree, so `yes` exits 1 (not 141) and no
+          # pipefail guard can distinguish that from a real failure. With
+          # stdin at EOF, sdkmanager exits 0 when licenses are already
+          # accepted and non-zero with its own diagnostic when acceptance
+          # is genuinely required — stdout/stderr stay visible either way.
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses < /dev/null
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
             "platforms;android-36" \
