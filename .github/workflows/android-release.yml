@@ -61,7 +61,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Set up JDK 17 (Temurin)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -69,7 +69,10 @@ jobs:
       - name: Install Android SDK packages (pinned)
         run: |
           set -euo pipefail
-          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          # `yes` exits 141 (SIGPIPE) once sdkmanager stops reading stdin;
+          # tolerate exactly that so `pipefail` does not fail the step, while
+          # any real sdkmanager failure (exit != 141) still fails fast.
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || test $? -eq 141
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
             "platforms;android-36" \
