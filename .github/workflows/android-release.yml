@@ -1,0 +1,118 @@
+# Android release build — Phase 1: unsigned compile-verification artifact.
+#
+# NOT Play Store-ready: the AAB produced here is signed with the default
+# debug key (React Native template default), NOT with the production EAS
+# keystore. It exists only to prove that Expo prebuild + Gradle compilation
+# succeed on a clean machine. Production signing (Phase 2) is intentionally
+# absent from this workflow.
+#
+# Trigger: manual `workflow_dispatch` only. No deploy, no Play publishing.
+
+name: Android release build (Phase 1 — unsigned test artifact)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    name: Prebuild + Gradle bundleRelease
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+        working-directory: frontend
+    env:
+      # Production backend + runtime-asset hosts (public values, no secrets).
+      EXPO_PUBLIC_API_URL: https://api.healthgraph.shop
+      EXPO_PUBLIC_ASSET_CDN_URL: https://api.healthgraph.shop/assets
+      EXPO_PUBLIC_ANATOMY_CDN_URL: https://api.healthgraph.shop/assets
+      # Firebase *public client* identifiers for medg-50cbe (safe to embed in
+      # any client build; the service-account key is never used here). These
+      # may be moved to GitHub Actions Variables without changing the build.
+      EXPO_PUBLIC_FIREBASE_API_KEY: AIzaSyBX2nwNuCSqB3nxuhyDT-bqZExe7B2XNfg
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: medg-50cbe.firebaseapp.com
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: medg-50cbe
+      EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: medg-50cbe.appspot.com
+      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '891954375001'
+      EXPO_PUBLIC_FIREBASE_APP_ID: 1:891954375001:web:853d999bad1faa426f4448
+      GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies (clean)
+        run: npm ci --no-audit --no-fund
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK packages (pinned)
+        run: |
+          set -euo pipefail
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "platforms;android-35" \
+            "build-tools;36.0.0" \
+            "build-tools;35.0.0" \
+            "ndk;27.1.12297006" \
+            "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.1.12297006" >> "${GITHUB_ENV}"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Expo prebuild (Android)
+        run: npx expo prebuild --platform android --non-interactive
+
+      - name: Verify native modules linked (no-op guard)
+        run: |
+          set -euo pipefail
+          test -f android/gradlew
+          grep -q "android.permission.CAMERA" android/app/src/main/AndroidManifest.xml
+          test -d node_modules/healthgraph-ppg/android
+          test -d node_modules/healthgraph-rppg/android
+          echo "Prebuild OK: gradlew present, CAMERA permission present, ppg/rppg native dirs present."
+
+      - name: Gradle bundleRelease
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
+        working-directory: frontend/android
+
+      - name: Label test artifact (NOT Play Store-ready)
+        run: |
+          set -euo pipefail
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          test -f "${AAB}"
+          cp "${AAB}" medgraph-app-release-test-unsigned.aab
+          ls -la medgraph-app-release-test-unsigned.aab
+
+      - name: Upload unsigned test AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: medgraph-android-test-unsigned-NOT-PLAY-READY
+          path: frontend/medgraph-app-release-test-unsigned.aab
+          if-no-files-found: error
+          retention-days: 14
