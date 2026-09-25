@@ -28,8 +28,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from core.config import settings
-
 # Envelope layout: 4-byte magic || 12-byte nonce || AES-256-GCM ciphertext
 # || 16-byte tag. The magic byte-prefix is the detector that distinguishes
 # encrypted rows from legacy plaintext rows on read.
@@ -64,6 +62,10 @@ def decode_key(value: str) -> Optional[bytes]:
 
 
 def _load_key() -> bytes:
+    # Local import: core.config's production gate imports decode_key from
+    # this module, so a module-level settings import would be circular.
+    from core.config import settings
+
     key = decode_key(settings.DOC_ENCRYPTION_KEY)
     if key is not None:
         return key
