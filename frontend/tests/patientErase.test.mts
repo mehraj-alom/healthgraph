@@ -90,6 +90,7 @@ const DDL = `
   CREATE TABLE cycle_entries (entry_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE food_scan_items (scan_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE onboarding_state (patient_id TEXT PRIMARY KEY, completed INTEGER);
+  CREATE TABLE reminder_instances (occurrence_id TEXT PRIMARY KEY, patient_id TEXT, medication_id TEXT, scheduled_at TEXT);
   CREATE TABLE hydration_state (scope TEXT, key TEXT, value TEXT);
   CREATE TABLE sync_queue (id INTEGER PRIMARY KEY, table_name TEXT, record_id TEXT, patient_id TEXT, payload_json TEXT, status TEXT);
 `;
@@ -118,6 +119,7 @@ function seedDb() {
     INSERT INTO cycle_entries VALUES ('c-a1','${A}'), ('c-b1','${B}');
     INSERT INTO food_scan_items VALUES ('f-a1','${A}'), ('f-b1','${B}');
     INSERT INTO onboarding_state VALUES ('${A}',1), ('${B}',0);
+    INSERT INTO reminder_instances VALUES ('r-a1','${A}','m-a1','08:00'), ('r-b1','${B}','m-b1','08:00');
     INSERT INTO hydration_state VALUES ('taken-events','taken_hydrated:${A}','{}'), ('taken-events','taken_hydrated:${B}','{}');
     INSERT INTO sync_queue (table_name, record_id, patient_id, payload_json, status) VALUES
       ('medications','m-a1','${A}','{}','pending'),

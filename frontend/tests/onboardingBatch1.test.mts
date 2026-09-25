@@ -324,7 +324,7 @@ describe('batch 1 wiring', () => {
     assert.equal(registrations.length, 2);
     assert.ok(app.includes('setupNeeded'), 'gate state');
     assert.ok(app.includes('resolveOnboardingGateDb'), 'per-patient gate resolution');
-    assert.ok(app.includes('user && !setupChecked'), 'no Main flash before gate resolves');
+    assert.ok(app.includes('!pricingChecked') && app.includes('!setupChecked'), 'no Main flash before gates resolve');
   });
 
   test('setup flow persists per step and completes exactly once', () => {
