@@ -242,7 +242,12 @@ export function buildActivityItems(input: ActivityInputs): ActivityItem[] {
     if (doc.patient_id !== patientId) continue;
     const timeMs = parseTime(doc.created_at);
     if (timeMs === null) continue;
-    const done = doc.status === 'EXTRACTED' || doc.status === 'COMPLETED';
+    // Canonical mapping, mirrored from isDocumentComplete/isDocumentFailed
+    // in services/documents.ts (this module must stay dependency-free for
+    // node tests): only backend-reported COMPLETED counts as done.
+    // EXTRACTED still has pipeline stages ahead, so it renders as
+    // Processing, never Processed.
+    const done = doc.status === 'COMPLETED';
     const failed = doc.status === 'FAILED' || doc.status === 'FAILED_TRIAGE';
     out.push({
       key: `document-${doc.document_id}`,

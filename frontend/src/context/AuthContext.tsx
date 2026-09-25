@@ -91,6 +91,7 @@ async function syncBackendIdentity(): Promise<void> {
 
 // Import the readiness tracker (no circular dep — this is a pure module)
 import { setSyncPromise } from '@/services/backendIdentity';
+import { requestDataRefresh } from '@/services/dataRefresh';
 
 /**
  * One-time cleanup of legacy plaintext HomeCache keys from AsyncStorage.
@@ -160,6 +161,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.error('[MedGraph] Backend auth sync failed (non-blocking):', syncError);
         });
         setSyncPromise(syncPromise);
+        // Identity-gated queries (useCachedQuery) skip their network fetch
+        // until the Patient row exists. Nudge them once sync settles so
+        // cold start never needs a second mount to fill in.
+        void syncPromise.finally(() => {
+          requestDataRefresh();
+        });
         // Prefer the backend profile name (what the user typed in Settings)
         // over the Firebase displayName. Lazy + fire-and-forget, same as above.
         import('@/services/api').then(({ api }) =>

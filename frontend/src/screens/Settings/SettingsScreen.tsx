@@ -27,7 +27,12 @@ import { getCachedPatientId } from '@/services/patientIdentity';
 import { getOnboardingState, saveOnboardingSelections } from '@/db/queries/onboarding';
 import { requestDataRefresh } from '@/services/dataRefresh';
 import { deleteAccountCompletely, deleteAllHealthData } from '@/services/deletion';
-import { deletionFailureMessage } from '@/services/deletionContract';
+import { deletionFailureMessage, isTimeoutLikeError } from '@/services/deletionContract';
+import {
+  DeleteConfirmSheet,
+  type DeleteMode,
+  type DeleteResult,
+} from '@/components/DeleteConfirmSheet';
 import type { PatientProfile, RootStackParamList } from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -215,8 +220,24 @@ export default function SettingsScreen() {
   // Every failure path leaves existing data untouched. A 404 means the
   // deployed backend predates the erasure routes — reported as such, never
   // as a connection problem.
+  // Destructive confirmation runs through DeleteConfirmSheet: exact DELETE
+  // match + 20s countdown + explicit final tap. Timeouts reconcile via
+  // idempotent retry instead of claiming "nothing was deleted".
   const [deleting, setDeleting] = useState<'data' | 'account' | null>(null);
   const deletingRef = useRef(false);
+  const [sheetMode, setSheetMode] = useState<DeleteMode | null>(null);
+  const [sheetResult, setSheetResult] = useState<DeleteResult | null>(null);
+
+  const DATA_SCOPE = [
+    'Daily logs and check-ins',
+    'Medications and dose history',
+    'Uploaded documents and extractions',
+    'On-device caches and timeline',
+  ];
+  const ACCOUNT_SCOPE = [
+    ...DATA_SCOPE,
+    'Your profile and sign-in identity',
+  ];
 
   const runDeleteData = useCallback(async () => {
     if (deleting || deletingRef.current) return;
@@ -229,50 +250,39 @@ export default function SettingsScreen() {
     try {
       const { report } = await deleteAllHealthData();
       queryClient.clear();
-      if (report.status === 'completed') {
-        Alert.alert(
-          'Data deleted',
-          'All health records were removed from your account and this device.',
-        );
-      } else {
-        Alert.alert(
-          'Partially deleted',
-          'Your records were removed, but some background systems need another pass. ' +
-            'Please try again in a little while to finish.',
-        );
-      }
+      setSheetResult(
+        report.status === 'completed' ? { status: 'completed' } : { status: 'partial' },
+      );
     } catch (error) {
-      Alert.alert('Could not delete data', deletionFailureMessage(error, 'data'));
+      // Timeout-like failures must never claim "nothing was deleted": the
+      // server may already have committed. Offer reconcile-and-retry
+      // (the backend is idempotent, so retrying is safe).
+      setSheetResult(
+        isTimeoutLikeError(error)
+          ? {
+              status: 'failed',
+              message:
+                'The request timed out before confirming. Your data may ' +
+                'already be deleted on the server.',
+              retryable: true,
+            }
+          : {
+              status: 'failed',
+              message: deletionFailureMessage(error, 'data'),
+              retryable: true,
+            },
+      );
     } finally {
       deletingRef.current = false;
       setDeleting(null);
     }
   }, [deleting, queryClient]);
 
-  const confirmDeleteData = useCallback(() => {
+  const openDeleteDataSheet = useCallback(() => {
     if (deleting) return;
-    Alert.alert(
-      'Delete all my data?',
-      'This removes daily logs, medications, documents and cached health data ' +
-        'from this device and your account. Your profile stays. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          style: 'destructive',
-          onPress: () =>
-            Alert.alert('Final confirmation', 'Permanently delete all health data?', [
-              { text: 'Back', style: 'cancel' },
-              {
-                text: 'Delete everything',
-                style: 'destructive',
-                onPress: () => void runDeleteData(),
-              },
-            ]),
-        },
-      ],
-    );
-  }, [deleting, runDeleteData]);
+    setSheetResult(null);
+    setSheetMode('data');
+  }, [deleting]);
 
   const runDeleteAccount = useCallback(async () => {
     if (deleting || deletingRef.current) return;
@@ -286,56 +296,55 @@ export default function SettingsScreen() {
       const { report } = await deleteAccountCompletely();
       await savePhoto(null);
       queryClient.clear();
-      if (report.status === 'completed') {
-        Alert.alert('Account deleted', 'Your account and all data were removed.', [
-          {
-            text: 'Done',
-            onPress: () => {
-              logout().catch(() => {
-                Alert.alert('Sign-out needed', 'Please sign out to finish.');
-              });
-            },
-          },
-        ]);
-      } else {
-        Alert.alert(
-          'Partially deleted',
-          'Your account removal needs another pass to finish background systems. ' +
-            'Please try again in a little while. Your session stays active until it completes.',
-        );
-      }
+      setSheetResult(
+        report.status === 'completed' ? { status: 'completed' } : { status: 'partial' },
+      );
     } catch (error) {
-      Alert.alert('Could not delete account', deletionFailureMessage(error, 'account'));
+      setSheetResult(
+        isTimeoutLikeError(error)
+          ? {
+              status: 'failed',
+              message:
+                'The request timed out before confirming. Your account may ' +
+                'already be deleted on the server.',
+              retryable: true,
+            }
+          : {
+              status: 'failed',
+              message: deletionFailureMessage(error, 'account'),
+              retryable: true,
+            },
+      );
     } finally {
       deletingRef.current = false;
       setDeleting(null);
     }
-  }, [deleting, queryClient, logout, savePhoto]);
+  }, [deleting, queryClient, savePhoto]);
 
-  const confirmDeleteAccount = useCallback(() => {
+  const openDeleteAccountSheet = useCallback(() => {
     if (deleting) return;
-    Alert.alert(
-      'Delete account?',
-      'This permanently deletes your account, profile and all health data. ' +
-        'This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          style: 'destructive',
-          onPress: () =>
-            Alert.alert('Final confirmation', 'Permanently delete your account?', [
-              { text: 'Back', style: 'cancel' },
-              {
-                text: 'Delete account',
-                style: 'destructive',
-                onPress: () => void runDeleteAccount(),
-              },
-            ]),
-        },
-      ],
-    );
-  }, [deleting, runDeleteAccount]);
+    setSheetResult(null);
+    setSheetMode('account');
+  }, [deleting]);
+
+  const closeSheet = useCallback(() => {
+    // Account completed: leaving the sheet finishes sign-out, mirroring
+    // the previous Done-button flow.
+    if (
+      sheetMode === 'account' &&
+      sheetResult !== null &&
+      sheetResult.status === 'completed'
+    ) {
+      setSheetMode(null);
+      setSheetResult(null);
+      logout().catch(() => {
+        Alert.alert('Sign-out needed', 'Please sign out to finish.');
+      });
+      return;
+    }
+    setSheetMode(null);
+    setSheetResult(null);
+  }, [sheetMode, sheetResult, logout]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -522,7 +531,7 @@ export default function SettingsScreen() {
         <View style={styles.dangerCard}>
           <Pressable
             style={styles.dangerRow}
-            onPress={confirmDeleteData}
+            onPress={openDeleteDataSheet}
             accessibilityRole="button"
             accessibilityLabel="Delete all my data"
           >
@@ -537,7 +546,7 @@ export default function SettingsScreen() {
           <View style={styles.dangerDivider} />
           <Pressable
             style={styles.dangerRow}
-            onPress={confirmDeleteAccount}
+            onPress={openDeleteAccountSheet}
             accessibilityRole="button"
             accessibilityLabel="Delete account"
           >
@@ -551,6 +560,22 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
       </ScrollView>
+      <DeleteConfirmSheet
+        visible={sheetMode !== null}
+        mode={sheetMode ?? 'data'}
+        scopeLines={sheetMode === 'account' ? ACCOUNT_SCOPE : DATA_SCOPE}
+        running={deleting !== null}
+        result={sheetResult}
+        onConfirm={() => {
+          if (sheetMode === 'account') void runDeleteAccount();
+          else void runDeleteData();
+        }}
+        onRetry={() => {
+          if (sheetMode === 'account') void runDeleteAccount();
+          else void runDeleteData();
+        }}
+        onClose={closeSheet}
+      />
     </SafeAreaView>
   );
 }

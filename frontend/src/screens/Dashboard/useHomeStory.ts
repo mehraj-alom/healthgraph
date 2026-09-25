@@ -29,8 +29,64 @@ import {
 } from './homeData';
 import type { Medication, MedicationTakenEvent, DailyCheckInDetail } from '@/types';
 
-interface UseHomeStoryResult {
-  /** Recent health events across last 7 days, time-sorted descending. */
+/**
+ * In-flight server fallbacks keyed by patient + date. Concurrent load()
+ * calls (remounts, focus refetch racing initial load) share one request
+ * instead of firing duplicate GETs for the same day.
+ */
+const fallbackInflight = new Map<string, Promise<DailyCheckInDetail | null>>();
+
+/**
+ * Settled fallback results, reused briefly. Sequential load() calls (mount
+ * then focus refetch seconds later) must not re-GET the same day: the
+ * local-first read above already prefers fresh SQLite rows, so this cache
+ * only ever serves the fallback path. 60s keeps it stale-safe.
+ */
+const fallbackCache = new Map<string, { at: number; value: DailyCheckInDetail | null }>();
+const FALLBACK_CACHE_MS = 60_000;
+
+function fetchTodayFallback(
+  patientId: string,
+  today: string,
+): Promise<DailyCheckInDetail | null> {
+  const key = `${patientId}:${today}`;
+  const cached = fallbackCache.get(key);
+  if (cached && Date.now() - cached.at < FALLBACK_CACHE_MS) {
+    return Promise.resolve(cached.value);
+  }
+  const running = fallbackInflight.get(key);
+  if (running) return running;
+  const task = (async (): Promise<DailyCheckInDetail | null> => {
+    try {
+      const serverDetail = await api.get<DailyCheckInDetail>(
+        `/api/v1/logs/daily-checkin/${today}`,
+      );
+      await dbHydrateDailyLog(patientId, serverDetail).catch(() => {});
+      const detail =
+        (await dbGetDailyLogDetail(patientId, today).catch(() => null)) ??
+        serverDetail;
+      if (__DEV__) console.log(`[HomeStory] today recovered from server date=${today}`);
+      fallbackCache.set(key, { at: Date.now(), value: detail });
+      return detail;
+    } catch (e: any) {
+      // 404 (nothing logged today) or offline — detail stays null.
+      // Status only (never bodies): tells wipe-recovery apart from
+      // no-log and no-network when reading dev logs.
+      if (__DEV__) {
+        const status = e?.response?.status ?? 'none';
+        console.log(`[HomeStory] today server fallback missed date=${today} status=${status}`);
+      }
+      // Negative results are NOT cached: a retry after logging must refetch.
+      return null;
+    } finally {
+      fallbackInflight.delete(key);
+    }
+  })();
+  fallbackInflight.set(key, task);
+  return task;
+}
+
+interface UseHomeStoryResult {  /** Recent health events across last 7 days, time-sorted descending. */
   story: HomeStoryItem[];
   /** Today's water intake in ml (from today's daily log detail). */
   water: number | null;
@@ -72,24 +128,7 @@ export function useHomeStory(): UseHomeStoryResult {
       // Local pending edits always win: hydrate skips non-synced rows.
       let detail = await dbGetDailyLogDetail(patientId, today).catch(() => null);
       if (!detail) {
-        try {
-          const serverDetail = await api.get<DailyCheckInDetail>(
-            `/api/v1/logs/daily-checkin/${today}`,
-          );
-          await dbHydrateDailyLog(patientId, serverDetail).catch(() => {});
-          detail =
-            (await dbGetDailyLogDetail(patientId, today).catch(() => null)) ??
-            serverDetail;
-          if (__DEV__) console.log(`[HomeStory] today recovered from server date=${today}`);
-        } catch (e: any) {
-          // 404 (nothing logged today) or offline — detail stays null.
-          // Status only (never bodies): tells wipe-recovery apart from
-          // no-log and no-network when reading dev logs.
-          if (__DEV__) {
-            const status = e?.response?.status ?? 'none';
-            console.log(`[HomeStory] today server fallback missed date=${today} status=${status}`);
-          }
-        }
+        detail = await fetchTodayFallback(patientId, today);
       }
 
       // ── Active medications (local DB, non-blocking) ──

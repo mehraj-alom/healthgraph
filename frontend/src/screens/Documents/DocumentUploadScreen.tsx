@@ -98,6 +98,7 @@ export default function DocumentUploadScreen() {
     subscribeStage,
     dismissProcessing,
     getActiveProcessing,
+    isProcessing: anotherUploadRunning,
   } = useDocuments();
 
   // ---- File picker state ----
@@ -175,9 +176,11 @@ export default function DocumentUploadScreen() {
     }
   }, []);
 
-  // ---- Upload ----
+  // ---- Upload (single active upload: the button stays disabled while
+  // any document is mid-pipeline, and the context guard below rejects a
+  // second start with a friendly message instead of a duplicate entry) ----
   const handleUpload = useCallback(() => {
-    if (!selectedFile) return;
+    if (!selectedFile || anotherUploadRunning) return;
     setUploadError(null);
     uploadAndProcess(
       selectedFile,
@@ -190,7 +193,7 @@ export default function DocumentUploadScreen() {
         setUploadError(error);
       },
     );
-  }, [selectedFile, uploadAndProcess]);
+  }, [selectedFile, anotherUploadRunning, uploadAndProcess]);
 
   // ---- Dismiss on completion ----
   const handleDone = useCallback(() => {
@@ -397,7 +400,7 @@ export default function DocumentUploadScreen() {
           <Button
             title="Upload & Process"
             onPress={handleUpload}
-            disabled={!selectedFile}
+            disabled={!selectedFile || anotherUploadRunning}
             fullWidth
           />
           <Button
@@ -407,6 +410,11 @@ export default function DocumentUploadScreen() {
             fullWidth
           />
         </View>
+        {anotherUploadRunning ? (
+          <Text style={styles.hint}>
+            An upload is already in progress. It will finish automatically.
+          </Text>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

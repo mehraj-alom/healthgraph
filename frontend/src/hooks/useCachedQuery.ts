@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import { waitForIdentityReady } from '@/services/backendIdentity';
+import { subscribeDataRefresh } from '@/services/dataRefresh';
 import {
   CACHE_TTL,
   getProfileCache,
@@ -132,7 +134,19 @@ export function useCachedQuery<T>({
         }
       }
 
-      // Fetch fresh data from the network
+      // Fetch fresh data from the network — but only once backend identity
+      // is established. Firing a patient-scoped query with a valid Firebase
+      // token before POST /auth/sync commits the Patient row yields a 403
+      // the user never caused (startup race). SQLite reads above are
+      // unaffected: offline-first still works with no identity at all.
+      await waitForIdentityReady().catch(() => {});
+      if (getCachedPatientId() === null) {
+        if (mountedRef.current && fetchId === fetchCountRef.current) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
+        return;
+      }
       const freshData = await queryFn();
       
       if (mountedRef.current && fetchId === fetchCountRef.current) {
@@ -174,6 +188,11 @@ export function useCachedQuery<T>({
   useEffect(() => {
     fetchData(false);
   }, [fetchData]);
+
+  // Backend identity lands after mount (POST /sync commits the Patient
+  // row): a gated-skipped fetch above must retry once sync settles, or
+  // cold-start data would stay empty until the next mount/refresh.
+  useEffect(() => subscribeDataRefresh(() => fetchData(false)), [fetchData]);
 
   // Refetch function for pull-to-refresh
   const refetch = useCallback(async () => {

@@ -60,6 +60,7 @@ import HGraphMap, { type HMetric } from '@/components/home/HGraphMap';
 import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
 
 import { BrandLogo } from '@/components/BrandLogo';
+import { ProcessingBanner } from '@/components/ProcessingBanner';
 import { consumeDataRefreshRequest } from '@/services/dataRefresh';
 import { useLocalHeartRate } from '@/hooks/useLocalHeartRate';
 import { useDialMetrics } from '@/hooks/useDialMetrics';
@@ -1332,7 +1333,12 @@ export default function HealthDashboardScreen() {
         data={feed}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        ListHeaderComponent={listHeader}
+        ListHeaderComponent={
+          <>
+            <ProcessingBanner />
+            {listHeader}
+          </>
+        }
         ListEmptyComponent={listEmpty}
         ListFooterComponent={feedFooter}
         contentContainerStyle={styles.listContent}

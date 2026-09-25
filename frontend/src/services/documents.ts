@@ -228,10 +228,32 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
+ * Canonical document-status interpretation — the single source of truth
+ * every screen must use so status never disagrees between views.
+ *
+ * - Processing: genuinely non-terminal backend states. EXTRACTED counts:
+ *   the raw extraction committed but de-identification, vector indexing,
+ *   timeline mapping and anatomical recording may still be running.
+ * - Complete: ONLY backend-reported COMPLETED. Never claim success earlier.
+ * - Failed: ONLY backend-reported FAILED / FAILED_TRIAGE. Transient
+ *   client/network trouble must never render as failed.
+ */
+export function isDocumentProcessing(status: string): boolean {
+  return status === 'UPLOADED' || status === 'PROCESSING' || status === 'EXTRACTED';
+}
+
+export function isDocumentComplete(status: string): boolean {
+  return status === 'COMPLETED';
+}
+
+export function isDocumentFailed(status: string): boolean {
+  return status === 'FAILED' || status === 'FAILED_TRIAGE';
+}
+
+/**
  * Map document status to a human-readable label.
  */
-export function statusLabel(status: string): string {
-  switch (status) {
+export function statusLabel(status: string): string {  switch (status) {
     case 'UPLOADED':
       return 'Uploaded';
     case 'PROCESSING':

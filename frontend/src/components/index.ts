@@ -19,6 +19,12 @@ export { AmbientBackground } from './AmbientBackground';
 export { UmbrellaTabBar } from './UmbrellaTabBar';
 export { LogCelebration } from './LogCelebration';
 export { ProcessingBadge } from './ProcessingBadge';
+export { ProcessingBanner } from './ProcessingBanner';
+export {
+  DeleteConfirmSheet,
+  type DeleteMode,
+  type DeleteResult,
+} from './DeleteConfirmSheet';
 
 // ── Reusable layout & feedback primitives ───────────────────────────────────
 export { Skeleton, SkeletonList, SkeletonCard } from './Skeleton';

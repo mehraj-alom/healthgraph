@@ -20,7 +20,10 @@
       },
       "package": "com.medgraph.app",
       "softwareKeyboardLayoutMode": "resize",
-      "permissions": ["POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM"]
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -49,7 +52,8 @@
       [
         "expo-build-properties"
       ],
-      "./plugins/withArm64Abi.js"
+      "./plugins/withArm64Abi.js",
+      "expo-sharing"
     ],
     "extra": {
       "eas": {

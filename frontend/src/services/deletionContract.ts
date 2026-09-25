@@ -46,6 +46,20 @@ export function deletionStatusOf(error: unknown): number | undefined {
 }
 
 /**
+ * True for timeout/network-style failures where the server may already
+ * have committed the erasure (axios aborts do not cancel server work).
+ * Callers must offer reconcile-and-retry, never claim "nothing happened".
+ */
+export function isTimeoutLikeError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === 'ECONNABORTED' || code === 'ERR_NETWORK' || code === 'ETIMEDOUT') {
+    return true;
+  }
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  return /timeout|timed out|network error|network request failed/i.test(msg);
+}
+
+/**
  * User-facing failure copy for a deletion error. A 404 here is precise:
  * these routes did not exist on the server that answered, so the user
  * needs a backend update — not another retry against their connection.
@@ -62,4 +76,21 @@ export function deletionFailureMessage(
         'Update the backend and try again — nothing was deleted.';
   }
   return 'Nothing was deleted. Check your connection and try again.';
+}
+
+/**
+ * Destructive-confirmation contract (DeleteConfirmSheet). Exact,
+ * case-sensitive match; the 20s countdown is a client-side safeguard —
+ * the backend remains the authorization boundary.
+ */
+export const DELETE_CONFIRM_PHRASE = 'DELETE';
+export const DELETE_COUNTDOWN_SECONDS = 20;
+
+/** Exact, case-sensitive match. Empty/whitespace input never matches. */
+export function isDeleteConfirmed(input: string): boolean {
+  return input === DELETE_CONFIRM_PHRASE;
+}
+
+export function countdownLabel(secondsLeft: number): string {
+  return secondsLeft > 0 ? `Wait ${secondsLeft}s…` : 'Delete now';
 }

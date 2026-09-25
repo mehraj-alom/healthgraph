@@ -17,12 +17,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import * as Sharing from 'expo-sharing';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import { Button, Card } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { useDocuments, type DocumentsContextValue } from '@/context/DocumentsContext';
 import {
   getDocument,
+  isDocumentProcessing,
   statusLabel,
   documentTypeLabel,
   cachedFileExists,
@@ -43,6 +45,24 @@ import type {
 // ---------------------------------------------------------------------------
 
 type RouteParams = RouteProp<RootStackParamList, 'DocumentDetail'>;
+
+/**
+ * Where a resolved file should open. Android WebView cannot render PDFs
+ * (blank page, no error), so PDFs and unknown types go to the OS viewer
+ * via the share sheet; images render inline. Pure for testability.
+ */
+export function viewerForUri(uri: string): 'webview' | 'share' {
+  const lower = uri.toLowerCase();
+  return (
+    lower.endsWith('.png') ||
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.webp') ||
+    lower.endsWith('.gif')
+  )
+    ? 'webview'
+    : 'share';
+}
 
 interface LabSection {
   section_title?: string;
@@ -83,17 +103,31 @@ export default function DocumentDetailScreen() {
     setFileError(null);
     try {
       // 1. Use the on-device copy when it exists (works offline).
+      let uri: string | null = null;
       if (await cachedFileExists(document.local_uri)) {
-        setViewerUri(document.local_uri as string);
-        return;
+        uri = document.local_uri as string;
+      } else {
+        // 2. Otherwise download once, remember the path, then open.
+        setFileLoading(true);
+        const patientId = getCachedPatientId();
+        const downloaded = await downloadDocumentFile(document.document_id, document.file_hash);
+        if (patientId) {
+          await setDocumentLocalUri(patientId, document.document_id, downloaded).catch(() => {});
+          setDocument((prev) => (prev ? { ...prev, local_uri: downloaded } : prev));
+        }
+        uri = downloaded;
       }
-      // 2. Otherwise download once, remember the path, then open.
-      setFileLoading(true);
-      const patientId = getCachedPatientId();
-      const uri = await downloadDocumentFile(document.document_id, document.file_hash);
-      if (patientId) {
-        await setDocumentLocalUri(patientId, document.document_id, uri).catch(() => {});
-        setDocument((prev) => (prev ? { ...prev, local_uri: uri } : prev));
+      // 3. PDFs (and unknown types) go to the OS viewer — Android WebView
+      // renders a blank page for PDFs with no error. Images stay inline.
+      // The file is on-device and private in both paths.
+      if (viewerForUri(uri) === 'share') {
+        setFileLoading(true);
+        if (!(await Sharing.isAvailableAsync())) {
+          setFileError('No app on this device can open this file type.');
+          return;
+        }
+        await Sharing.shareAsync(uri, { dialogTitle: 'Open original document' });
+        return;
       }
       setViewerUri(uri);
     } catch {
@@ -185,9 +219,11 @@ export default function DocumentDetailScreen() {
   const patient = docData?.patient;
   const title = docData?.title || docData?.document_type || 'Medical Document';
   const docType = extraction?.gateway_json?.document_type;
-  const isProcessing =
-    document.status === 'UPLOADED' ||
-    document.status === 'PROCESSING';
+  // Canonical status interpretation: EXTRACTED means the raw extraction
+  // committed but de-identification, vector indexing, timeline mapping and
+  // anatomical recording may still be running — genuinely non-terminal, so
+  // the spinner stays until the backend reports COMPLETED or FAILED.
+  const isProcessing = isDocumentProcessing(document.status);
 
   // -----------------------------------------------------------------------
   // Render

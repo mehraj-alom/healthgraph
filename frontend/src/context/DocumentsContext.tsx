@@ -145,6 +145,18 @@ const TERMINAL_STATUSES = new Set(['COMPLETED', 'FAILED', 'FAILED_TRIAGE']);
 const isTerminal = (stage: ProcessingStage): boolean =>
   stage === 'completed' || stage === 'failed' || stage === 'failed_triage';
 
+/**
+ * True when any entry is still mid-pipeline. Pure so the single-upload
+ * guard and its regression test share one implementation.
+ */
+export function hasActiveUpload(entries: readonly { stage: ProcessingStage }[]): boolean {
+  return entries.some((e) => !isTerminal(e.stage));
+}
+
+/** Shown when a second upload starts while one is still running. */
+export const BUSY_UPLOAD_MSG =
+  'An upload is already in progress. Please wait for it to finish before starting another.';
+
 // ---------------------------------------------------------------------------
 // Friendly copy for paused/queued processing.
 // Shown instead of raw HTTP details or an eternal spinner when the
@@ -331,6 +343,13 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       onUploaded?: (docId: string) => void,
       onError?: (message: string) => void,
     ) => {
+      // One upload at a time: a second start while anything is mid-pipeline
+      // would create a duplicate entry, a duplicate poll loop, and a
+      // duplicate server-side document row.
+      if (hasActiveUpload(activeProcessingRef.current)) {
+        onError?.(BUSY_UPLOAD_MSG);
+        return;
+      }
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       addProcessingEntry({

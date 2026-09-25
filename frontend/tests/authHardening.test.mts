@@ -69,6 +69,15 @@ describe('auth hardening wiring', () => {
     assert.ok(api.includes('10.22.93.11:8000'), 'dev LAN fallback preserved');
   });
 
+  test('patient queries wait for backend identity (no startup 403)', () => {
+    const hook = src('src/hooks/useCachedQuery.ts');
+    assert.ok(hook.includes('waitForIdentityReady'), 'waits for sync before network');
+    assert.ok(hook.includes('getCachedPatientId() === null'), 'skips network without a patient row');
+    assert.ok(hook.includes('subscribeDataRefresh'), 'refetches once identity lands');
+    const auth = src('src/context/AuthContext.tsx');
+    assert.ok(auth.includes('requestDataRefresh()'), 'sync completion nudges gated queries');
+  });
+
   test('SecureStore chunk helpers round-trip without native modules', async () => {
     const { splitValue, joinParts, CHUNK_SIZE } = await import('../src/services/secureChunks.ts');
     assert.equal(typeof CHUNK_SIZE, 'number');
