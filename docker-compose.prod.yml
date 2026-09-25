@@ -55,6 +55,7 @@ services:
     env_file:
       - /opt/healthgraph/backend.env
     volumes:
+      - /opt/healthgraph/firebase_credentials.json:/app/firebase_credentials.json:ro
       - document_storage:/app/storage
     depends_on:
       db:
@@ -84,6 +85,7 @@ services:
     env_file:
       - /opt/healthgraph/backend.env
     volumes:
+      - /opt/healthgraph/firebase_credentials.json:/app/firebase_credentials.json:ro
       - document_storage:/app/storage
     depends_on:
       db:
@@ -112,6 +114,7 @@ services:
     env_file:
       - /opt/healthgraph/backend.env
     volumes:
+      - /opt/healthgraph/firebase_credentials.json:/app/firebase_credentials.json:ro
       - beatdata:/app/beatdata
     depends_on:
       redis:
