@@ -114,6 +114,78 @@ describe('processing progress copy', () => {
     assert.ok(story.includes('FALLBACK_CACHE_MS'), 'short result cache for sequential calls');
   });
 
+  test('upload policy: retry only transport failures, reconcile recent rows', async () => {
+    const policy = await import('../src/services/uploadPolicy.ts');
+    assert.equal(policy.UPLOAD_TIMEOUT_MS, 600000, '10-minute upload window, not 120s');
+    assert.equal(policy.UPLOAD_MAX_ATTEMPTS, 2, 'initial try plus one retry');
+    // Retriable: timeouts and resets with no server verdict.
+    assert.equal(policy.isRetriableUploadError({ code: 'ECONNABORTED' }), true);
+    assert.equal(policy.isRetriableUploadError({ code: 'ERR_NETWORK' }), true);
+    assert.equal(policy.isRetriableUploadError(new Error('timeout of 600000ms exceeded')), true);
+    assert.equal(policy.isRetriableUploadError(new Error('Network Error')), true);
+    // Never blindly retry a server decision.
+    assert.equal(policy.isRetriableUploadError({ response: { status: 400 } }), false);
+    assert.equal(policy.isRetriableUploadError({ response: { status: 503 } }), false);
+    assert.equal(policy.isRetriableUploadError({ response: { status: 500 } }), false);
+    assert.equal(policy.isRetriableUploadError(new Error('Validation failed')), false);
+    // Reconcile prefers youngest non-terminal, falls back to terminal.
+    const now = Date.parse('2026-09-25T12:00:00Z');
+    const iso = (minsAgo: number) => new Date(now - minsAgo * 60000).toISOString();
+    assert.equal(
+      policy.matchRecentUpload(
+        [
+          { document_id: 'old', created_at: iso(30), status: 'UPLOADED' },
+          { document_id: 'mid', created_at: iso(5), status: 'COMPLETED' },
+          { document_id: 'young', created_at: iso(2), status: 'PROCESSING' },
+        ],
+        now,
+      ),
+      'young',
+    );
+    assert.equal(
+      policy.matchRecentUpload(
+        [{ document_id: 'done', created_at: iso(4), status: 'COMPLETED' }],
+        now,
+      ),
+      'done',
+    );
+    assert.equal(policy.matchRecentUpload([], now), null, 'empty stays failed');
+    assert.equal(
+      policy.matchRecentUpload(
+        [{ document_id: 'stale', created_at: iso(60), status: 'UPLOADED' }],
+        now,
+      ),
+      null,
+      'hour-old rows never adopted',
+    );
+    assert.equal(
+      policy.matchRecentUpload(
+        [{ document_id: 'future', created_at: new Date(now + 3600000).toISOString() }],
+        now,
+      ),
+      null,
+      'future-dated rows never adopted',
+    );
+    assert.equal(
+      policy.matchRecentUpload(
+        [{ document_id: 'bad-date', created_at: 'not-a-date' }],
+        now,
+      ),
+      null,
+      'undateable rows never adopted',
+    );
+  });
+
+  test('upload flow retries once then reconciles instead of false-failed', () => {
+    const ctx = src('src/context/DocumentsContext.tsx');
+    assert.ok(ctx.includes('retrying once'), 'single retry logged');
+    assert.ok(ctx.includes('matchRecentUpload(recent, Date.now())'), 'reconcile before failed');
+    assert.ok(ctx.includes('reconciled timed-out upload'), 'adoption logged distinctly');
+    assert.ok(ctx.includes('onProgress: reportProgress'), 'progress wired into upload');
+    const banner = src('src/components/ProcessingBanner.tsx');
+    assert.ok(banner.includes('current.progress'), 'banner renders live percent');
+  });
+
   test('canonical status: EXTRACTED is processing, COMPLETED alone is done', () => {
     const docs = src('src/services/documents.ts');
     assert.ok(docs.includes('isDocumentProcessing'), 'processing helper exists');

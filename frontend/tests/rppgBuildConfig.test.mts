@@ -31,8 +31,6 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 
-import { ASSET_RELEASE_TAG } from '../src/services/assetHost.ts';
-
 function repoFile(rel: string): string {
   return new URL(rel, import.meta.url).pathname;
 }
@@ -45,8 +43,9 @@ function readJson(rel: string): unknown {
   return JSON.parse(readText(rel)) as unknown;
 }
 
-const EXPECTED_ASSET_BASE =
-  `https://github.com/mehraj-alom/healthgraph-assets/releases/download/${ASSET_RELEASE_TAG}`;
+const EXPECTED_ASSET_BASE = 'https://api.healthgraph.shop/assets';
+// NOTE: the legacy GitHub Release host (ASSET_RELEASE_TAG) is superseded:
+// runtime assets now serve from the production VPS (verified 200).
 
 // ============================================================================
 // app.json — native linkage plugins + no bundled-model pattern

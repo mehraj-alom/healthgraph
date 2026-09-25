@@ -37,10 +37,16 @@ export const BANNER_STEPS: ProcessingStage[] = [
 
 /** User-facing copy per stage. `extracted` means extraction finished and
  *  de-identification is running — the pipeline order in the backend. */
-export function bannerCopy(stage: ProcessingStage, fileName: string): string {
+export function bannerCopy(
+  stage: ProcessingStage,
+  fileName: string,
+  progress?: number,
+): string {
   switch (stage) {
     case 'uploading':
-      return `Uploading ${fileName}…`;
+      return progress !== undefined && progress !== null
+        ? `Uploading ${fileName}… ${progress}%`
+        : `Uploading ${fileName}…`;
     case 'uploaded':
       return 'Upload complete — starting analysis…';
     case 'processing':
@@ -106,7 +112,7 @@ export function ProcessingBanner() {
             )}
             <View style={styles.textCol}>
               <Text style={styles.title} numberOfLines={2}>
-                {bannerCopy(current.stage, current.fileName)}
+                {bannerCopy(current.stage, current.fileName, current.progress)}
               </Text>
               {active.length > 1 ? (
                 <Text style={styles.count}>

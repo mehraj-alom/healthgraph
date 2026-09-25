@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { api, getApiBaseUrl } from '@/services/api';
 import { auth } from '@/context/AuthContext';
+import { UPLOAD_TIMEOUT_MS } from './uploadPolicy';
 import type {
   DocumentListItem,
   DocumentExtraction,
@@ -14,6 +15,13 @@ import type {
  */
 export async function uploadDocument(
   file: { uri: string; name: string; type: string },
+  options?: {
+    /** Per-request timeout ms. Body upload on mobile uplinks is slow:
+     *  the shared 120s default trips on multi-MB PDFs. Default 10 min. */
+    timeoutMs?: number;
+    /** 0..1 upload progress for live UI. Called on upload events only. */
+    onProgress?: (fraction: number) => void;
+  },
 ): Promise<DocumentListItem> {
   if (__DEV__) console.log(`[Upload] ▶ POST /api/v1/documents/upload name=${file.name} type=${file.type}`);
   const formData = new FormData();
@@ -30,7 +38,15 @@ export async function uploadDocument(
     '/api/v1/documents/upload',
     formData,
     {
-      timeout: 120000,
+      timeout: options?.timeoutMs ?? UPLOAD_TIMEOUT_MS,
+      onUploadProgress: options?.onProgress
+        ? (event) => {
+            const total = event.total ?? 0;
+            if (total > 0) {
+              options.onProgress?.(Math.min(1, Math.max(0, event.loaded / total)));
+            }
+          }
+        : undefined,
     },
   );
 
@@ -40,6 +56,20 @@ export async function uploadDocument(
   );
   return doc;
 }
+
+/**
+ * Upload retry/reconcile policy. Single source of truth lives in
+ * uploadPolicy (dependency-free, unit tested); re-exported here so call
+ * sites keep one import.
+ */
+export {
+  isRetriableUploadError,
+  matchRecentUpload,
+  UPLOAD_TIMEOUT_MS,
+  UPLOAD_MAX_ATTEMPTS,
+  RECONCILE_MAX_AGE_MS,
+} from './uploadPolicy';
+export type { RecentUploadCandidate } from './uploadPolicy';
 
 /**
  * List all documents for the authenticated patient (newest first).

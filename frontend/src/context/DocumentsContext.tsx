@@ -33,7 +33,10 @@ import { useAuth } from '@/context/AuthContext';
 import {
   uploadDocument as apiUpload,
   listDocuments,
+  getDocument,
   getDocumentExtraction,
+  isRetriableUploadError,
+  matchRecentUpload,
   pollDocumentStatus,
   cacheLocalCopy,
 } from '@/services/documents';
@@ -68,6 +71,8 @@ export interface ActiveProcessing {
   fileName: string;
   stage: ProcessingStage;
   startedAt: number;
+  /** 0..100 body-upload percent (uploading stage only). */
+  progress?: number;
   error?: string;
   /**
    * Friendly, user-facing note (e.g. processing paused). Optional so all
@@ -362,10 +367,18 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
       // Fire-and-forget — the async block runs independently of any component.
       (async () => {
         let resolvedId: string = tempId; // tracks which ID is current
-        try {
-          // 1. Upload
-          console.log(`[UploadFlow] ▶ Starting upload: ${file.name}`);
-          const doc = await apiUpload(file);
+        // Upload progress reporter, throttled to whole-percent changes so
+        // poll-speed re-renders never happen on the progress path.
+        let lastPct = -1;
+        const reportProgress = (fraction: number) => {
+          const pct = Math.round(fraction * 100);
+          if (pct === lastPct) return;
+          lastPct = pct;
+          updateEntry(tempId, { progress: pct });
+          notifyStage(tempId, 'uploading');
+        };
+        // Steps 1b–4 shared by the fresh-upload and adopted paths below.
+        const trackUpload = async (doc: DocumentListItem) => {
           const realId = doc.document_id;
           resolvedId = realId;
           console.log(`[UploadFlow] ✓ Upload succeeded → document_id=${realId}`);
@@ -442,6 +455,22 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
             notifyStage(realId, stageFromStatus(lastStatus));
           }
           await refetchDocuments();
+        };
+        try {
+          // 1. Upload. One automatic retry on transport failure only: the
+          // backend dedups by (file_hash, patient_id), so retrying the
+          // identical file cannot create a duplicate row. Any HTTP response
+          // is a server verdict and is never retried blindly.
+          console.log(`[UploadFlow] ▶ Starting upload: ${file.name}`);
+          let doc: DocumentListItem;
+          try {
+            doc = await apiUpload(file, { onProgress: reportProgress });
+          } catch (uploadErr: unknown) {
+            if (!isRetriableUploadError(uploadErr)) throw uploadErr;
+            console.log('[UploadFlow] ↻ transport failure, retrying once');
+            doc = await apiUpload(file, { onProgress: reportProgress });
+          }
+          await trackUpload(doc);
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : 'Upload failed';
           const code = (err as any)?.code ?? 'UNKNOWN';
@@ -459,6 +488,25 @@ export function DocumentsProvider({ children }: { children: ReactNode }) {
             notifyStage(resolvedId, 'uploaded');
             await refetchDocuments().catch(() => {});
             return;
+          }
+          // No server verdict ever arrived (both attempts failed at transport
+          // level). Reconcile before calling it failed: the bytes may have
+          // landed server-side while the response was lost. matchRecentUpload
+          // only ever adopts a minutes-old row, and trackUpload re-verifies
+          // its live status before polling.
+          if (resolvedId === tempId && isRetriableUploadError(err)) {
+            try {
+              const recent = await listDocuments();
+              const adoptedId = matchRecentUpload(recent, Date.now());
+              if (adoptedId) {
+                console.log(`[UploadFlow] ↻ reconciled timed-out upload → ${adoptedId}`);
+                const adopted = await getDocument(adoptedId);
+                await trackUpload(adopted);
+                return;
+              }
+            } catch {
+              // Reconcile failed — fall through to the honest failure below.
+            }
           }
           // Upload never completed. A 503 means the server DID persist the
           // document but the processing handoff failed — say so plainly
