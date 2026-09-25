@@ -386,9 +386,10 @@ def get_health_graph(
          collect(DISTINCT fe) AS food_entries,
          collect(DISTINCT pp) AS ppg
 
-    // Merge medications from both paths
+    // Merge medications from both paths (lists combine in this pure WITH —
+    // no aggregation here, so list concatenation is legal).
     WITH p, observations, structures, medication_events, med_requests, conditions, visits, statements, measurements, med_versions, sleep_eps, activities, nutrition, food_scans, food_entries, ppg,
-         documents + documents2 AS all_docs,
+         documents, documents2,
          timeline_events1 + timeline_events2 AS all_te,
          medications1 + medications2 AS all_meds,
          concepts1 + concepts2 AS all_concepts,
@@ -397,12 +398,18 @@ def get_health_graph(
     // P1: documents linked from conditions / medication requests (patient-
     // scoped through the patient's own nodes) merge into the doc set.
     // P2: same for measurement documents.
+    // GQL note: an expression alias (documents + documents2) may not appear
+    // inside a later aggregation, so the extra doc sets are collected here
+    // as plain collect() aliases and combined in the pure WITH below.
     OPTIONAL MATCH (p)-[:HAS_CONDITION]->(cd1:ConditionOccurrence)-[:DOCUMENTED_IN]->(cdd:Document)
     OPTIONAL MATCH (p)-[:HAS_MEDICATION_REQUEST]->(reqd:MedicationRequest)-[:DOCUMENTED_IN]->(reqdd:Document)
     OPTIONAL MATCH (p)-[:HAS_MEASUREMENT]->(mdm:Measurement)-[:DOCUMENTED_IN]->(mdd:Document)
     WITH p, observations, structures, medication_events, med_requests, conditions, visits, statements, measurements, med_versions, sleep_eps, activities, nutrition, food_scans, food_entries, ppg,
+         all_te, all_meds, all_concepts, all_canon_meds, documents, documents2,
+         collect(DISTINCT cdd) AS cdds, collect(DISTINCT reqdd) AS reqdds, collect(DISTINCT mdd) AS mdds
+    WITH p, observations, structures, medication_events, med_requests, conditions, visits, statements, measurements, med_versions, sleep_eps, activities, nutrition, food_scans, food_entries, ppg,
          all_te, all_meds, all_concepts, all_canon_meds,
-         all_docs + collect(DISTINCT cdd) + collect(DISTINCT reqdd) + collect(DISTINCT mdd) AS all_docs2
+         documents + documents2 + cdds + reqdds + mdds AS all_docs2
 
     // Build relationship list — ONLY patient-owned relationships
     // SECURITY: Each OPTIONAL MATCH must filter NULLs before collecting.
@@ -2182,7 +2189,8 @@ def get_node_detail(
         WITH p, target, patient_obs, collect(DISTINCT d) AS patient_docs_legacy
         OPTIONAL MATCH (p)-[:HAS_OBSERVATION]->(o2b:Observation)-[:DOCUMENTED_IN]->(d2:Document)
         WHERE o2b IN patient_obs
-        WITH p, target, patient_obs, patient_docs_legacy + collect(DISTINCT d2) AS patient_docs
+        WITH p, target, patient_obs, patient_docs_legacy, collect(DISTINCT d2) AS patient_docs_new
+        WITH p, target, patient_obs, patient_docs_legacy + patient_docs_new AS patient_docs
 
         // Get timeline events through patient's observations only
         OPTIONAL MATCH (p)-[:HAS_OBSERVATION]->(o3:Observation)-[:LOGGED_ON]->(te:TimelineEvent)

@@ -133,6 +133,23 @@ def _db_init() -> None:
         raise
     finally:
         db.close()
+    # Anatomical reference rows are FK targets for pipeline projections
+    # (record_anatomical_observation). A fresh database without them fails
+    # every document carrying an unmapped observation with an FK violation
+    # AFTER extraction commits — the exact "extraction visible but FAILED"
+    # inconsistency. The seeder is idempotent (merge/upsert) and manages
+    # its own session.
+    try:
+        from scripts.seed_anatomical_structures import seed_anatomical_structures
+
+        seed_anatomical_structures()
+    except SystemExit:
+        raise
+    except Exception:
+        logger.warning(
+            "Anatomical structures seed skipped; documents with unmapped "
+            "observations may fail at the anatomical step until seeded."
+        )
     _done("hooks.seed", _marker("hooks.seed.done"))
 
 

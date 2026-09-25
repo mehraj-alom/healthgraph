@@ -79,6 +79,27 @@ def _document_deleted_or_gone(db, document_id) -> bool:
     return row[0] == "DELETED"
 
 
+def _record_anatomical_observations(db, observations, document_id_str) -> tuple[int, int]:
+    """Record anatomical observations, one SAVEPOINT each.
+
+    Returns (recorded, failed). A single bad structure reference rolls back
+    to its savepoint only — it can never poison the session and fail the
+    whole document after extraction already committed.
+    """
+    recorded = 0
+    failed = 0
+    for obs in observations:
+        try:
+            with db.begin_nested():
+                record_anatomical_observation(db, obs, auto_commit=False)
+            _log("info", f"Recorded anatomical observation {obs.observation_id} for document {document_id_str}.", document_id_str)
+            recorded += 1
+        except Exception as e:
+            failed += 1
+            _log("error", f"Failed to record anatomical observation {obs.observation_id} ({type(e).__name__}).", document_id_str)
+    return recorded, failed
+
+
 @celery_app.task(name="ingestion_tasks.process_document", bind=True, max_retries=0)
 def process_document_pipeline(self, document_id_str: str):
     db = SessionLocal()
@@ -197,13 +218,12 @@ def process_document_pipeline(self, document_id_str: str):
             return
         events_created, observations_created = ExtractionMapper.map_to_timeline(db, document.document_id)
 
-        # Record anatomical observations to populate 3D body state and Neo4j outbox
-        for obs in observations_created:
-            try:
-                record_anatomical_observation(db, obs, auto_commit=False)
-                _log("info", f"Recorded anatomical observation {obs.observation_id} for document {document_id_str}.", document_id_str)
-            except Exception as e:
-                _log("error", f"Failed to record anatomical observation {obs.observation_id} ({type(e).__name__}).", document_id_str)
+        # Record anatomical observations to populate 3D body state and Neo4j outbox.
+        # _record_anatomical_observations isolates each row in a SAVEPOINT so
+        # one bad structure reference can never fail the whole document AFTER
+        # extraction already committed (the "extraction visible but FAILED"
+        # inconsistency).
+        _record_anatomical_observations(db, observations_created, document_id_str)
 
         document.status = "COMPLETED"
         db.commit()
