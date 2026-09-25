@@ -86,6 +86,44 @@ jobs:
             "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/27.1.12297006" >> "${GITHUB_ENV}"
 
+      - name: Free runner disk (safe set, build untouched)
+        run: |
+          set -euo pipefail
+          echo '--- disk BEFORE cleanup ---'
+          df -h / | tail -1
+          # Preinstalled toolchains unrelated to this build (multi-GB).
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup 2>/dev/null || true
+          rm -rf "$HOME/.cabal" "$HOME/.ghcup" 2>/dev/null || true
+          sudo rm -rf /usr/share/powershell /opt/microsoft/powershell 2>/dev/null || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          sudo docker system prune -af > /dev/null 2>&1 || true
+          sudo apt-get clean 2>/dev/null || true
+
+      - name: Prune Android SDK to pinned + in-use set
+        run: |
+          set -euo pipefail
+          # Keep ONLY: platform-tools, cmdline-tools, licenses,
+          # platforms android-36/35, build-tools 36.0.0/35.0.0,
+          # NDK 27.1.12297006 (pinned) + 27.0.12077973 (preinstalled default
+          # the native build actually resolves — do NOT remove it),
+          # CMake 3.22.1. Everything else (emulator, system-images,
+          # other platforms/NDKs/CMake) is dead weight for this build.
+          sudo rm -rf "$ANDROID_HOME/emulator" "$ANDROID_HOME/system-images" "$ANDROID_HOME/sources" 2>/dev/null || true
+          for p in "$ANDROID_HOME"/platforms/android-*; do
+            case "$p" in */android-36|*/android-35) ;; *) sudo rm -rf "$p" || true;; esac
+          done
+          for b in "$ANDROID_HOME"/build-tools/*; do
+            case "$b" in */36.0.0|*/35.0.0) ;; *) sudo rm -rf "$b" || true;; esac
+          done
+          for n in "$ANDROID_HOME"/ndk/*; do
+            case "$n" in */27.1.12297006|*/27.0.12077973) ;; *) sudo rm -rf "$n" || true;; esac
+          done
+          for c in "$ANDROID_HOME"/cmake/*; do
+            case "$c" in */3.22.1) ;; *) sudo rm -rf "$c" || true;; esac
+          done
+          echo '--- disk AFTER SDK prune ---'
+          df -h / | tail -1
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -107,6 +145,13 @@ jobs:
           test -d node_modules/healthgraph-ppg/android
           test -d node_modules/healthgraph-rppg/android
           echo "Prebuild OK: gradlew present, CAMERA permission present, ppg/rppg native dirs present."
+
+      - name: Diagnose disk immediately before Gradle
+        run: |
+          df -h
+          du -sh "$ANDROID_HOME"/* 2>/dev/null | sort -h
+          du -sh ~/.gradle 2>/dev/null || true
+          du -sh "$RUNNER_TEMP" 2>/dev/null || true
 
       - name: Gradle assembleRelease + bundleRelease (NOT Play-signed)
         run: ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
