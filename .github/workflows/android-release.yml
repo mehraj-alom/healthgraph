@@ -1,14 +1,19 @@
-# Android release build — Phase 1: unsigned compile-verification artifact.
+# Android release build — Phase 1: test artifacts only.
 #
-# NOT Play Store-ready: the AAB produced here is signed with the default
+# NOT Play Store-ready: the APK/AAB produced here are signed with the default
 # debug key (React Native template default), NOT with the production EAS
-# keystore. It exists only to prove that Expo prebuild + Gradle compilation
-# succeed on a clean machine. Production signing (Phase 2) is intentionally
-# absent from this workflow.
+# keystore. They exist only to prove that Expo prebuild + Gradle compilation
+# succeed on a clean machine and (APK) for direct install on a test device.
+# Do not upload them to the Play Console. Production signing (Phase 2) is
+# intentionally absent from this workflow.
+#
+# Outputs:
+#   HealthGraph-android-test.apk — install directly on a physical device.
+#   HealthGraph-android-test.aab — validates the Play distribution build path.
 #
 # Trigger: manual `workflow_dispatch` only. No deploy, no Play publishing.
 
-name: Android release build (Phase 1 — unsigned test artifact)
+name: Android release build (Phase 1 — test artifacts)
 
 on:
   workflow_dispatch: {}
@@ -18,7 +23,7 @@ permissions:
 
 jobs:
   build-android:
-    name: Prebuild + Gradle bundleRelease
+    name: Prebuild + Gradle assembleRelease/bundleRelease
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     defaults:
@@ -97,22 +102,33 @@ jobs:
           test -d node_modules/healthgraph-rppg/android
           echo "Prebuild OK: gradlew present, CAMERA permission present, ppg/rppg native dirs present."
 
-      - name: Gradle bundleRelease
-        run: ./gradlew bundleRelease --no-daemon --stacktrace
+      - name: Gradle assembleRelease + bundleRelease (NOT Play-signed)
+        run: ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
         working-directory: frontend/android
 
-      - name: Label test artifact (NOT Play Store-ready)
+      - name: Label test artifacts (NOT Play Store-ready)
         run: |
           set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
           AAB=android/app/build/outputs/bundle/release/app-release.aab
+          test -f "${APK}"
           test -f "${AAB}"
-          cp "${AAB}" medgraph-app-release-test-unsigned.aab
-          ls -la medgraph-app-release-test-unsigned.aab
+          cp "${APK}" HealthGraph-android-test.apk
+          cp "${AAB}" HealthGraph-android-test.aab
+          ls -la HealthGraph-android-test.apk HealthGraph-android-test.aab
 
-      - name: Upload unsigned test AAB
+      - name: Upload test APK (device install, NOT Play-ready)
         uses: actions/upload-artifact@v4
         with:
-          name: medgraph-android-test-unsigned-NOT-PLAY-READY
-          path: frontend/medgraph-app-release-test-unsigned.aab
+          name: HealthGraph-android-test.apk
+          path: frontend/HealthGraph-android-test.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test AAB (Play-path validation, NOT signed)
+        uses: actions/upload-artifact@v4
+        with:
+          name: HealthGraph-android-test.aab
+          path: frontend/HealthGraph-android-test.aab
           if-no-files-found: error
           retention-days: 14
