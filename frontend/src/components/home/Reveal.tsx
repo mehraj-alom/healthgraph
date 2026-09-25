@@ -10,6 +10,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withDelay,
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
@@ -33,10 +34,13 @@ export function Reveal({ children, delay = 0, style }: RevealProps) {
       progress.value = 1;
       return;
     }
-    progress.value = withTiming(1, {
-      duration: durations.slow,
-      easing: bezier(curves.standard),
-    });
+    progress.value = withDelay(
+      delay,
+      withTiming(1, {
+        duration: durations.slow,
+        easing: bezier(curves.standard),
+      }),
+    );
     // We intentionally only run on mount; delay is static per section.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduced]);

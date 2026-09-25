@@ -14,7 +14,15 @@ import { waitForIdentityReady } from '@/services/backendIdentity';
  */
 const API_URL = (() => {
   const configured = process.env.EXPO_PUBLIC_API_URL;
-  if (configured) return configured;
+  if (configured) {
+    const dev = typeof __DEV__ !== 'undefined' && __DEV__;
+    if (!dev && !/^https:\/\//i.test(configured.trim())) {
+      throw new Error(
+        'EXPO_PUBLIC_API_URL must use https:// in production builds.',
+      );
+    }
+    return configured;
+  }
   if (typeof __DEV__ !== 'undefined' && __DEV__) return 'http://10.22.93.11:8000';
   throw new Error(
     'EXPO_PUBLIC_API_URL is not configured. Production builds require the backend URL.',

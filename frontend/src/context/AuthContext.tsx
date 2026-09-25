@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import * as FirebaseAuth from 'firebase/auth';
 import {
   createUserWithEmailAndPassword,
   getAuth,
   initializeAuth,
   onIdTokenChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   updateProfile,
@@ -33,15 +33,15 @@ const firebaseConfig = {
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-type ReactNativePersistenceFactory = (storage: typeof AsyncStorage) => FirebaseAuth.Persistence;
-const getReactNativePersistence = (FirebaseAuth as unknown as {
-  getReactNativePersistence: ReactNativePersistenceFactory;
-}).getReactNativePersistence;
+import { securePersistence } from '@/services/securePersistence';
 
 function createFirebaseAuth(): Auth {
   if (Platform.OS === 'web') return getAuth(app);
   try {
-    return initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) });
+    // SecureStore-backed persistence (Keychain/Keystore), not plaintext
+    // AsyncStorage. Existing AsyncStorage sessions are not migrated —
+    // affected users sign in once more.
+    return initializeAuth(app, { persistence: securePersistence });
   } catch (error: unknown) {
     if (typeof error === 'object' && error !== null && 'code' in error &&
       (error as { code?: unknown }).code === 'auth/already-initialized') {
@@ -69,6 +69,8 @@ export interface AuthContextType {
   signup: (email: string, password: string, displayName?: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Sends a Firebase password-reset link. Throws on failure. */
+  sendReset: (email: string) => Promise<void>;
   clearError: () => void;
   /** Patch the cached display name (e.g. after a Settings save). */
   refreshDisplayName: (name: string) => void;
@@ -210,8 +212,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const logout = useCallback(async (): Promise<void> => {
+  const sendReset = useCallback(async (email: string): Promise<void> => {
     setError(null);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch (authError: unknown) {
+      setError(authError instanceof Error ? authError.message : 'Password reset failed');
+      throw authError;
+    }
+  }, []);
+
+  const logout = useCallback(async (): Promise<void> => {    setError(null);
     // Clear SQLite health cache and patient identity before signing out.
     // The sync_queue is intentionally left intact: pending rows are unsynced
     // user data and must never be deleted on logout.
@@ -220,6 +231,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const patientId = getCachedPatientId();
     if (patientId) {
       await clearHomeCache(patientId);
+      // Drop this patient's OS reminders before the identity goes away:
+      // a reminder must never be actionable as another patient.
+      const { cancelAllPatientReminders } = await import(
+        '@/services/medicationReminders'
+      );
+      await cancelAllPatientReminders(patientId).catch(() => {});
     }
     await clearPatientId();
     await firebaseSignOut(auth);
@@ -236,8 +253,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const value = useMemo(
-    () => ({ user, userProfile, loading, error, signup, login, logout, clearError, refreshDisplayName }),
-    [user, userProfile, loading, error, signup, login, logout, clearError, refreshDisplayName],
+    () => ({ user, userProfile, loading, error, signup, login, logout, sendReset, clearError, refreshDisplayName }),
+    [user, userProfile, loading, error, signup, login, logout, sendReset, clearError, refreshDisplayName],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

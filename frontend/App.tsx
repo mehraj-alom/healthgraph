@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   AppState,
   LogBox,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -17,8 +18,9 @@ LogBox.ignoreLogs([
   'is not registered (yet); skipping surface setup',
 ]);
 
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -41,6 +43,10 @@ import { UmbrellaTabBar } from '@/components';
 
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
 import OnboardingSetupScreen from '@/screens/Onboarding/OnboardingSetupScreen';
+import PricingScreen, {
+  clearPricingNeeded,
+  shouldShowPricing,
+} from '@/screens/Onboarding/PricingScreen';
 import HealthDashboardScreen from '@/screens/Dashboard/HealthDashboardScreen';
 import VitalsLoggerScreen from '@/screens/VitalsLogger/VitalsLoggerScreen';
 import TimelineScreen from '@/screens/Timeline/TimelineScreen';
@@ -50,6 +56,7 @@ import DocumentDetailScreen from '@/screens/Documents/DocumentDetailScreen';
 import SettingsScreen from '@/screens/Settings/SettingsScreen';
 import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
+import MedicationReminderScreen from '@/screens/Medications/MedicationReminderScreen';
 import SymptomMapScreen from '@/screens/Body/SymptomMapScreen';
 import PpgMeasureScreen from '@/screens/PpgMeasure/PpgMeasureScreen';
 import PulseMethodScreen from '@/screens/PpgMeasure/PulseMethodScreen';
@@ -90,6 +97,12 @@ import { getCachedPatientId } from '@/services/patientIdentity';
 import { waitForIdentityReady } from '@/services/backendIdentity';
 import { subscribeDataRefresh } from '@/services/dataRefresh';
 import { TrendRangeProvider } from '@/context/TrendRangeContext';
+import {
+  notificationListeners,
+  parseReminderTap,
+  setReminderNotificationHandler,
+} from '@/services/reminderNotifications';
+import { reconcileMedicationReminders } from '@/services/medicationReminders';
 
 
 /* ============================================================================
@@ -114,6 +127,72 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+/* ============================================================================
+ * Medication reminder bridge (local notifications → reminder screen)
+ * ========================================================================== */
+
+/**
+ * OS-driven only: foreground delivery opens the call-like screen, taps
+ * and shade actions route to it (shortcuts auto-run once there). No
+ * polling, no timers — listeners are subscriptions with cleanup. The
+ * expo-notifications package is loaded lazily (never statically) so
+ * Expo Go — where its native modules don't exist — never evaluates it.
+ */
+function ReminderBridge() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const seen = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    if (Platform.OS === 'web') return;
+    let cancelled = false;
+    let onReceived: { remove: () => void } | null = null;
+    let onResponse: { remove: () => void } | null = null;
+    void (async () => {
+      const { isReminderRuntimeSupported } = await import(
+        '@/services/reminderNotifications'
+      );
+      if (cancelled || !isReminderRuntimeSupported()) return;
+      const { DEFAULT_ACTION_IDENTIFIER } = await import('expo-notifications');
+      if (cancelled) return;
+      setReminderNotificationHandler();
+      onReceived = notificationListeners.addReceivedListener((event) => {
+        if (AppState.currentState !== 'active') return;
+        const parsed = parseReminderTap(
+          event.request.content.data,
+          DEFAULT_ACTION_IDENTIFIER,
+          getCachedPatientId(),
+          DEFAULT_ACTION_IDENTIFIER,
+        );
+        if (!parsed || seen.current.has(parsed.occurrenceId)) return;
+        seen.current.add(parsed.occurrenceId);
+        navigation.navigate('MedicationReminder', { occurrenceId: parsed.occurrenceId });
+      });
+      onResponse = notificationListeners.addResponseListener((response) => {
+        const parsed = parseReminderTap(
+          response.notification.request.content.data,
+          response.actionIdentifier,
+          getCachedPatientId(),
+          DEFAULT_ACTION_IDENTIFIER,
+        );
+        if (!parsed) return;
+        if (parsed.action === 'open') {
+          navigation.navigate('MedicationReminder', { occurrenceId: parsed.occurrenceId });
+        } else {
+          navigation.navigate('MedicationReminder', {
+            occurrenceId: parsed.occurrenceId,
+            action: parsed.action,
+          });
+        }
+      });
+    })();
+    return () => {
+      cancelled = true;
+      onReceived?.remove();
+      onResponse?.remove();
+    };
+  }, [navigation]);
+  return null;
+}
 
 /* ============================================================================
  * Main authenticated application
@@ -214,6 +293,42 @@ function AppNavigator() {
     };
   }, [user?.uid]);
 
+  // Post-signup pricing gate: a brand-new signup sees the pricing screen
+  // exactly once. Login never sets the flag, and sign-out clears it, so
+  // established users are never interrupted. Fail open everywhere: any
+  // storage failure resolves to "no pricing" and the app proceeds.
+  const [pricingNeeded, setPricingNeeded] = React.useState(false);
+  const [pricingChecked, setPricingChecked] = React.useState(false);
+  React.useEffect(() => {
+    if (!user) {
+      setPricingNeeded(false);
+      setPricingChecked(true);
+      clearPricingNeeded().catch(() => {});
+      return;
+    }
+    let cancelled = false;
+    shouldShowPricing()
+      .then(needed => {
+        if (!cancelled) {
+          setPricingNeeded(needed);
+          setPricingChecked(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPricingNeeded(false);
+          setPricingChecked(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
+
+  const handlePricingDone = React.useCallback(() => {
+    setPricingNeeded(false);
+  }, []);
+
   // Initialize network monitor and sync on lifecycle events
   React.useEffect(() => {
     if (!user) {
@@ -238,14 +353,27 @@ function AppNavigator() {
       const startupSync = async () => {
         await retryFailedSyncs();
         await syncPendingMutations();
+        // Reminder reconciliation rides the same deferred startup slot:
+        // schedules are derived locally, so this works fully offline.
+        const patientId = getCachedPatientId();
+        if (patientId) {
+          await reconcileMedicationReminders(patientId).catch(() => {});
+        }
       };
       startupSync().catch(() => {});
     }, 2500);
 
-    // Sync on foreground transition
+    // Sync on foreground transition (reminders reconcile here too: the
+    // wall-clock derivation re-absorbs DST/timezone shifts on return).
     const appSubscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active' && isOnline()) {
-        syncPendingMutations().catch(() => {});
+      if (nextState === 'active') {
+        if (isOnline()) {
+          syncPendingMutations().catch(() => {});
+        }
+        const patientId = getCachedPatientId();
+        if (patientId) {
+          void reconcileMedicationReminders(patientId);
+        }
       }
     });
 
@@ -267,10 +395,11 @@ function AppNavigator() {
   /* --------------------------------------------------------------------------
    * Firebase authentication state is still restoring, or the per-patient
    * setup gate has not resolved yet (fast SQLite read — avoids flashing
-   * Main before a first-run patient is routed to setup).
+   * Main before a first-run patient is routed to setup), or the one-shot
+   * post-signup pricing flag has not been read yet.
    * ------------------------------------------------------------------------ */
 
-  if (loading || (user && !setupChecked)) {
+  if (loading || (user && (!pricingChecked || (!pricingNeeded && !setupChecked)))) {
     return (
       <View
         style={
@@ -301,6 +430,7 @@ function AppNavigator() {
 
   return (
     <NavigationContainer>
+      <ReminderBridge />
       <RootStack.Navigator
         key={user ? 'authenticated' : 'unauthenticated'}
         screenOptions={{
@@ -317,6 +447,15 @@ function AppNavigator() {
             name="Onboarding"
             component={OnboardingScreen}
           />
+        ) : pricingNeeded ? (
+          <RootStack.Screen
+            name="Pricing"
+            options={{
+              headerShown: false,
+            }}
+          >
+            {() => <PricingScreen onDone={handlePricingDone} />}
+          </RootStack.Screen>
         ) : setupNeeded ? (
           <RootStack.Screen
             name="OnboardingSetup"
@@ -332,6 +471,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="PpgMeasureFlow"
               component={PpgMeasureScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Call-like local medication reminder (one dose occurrence). */}
+            <RootStack.Screen
+              name="MedicationReminder"
+              component={MedicationReminderScreen}
               options={{
                 headerShown: false,
               }}

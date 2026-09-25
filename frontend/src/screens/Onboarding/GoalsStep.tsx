@@ -7,10 +7,10 @@
  */
 
 import { StyleSheet, Text, View } from 'react-native';
-import { Chip } from '@/components';
 import { Reveal } from '@/components/home/Reveal';
 import { FONT, GV, TYPE } from '@/theme/guava';
 import { HEALTH_GOALS } from './options';
+import { FocusTile } from './FocusStep';
 
 export function GoalsStep({
   selected,
@@ -19,6 +19,10 @@ export function GoalsStep({
   selected: readonly string[];
   onToggle: (id: string) => void;
 }) {
+  const rows: typeof HEALTH_GOALS[] = [];
+  for (let i = 0; i < HEALTH_GOALS.length; i += 2) {
+    rows.push(HEALTH_GOALS.slice(i, i + 2));
+  }
   return (
     <View style={styles.wrap}>
       <Reveal>
@@ -32,21 +36,22 @@ export function GoalsStep({
           Pick goals. You can change them anytime.
         </Text>
       </Reveal>
-      <View style={styles.chips} accessibilityRole="list">
-        {HEALTH_GOALS.map((goal) => {
-          const active = selected.includes(goal.id);
-          return (
-            <Chip
-              key={goal.id}
-              label={goal.label}
-              selected={active}
-              onPress={() => onToggle(goal.id)}
-              size="large"
-              color={GV.cta}
-              accessibilityLabel={`${goal.label}. ${goal.hint}`}
-            />
-          );
-        })}
+      <View style={styles.grid} accessibilityRole="list">
+        {rows.map((row, r) => (
+          <View key={r} style={styles.row}>
+            {row.map(goal => (
+              <FocusTile
+                key={goal.id}
+                id={goal.id}
+                label={goal.label}
+                hint={goal.hint}
+                active={selected.includes(goal.id)}
+                onToggle={() => onToggle(goal.id)}
+                fullWidth={row.length === 1}
+              />
+            ))}
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -81,11 +86,12 @@ const styles = StyleSheet.create({
     maxWidth: 330,
     alignSelf: 'center',
   },
-  chips: {
+  grid: {
+    gap: 12,
+    marginTop: 12,
+  },
+  row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 8,
+    gap: 12,
   },
 });

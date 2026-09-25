@@ -51,6 +51,10 @@ function requirePatientId(): string {
 
 async function wipeLocal(patientId: string): Promise<LocalEraseCounts> {
   const { deletePatientLocalData } = await import('@/db/queries/patientErase');
+  // Cancel this patient's OS reminders first: no stale reminder may
+  // survive the wipe (the instances table itself is wiped below).
+  const { cancelAllPatientReminders } = await import('@/services/medicationReminders');
+  await cancelAllPatientReminders(patientId).catch(() => {});
   const local = await deletePatientLocalData(patientId);
   const { refreshSyncState } = await import('@/services/syncState');
   await refreshSyncState().catch(() => {});

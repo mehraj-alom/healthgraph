@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { StageGradient } from '@/components/StageGradient';
+import { MarkerHighlight } from '@/components/MarkerHighlight';
 import { Skeleton } from '@/components/Skeleton';
 import { HealthFact } from '@/components/HealthFact';
 import { useHealthAreas } from '@/hooks/useHealthAreas';
@@ -48,8 +49,8 @@ function relativeDay(date: string): string {
 }
 
 function provenanceDot(p: string): string {
-  if (p === 'device') return GV.cta;
-  if (p === 'pending') return GV.fx.amber;
+  // One meaningful color only: failed syncs read red, everything else
+  // stays quiet. The words beside the dot carry the rest.
   if (p === 'failed') return GV.danger;
   return GV.muted;
 }
@@ -145,55 +146,15 @@ export default function HealthAreasScreen() {
 
   const live = orderedAreas.filter((a) => a.status === 'available');
   const todo = orderedAreas.filter((a) => a.status !== 'available');
-  const total = orderedAreas.length;
-  const pct = total > 0 ? Math.round((live.length / total) * 100) : 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <StageGradient />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable
-          onPress={() => navigation.canGoBack() && navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-          style={styles.backHit}
-        >
-          <Text style={styles.backText} maxFontSizeMultiplier={1.4}>‹ Back</Text>
-        </Pressable>
-
         <View style={styles.hero}>
-          <Text style={styles.title} maxFontSizeMultiplier={1.4}>Everything you track</Text>
-          <Text style={styles.sub}>One place for every area. Only real entries count.</Text>
+          <MarkerHighlight textStyle={styles.title}>Everything you track</MarkerHighlight>
+          <Text style={styles.sub}>This page fills in as you log.</Text>
         </View>
-
-        {isLoading ? (
-          <View style={styles.heroCard} accessible accessibilityLabel="Loading areas">
-            <Skeleton width="45%" height={14} />
-            <Skeleton width="70%" height={34} />
-            <Skeleton width="100%" height={6} />
-          </View>
-        ) : (
-          <View style={styles.heroCard} accessible accessibilityLabel={`${live.length} of ${total} areas live`}>
-            <View style={styles.heroRow}>
-              <Text style={styles.heroNumber} maxFontSizeMultiplier={1.3}>{live.length}</Text>
-              <View style={styles.heroMeta}>
-                <Text style={styles.heroOf} maxFontSizeMultiplier={1.4}>of {total} live</Text>
-                <Text style={styles.heroHint} maxFontSizeMultiplier={1.4}>
-                  {live.length === 0
-                    ? 'Start one area below'
-                    : todo.length === 0
-                      ? 'Every area is live'
-                      : `${todo.length} still to start`}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.track}>
-              <View style={[styles.fill, { width: `${pct}%` as `${number}%` }]} />
-            </View>
-            <Text style={styles.heroFoot}>The rest wait until you log them.</Text>
-          </View>
-        )}
 
         {isLoading ? (
           <>
@@ -211,37 +172,28 @@ export default function HealthAreasScreen() {
         ) : (
           <>
             {live.length > 0 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.4}>Live now</Text>
-                <View style={styles.grid}>
-                  {live.map((area) => (
-                    <HealthAreaTile
-                      key={area.id}
-                      area={area}
-                      change={changes[area.id] ?? null}
-                      onPress={pressable(area.id) ? () => go(area.id) : undefined}
-                    />
-                  ))}
-                </View>
+              <View style={styles.grid}>
+                {live.map((area) => (
+                  <HealthAreaTile
+                    key={area.id}
+                    area={area}
+                    change={changes[area.id] ?? null}
+                    onPress={pressable(area.id) ? () => go(area.id) : undefined}
+                  />
+                ))}
               </View>
             ) : null}
 
             {todo.length > 0 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.4}>
-                  {live.length > 0 ? 'To start' : 'Start tracking'}
-                </Text>
-                <Text style={styles.sectionSub}>Nothing estimated. Pick one when ready.</Text>
-                <View style={styles.groupedCard}>
-                  {todo.map((area, i, arr) => (
-                    <HealthAreaRow
-                      key={area.id}
-                      area={area}
-                      last={i === arr.length - 1}
-                      onPress={pressable(area.id) ? () => go(area.id) : undefined}
-                    />
-                  ))}
-                </View>
+              <View style={styles.groupedCard}>
+                {todo.map((area, i, arr) => (
+                  <HealthAreaRow
+                    key={area.id}
+                    area={area}
+                    last={i === arr.length - 1}
+                    onPress={pressable(area.id) ? () => go(area.id) : undefined}
+                  />
+                ))}
               </View>
             ) : null}
           </>
@@ -249,7 +201,7 @@ export default function HealthAreasScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.4}>Recent activity</Text>
-          <Text style={styles.sectionSub}>Newest first, from real entries.</Text>
+          <Text style={styles.sectionSub}>Newest first.</Text>
           {activity.isLoading ? (
             <View style={styles.groupedCard}>
               <Skeleton width="60%" height={14} />
@@ -260,7 +212,7 @@ export default function HealthAreasScreen() {
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle} maxFontSizeMultiplier={1.4}>No recent activity yet</Text>
               <Text style={styles.emptyBody}>
-                Log a day, take a measurement, or add a record. It shows up here first.
+                Log a day and it will show up here.
               </Text>
             </View>
           ) : (
@@ -306,10 +258,6 @@ export default function HealthAreasScreen() {
             </View>
           )}
         </View>
-
-        <Text style={styles.footnote}>
-          Device-only areas stay on this phone. Synced areas back up with your account.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -322,12 +270,10 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: SPACE.screenH,
-    paddingVertical: SPACE.sectionGap,
+    paddingTop: 6,
     paddingBottom: 32,
     gap: 20,
   },
-  backHit: { minHeight: 44, justifyContent: 'center' },
-  backText: { ...TYPE.button, fontSize: 16, color: GV.fog },
   hero: {
     gap: 6,
   },
@@ -341,54 +287,6 @@ const styles = StyleSheet.create({
     ...TYPE.body,
     color: GV.fog,
     textAlign: 'left',
-  },
-  heroCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-    gap: 12,
-  },
-  heroRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
-  },
-  heroNumber: {
-    fontFamily: FONT.semi,
-    fontSize: 44,
-    lineHeight: 48,
-    letterSpacing: -0.9,
-    color: GV.ink,
-    fontVariant: ['tabular-nums'],
-  },
-  heroMeta: {
-    flex: 1,
-    gap: 2,
-    paddingBottom: 4,
-  },
-  heroOf: {
-    ...TYPE.button,
-    fontSize: 15,
-    color: GV.ink,
-  },
-  heroHint: {
-    ...TYPE.caption,
-    color: GV.muted,
-  },
-  track: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: GV.wash,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: GV.cta,
-  },
-  heroFoot: {
-    ...TYPE.caption,
-    color: GV.muted,
   },
   section: {
     gap: 8,
@@ -414,11 +312,13 @@ const styles = StyleSheet.create({
   skelTile: {
     flexGrow: 1,
     flexBasis: '47%',
-    backgroundColor: GV.card,
+    backgroundColor: '#EFF3F1',
+    borderWidth: 1,
+    borderColor: 'rgba(20, 32, 29, 0.08)',
     borderRadius: SPACE.rCard,
-    padding: 16,
+    padding: 12,
     gap: 8,
-    minHeight: 132,
+    minHeight: 104,
   },
   fact: {
     ...TYPE.caption,
@@ -427,7 +327,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   groupedCard: {
-    backgroundColor: GV.card,
+    backgroundColor: '#EFF3F1',
+    borderWidth: 1,
+    borderColor: 'rgba(20, 32, 29, 0.08)',
     borderRadius: SPACE.rCard,
     paddingHorizontal: SPACE.cardPad,
     paddingVertical: 4,
@@ -482,7 +384,9 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   emptyCard: {
-    backgroundColor: GV.card,
+    backgroundColor: '#EFF3F1',
+    borderWidth: 1,
+    borderColor: 'rgba(20, 32, 29, 0.08)',
     borderRadius: SPACE.rCard,
     padding: SPACE.cardPad,
     gap: 4,
@@ -497,11 +401,5 @@ const styles = StyleSheet.create({
     ...TYPE.body,
     color: GV.body,
     textAlign: 'center',
-  },
-  footnote: {
-    ...TYPE.caption,
-    color: GV.fog,
-    textAlign: 'center',
-    marginTop: 4,
   },
 });

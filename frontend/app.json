@@ -19,13 +19,15 @@
         "backgroundColor": "#0f172a"
       },
       "package": "com.medgraph.app",
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": ["POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-secure-store",
+      "expo-notifications",
       "./modules/healthgraph-ppg/app.plugin.js",
       "./modules/healthgraph-rppg/app.plugin.js",
       "onnxruntime-react-native",

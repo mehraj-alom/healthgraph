@@ -23,16 +23,70 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import axios from 'axios';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
+import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { api } from '@/services/api';
-import { BrandLogo } from '@/components/BrandLogo';
 import { MEDICAL_DISCLAIMER } from '@/constants';
+import { useAuth } from '@/context/AuthContext';
+import { getSelectedPlan, type PricingPlan } from '@/screens/Onboarding/PricingScreen';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { StageGradient } from '@/components/StageGradient';
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { useDocuments } from '@/context/DocumentsContext';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
+
+// ─── Starry-night backdrop (pure code, static — no assets, no animation) ───
+// Deep-night base, deterministic star field, moon, two mountain ridges.
+// Replaces the flat stage on this screen only, mirroring the reference.
+const STARS = Array.from({ length: 48 }, (_, i) => ({
+  x: (i * 37.7 + 11) % 100,
+  y: (i * 53.3 + 7) % 58,
+  size: 1 + ((i * 7) % 3) * 0.8,
+  opacity: 0.25 + (((i * 13) % 10) / 10) * 0.65,
+}));
+
+function NightSky() {
+  const { width } = useWindowDimensions();
+  return (
+    <View style={styles.night} pointerEvents="none">
+      {STARS.map((star, i) => (
+        <View
+          key={i}
+          style={{
+            position: 'absolute',
+            left: (star.x / 100) * width,
+            top: (star.y / 100) * 640,
+            width: star.size,
+            height: star.size,
+            borderRadius: star.size / 2,
+            backgroundColor: '#FFFFFF',
+            opacity: star.opacity,
+          }}
+        />
+      ))}
+      <Svg
+        style={styles.ridges}
+        width={width}
+        height={230}
+        viewBox="0 0 400 230"
+        preserveAspectRatio="none"
+      >
+        <Circle cx={318} cy={46} r={30} fill="#FFFFFF" opacity={0.1} />
+        <Circle cx={318} cy={46} r={15} fill="#F4F1DE" opacity={0.9} />
+        <Path
+          d="M0 150 L70 90 L130 140 L210 60 L290 150 L340 110 L400 160 L400 230 L0 230 Z"
+          fill="#141C3D"
+          opacity={0.92}
+        />
+        <Path
+          d="M0 192 L90 142 L170 186 L260 132 L340 182 L400 156 L400 230 L0 230 Z"
+          fill="#04060F"
+        />
+      </Svg>
+    </View>
+  );
+}
 
 interface ChatMessage {
   id: string;
@@ -262,6 +316,8 @@ function Composer({
   sending,
   busy,
   keyboardOpen,
+  planPill,
+  planLine,
   onSend,
   onStop,
 }: {
@@ -269,12 +325,16 @@ function Composer({
   busy: boolean;
   /** True while the soft keyboard is open (tab bar hidden then). */
   keyboardOpen: boolean;
+  /** Tier pill + allowance line (real plan facts, never a fake counter). */
+  planPill: string;
+  planLine: string;
   onSend: (text: string) => void;
   onStop: () => void;
 }) {
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const glassOff = useReducedMotion();
   // No dock on this screen (system back handles exit), so the composer
   // sits on the safe-area inset — not on tab-clearing clearance.
   const insets = useSafeAreaInsets();
@@ -298,51 +358,65 @@ function Composer({
         { paddingBottom: keyboardOpen ? 8 : insets.bottom + 8 },
       ]}
     >
-      <View style={[styles.composerShell, focused && styles.composerShellFocused]}>
-        <TextInput
-          ref={inputRef}
-          style={styles.inputInner}
-          value={text}
-          onChangeText={setText}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          placeholder={sending ? 'Waiting for response…' : 'Ask about your health…'}
-          placeholderTextColor={GV.muted}
-          multiline
-          maxLength={2000}
-          editable={!sending}
-          returnKeyType="send"
-          blurOnSubmit={false}
-          onSubmitEditing={submit}
-          keyboardAppearance="dark"
-          underlineColorAndroid="transparent"
-          accessibilityLabel="Message input"
-        />
-        <View style={styles.composerAction}>
-          {busy ? (
-            <Pressable
-              onPress={onStop}
-              accessibilityRole="button"
-              accessibilityLabel="Stop response"
-              style={({ pressed }) => [styles.stopButton, pressed && { opacity: 0.7, transform: [{ scale: 0.94 }] }]}
-            >
-              <Text style={styles.stopButtonText}>■</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={submit}
-              disabled={!text.trim()}
-              accessibilityRole="button"
-              accessibilityLabel="Send message"
-              style={({ pressed }) => [
-                styles.sendButton,
-                !text.trim() && styles.sendButtonGhost,
-                pressed && text.trim() && styles.sendButtonPressed,
-              ]}
-            >
-              <Text style={!text.trim() ? styles.sendButtonGhostText : styles.sendButtonText}>↑</Text>
-            </Pressable>
-          )}
+      <View style={styles.glassCard}>
+        {glassOff ? (
+          <View style={styles.glassSolid} />
+        ) : (
+          <BlurView tint="dark" intensity={70} style={styles.glassFill} />
+        )}
+        <View style={styles.glassTint} />
+        <View style={styles.creditRow}>
+          <Text style={styles.creditText} numberOfLines={1}>{planLine}</Text>
+          <View style={styles.proPill}>
+            <Text style={styles.proText}>{planPill}</Text>
+          </View>
+        </View>
+        <View style={[styles.whiteBox, focused && styles.whiteBoxFocused]}>
+          <TextInput
+            ref={inputRef}
+            style={styles.whiteBoxInput}
+            value={text}
+            onChangeText={setText}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            placeholder={sending ? 'Waiting for response…' : 'Ask about your health…'}
+            placeholderTextColor="#8A8F9E"
+            multiline
+            maxLength={2000}
+            editable={!sending}
+            returnKeyType="send"
+            blurOnSubmit={false}
+            onSubmitEditing={submit}
+            keyboardAppearance="dark"
+            underlineColorAndroid="transparent"
+            accessibilityLabel="Message input"
+          />
+          <View style={styles.sendSlot}>
+            {busy ? (
+              <Pressable
+                onPress={onStop}
+                accessibilityRole="button"
+                accessibilityLabel="Stop response"
+                style={({ pressed }) => [styles.stopButton, pressed && { opacity: 0.7, transform: [{ scale: 0.94 }] }]}
+              >
+                <Text style={styles.stopButtonText}>■</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={submit}
+                disabled={!text.trim()}
+                accessibilityRole="button"
+                accessibilityLabel="Send message"
+                style={({ pressed }) => [
+                  styles.sendButton,
+                  !text.trim() && styles.sendButtonGhost,
+                  pressed && text.trim() && styles.sendButtonPressed,
+                ]}
+              >
+                <Text style={!text.trim() ? styles.sendButtonGhostText : styles.sendButtonText}>↑</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
       </View>
     </View>
@@ -377,11 +451,30 @@ function DisclaimerNote({ style }: { style?: object }) {
 
 export default function ChatScreen() {
   const navigation = useNavigation<any>();
+  const { userProfile } = useAuth();
+  const glassOff = useReducedMotion();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [revealingId, setRevealingId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [planId, setPlanId] = useState<PricingPlan>('free');
+
+  // Display-only tier facts (the locally picked plan — billing is separate).
+  useEffect(() => {
+    getSelectedPlan().then(setPlanId).catch(() => {});
+  }, []);
+  const planMeta =
+    planId === 'allin'
+      ? { pill: 'ALL-IN', line: 'Unlimited AI chat' }
+      : planId === 'general'
+        ? { pill: 'GENERAL', line: 'Limited AI messages / month' }
+        : { pill: 'FREE', line: '2 AI messages / month' };
+
+  const firstName =
+    userProfile?.displayName?.trim().split(/\s+/)[0] ||
+    userProfile?.email?.split('@')[0] ||
+    'there';
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
   // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
@@ -604,6 +697,15 @@ export default function ChatScreen() {
   const busy = sending || revealingId != null;
   const isEmpty = messages.length === 0;
 
+  // New chat: stop anything in flight and start a blank conversation.
+  const newChat = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setMessages([]);
+    setConversationId(null);
+    setRevealingId(null);
+  }, []);
+
   const lastAssistantId =
     messages.length > 0 && messages[messages.length - 1].role === 'assistant'
       ? messages[messages.length - 1].id
@@ -679,7 +781,7 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StageGradient />
+      <NightSky />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoiding}
@@ -687,13 +789,30 @@ export default function ChatScreen() {
         enabled={Platform.OS === 'ios'}
       >
         <View style={styles.container}>
-          {/* Header — tinted lockup on dark, one quiet capability line. */}
-          <View style={styles.header}>
-            <BrandLogo height={20} tint={GV.teal} />
-            <View style={styles.headerText}>
-              <Text style={styles.headerTitle}>Assistant</Text>
-              <Text style={styles.headerSub}>Can read your logs and records</Text>
-            </View>
+          {/* Frosted top bar: back, title, new-chat. All three do something. */}
+          <View style={styles.topbar}>
+            {!glassOff ? (
+              <BlurView tint="dark" intensity={60} style={styles.glassFill} />
+            ) : null}
+            <Pressable
+              onPress={() => navigation.goBack()}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              hitSlop={12}
+              style={({ pressed }) => [styles.topBtn, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.topGlyph}>‹</Text>
+            </Pressable>
+            <Text style={styles.topTitle}>New chat</Text>
+            <Pressable
+              onPress={newChat}
+              accessibilityRole="button"
+              accessibilityLabel="Start a new chat"
+              hitSlop={12}
+              style={({ pressed }) => [styles.topBtn, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.topGlyph}>•••</Text>
+            </Pressable>
           </View>
 
           <View style={styles.messagesContainer}>
@@ -704,8 +823,12 @@ export default function ChatScreen() {
                 renderItem={null}
                 ListHeaderComponent={
                   <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyPersona}>
-                      Ask a question.
+                    <Text style={styles.helloSmall}>
+                      {`Hello, ${firstName}`}
+                    </Text>
+                    <Text style={styles.helloBig}>
+                      {'How may I\n'}
+                      <Text style={styles.helloAccent}>Assist you today</Text>
                     </Text>
 
                     <DisclaimerNote />
@@ -804,6 +927,8 @@ export default function ChatScreen() {
             sending={sending}
             busy={busy}
             keyboardOpen={keyboardOpen}
+            planPill={planMeta.pill}
+            planLine={planMeta.line}
             onSend={(text) => void sendMessage(text)}
             onStop={stopAll}
           />
@@ -826,8 +951,57 @@ function prettyStructure(structureId: string | null): string {
 // cards are flat white, the CTA is the one green, caret rides GV.teal.
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: GV.stage },
+  container: { flex: 1, backgroundColor: '#070B1D' },
   keyboardAvoiding: { flex: 1 },
+
+  // ── Starry-night backdrop ──
+  night: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#070B1D',
+  },
+  ridges: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  glassFill: {
+    ...StyleSheet.absoluteFill,
+  },
+
+  // ── Frosted top bar ──
+  topbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255, 255, 255, 0.12)',
+    overflow: 'hidden',
+  },
+  topBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+  },
+  topGlyph: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontFamily: FONT.semi,
+    marginTop: -2,
+  },
+  topTitle: {
+    flex: 1,
+    ...TYPE.button,
+    color: '#FFFFFF',
+    fontSize: 16,
+    textAlign: 'center',
+  },
 
   // Header — lockup + one quiet capability line, hairline rule.
   // No presence theater ("Online ·"), no status dots.
@@ -853,12 +1027,28 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  // ── Empty state: overline + one editorial line, left-aligned. ──
-  emptyContainer: { paddingTop: 24, gap: SPACE.cardGap },
-  emptyPersona: {
-    ...TYPE.display,
+  // ── Empty-state hero: centered serif greeting over the night. ──
+  emptyContainer: { alignItems: 'center', paddingTop: 72, gap: 8 },
+  helloSmall: {
+    fontFamily: FONT.medium,
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+  },
+  helloBig: {
+    fontFamily: FONT.semi,
+    fontSize: 30,
+    lineHeight: 37,
     color: '#FFFFFF',
+    textAlign: 'center',
     letterSpacing: -0.3,
+    textShadowColor: 'rgba(255, 255, 255, 0.18)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 24,
+  },
+  helloAccent: {
+    fontStyle: 'italic',
   },
 
   // Quiet disclaimer footnote — present, never in the way.
@@ -926,7 +1116,7 @@ const styles = StyleSheet.create({
   citeTitle: { ...TYPE.caption, color: GV.fog, fontSize: 11 },
   citeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
   citeRowInner: { flex: 1, gap: 1 },
-  citeLabel: { ...TYPE.body, color: GV.ink, fontSize: 13 },
+  citeLabel: { ...TYPE.body, color: '#FFFFFF', fontSize: 13 },
   citeQuote: { ...TYPE.caption, color: GV.fog, fontSize: 11, fontStyle: 'italic' },
   citeGo: { ...TYPE.title, color: GV.fog },
 
@@ -945,87 +1135,104 @@ const styles = StyleSheet.create({
   typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: GV.teal },
   typingText: { ...TYPE.caption, color: GV.fog, fontSize: 13 },
 
-  // ── Composer: one white pill, send lives inside ────────────────────────
-  sheetStageRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  sheetDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: GV.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: GV.wash,
-  },
-  sheetDotDone: { backgroundColor: GV.cta, borderColor: GV.cta },
-  sheetDotCurrent: { borderColor: GV.cta },
-  sheetCheck: { color: '#FFFFFF', fontSize: 13, fontFamily: FONT.bold },
-  sheetStageLabel: { ...TYPE.body, color: GV.muted, flex: 1 },
-  sheetStageLabelOn: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink, flex: 1 },
+  // ── Composer: frosted glass card, plan row, white input box ──────────
   inputContainer: {
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 8,
-    backgroundColor: GV.stage,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: GV.stageline,
+    backgroundColor: 'transparent',
   },
-  composerShell: {
+  glassCard: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    padding: 12,
+    gap: 10,
+  },
+  glassSolid: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  glassTint: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(10, 15, 36, 0.55)',
+  },
+  creditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  creditText: {
+    fontFamily: FONT.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(255, 255, 255, 0.75)',
+    flex: 1,
+  },
+  proPill: {
+    backgroundColor: '#0C0C0E',
+    borderRadius: 9999,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  proText: {
+    fontFamily: FONT.bold,
+    fontSize: 10.5,
+    lineHeight: 14,
+    letterSpacing: 0.6,
+    color: '#FFFFFF',
+  },
+  whiteBox: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: GV.card,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     borderWidth: 2,
-    borderColor: GV.card,
-    borderRadius: 28,
-    borderCurve: 'continuous',
-    paddingLeft: 6,
-    paddingRight: 6,
-    paddingVertical: 6,
+    borderColor: '#FFFFFF',
+    paddingLeft: 4,
+    paddingRight: 4,
+    paddingVertical: 4,
     gap: 4,
-    minHeight: 56,
+    minHeight: 88,
   },
-  composerShellFocused: {
-    borderColor: GV.cta,
+  whiteBoxFocused: {
+    borderColor: GV.teal,
   },
-  inputInner: {
+  whiteBoxInput: {
     flex: 1,
     ...TYPE.body,
     fontSize: 15,
     lineHeight: 21,
-    color: GV.ink,
+    color: '#14151D',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    textAlignVertical: 'center',
+    paddingVertical: 10,
+    textAlignVertical: 'top',
     maxHeight: 120,
-    minHeight: 40,
+    minHeight: 64,
     backgroundColor: 'transparent',
   },
-  composerAction: {
+  sendSlot: {
     width: 44,
     alignItems: 'center',
     justifyContent: 'flex-end',
     alignSelf: 'flex-end',
     paddingBottom: 2,
   },
-  // Send — ghost ring when empty, floods solid CTA green the moment there's
-  // text. The affordance flip is the feedback; no muddy gray state.
+  // Send — black disc like the reference; ghost ring when empty.
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: GV.cta,
+    backgroundColor: '#0C0C0E',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonGhost: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: GV.line,
+    borderColor: 'rgba(12, 12, 14, 0.25)',
   },
   sendButtonPressed: {
     transform: [{ scale: 0.92 }],
@@ -1039,7 +1246,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   sendButtonGhostText: {
-    color: GV.muted,
+    color: 'rgba(12, 12, 14, 0.4)',
     fontSize: 18,
     fontFamily: FONT.bold,
     marginTop: -1,

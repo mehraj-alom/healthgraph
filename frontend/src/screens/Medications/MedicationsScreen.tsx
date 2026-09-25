@@ -38,6 +38,15 @@ import {
   type ScanSession,
 } from '@/db/queries/scanSessions';
 import { api } from '@/services/api';
+import {
+  hydrateMedications as dbHydrateMedications,
+  markMedicationStatusLocal as dbMarkMedicationStatusLocal,
+} from '@/db/queries/medications';
+import { reconcileMedicationReminders } from '@/services/medicationReminders';
+import {
+  isReminderRuntimeSupported,
+  requestReminderPermissions,
+} from '@/services/reminderNotifications';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { StageGradient } from '@/components/StageGradient';
 void FONT;
@@ -233,7 +242,16 @@ export default function MedicationsScreen() {
       await api.put(`/api/v1/medications/${medication.medication_id}`, {
         status: 'PAUSED',
       });
+      // Mirror the confirmed status locally (queue-free): the list reads
+      // the local mirror, which otherwise stays stale until hydration.
+      const patientId = getCachedPatientId();
+      if (patientId) {
+        await dbMarkMedicationStatusLocal(patientId, medication.medication_id, 'PAUSED').catch(
+          () => {},
+        );
+      }
       refetchMedications();
+      if (patientId) void reconcileMedicationReminders(patientId);
       Alert.alert('Success', 'Medication paused');
     } catch (error) {
       Alert.alert('Error', 'Failed to pause medication');
@@ -245,7 +263,14 @@ export default function MedicationsScreen() {
       await api.put(`/api/v1/medications/${medication.medication_id}`, {
         status: 'ACTIVE',
       });
+      const patientId = getCachedPatientId();
+      if (patientId) {
+        await dbMarkMedicationStatusLocal(patientId, medication.medication_id, 'ACTIVE').catch(
+          () => {},
+        );
+      }
       refetchMedications();
+      if (patientId) void reconcileMedicationReminders(patientId);
       Alert.alert('Success', 'Medication resumed');
     } catch (error) {
       Alert.alert('Error', 'Failed to resume medication');
@@ -264,7 +289,16 @@ export default function MedicationsScreen() {
           onPress: async () => {
             try {
               await api.delete(`/api/v1/medications/${medication.medication_id}`);
+              const patientId = getCachedPatientId();
+              if (patientId) {
+                await dbMarkMedicationStatusLocal(
+                  patientId,
+                  medication.medication_id,
+                  'DISCONTINUED',
+                ).catch(() => {});
+              }
               refetchMedications();
+              if (patientId) void reconcileMedicationReminders(patientId);
               Alert.alert('Success', 'Medication discontinued');
             } catch (error) {
               Alert.alert('Error', 'Failed to stop medication');
@@ -276,6 +310,40 @@ export default function MedicationsScreen() {
   }, [refetchMedications]);
 
   // ── Render ──
+
+  // DEV-ONLY preview entry so the call-like screen can be opened where
+  // OS notifications cannot fire (Expo Go). The full Taken/snooze flow
+  // runs for real; only the banner, sound and exact timing need a dev
+  // build. Stripped from production builds.
+  const previewReminder = useCallback(async () => {
+    try {
+      const patientId = getCachedPatientId();
+      if (!patientId) {
+        Alert.alert('Error', 'Not authenticated');
+        return;
+      }
+      await reconcileMedicationReminders(patientId).catch(() => {});
+      const { listReminderInstancesFrom } = await import(
+        '@/db/queries/reminderInstances'
+      );
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const rows = await listReminderInstancesFrom(patientId, yesterday.toISOString()).catch(
+        () => [],
+      );
+      const next = rows.find((r) => r.status === 'scheduled');
+      if (!next) {
+        Alert.alert(
+          'No reminder yet',
+          'Save a medication with reminders on and daily times first, then preview again.',
+        );
+        return;
+      }
+      navigation.navigate('MedicationReminder', { occurrenceId: next.occurrence_id });
+    } catch {
+      Alert.alert('Error', 'Could not open the reminder preview.');
+    }
+  }, [navigation]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -300,6 +368,17 @@ export default function MedicationsScreen() {
           accessibilityLabel="Scan prescription pages"
         />
       </View>
+
+      {__DEV__ ? (
+        <View style={styles.addWrap}>
+          <Button
+            title="Preview reminder"
+            variant="ghost"
+            onPress={() => void previewReminder()}
+            accessibilityLabel="Preview medication reminder (development only)"
+          />
+        </View>
+      ) : null}
 
       {scanSessions.length > 0 && (
         <Card style={styles.scanCard}>
@@ -435,6 +514,10 @@ export default function MedicationsScreen() {
           setScanSourceDocId(null);
           refetchMedications();
           refetchSchedule();
+          // Save/edit/scan-accept share this path: rebuild reminders from
+          // the fresh schedule (idempotent, offline-safe).
+          const patientId = getCachedPatientId();
+          if (patientId) void reconcileMedicationReminders(patientId);
         }}
       />
     </SafeAreaView>
@@ -850,10 +933,35 @@ function AddMedicationModal({
         source_document_id: sourceDocumentId ?? medication?.source_document_id ?? null,
       };
 
+      let saved: Medication | null = null;
       if (medication) {
-        await api.put(`/api/v1/medications/${medication.medication_id}`, payload);
+        saved = await api.put<Medication>(
+          `/api/v1/medications/${medication.medication_id}`,
+          payload,
+        );
       } else {
-        await api.post('/api/v1/medications', payload);
+        saved = await api.post<Medication>('/api/v1/medications', payload);
+      }
+
+      // Mirror the server-confirmed row locally (hydration marks it
+      // synced, never queued): the list reads this mirror, so without
+      // this a new medication stays invisible until a full hydration.
+      const patientId = getCachedPatientId();
+      if (patientId && saved && typeof saved.medication_id === 'string') {
+        await dbHydrateMedications(patientId, [saved]).catch(() => {});
+      }
+
+      // Moment-of-intent permission: only when reminders were just switched
+      // on with actual times (never on mount, never on cold start), and
+      // only where the runtime can actually deliver (never in Expo Go).
+      if (reminderEnabled && scheduledTimes.trim() && isReminderRuntimeSupported()) {
+        const granted = await requestReminderPermissions().catch(() => false);
+        if (!granted) {
+          Alert.alert(
+            'Notifications off',
+            'The medication was saved, but reminders cannot fire until notifications are allowed in system settings.',
+          );
+        }
       }
 
       onSave();
@@ -1007,6 +1115,27 @@ function AddMedicationModal({
           </Card>
 
           <Card style={styles.fieldCard}>
+            <Text style={styles.fieldLabel}>Reminders</Text>
+            <Text style={styles.fieldHint}>Alerts fire at the times above.</Text>
+            <View style={styles.toggleRow}>
+              <Chip
+                label="PRN (As needed)"
+                size="large"
+                selected={prn}
+                onPress={() => setPrn(!prn)}
+                accessibilityLabel="Toggle as needed"
+              />
+              <Chip
+                label="Enable Reminders"
+                size="large"
+                selected={reminderEnabled}
+                onPress={() => setReminderEnabled(!reminderEnabled)}
+                accessibilityLabel="Toggle reminders"
+              />
+            </View>
+          </Card>
+
+          <Card style={styles.fieldCard}>
             <View style={styles.fieldRow}>
               <View style={styles.fieldHalf}>
                 <Input
@@ -1054,25 +1183,6 @@ function AddMedicationModal({
               onChangeText={setPrescriber}
               placeholder="e.g., Dr. Smith"
             />
-          </Card>
-
-          <Card style={styles.fieldCard}>
-            <View style={styles.toggleRow}>
-              <Chip
-                label="PRN (As needed)"
-                size="large"
-                selected={prn}
-                onPress={() => setPrn(!prn)}
-                accessibilityLabel="Toggle as needed"
-              />
-              <Chip
-                label="Enable Reminders"
-                size="large"
-                selected={reminderEnabled}
-                onPress={() => setReminderEnabled(!reminderEnabled)}
-                accessibilityLabel="Toggle reminders"
-              />
-            </View>
           </Card>
 
           <Card style={styles.fieldCard}>

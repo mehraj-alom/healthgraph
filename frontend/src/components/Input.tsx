@@ -18,11 +18,13 @@ const HEIGHT: Record<ControlSize, number> = {
 
 interface InputProps {
   label?: string;
-  placeholder?: string;
-  value: string;
+  placeholder?: string;  value: string;
   onChangeText: (text: string) => void;
   error?: string;
   hint?: string;
+  /** Optional label/hint color overrides. Defaults preserve current behavior. */
+  labelStyle?: TextStyle;
+  hintStyle?: TextStyle;
   secureTextEntry?: boolean;
   keyboardType?: TextInputProps['keyboardType'];
   autoCapitalize?: TextInputProps['autoCapitalize'];
@@ -59,6 +61,8 @@ export const Input = ({
   onChangeText,
   error,
   hint,
+  labelStyle,
+  hintStyle,
   secureTextEntry = false,
   keyboardType = 'default',
   autoCapitalize = 'none',
@@ -89,7 +93,7 @@ export const Input = ({
   return (
     <View style={styles.container}>
       {label ? (
-        <Text style={[styles.label, hasError && { color: colors.error }]}>
+        <Text style={[styles.label, labelStyle, hasError && { color: colors.error }]}>
           {label}
         </Text>
       ) : null}
@@ -161,7 +165,7 @@ export const Input = ({
       {error ? (
         <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
       ) : hint && !hasError ? (
-        <Text style={[styles.hintText, { color: colors.textMuted }]}>{hint}</Text>
+        <Text style={[styles.hintText, { color: colors.textMuted }, hintStyle]}>{hint}</Text>
       ) : null}
     </View>
   );

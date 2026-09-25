@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 15;
+export const CURRENT_SCHEMA_VERSION = 16;
 
 /**
  * Migration function type.
@@ -784,6 +784,48 @@ const migrations: Record<number, MigrationFn> = {
   },
 
   // ========================================================================
+  // Migration 16: medication reminder instances (additive, device-only)
+  // ========================================================================
+  // One row per scheduled reminder occurrence derived from the existing
+  // medication schedule (plus snooze rows). The schedule itself stays the
+  // source of truth — this table only tracks what the OS was asked to
+  // fire so reconciliation can diff without a second schedule database.
+  // Device-local only: no sync_status column, no queue rows, patient
+  // scoped, wiped with the patient row on deletion.
+  16: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS reminder_instances (
+        occurrence_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        medication_id TEXT NOT NULL,
+        scheduled_at TEXT NOT NULL,
+        scheduled_time TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'scheduled',
+        snooze_count INTEGER NOT NULL DEFAULT 0,
+        parent_occurrence_id TEXT,
+        notification_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_reminder_patient_time ON reminder_instances (patient_id, scheduled_at);
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_reminder_patient_med ON reminder_instances (patient_id, medication_id);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      16,
+      'Medication reminders: reminder_instances table (device-only)',
+      16,
+    );
+  },
+  // ========================================================================
   // Migration 15: food-scan item breakdown (additive, device-only)
   // ========================================================================
   // The daily log keeps day totals only (meals_count, calories_kcal,
@@ -913,6 +955,8 @@ const REQUIRED_TABLES = [
   'cycle_entries',
   // Food-scan item breakdown (migration 15, device-only)
   'food_scan_items',
+  // Medication reminder instances (migration 16, device-only)
+  'reminder_instances',
 ];
 
 /**

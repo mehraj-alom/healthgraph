@@ -45,6 +45,7 @@ const PATIENT_TABLES: readonly string[] = [
   'substance_entries',
   'cycle_entries',
   'food_scan_items',
+  'reminder_instances',
   'onboarding_state',
 ];
 

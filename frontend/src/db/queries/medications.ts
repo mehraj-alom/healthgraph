@@ -346,6 +346,24 @@ export async function updateMedication(
 }
 
 /**
+ * Mirror a server-confirmed status change locally WITHOUT touching
+ * sync_status or the queue (the server already applied it — queueing
+ * would replay the mutation). Used after pause/resume/stop succeed.
+ */
+export async function markMedicationStatusLocal(
+  patientId: string,
+  medicationId: string,
+  status: MedicationStatus,
+): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync(
+    `UPDATE medications SET status = ?, updated_at = ?
+      WHERE patient_id = ? AND medication_id = ?`,
+    [status, nowIso(), patientId, medicationId],
+  );
+}
+
+/**
  * Soft-delete a medication by setting status = 'DISCONTINUED' and sync_status = 'pending_delete'.
  * Does not remove the record (preserves data for sync).
  */

@@ -10,8 +10,9 @@
  * already confirmed; Start marks completion and the gate flips to Main.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   ScrollView,
@@ -23,8 +24,9 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '@/components';
+import { BlurView } from 'expo-blur';
 import { FONT, GV, SPACE } from '@/theme/guava';
+import { useReducedMotion } from '@/theme/useReducedMotion';
 import { StageGradient } from '@/components/StageGradient';
 import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { GoalsStep } from './GoalsStep';
@@ -40,10 +42,19 @@ export default function OnboardingSetupScreen() {
   const pager = useRef<FlatList<number> | null>(null);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Read-first CTA: transparent black arrow, bottom-right, 3.5s after
+  // each step lands. Resets per step, clears on unmount.
+  const [ctaVisible, setCtaVisible] = useState(false);
+  useEffect(() => {
+    setCtaVisible(false);
+    const timer = setTimeout(() => setCtaVisible(true), 3500);
+    return () => clearTimeout(timer);
+  }, [step]);
   const { state, save, complete } = useOnboardingState();
   const [goals, setGoals] = useState<string[]>(() => state?.goals ?? []);
   const [focus, setFocus] = useState<string[]>(() => state?.focus ?? []);
   const [seeded, setSeeded] = useState(false);
+  const glassOff = useReducedMotion();
 
   // Adopt stored selections once they load (local edits win afterwards).
   if (state && !seeded) {
@@ -126,7 +137,22 @@ export default function OnboardingSetupScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StageGradient />
+      {/* Goals + focus carry the navy picker backdrop (reference look);
+          the week rides a full liquid-glass backdrop; done keeps the wash. */}
+      {step <= 1 ? (
+        <View style={styles.navyFill} />
+      ) : step === 2 ? (
+        glassOff ? (
+          <View style={styles.liquidSolid} />
+        ) : (
+          <View style={styles.liquidFill}>
+            <BlurView tint="dark" intensity={80} style={styles.liquidFill} />
+            <View style={styles.liquidTint} />
+          </View>
+        )
+      ) : (
+        <StageGradient />
+      )}
       <View style={styles.topBar}>
         {step > 0 ? (
           <Pressable
@@ -186,15 +212,26 @@ export default function OnboardingSetupScreen() {
       />
 
       <View style={styles.footer}>
-        <Button
-          title={isDone ? 'Start' : step < 2 ? 'Continue' : 'See my summary'}
-          onPress={() => void (isDone ? handleStart() : handleContinue())}
-          fullWidth
-          size="large"
-          loading={busy}
-          disabled={busy}
-          style={styles.cta}
-        />
+        {ctaVisible ? (
+          <Pressable
+            onPress={() => void (isDone ? handleStart() : handleContinue())}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel={isDone ? 'Start' : step < 2 ? 'Continue' : 'See my summary'}
+            hitSlop={12}
+            style={({ pressed }) => [
+              styles.goCircle,
+              pressed && !busy && { opacity: 0.7, transform: [{ scale: 0.94 }] },
+              busy && { opacity: 0.6 },
+            ]}
+          >
+            {busy ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.goArrow}>→</Text>
+            )}
+          </Pressable>
+        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -204,6 +241,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: GV.stage,
+  },
+  navyFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#20263D',
+  },
+  liquidFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  liquidTint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(11, 74, 63, 0.5)',
+  },
+  liquidSolid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   topBar: {
     flexDirection: 'row',
@@ -267,10 +335,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: Math.max(16, SPACE.sectionGap - 8),
+    minHeight: 88,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
-  cta: {
-    minHeight: 56,
+  // Transparent black read-first arrow, bottom-right.
+  goCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(12, 12, 14, 0.55)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  goArrow: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    lineHeight: 26,
+    fontFamily: FONT.semi,
+    marginTop: -2,
   },
 });

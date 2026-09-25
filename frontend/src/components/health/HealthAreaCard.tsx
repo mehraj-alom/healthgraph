@@ -1,14 +1,15 @@
 /**
  * HealthAreaCard - bento tiles for live areas, grouped rows for the rest.
  *
- * Anti-slop notes (mobile-taste):
- * - No icon chip row. Live tiles carry a 3px accent spine in the area
- *   color, quiet rows carry an 8px dot. One accent per tile, never a
- *   tinted square plus a colored glyph plus a pill.
+ * Color discipline (mobile-taste calibration): no rainbow. Tiles are
+ * quiet white surfaces where hierarchy comes from type alone — small
+ * muted label, large ink value, one CTA-green change line. Rows are
+ * text plus chevron with hairline dividers. The only color on either
+ * is the change line, never decoration.
  * - Value first. The real number is the hero of each tile (20 SemiBold,
  *   tabular). The area name sits small above it.
  * - Cards group by role. Live tiles are tappable objects in a 2 column
- *   bento grid. To start rows live inside one inset grouped card with
+ *   bento grid. Quiet rows live inside one inset grouped card with
  *   hairline dividers, never twelve identical cards.
  * - Press feedback runs on the UI thread via PressScale (spring 0.97).
  *   Reduced motion collapses to opacity.
@@ -20,24 +21,20 @@ import { PressScale } from '@/components/PressScale';
 import type { HealthAreaState } from '@/screens/HealthAreas/areas';
 import type { HealthAreaId } from '@/screens/HealthAreas/areas';
 
-export const AREA_ACCENT: Record<HealthAreaId, string> = {
-  heart: GV.fx.pink,
-  sleep: GV.fx.purple,
-  activity: GV.fx.green,
-  nutrition: GV.fx.amber,
-  weight: GV.fx.sky,
-  wellbeing: GV.cta,
-  medications: GV.fx.blue,
-  records: GV.fx.brown,
-  skin: GV.muted,
-  substance: GV.muted,
-  cycle: GV.fx.pink,
-  discipline: GV.cta,
-};
-
-const SOURCE_LABEL: Record<string, string> = {
-  device: 'On this device',
-  server: 'Synced',
+/** Light pastel wash per area — soft color, ink text stays readable. */
+export const AREA_TINT: Record<HealthAreaId, string> = {
+  heart: '#FBE7EC',
+  sleep: '#E9E3F7',
+  activity: '#DDF2E7',
+  nutrition: '#FBEFD8',
+  weight: '#DFF0F8',
+  wellbeing: '#DCEFE8',
+  medications: '#E0EBFA',
+  records: '#EFE6D8',
+  skin: '#E9ECEE',
+  substance: '#E9ECEE',
+  cycle: '#FBE7EC',
+  discipline: '#DCEFE8',
 };
 
 function a11yLabel(area: HealthAreaState, change?: string | null): string {
@@ -55,9 +52,8 @@ export function HealthAreaTile({
   change?: string | null;
   onPress?: () => void;
 }) {
-  const accent = AREA_ACCENT[area.id] ?? GV.muted;
-  const sourceLabel = SOURCE_LABEL[area.source] ?? null;
   const label = a11yLabel(area, change);
+  const tint = AREA_TINT[area.id] ?? GV.paper;
   return (
     <PressScale
       onPress={onPress}
@@ -66,8 +62,11 @@ export function HealthAreaTile({
       hitSlop={4}
       style={styles.tileOuter}
     >
-      <View style={styles.tile} accessible accessibilityLabel={label}>
-        <View style={[styles.spine, { backgroundColor: accent }]} />
+      <View
+        style={[styles.tile, { backgroundColor: tint }]}
+        accessible
+        accessibilityLabel={label}
+      >
         <View style={styles.tileHead}>
           <Text
             style={styles.tileLabel}
@@ -98,13 +97,6 @@ export function HealthAreaTile({
             {change}
           </Text>
         ) : null}
-        <Text
-          style={styles.tileSource}
-          numberOfLines={1}
-          maxFontSizeMultiplier={1.4}
-        >
-          {sourceLabel ?? 'Live'}
-        </Text>
       </View>
     </PressScale>
   );
@@ -120,7 +112,6 @@ export function HealthAreaRow({
   onPress?: () => void;
   last?: boolean;
 }) {
-  const accent = AREA_ACCENT[area.id] ?? GV.muted;
   const label = a11yLabel(area, null);
   return (
     <PressScale
@@ -131,7 +122,6 @@ export function HealthAreaRow({
       style={[styles.rowOuter, last && styles.rowLast]}
     >
       <View style={styles.row} accessible accessibilityLabel={label}>
-        <View style={[styles.dot, { backgroundColor: accent }]} />
         <View style={styles.rowMain}>
           <Text style={styles.rowTitle} numberOfLines={1} maxFontSizeMultiplier={1.4}>
             {area.label}
@@ -176,19 +166,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   tile: {
-    backgroundColor: GV.card,
+    borderWidth: 1,
+    borderColor: 'rgba(20, 32, 29, 0.08)',
     borderRadius: SPACE.rCard,
-    padding: 16,
-    minHeight: 132,
+    padding: 12,
+    minHeight: 104,
     justifyContent: 'flex-start',
-    overflow: 'hidden',
-  },
-  spine: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
   },
   tileHead: {
     flexDirection: 'row',
@@ -199,6 +182,7 @@ const styles = StyleSheet.create({
   tileLabel: {
     ...TYPE.caption,
     color: GV.muted,
+    letterSpacing: 0.5,
     flex: 1,
   },
   tileChev: {
@@ -209,11 +193,11 @@ const styles = StyleSheet.create({
   tileValue: {
     fontFamily: FONT.semi,
     fontSize: 20,
-    lineHeight: 26,
-    letterSpacing: -0.3,
+    lineHeight: 24,
+    letterSpacing: -0.4,
     color: GV.ink,
     fontVariant: ['tabular-nums'],
-    marginTop: 6,
+    marginTop: 4,
   },
   tileChange: {
     fontFamily: FONT.semi,
@@ -222,12 +206,6 @@ const styles = StyleSheet.create({
     color: GV.cta,
     fontVariant: ['tabular-nums'],
     marginTop: 4,
-  },
-  tileSource: {
-    ...TYPE.caption,
-    fontSize: 12,
-    color: GV.muted,
-    marginTop: 6,
   },
   rowOuter: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -243,18 +221,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     minHeight: 64,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
   rowMain: {
     flex: 1,
     gap: 2,
   },
   rowTitle: {
-    ...TYPE.button,
-    fontSize: 15,
+    fontFamily: FONT.regular,
+    fontSize: 17,
+    lineHeight: 23,
     color: GV.ink,
   },
   rowSub: {

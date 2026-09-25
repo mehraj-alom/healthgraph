@@ -378,6 +378,8 @@ export type RootStackParamList = {
   Onboarding: undefined;
   /** Post-auth personalization (goals → focus → momentum → done), once per patient. */
   OnboardingSetup: undefined;
+  /** Post-signup pricing (Free €0 / General €11 / All-in €18), once per new account. */
+  Pricing: undefined;
   /** Health-area hub (real-data availability per area). */
   HealthAreas: undefined;
   /** Neutral substance-use tracking (device-only). */
@@ -420,6 +422,8 @@ export type RootStackParamList = {
   FoodScan: undefined;
   /** Guided multipage prescription capture (premium). */
   PrescriptionScanner: undefined;
+  /** Call-like local medication reminder (one dose occurrence). */
+  MedicationReminder: { occurrenceId: string; action?: 'taken' | 'snooze-30' | 'snooze-60' };
 };
 
 // ============================================================================

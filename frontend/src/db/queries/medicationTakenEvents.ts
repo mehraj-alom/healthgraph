@@ -140,8 +140,10 @@ function toLocalDateString(isoString: string): string {
 }
 
 // ─── Frequency → Default Times Mapping (matches backend) ─────────────────────
+// Exported for the reminder scheduler, which applies the same slot rules to
+// future occurrences without duplicating the mapping.
 
-function getDefaultScheduledTimes(frequency: string): string[] {
+export function getDefaultScheduledTimes(frequency: string): string[] {
   switch (frequency) {
     case 'ONCE_DAILY': return ['08:00'];
     case 'TWICE_DAILY': return ['08:00', '20:00'];
