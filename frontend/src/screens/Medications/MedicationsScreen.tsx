@@ -377,6 +377,12 @@ export default function MedicationsScreen() {
             onPress={() => void previewReminder()}
             accessibilityLabel="Preview medication reminder (development only)"
           />
+          <Button
+            title="Voice test (sanoTTS, isolated)"
+            variant="ghost"
+            onPress={() => navigation.navigate('SattsTest')}
+            accessibilityLabel="Open isolated sanoTTS voice test (development only)"
+          />
         </View>
       ) : null}
 

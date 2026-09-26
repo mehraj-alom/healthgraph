@@ -58,6 +58,7 @@ import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
 import MedicationReminderScreen from '@/screens/Medications/MedicationReminderScreen';
 import MedicationCallScreen from '@/screens/Medications/MedicationCallScreen';
+import SattsTestScreen from '@/screens/Voice/SattsTestScreen';
 import SymptomMapScreen from '@/screens/Body/SymptomMapScreen';
 import PulseInstrumentScreen from '@/screens/PpgMeasure/PulseInstrumentScreen';
 import ImproveScreen from '@/screens/Dashboard/ImproveScreen';
@@ -509,6 +510,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="MedicationCall"
               component={MedicationCallScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Isolated sanoTTS test (dev only, disconnected from call flow). */}
+            <RootStack.Screen
+              name="SattsTest"
+              component={SattsTestScreen}
               options={{
                 headerShown: false,
               }}

@@ -434,6 +434,8 @@ export type RootStackParamList = {
   MedicationReminder: { occurrenceId: string; action?: 'taken' | 'snooze-30' | 'snooze-60' };
   /** Incoming-call medication reminder (same engine, call UX). */
   MedicationCall: { occurrenceId: string };
+  /** Isolated sanoTTS synthesis test (development only, no call flow). */
+  SattsTest: undefined;
 };
 
 // ============================================================================

@@ -8,7 +8,8 @@
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "assets/app-load.mp4",
-      "assets/audio/*"
+      "assets/audio/*",
+      "assets/voices/*"
     ],
     "ios": {
       "supportsTablet": true,

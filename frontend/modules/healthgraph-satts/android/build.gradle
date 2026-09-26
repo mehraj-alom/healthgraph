@@ -1,0 +1,35 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.healthgraph.satts'
+version = '1.0.0'
+
+// SDK versions, Kotlin toolchain, lint, and the expo-modules-core dependency
+// are managed by expo-module-gradle-plugin from the project's Expo/RN
+// versions. Do NOT hardcode compileSdk/minSdk here.
+
+android {
+  namespace 'com.healthgraph.satts'
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+    externalNativeBuild {
+      cmake {
+        // arm64 primary; x86_64 emulator slice builds from the same sources.
+        abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+      }
+    }
+  }
+  externalNativeBuild {
+    cmake {
+      path 'src/main/cpp/CMakeLists.txt'
+      version '3.22.1'
+    }
+  }
+}
+
+dependencies {
+  // No third-party native deps: pure C99 + JNI + Expo bridge only.
+}
