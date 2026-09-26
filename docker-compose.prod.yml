@@ -130,6 +130,31 @@ services:
       retries: 3
       start_period: 90s
 
+  # Pakeet STT sidecar (Phase 5 voice transport). Warm int8 model, stdlib
+  # HTTP on the INTERNAL network only — no ports published, so it is never
+  # reachable from outside the compose network. The 631 MB weights are
+  # bind-mounted read-only (never baked into the image). The API proxies
+  # authenticated turns here; a stopped sidecar degrades to HTTP 503, it
+  # never blocks boot (nothing depends_on it).
+  pakeet:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.pakeet
+    volumes:
+      - /opt/healthgraph/voice-pakeet/models:/models:ro
+    restart: unless-stopped
+    mem_limit: 1536m
+    cpus: 1.5
+    deploy:
+      resources:
+        limits: { cpus: "1.5", memory: 1536M }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8477/healthz',timeout=5)\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
   db:
     image: postgres:15-alpine
     command: ["postgres", "-c", "max_connections=50", "-c", "shared_buffers=256MB"]

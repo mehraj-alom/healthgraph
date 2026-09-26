@@ -120,7 +120,7 @@ def test_voice_transcribe_success_proxies_text(monkeypatch):
         resp = client.post("/api/v1/voice/transcribe", files={"file": ("t.wav", audio, "audio/wav")})
         assert resp.status_code == 200, resp.status_code
         assert resp.json()["text"] == "took my morning pill"
-        assert "127.0.0.1" in FakeClient.seen["url"], "proxied to the loopback sidecar only"
+        assert FakeClient.seen["url"] == "http://pakeet:8477/transcribe", "internal sidecar only"
         assert FakeClient.seen["bytes"] > 1000
     finally:
         app.dependency_overrides.clear()

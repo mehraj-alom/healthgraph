@@ -1,0 +1,24 @@
+# Pakeet STT sidecar image (Phase 5 voice transport).
+#
+# Stock Python + pinned sherpa-onnx + ffmpeg for container-audio decode.
+# The 631 MB int8 model is bind-mounted (never COPYed into the image, so
+# builds stay small and weights live outside application source).
+# No ports are published by default; peers reach it as http://pakeet:8477
+# on the internal compose network only.
+FROM python:3.11-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir "sherpa-onnx==1.13.8" "numpy"
+
+WORKDIR /srv/pakeet
+COPY voice-pakeet-server/server.py ./server.py
+
+ENV MODEL_DIR=/models \
+    PAKEET_BIND=0.0.0.0 \
+    PAKEET_PORT=8477 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8477
+CMD ["python", "server.py"]
