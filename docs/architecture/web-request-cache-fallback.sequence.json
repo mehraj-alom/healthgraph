@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Web Request with Redis Cache Fallback — function by function",
+    "output": "web-request-cache-fallback.html",
+    "viewBox": [1080, 640],
+    "column_fit": "spread",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "high-level", "label": "High level", "focus": ["browser", "api", "redis", "postgres"], "note": "The system view: who talks to whom when Redis misses." },
+      { "id": "handler", "label": "Handler internals", "focus": ["api", "handler", "redis", "postgres"], "note": "Function by function: every call the handler makes, in order." },
+      { "id": "miss-path", "label": "Miss path", "focus": ["handler", "redis", "postgres"], "note": "The fallback branch: miss, query, backfill." },
+      { "id": "response", "label": "Response", "focus": ["handler", "api", "browser"], "note": "Payload return and the 200 JSON response." }
+    ]
+  },
+  "participants": [
+    { "id": "browser", "type": "external", "label": "Browser", "sublabel": "web client" },
+    { "id": "api", "type": "backend", "label": "API Server", "sublabel": "router" },
+    { "id": "handler", "type": "backend", "label": "getResource()", "sublabel": "handler fn" },
+    { "id": "redis", "type": "database", "label": "Redis", "sublabel": "cache" },
+    { "id": "postgres", "type": "database", "label": "Postgres", "sublabel": "source" }
+  ],
+  "segments": [
+    { "from": 150, "to": 250, "label": "Request + route" },
+    { "from": 260, "to": 370, "label": "Cache check" },
+    { "from": 380, "to": 480, "label": "DB fallback" },
+    { "from": 490, "to": 570, "label": "Backfill + respond" }
+  ],
+  "messages": [
+    { "id": "http-get", "from": "browser", "to": "api", "y": 165, "label": "GET /resource?id=42", "variant": "emphasis" },
+    { "id": "route", "from": "api", "to": "handler", "y": 205, "label": "route + validate", "variant": "default" },
+    { "id": "cache-get", "from": "handler", "to": "redis", "y": 275, "label": "cache.get(res:42)", "variant": "default" },
+    { "id": "cache-miss", "from": "redis", "to": "handler", "y": 310, "label": "nil (miss)", "variant": "return" },
+    { "id": "sql-query", "from": "handler", "to": "postgres", "y": 395, "label": "db.queryRow(SELECT …)", "variant": "emphasis" },
+    { "id": "sql-row", "from": "postgres", "to": "handler", "y": 430, "label": "row", "variant": "return" },
+    { "id": "cache-set", "from": "handler", "to": "redis", "y": 494, "label": "cache.set(res:42, TTL 300s)", "variant": "dashed" },
+    { "id": "payload", "from": "handler", "to": "api", "y": 524, "label": "payload (return)", "variant": "return" },
+    { "id": "http-200", "from": "api", "to": "browser", "y": 552, "label": "200 JSON", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "browser", "from": 160, "to": 556, "type": "frontend" },
+    { "participant": "api", "from": 165, "to": 552, "type": "backend" },
+    { "participant": "handler", "from": 205, "to": 530, "type": "backend" },
+    { "participant": "redis", "from": 270, "to": 316, "type": "database" },
+    { "participant": "redis", "from": 489, "to": 505, "type": "database" },
+    { "participant": "postgres", "from": 390, "to": 436, "type": "database" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "High level",
+      "items": [
+        "Browser -> API -> Redis is attempted first on every read",
+        "PostgreSQL is touched only after a Redis miss"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Function by function",
+      "items": [
+        "getResource() owns the whole fallback: get, miss, query, set, return",
+        "The SET carries a TTL so the next identical read is a cache hit",
+        "Return messages stay quieter than forward calls"
+      ]
+    }
+  ]
+}

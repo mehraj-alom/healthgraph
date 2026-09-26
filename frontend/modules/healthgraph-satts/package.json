@@ -1,0 +1,7 @@
+{
+  "name": "healthgraph-satts",
+  "version": "1.0.0",
+  "description": "On-device sanoTTS speech for HealthGraph (Expo native module). Phoneme IDs in, PCM out — text phonemization stays outside the module.",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}
