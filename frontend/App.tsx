@@ -57,6 +57,7 @@ import SettingsScreen from '@/screens/Settings/SettingsScreen';
 import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
 import MedicationReminderScreen from '@/screens/Medications/MedicationReminderScreen';
+import MedicationCallScreen from '@/screens/Medications/MedicationCallScreen';
 import SymptomMapScreen from '@/screens/Body/SymptomMapScreen';
 import PulseInstrumentScreen from '@/screens/PpgMeasure/PulseInstrumentScreen';
 import ImproveScreen from '@/screens/Dashboard/ImproveScreen';
@@ -163,7 +164,8 @@ function ReminderBridge() {
         );
         if (!parsed || seen.current.has(parsed.occurrenceId)) return;
         seen.current.add(parsed.occurrenceId);
-        navigation.navigate('MedicationReminder', { occurrenceId: parsed.occurrenceId });
+        // Foreground delivery auto-presents the incoming-call experience.
+        navigation.navigate('MedicationCall', { occurrenceId: parsed.occurrenceId });
       });
       onResponse = notificationListeners.addResponseListener((response) => {
         const parsed = parseReminderTap(
@@ -174,14 +176,44 @@ function ReminderBridge() {
         );
         if (!parsed) return;
         if (parsed.action === 'open') {
-          navigation.navigate('MedicationReminder', { occurrenceId: parsed.occurrenceId });
+          // Tap (foreground banner, lock screen, notification center) opens
+          // the call UI; the call screen stale-guards already-handled rows.
+          navigation.navigate('MedicationCall', { occurrenceId: parsed.occurrenceId });
         } else {
+          // Shade shortcuts keep their existing auto-run behavior.
           navigation.navigate('MedicationReminder', {
             occurrenceId: parsed.occurrenceId,
             action: parsed.action,
           });
         }
       });
+      // Cold-start drain: a tap that launched a dead app never reaches the
+      // listeners above. Drain the last response once so it routes the same.
+      try {
+        const { getLastNotificationResponseAsync } = await import('expo-notifications');
+        const last = await getLastNotificationResponseAsync().catch(() => null);
+        if (!cancelled && last) {
+          const parsed = parseReminderTap(
+            last.notification.request.content.data,
+            last.actionIdentifier,
+            getCachedPatientId(),
+            DEFAULT_ACTION_IDENTIFIER,
+          );
+          if (parsed && !seen.current.has(parsed.occurrenceId)) {
+            seen.current.add(parsed.occurrenceId);
+            if (parsed.action === 'open') {
+              navigation.navigate('MedicationCall', { occurrenceId: parsed.occurrenceId });
+            } else {
+              navigation.navigate('MedicationReminder', {
+                occurrenceId: parsed.occurrenceId,
+                action: parsed.action,
+              });
+            }
+          }
+        }
+      } catch {
+        // Cold-start routing is best-effort; the notification stays visible.
+      }
     })();
     return () => {
       cancelled = true;
@@ -469,6 +501,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="MedicationReminder"
               component={MedicationReminderScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Incoming-call medication reminder (same engine, call UX). */}
+            <RootStack.Screen
+              name="MedicationCall"
+              component={MedicationCallScreen}
               options={{
                 headerShown: false,
               }}

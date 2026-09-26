@@ -7,7 +7,8 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
-      "assets/app-load.mp4"
+      "assets/app-load.mp4",
+      "assets/audio/*"
     ],
     "ios": {
       "supportsTablet": true,
@@ -53,7 +54,8 @@
         "expo-build-properties"
       ],
       "./plugins/withArm64Abi.js",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-audio"
     ],
     "extra": {
       "eas": {

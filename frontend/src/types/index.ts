@@ -432,6 +432,8 @@ export type RootStackParamList = {
   PrescriptionScanner: undefined;
   /** Call-like local medication reminder (one dose occurrence). */
   MedicationReminder: { occurrenceId: string; action?: 'taken' | 'snooze-30' | 'snooze-60' };
+  /** Incoming-call medication reminder (same engine, call UX). */
+  MedicationCall: { occurrenceId: string };
 };
 
 // ============================================================================
