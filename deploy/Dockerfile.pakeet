@@ -13,7 +13,7 @@ RUN apt-get update \
     && pip install --no-cache-dir "sherpa-onnx==1.13.8" "numpy"
 
 WORKDIR /srv/pakeet
-COPY voice-pakeet-server/server.py ./server.py
+COPY deploy/voice-pakeet-server/server.py ./server.py
 
 ENV MODEL_DIR=/models \
     PAKEET_BIND=0.0.0.0 \
