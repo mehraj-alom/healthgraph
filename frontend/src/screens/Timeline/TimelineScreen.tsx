@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '@/services/api';
 import { Button, Chip } from '@/components';
@@ -38,6 +39,9 @@ import {
   type HomeStoryItem,
 } from '../Dashboard/homeData';
 import type { RootStackParamList } from '@/types';
+import { buildDiaryDays, type DiaryDay, type DiaryItemInput } from './diary';
+import { DIARY_PAGE_HEIGHT, DiaryPagePreview, DiaryReportSheet } from './DiaryPaper';
+import { useAuth } from '@/context/AuthContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -1103,6 +1107,96 @@ export default function TimelineScreen() {
     return grouped;
   }, [filteredItems]);
 
+  // ---- Book journal: view-model over the SAME merged sections -------------
+  // No new data source: DiaryDay pages project PreparedItems (titles via the
+  // existing titleFor + story fields, origin node kept opaque for the full
+  // report renderer below).
+
+  function toDiaryInput(item: PreparedItem): DiaryItemInput {
+    const node = item.node;
+    if (node.kind === 'local') {
+      const s = node.item;
+      return { key: item.key, time: item.time, category: item.category, title: s.title, detail: s.detail, icon: s.icon ?? '', documentId: null, node };
+    }
+    if (node.kind === 'observation') {
+      const o = node.item;
+      return {
+        key: item.key, time: item.time, category: item.category,
+        title: o.finding_display_name, detail: (o.clinical_summary ?? '').slice(0, 120),
+        icon: '', documentId: null, node,
+      };
+    }
+    const ev = node.item;
+    const detail = ev.lab_result
+      ? `${ev.lab_result.value}${ev.lab_result.unit ? ` ${ev.lab_result.unit}` : ''}`
+      : ev.vital_sign
+        ? `${ev.vital_sign.value} ${ev.vital_sign.unit}`
+        : (ev.safe_notes ?? '').slice(0, 120);
+    return {
+      key: item.key, time: item.time, category: item.category,
+      title: titleFor(ev), detail, icon: '',
+      documentId: ev.evidence?.document_id ?? null, node,
+    };
+  }
+
+  const diaryDays: DiaryDay[] = useMemo(
+    () => buildDiaryDays(sections.map((s) => ({ dayKey: s.date, items: s.data.map(toDiaryInput) }))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sections],
+  );
+
+  const route = useRoute<RouteProp<RootStackParamList, 'Timeline'>>();
+  const { userProfile } = useAuth();
+  const patientName = userProfile?.displayName ?? null;
+  const flatRef = useRef<FlatList<DiaryDay> | null>(null);
+  const [openDayKey, setOpenDayKey] = useState<string | null>(null);
+  const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  const consumedAiNav = useRef<string | null>(null);
+
+  const openDay = useCallback((dayKey: string, highlight: string | null = null) => {
+    setHighlightKey(highlight);
+    setOpenDayKey(dayKey);
+  }, []);
+
+  const closeSheet = useCallback(() => {
+    setOpenDayKey(null);
+    setHighlightKey(null);
+  }, []);
+
+  const resolveHighlight = useCallback(
+    (day: DiaryDay, rawId: string): string | null => {
+      const hit = day.items.find((i) => i.key === rawId || i.key === `local-${rawId}`);
+      return hit ? hit.key : null;
+    },
+    [],
+  );
+
+  // AI navigation: search → date → scroll the journal to that page → open
+  // its 2/3 report → highlight the evidence row. Consumed once per param so
+  // focus returns never re-trigger it; the FlatList stays mounted behind
+  // the sheet, so dismissing returns to the exact scroll position.
+  useEffect(() => {
+    const target = route.params?.dateKey;
+    if (!target || diaryDays.length === 0) return;
+    const stamp = `${target}|${route.params?.highlightEventId ?? ''}`;
+    if (consumedAiNav.current === stamp) return;
+    const index = diaryDays.findIndex((d) => d.dayKey === target);
+    if (index < 0) return;
+    consumedAiNav.current = stamp;
+    try {
+      flatRef.current?.scrollToIndex({ index, viewPosition: 0.1, animated: true });
+    } catch {
+      // Fallback: estimated offset (fixed page height keeps this exact).
+      flatRef.current?.scrollToOffset({ offset: index * (DIARY_PAGE_HEIGHT + 18), animated: true });
+    }
+    const day = diaryDays[index];
+    const raw = route.params?.highlightEventId;
+    openDay(target, raw ? resolveHighlight(day, raw) : null);
+    navigation.setParams({ dateKey: undefined, highlightEventId: undefined } as never);
+  }, [route.params, diaryDays, navigation, openDay, resolveHighlight]);
+
+  const openDayItem = diaryDays.find((d) => d.dayKey === openDayKey) ?? null;
+
   // Single-select with toggle: tapping the active view releases back to All,
   // so a tap always shows ONLY the selected view — never a mixed state.
   const toggleFilter = useCallback(
@@ -1238,15 +1332,23 @@ export default function TimelineScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StageGradient />
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => item.key}
-        stickySectionHeadersEnabled
+      {/* The timeline IS the book: virtualized stack of daily report pages.
+          Fixed page height → exact getItemLayout → AI scroll + preserved
+          position on sheet dismiss (the list never unmounts). */}
+      <FlatList
+        ref={flatRef}
+        data={diaryDays}
+        keyExtractor={(day) => day.dayKey}
+        getItemLayout={(_, index) => ({
+          length: DIARY_PAGE_HEIGHT + 18,
+          offset: (DIARY_PAGE_HEIGHT + 18) * index,
+          index,
+        })}
         onScroll={onTabScroll}
         scrollEventThrottle={16}
         windowSize={7}
-        maxToRenderPerBatch={6}
-        initialNumToRender={8}
+        maxToRenderPerBatch={4}
+        initialNumToRender={5}
         removeClippedSubviews
         contentContainerStyle={styles.content}
         refreshControl={
@@ -1270,19 +1372,32 @@ export default function TimelineScreen() {
             </Text>
           </View>
         }
-        renderSectionHeader={({ section }) => (
-          <View style={styles.dateDivider}>
-            <View style={styles.dateHeaderRow}>
-              <Text style={styles.dateHeading}>{displayDate(section.date)}</Text>
-              <View style={styles.dateCountPill}>
-                <Text style={styles.dateCountText}>{section.count}</Text>
-              </View>
-              <View style={styles.dateRule} />
-            </View>
-          </View>
+        renderItem={({ item: day }) => (
+          <DiaryPagePreview day={day} patientName={patientName} onOpen={(key) => openDay(key)} />
         )}
-        renderSectionFooter={() => <View style={styles.sectionFoot} />}
-        renderItem={renderTimelineItem}
+        onScrollToIndexFailed={(info) => {
+          flatRef.current?.scrollToOffset({
+            offset: info.index * (DIARY_PAGE_HEIGHT + 18),
+            animated: true,
+          });
+        }}
+      />
+      {/* The opened page: 2/3 report over the untouched timeline. Full rows
+          reuse the existing card renderers (same components, same handlers). */}
+      <DiaryReportSheet
+        visible={openDayKey !== null}
+        day={openDayItem}
+        days={diaryDays}
+        patientName={patientName}
+        highlightKey={highlightKey}
+        renderRow={(diaryItem, _highlighted) =>
+          renderTimelineItem({ item: diaryItem.node as PreparedItem })
+        }
+        onClose={closeSheet}
+        onSelectDay={(dayKey) => {
+          setHighlightKey(null);
+          setOpenDayKey(dayKey);
+        }}
       />
     </SafeAreaView>
   );

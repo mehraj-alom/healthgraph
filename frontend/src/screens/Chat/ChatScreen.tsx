@@ -98,6 +98,8 @@ interface ChatMessage {
     structure_id: string | null;
     mesh_node_name: string | null;
     visual_status: string | null;
+    date_key?: string | null;
+    highlight_event_id?: string | null;
   }[];
   citations?: {
     node_id?: string | null;
@@ -115,6 +117,8 @@ interface ChatResponse {
     structure_id: string | null;
     mesh_node_name: string | null;
     visual_status: string | null;
+    date_key?: string | null;
+    highlight_event_id?: string | null;
   }[];
 }
 
@@ -715,6 +719,10 @@ export default function ChatScreen() {
     if (item.role !== 'assistant' || sending) return null;
     const actions = item.ui_actions ?? [];
     const structures = actions.filter((a) => a.structure_id);
+    // Journal navigation: the backend emits open_timeline_day when the user
+    // asks about a dated record. The Timeline screen scrolls to that page,
+    // opens its 2/3 report, and highlights the evidence row.
+    const journalDays = actions.filter((a) => a.action_type === 'open_timeline_day' && a.date_key);
     // P7: validated citations from the backend (filtered server-side to
     // tool-output references). Document rows deep-link to the record.
     const citations = (item.citations ?? []).filter((c) => c.node_id || c.document_id);
@@ -731,6 +739,22 @@ export default function ChatScreen() {
             <Text style={styles.actionChipText}>
               View {prettyStructure(a.structure_id)} in 3D body
             </Text>
+          </Pressable>
+        ))}
+        {journalDays.slice(0, 2).map((a, i) => (
+          <Pressable
+            key={`${a.date_key}-${i}`}
+            onPress={() =>
+              navigation.navigate('Timeline', {
+                dateKey: a.date_key ?? undefined,
+                highlightEventId: a.highlight_event_id ?? undefined,
+              })
+            }
+            style={({ pressed }) => [styles.actionChip, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${a.date_key} in the health journal`}
+          >
+            <Text style={styles.actionChipText}>Open {a.date_key} in journal</Text>
           </Pressable>
         ))}
         {isLast ? (

@@ -119,6 +119,14 @@ export interface UIAction {
   structure_id: string | null;
   mesh_node_name: string | null;
   visual_status: string | null;
+  /**
+   * Journal navigation (action_type 'open_timeline_day'). The backend may
+   * emit this when the user asks about a dated record ("the day I uploaded
+   * my blood report"): the client scrolls the journal to date_key, opens
+   * its 2/3 report, and highlights highlight_event_id when present.
+   */
+  date_key?: string | null;
+  highlight_event_id?: string | null;
 }
 
 export interface ChatCitation {
@@ -404,7 +412,9 @@ export type RootStackParamList = {
   Priority: undefined;
   Main: { screen?: string } | undefined;
   DailyLog: undefined;
-  Timeline: undefined;
+  Timeline:
+    | { dateKey?: string; highlightEventId?: string }
+    | undefined;
   Body: { focusStructureId?: string } | undefined;
   Settings: undefined;
   DocumentUpload: undefined;
