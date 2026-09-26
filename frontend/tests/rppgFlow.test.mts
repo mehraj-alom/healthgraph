@@ -1,32 +1,14 @@
 /**
- * rppgFlow — static flow-regression tests for the Pulse method selector.
+ * rppgFlow — static flow-regression tests for the unified pulse instrument.
  *
- * Asserts the wiring that MUST stay intact without a device or build:
- * - red-button tab still lands on the Pulse method screen
- * - fingertip flow route serves the EXISTING untouched PpgMeasureScreen
- * - face flow route serves the new RppgMeasureScreen
- * - PpgMeasureScreen contains zero rPPG references (modality isolation)
- * - method + face screens honor the honesty rules (no fabricated BPM,
- *   no simulation fallback, wellness copy)
- * - route params + timeline carry source provenance for both methods
- *
- * Sources are read as TEXT (repo layout preserved in staging). From `frontend/`:
- *   rm -rf /tmp/rppgflow /tmp/rppgflow-out && mkdir -p /tmp/rppgflow && \
- *   cp --parents tests/rppgFlow.test.mts App.tsx src/types/index.ts \
- *     src/screens/PpgMeasure/PulseMethodScreen.tsx \
- *     src/screens/PpgMeasure/RppgMeasureScreen.tsx \
- *     src/screens/PpgMeasure/PpgMeasureScreen.tsx \
- *     src/hooks/useRppgMeasurement.ts src/hooks/usePpgMeasurement.ts \
- *     src/components/UmbrellaTabBar.tsx \
- *     src/screens/Timeline/TimelineScreen.tsx \
- *     modules/healthgraph-rppg/src/RppgCameraPreview.tsx /tmp/rppgflow/ && \
- *   mv /tmp/rppgflow/tests/rppgFlow.test.mts /tmp/rppgflow/tests/rppgFlow.test.ts && \
- *   ./node_modules/.bin/tsc --ignoreConfig --ignoreDeprecations 6.0 \
- *     /tmp/rppgflow/tests/rppgFlow.test.ts --rootDir /tmp/rppgflow \
- *     --outDir /tmp/rppgflow-out --module commonjs --target es2022 \
- *     --esModuleInterop --skipLibCheck --noCheck --declaration false \
- *     --sourceMap false && \
- *   node --test /tmp/rppgflow-out/tests/rppgFlow.test.js
+ * One measurement path at a time (enforced by pulseMachineReducer):
+ * - red-button tab lands on PulseInstrumentScreen (single entry)
+ * - legacy PpgMeasureFlow / RppgMeasure routes are GONE (no dual paths)
+ * - the instrument drives both hooks but mounts exactly one camera preview
+ *   per authoritative mode (face XOR fingertip, never both)
+ * - overlays are labeled visual-only (no face-detection claims)
+ * - trace components render measured samples only (no sine synthesis)
+ * - hooks/services/timeline/persistence contracts are unchanged
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -60,73 +42,94 @@ function src(rel: string): string {
 
 const APP = 'App.tsx';
 const TYPES = 'src/types/index.ts';
-const METHOD = 'src/screens/PpgMeasure/PulseMethodScreen.tsx';
-const RPPG_SCREEN = 'src/screens/PpgMeasure/RppgMeasureScreen.tsx';
-const PPG_SCREEN = 'src/screens/PpgMeasure/PpgMeasureScreen.tsx';
+const INSTRUMENT = 'src/screens/PpgMeasure/PulseInstrumentScreen.tsx';
+const MACHINE = 'src/services/pulse/pulseMachine.ts';
 const RPPG_HOOK = 'src/hooks/useRppgMeasurement.ts';
 const PPG_HOOK = 'src/hooks/usePpgMeasurement.ts';
 const TABBAR = 'src/components/UmbrellaTabBar.tsx';
 const TIMELINE = 'src/screens/Timeline/TimelineScreen.tsx';
 const RPPG_PREVIEW = 'modules/healthgraph-rppg/src/RppgCameraPreview.tsx';
 
-test('red-button tab still lands on the Pulse method screen', () => {
+test('red-button tab lands on the unified pulse instrument', () => {
   const app = src(APP);
   assert.ok(
-    app.includes('<Tab.Screen name="PpgMeasure" component={PulseMethodScreen}'),
-    'PpgMeasure tab must render the method selector',
+    app.includes('<Tab.Screen name="PpgMeasure" component={PulseInstrumentScreen}'),
+    'PpgMeasure tab must render the instrument',
   );
   const tab = src(TABBAR);
   assert.ok(tab.includes("'PpgMeasure'"), 'tab bar still targets PpgMeasure');
   assert.ok(tab.includes('Measure pulse'), 'accessibility label intact');
 });
 
-test('both flows are registered as stack routes with param types', () => {
+test('legacy dual routes are removed (no simultaneous paths)', () => {
   const app = src(APP);
-  assert.ok(app.includes('name="PpgMeasureFlow"'), 'fingertip flow route');
-  assert.ok(app.includes('component={PpgMeasureScreen}'), 'flow serves existing screen');
-  assert.ok(app.includes('name="RppgMeasure"'), 'face flow route');
-  assert.ok(app.includes('component={RppgMeasureScreen}'), 'face route serves new screen');
+  assert.ok(!app.includes('name="PpgMeasureFlow"'), 'fingertip stack route removed');
+  assert.ok(!app.includes('name="RppgMeasure"'), 'face stack route removed');
+  assert.ok(!app.includes('component={PpgMeasureScreen}'), 'legacy fingertip screen unmounted');
+  assert.ok(!app.includes('component={RppgMeasureScreen}'), 'legacy face screen unmounted');
+  assert.ok(!app.includes('component={PulseMethodScreen}'), 'legacy selector unmounted');
   const types = src(TYPES);
-  assert.ok(types.includes('PpgMeasureFlow: undefined'), 'flow param type');
-  assert.ok(types.includes('RppgMeasure: undefined'), 'face param type');
+  assert.ok(!types.includes('PpgMeasureFlow: undefined'), 'flow param type removed');
+  assert.ok(!types.includes('RppgMeasure: undefined'), 'face param type removed');
+  for (const dead of [
+    'src/screens/PpgMeasure/PpgMeasureScreen.tsx',
+    'src/screens/PpgMeasure/RppgMeasureScreen.tsx',
+    'src/screens/PpgMeasure/PulseMethodScreen.tsx',
+  ]) {
+    assert.ok(!fs.existsSync(path.join(ROOT, dead)), `${dead} deleted`);
+  }
 });
 
-test('method screen offers both modalities with provenance badges', () => {
-  const s = src(METHOD);
-  assert.ok(s.includes("navigate('PpgMeasureFlow')"), 'fingertip navigation');
-  assert.ok(s.includes("navigate('RppgMeasure')"), 'face navigation');
-  assert.ok(s.includes('Fingertip PPG'), 'fingertip label');
-  assert.ok(s.includes('Face rPPG'), 'face label');
-  assert.ok(s.includes('getRecentPpgMeasurements'), 'fingertip recency');
-  assert.ok(s.includes('getRecentRppgMeasurements'), 'face recency');
+test('instrument owns single-mode orchestration', () => {
+  const s = src(INSTRUMENT);
+  assert.ok(s.includes('pulseMachineReducer'), 'reducer is the mode authority');
+  assert.ok(s.includes('useRppgMeasurement'), 'drives the rPPG hook');
+  assert.ok(s.includes('usePpgMeasurement'), 'drives the PPG hook');
+  assert.ok(s.includes('RppgCameraPreview'), 'renders the face preview');
+  assert.ok(s.includes('PpgCameraPreview'), 'renders the fingertip preview');
+  // Exactly one preview mounts per authoritative mode.
+  assert.ok(s.includes("machine.mode === 'face'"), 'face preview gated on face mode');
+  assert.ok(s.includes("machine.mode === 'fingertip'"), 'fingertip preview gated on fingertip mode');
+  assert.ok(s.includes('cancelRun'), 'single cancel path ends the active session');
+  assert.ok(s.includes("'background'"), 'background cancel intact');
+  assert.ok(s.includes('beforeRemove'), 'navigation-away cancel intact');
   assert.ok(s.includes('Not a medical device'), 'wellness disclaimer');
 });
 
-test('fingertip screen is untouched by rPPG (modality isolation)', () => {
-  const s = src(PPG_SCREEN);
-  assert.ok(!/rppg/i.test(s), 'PpgMeasureScreen must not reference rPPG');
-  assert.ok(!s.includes('RppgMeasure'), 'no face-route reference');
-  assert.ok(!s.includes('PulseMethodScreen'), 'no method-screen reference');
-  assert.ok(s.includes('usePpgMeasurement'), 'still drives the PPG hook');
-  assert.ok(s.includes('PpgCameraPreview'), 'still renders the PPG preview');
+test('face overlay never claims detection', () => {
+  const o = src('src/components/pulse/FaceGuideOverlay.tsx');
+  assert.ok(o.includes('Not face detection'), 'honest accessibility label');
+  // Positive detection claims only (the file names "detection" solely to
+  // disclaim it — match claim shapes, not the word itself).
+  assert.ok(!/face detection (is|using|technology|model)|landmark|mediapipe|detects (your|the) face|tracking (your|the) face/i.test(o), 'no detection claims');
+  const screen = src(INSTRUMENT);
+  assert.ok(screen.includes('Positioning guide only'), 'on-screen honesty caption');
+});
+
+test('fingertip overlay marks the sensing area only', () => {
+  const o = src('src/components/pulse/FingertipGuideOverlay.tsx');
+  assert.ok(!/fingertip (detection|segmentation|tracking)|segments (your|the) (finger|tip)/i.test(o), 'no segmentation/detection claims');
+  const screen = src(INSTRUMENT);
+  assert.ok(screen.includes('Placement guide only'), 'on-screen honesty caption');
+});
+
+test('trace views cannot synthesize data', () => {
+  for (const f of [
+    'src/components/pulse/PulseTraceView.tsx',
+    'src/components/pulse/BpmTrendView.tsx',
+  ]) {
+    const s = src(f);
+    assert.ok(!/Math\.sin|Math\.cos|buildSine|synthetic/i.test(s), `${f} has no waveform synthesis`);
+    assert.ok(s.includes('NO SIGNAL') || s.includes('AWAITING SIGNAL'), `${f} renders absence as absence`);
+  }
+  const trace = src('src/components/pulse/PulseTraceView.tsx');
+  assert.ok(trace.includes('detrendForDisplay'), 'renders provided samples only');
 });
 
 test('fingertip hook still refuses simulation persistence', () => {
   const h = src(PPG_HOOK);
   assert.ok(h.includes('saveAndSyncPpgResult'), 'unchanged save path');
   assert.ok(h.includes('r.simulated === true'), 'sim guard intact');
-});
-
-test('face screen honors the honesty rules', () => {
-  const s = src(RPPG_SCREEN);
-  assert.ok(s.includes('useRppgMeasurement'), 'drives the rPPG hook');
-  assert.ok(s.includes('RppgCameraPreview'), 'renders the face preview');
-  assert.ok(s.includes('hasResult'), 'HR gated on completion');
-  assert.ok(s.includes('state === \'COMPLETE\''), 'no early BPM');
-  assert.ok(s.includes('ErrorState'), 'failure surface');
-  assert.ok(!/simulat/i.test(s), 'no simulation fallback');
-  assert.ok(s.includes('never leave this phone'), 'privacy copy');
-  assert.ok(s.includes('Not a medical device'), 'wellness disclaimer');
 });
 
 test('face preview never renders the native stub without the module', () => {
@@ -149,6 +152,20 @@ test('face hook never persists unreliable runs, never invents HRV', () => {
   assert.ok(h.includes('hr.bpm === null'), 'null-HR gate');
   assert.ok(!/rmssd|sdnn|rrIntervals/i.test(h), 'no HRV fabrication in the hook');
   assert.ok(h.includes('syncPendingRppg'), 'pending retry on mount');
+  // Waveform exposure is render-only: the persistence input must not grow a
+  // waveform field (derived-only contract).
+  const svc = src('src/services/rppgService.ts');
+  assert.ok(!/waveform/i.test(svc), 'service never sees the render waveform');
+});
+
+test('fingertip raw trace cannot leak into storage or sync', () => {
+  const repo = src('src/db/queries/ppg.ts');
+  assert.ok(!/rawSignal/i.test(repo), 'SQLite layer has no rawSignal field');
+  const svc = src('src/services/ppgService.ts');
+  // The service may name rawSignal in comments that forbid it — the POST
+  // payload itself must carry no raw field (match field shapes, not prose).
+  assert.ok(!/rawSignal\s*:|exportRawSignal\s*:/.test(svc), 'sync payload has no raw field');
+  assert.ok(svc.includes('no rawSignal'), 'prohibition documented');
 });
 
 test('timeline distinguishes both pulse sources with provenance', () => {
@@ -180,4 +197,12 @@ test('offline-first service: derived payload only, pending retry, no raw data', 
   assert.ok(q.includes('rppg_measurements'), 'separate modality table');
   assert.ok(!/(FROM|INTO|UPDATE)\s+ppg_measurements/.test(q), 'never touches the fingertip table');
   assert.ok(q.includes("sync_status"), 'offline pending flag');
+});
+
+test('pulse machine module carries the mode contract', () => {
+  const m = src(MACHINE);
+  assert.ok(m.includes('FACE_PROBE_DEADLINE_MS'), 'probe budget is explicit');
+  assert.ok(m.includes('decideFaceViability'), 'viability is a pure decision');
+  assert.ok(m.includes('CHOOSE_FINGERTIP'), 'explicit fallback transition');
+  assert.ok(m.includes('most common cause is low light'), 'honest low-light copy');
 });

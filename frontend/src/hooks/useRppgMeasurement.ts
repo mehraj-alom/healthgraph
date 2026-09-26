@@ -61,6 +61,13 @@ export interface UseRppgMeasurement {
   synced: boolean | null;
   error: string | null;
   permissionBlocked: boolean;
+  /**
+   * The TRUE on-device model output (160 pulse samples) from the
+   * just-finished inference. UI-ONLY render data for the trace view:
+   * never persisted, never synced (the persistence input carries scalars
+   * only). Null until a run completes inference.
+   */
+  waveform: number[] | null;
   start: () => Promise<void>;
   cancel: () => Promise<void>;
   reset: () => void;
@@ -106,6 +113,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
   const [synced, setSynced] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
+  const [waveform, setWaveform] = useState<number[] | null>(null);
   const mounted = useRef(true);
   const settled = useRef(false);
   const modelAbortRef = useRef<AbortController | null>(null);
@@ -179,6 +187,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
   const start = useCallback(async () => {
     setError(null);
     setResult(null);
+    setWaveform(null);
     setSynced(null);
     setProgressFrames(0);
     setLiveStability(null);
@@ -401,6 +410,10 @@ export function useRppgMeasurement(): UseRppgMeasurement {
       variance /= data.length;
 
       const hr = estimateRppgHeartRate(data, fpsMeasured);
+      // Keep the true model output for the on-screen trace (render only).
+      if (mounted.current && !settled.current && data.length > 0) {
+        setWaveform(Array.from(data));
+      }
       const droppedFrac =
         capture.frameCount > 0
           ? capture.droppedFrames / (capture.frameCount + capture.droppedFrames)
@@ -525,6 +538,7 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     listenerOffRef.current = null;
     setState('IDLE');
     setResult(null);
+    setWaveform(null);
     setProgressFrames(0);
     setLiveStability(null);
     setModelProgress(null);
@@ -543,13 +557,12 @@ export function useRppgMeasurement(): UseRppgMeasurement {
     synced,
     error,
     permissionBlocked,
+    waveform,
     start,
     cancel,
     reset,
   };
 }
-
-/** Test seam: pure mapping of native capture states to screen states. */
 export function mapRppgNativeStateForTests(
   native: RppgNativeEvent['state'],
   stability: number | null,

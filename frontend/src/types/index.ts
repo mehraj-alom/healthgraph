@@ -414,10 +414,8 @@ export type RootStackParamList = {
   /** Tappable symptom body map (front/back, male/female, local state). */
   SymptomMap: undefined;
   Improve: { focus: 'improve' | 'keep'; metrics: ImproveMetric[] };
-  /** Existing validated fingertip PPG flow (relocated from the Pulse tab). */
-  PpgMeasureFlow: undefined;
-  /** Face rPPG flow (on-device capture + PhysFormer inference). */
-  RppgMeasure: undefined;
+  /* Fingertip + face measurement share one instrument screen (Pulse tab);
+     the two legacy routes were removed so only one path can be active. */
   /** Food photo calorie estimation (camera viewfinder + result sheet). */
   FoodScan: undefined;
   /** Guided multipage prescription capture (premium). */

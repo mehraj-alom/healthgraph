@@ -41,7 +41,14 @@ export interface UsePpgMeasurement {
   error: string | null;
   /** True when the OS will no longer prompt (enable in Settings instead). */
   permissionBlocked: boolean;
-  start: (durationSeconds?: number) => Promise<void>;
+  /**
+   * Raw sensor trace from the just-finished run, present only when the run
+   * was started with exportRawSignal === true and the native layer exported
+   * it. UI-ONLY render data: never persisted, never synced (the persistence
+   * input type has no rawSignal field, so it cannot leak into storage).
+   */
+  rawSignal: number[] | null;
+  start: (durationSeconds?: number, exportRawSignal?: boolean) => Promise<void>;
   cancel: () => Promise<void>;
   reset: () => void;
 }
@@ -55,6 +62,7 @@ export function usePpgMeasurement(): UsePpgMeasurement {
   const [synced, setSynced] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
+  const [rawSignal, setRawSignal] = useState<number[] | null>(null);
   const mounted = useRef(true);
   // Re-entrancy guard: a second Start press while a measurement is in flight
   // must be a no-op — otherwise two concurrent runs each insert their own
@@ -89,10 +97,11 @@ export function usePpgMeasurement(): UsePpgMeasurement {
     };
   }, [provider]);
 
-  const start = useCallback(async (durationSeconds = 60) => {
+  const start = useCallback(async (durationSeconds = 60, exportRawSignal = false) => {
     setError(null);
     setResult(null);
     setLiveBpm(null);
+    setRawSignal(null);
     setSynced(null);
     setPermissionBlocked(false);
     // A release build without the bundled native module must fail fast with
@@ -125,9 +134,12 @@ export function usePpgMeasurement(): UsePpgMeasurement {
     try {
       if (startInFlightRef.current) return;
       startInFlightRef.current = true;
-      const r = await provider.measure({ durationSeconds });
+      const r = await provider.measure({ durationSeconds, exportRawSignal });
       if (!mounted.current) return;
       setResult(r);
+      // Render-only trace: kept in component state, never handed to the
+      // persistence layer (PpgDerivedInput has no rawSignal field).
+      setRawSignal(Array.isArray(r.rawSignal) && r.rawSignal.length > 0 ? r.rawSignal : null);
       if (r.simulated === true) {
         // Simulation: ephemeral by design — never persisted, never synced.
         return;
@@ -230,6 +242,7 @@ export function usePpgMeasurement(): UsePpgMeasurement {
     startInFlightRef.current = false;
     setState('IDLE');
     setResult(null);
+    setRawSignal(null);
     setLiveQuality(null);
     setLiveBpm(null);
     setSynced(null);
@@ -243,6 +256,7 @@ export function usePpgMeasurement(): UsePpgMeasurement {
     result,
     liveQuality,
     liveBpm,
+    rawSignal,
     simulated: provider.kind === 'simulated',
     synced,
     error,

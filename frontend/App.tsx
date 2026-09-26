@@ -58,9 +58,7 @@ import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
 import MedicationReminderScreen from '@/screens/Medications/MedicationReminderScreen';
 import SymptomMapScreen from '@/screens/Body/SymptomMapScreen';
-import PpgMeasureScreen from '@/screens/PpgMeasure/PpgMeasureScreen';
-import PulseMethodScreen from '@/screens/PpgMeasure/PulseMethodScreen';
-import RppgMeasureScreen from '@/screens/PpgMeasure/RppgMeasureScreen';
+import PulseInstrumentScreen from '@/screens/PpgMeasure/PulseInstrumentScreen';
 import ImproveScreen from '@/screens/Dashboard/ImproveScreen';
 import FoodScanScreen from '@/screens/FoodScan/FoodScanScreen';
 import PrescriptionScannerScreen from '@/screens/Medications/PrescriptionScannerScreen';
@@ -210,7 +208,7 @@ function MainTabs() {
       <Tab.Screen name="Dashboard" component={HealthDashboardScreen} />
       {/* Pulse entry: method selector (fingertip PPG vs face rPPG). The
           red tab button lands here; each method pushes its own flow. */}
-      <Tab.Screen name="PpgMeasure" component={PulseMethodScreen} />
+      <Tab.Screen name="PpgMeasure" component={PulseInstrumentScreen} />
       {/* Chat is a full-screen surface: the dock never mounts there and
           the system back button handles exit. */}
       <Tab.Screen
@@ -467,14 +465,6 @@ function AppNavigator() {
               name="Main"
               component={MainTabs}
             />
-            {/* Fingertip PPG flow (existing validated screen, unchanged). */}
-            <RootStack.Screen
-              name="PpgMeasureFlow"
-              component={PpgMeasureScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
             {/* Call-like local medication reminder (one dose occurrence). */}
             <RootStack.Screen
               name="MedicationReminder"
@@ -483,14 +473,8 @@ function AppNavigator() {
                 headerShown: false,
               }}
             />
-            {/* Face rPPG flow (on-device PhysFormer capture + inference). */}
-            <RootStack.Screen
-              name="RppgMeasure"
-              component={RppgMeasureScreen}
-              options={{
-                headerShown: false,
-              }}
-            />
+            {/* Face rPPG flow is hosted inside the unified pulse instrument
+                (Pulse tab) — exactly one measurement path is ever active. */}
             <RootStack.Screen
               name="DailyLog"
               component={VitalsLoggerScreen}

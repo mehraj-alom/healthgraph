@@ -51,7 +51,7 @@
  *   src/services/ppg/types.ts
  *   src/services/ppgService.ts
  *   src/hooks/usePpgMeasurement.ts
- *   src/screens/PpgMeasure/PpgMeasureScreen.tsx
+ *   src/screens/PpgMeasure/PulseInstrumentScreen.tsx
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -167,7 +167,7 @@ test('cleanup releases torch, observer, timeout, and camera', () => {
 });
 
 test('backgrounding ends the session (no orphan camera/torch)', () => {
-  const screen = src('src/screens/PpgMeasure/PpgMeasureScreen.tsx');
+  const screen = src('src/screens/PpgMeasure/PulseInstrumentScreen.tsx');
   assert.ok(screen.includes('AppState'), 'AppState background handling missing');
   assert.ok(
     screen.includes("'background'"),
@@ -307,7 +307,7 @@ test('real camera preview: Preview + analysis share one rear camera', () => {
   // JS preview component + screen surface.
   const tsx = src(PREVIEW_TSX);
   assert.ok(tsx.includes("requireNativeView('HealthGraphPPG')"), 'JS preview binding missing');
-  const screen = src('src/screens/PpgMeasure/PpgMeasureScreen.tsx');
+  const screen = src('src/screens/PpgMeasure/PulseInstrumentScreen.tsx');
   assert.ok(screen.includes('PpgCameraPreview'), 'screen must mount the camera preview');
   // Monotonic camera timestamps (frame-rate variation cannot corrupt RR).
   assert.ok(kt.includes('imageInfo.timestamp'), 'camera timestamps missing');

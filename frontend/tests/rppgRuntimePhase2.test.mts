@@ -374,11 +374,14 @@ describe('phase 2 wiring', () => {
     assert.ok(hook.includes('downloadTimedOut'));
   });
 
-  test('screen derives busy from the single source of truth', () => {
-    const screen = src('src/screens/PpgMeasure/RppgMeasureScreen.tsx');
-    assert.ok(screen.includes('isRppgBusyState'));
-    // The old duplicated literal list must be gone.
-    assert.ok(!screen.includes("'MODEL_DOWNLOAD',"));
+  test('instrument derives busy from the single mode authority', () => {
+    const screen = src('src/screens/PpgMeasure/PulseInstrumentScreen.tsx');
+    // Busy = orchestrator phases with an authoritative active mode, never a
+    // duplicated hook-state literal list.
+    assert.ok(screen.includes("machine.phase === 'CHECKING'"));
+    assert.ok(screen.includes("machine.phase === 'FACE_RUN'"));
+    assert.ok(screen.includes("machine.phase === 'FINGERTIP_RUN'"));
+    assert.ok(screen.includes('busyRef'));
   });
 
   test('manager uses unique temp paths and codes storage failures', () => {

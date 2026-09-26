@@ -187,7 +187,7 @@ describe('rppg runtime hardening', () => {
   });
 
   test('screen cancels only an active capture (no idle CANCELLED)', () => {
-    const screen = readText('../src/screens/PpgMeasure/RppgMeasureScreen.tsx');
+    const screen = readText('../src/screens/PpgMeasure/PulseInstrumentScreen.tsx');
     assert.ok(screen.includes('busyRef'));
   });
 });
