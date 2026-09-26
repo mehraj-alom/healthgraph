@@ -116,6 +116,12 @@ class Settings(BaseSettings):
 
     STORAGE_DIR: str = "./storage/documents"
 
+    # Pakeet STT sidecar (localhost-only, Phase 5 voice transport). The
+    # sidecar binds 127.0.0.1 and is never exposed publicly; the API
+    # proxies authenticated patient turns to it. Override only to point at
+    # an equivalent loopback sidecar.
+    PAKEET_URL: str = "http://127.0.0.1:8477"
+
     # Optional explicit key for at-rest document encryption
     # (core/at_rest_crypto.py). Must be base64 encoding of exactly 32 bytes
     # (the standard Fernet-format key also works). When empty, the key is

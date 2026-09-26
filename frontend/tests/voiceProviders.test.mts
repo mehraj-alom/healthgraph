@@ -10,11 +10,38 @@
  *   MODEL_LOAD_FAILED; synth null → SYNTHESIS_FAILED; text without
  *   phonemizer → G2P_UNAVAILABLE; text with injected phonemizer → audio.
  */
-import { describe, it } from 'node:test';
+import { describe, it, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { VoiceError } from '../src/services/voice/errors.ts';
 import { createPakeetProvider } from '../src/services/voice/stt.ts';
 import { createSanoTTSProvider, type SattsBridge } from '../src/services/voice/tts.ts';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+declare const __dirname: string;
+
+function repoRoot(): string {
+  const bases: string[] = [];
+  try {
+    if (typeof __dirname === 'string') bases.push(path.resolve(__dirname, '..'));
+  } catch {
+    // ESM/strip-types runtimes have no __dirname: fall through to cwd.
+  }
+  bases.push(process.cwd(), path.join(process.cwd(), 'frontend'));
+  for (const b of bases) {
+    try {
+      if (fs.existsSync(path.join(b, 'App.tsx'))) return b;
+    } catch {
+      // Ignore and try the next candidate.
+    }
+  }
+  throw new Error('repo root not found (App.tsx missing)');
+}
+
+const ROOT = repoRoot();
+function src(rel: string): string {
+  return fs.readFileSync(path.join(ROOT, rel), 'utf8');
+}
 
 const VOICE = { frontUri: 'file:///front_q8.bin', modelUri: 'file:///model_q8.bin' };
 
@@ -103,6 +130,31 @@ describe('PakeetProvider', () => {
   });
 });
 
+test('voice transport reuses the authenticated API client (no new auth)', () => {
+  const t = src('src/services/voice/transport.ts');
+  assert.ok(t.includes('/api/v1/voice/transcribe'), 'posts to the voice endpoint');
+  assert.ok(t.includes('new FormData()'), 'multipart upload');
+  assert.ok(t.includes('api.getClient().post'), 'existing authenticated client');
+  assert.ok(!/['"]Content-Type['"]\s*:/.test(t), 'axios sets the multipart boundary');
+  assert.ok(t.includes('413') && t.includes('INVALID_AUDIO'), 'oversize mapped');
+  assert.ok(t.includes('503') && t.includes('MODEL_UNAVAILABLE'), 'sidecar-down mapped');
+  assert.ok(t.includes('401') || t.includes('403'), 'auth expiry mapped');
+  assert.ok(!/setInterval|WebSocket|EventSource|stt\/stream/i.test(t), 'turn-based only, no streaming');
+});
+
+test('turn screen is isolated, capped, and honest about playback', () => {
+  const s = src('src/screens/Voice/VoiceTurnScreen.tsx');
+  assert.ok(s.includes('MAX_TURN_S = 30'), '30s turn cap');
+  assert.ok(s.includes('/api/v1/chat'), 'reuses the existing chat/LangGraph path');
+  assert.ok(s.includes('createPakeetProvider'), 'transcription via the STT boundary');
+  assert.ok(s.includes('on-device text phonemization') || s.includes('phonemization'), 'playback limit stated');
+  assert.ok(!/MedicationCall|takeReminderDose|callMachine/i.test(s), 'no call-engine contact');
+  const app = src('App.tsx');
+  assert.ok(app.includes('name="VoiceTurn"'), 'dev route registered');
+  const meds = src('src/screens/Medications/MedicationsScreen.tsx');
+  assert.ok(meds.includes("navigate('VoiceTurn')"), 'dev-gated entry exists');
+  assert.ok(meds.includes('__DEV__'), 'entry is dev-only');
+});
 describe('SanoTTSProvider', () => {
   it('valid IDs → audio URI via bridge (lazy load once)', async () => {
     const bridge = fakeBridge();

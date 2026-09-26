@@ -25,6 +25,12 @@ import {
   assetUrl,
   getAssetBaseUrl,
 } from '../src/services/assetHost.ts';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+function repoSrc(rel: string): string {
+  return fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
+}
 
 // ============================================================================
 // Manifest — the fingerprint the installer enforces
@@ -123,7 +129,17 @@ describe('asset URLs', () => {
     );
   });
 
-  test('model + sample anatomy URLs resolve flat under the release', () => {
+  test('HTTP error pages never masquerade as checksum failures', () => {
+    const mgr = repoSrc('src/services/rppg/modelManager.ts');
+    // File.downloadFileAsync exposes no HTTP status, so the manager takes
+    // a cheap HEAD first: a non-OK verdict fails fast with the server
+    // status instead of falling through to a misleading checksum mismatch.
+    assert.ok(mgr.includes("method: 'HEAD'"), 'HEAD pre-check present');
+    assert.ok(mgr.includes('HTTP ${head.status}'), 'server verdict surfaced');
+    assert.ok(mgr.includes('checksum'), 'integrity gates retained');
+  });
+
+test('model + sample anatomy URLs resolve flat under the release', () => {
     assert.equal(
       assetUrl(RPPG_MODEL_MANIFEST.remotePath),
       `${getAssetBaseUrl()}/physformer_rppg_fp16.onnx`,

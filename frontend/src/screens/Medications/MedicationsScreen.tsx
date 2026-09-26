@@ -383,6 +383,12 @@ export default function MedicationsScreen() {
             onPress={() => navigation.navigate('SattsTest')}
             accessibilityLabel="Open isolated sanoTTS voice test (development only)"
           />
+          <Button
+            title="Voice turn test (isolated)"
+            variant="ghost"
+            onPress={() => navigation.navigate('VoiceTurn')}
+            accessibilityLabel="Open isolated turn-based voice test (development only)"
+          />
         </View>
       ) : null}
 

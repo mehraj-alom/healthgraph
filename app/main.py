@@ -33,6 +33,7 @@ from app.api.v1 import (
     summaries,
     timeline,
     trends,
+    voice,
 )
 from core.config import initialize_firebase, settings
 from core.db import SessionLocal, engine
@@ -388,6 +389,7 @@ def create_app() -> FastAPI:
     app.include_router(privacy.router)
     app.include_router(profile.router)
     app.include_router(trends.router)
+    app.include_router(voice.router)
     app.include_router(health_graph.router)
     app.include_router(medications.router)
 

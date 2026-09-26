@@ -59,6 +59,7 @@ import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
 import MedicationReminderScreen from '@/screens/Medications/MedicationReminderScreen';
 import MedicationCallScreen from '@/screens/Medications/MedicationCallScreen';
 import SattsTestScreen from '@/screens/Voice/SattsTestScreen';
+import VoiceTurnScreen from '@/screens/Voice/VoiceTurnScreen';
 import SymptomMapScreen from '@/screens/Body/SymptomMapScreen';
 import PulseInstrumentScreen from '@/screens/PpgMeasure/PulseInstrumentScreen';
 import ImproveScreen from '@/screens/Dashboard/ImproveScreen';
@@ -518,6 +519,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="SattsTest"
               component={SattsTestScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Isolated turn-based voice loop (dev only, no call flow). */}
+            <RootStack.Screen
+              name="VoiceTurn"
+              component={VoiceTurnScreen}
               options={{
                 headerShown: false,
               }}

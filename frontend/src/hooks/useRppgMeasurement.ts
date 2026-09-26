@@ -289,10 +289,15 @@ export function useRppgMeasurement(): UseRppgMeasurement {
         return;
       }
       setModelProgress(null);
+      // Production shows the friendly copy; development appends the actual
+      // native/manager reason (e.g. HTTP status) so a missing model host is
+      // diagnosable instead of collapsing into "not available".
+      const friendly = modelManager
+        ? modelManager.friendlyRppgModelMessage(code)
+        : 'The pulse model could not be prepared. Try again.';
+      const detail = e instanceof Error && e.message ? ` [${e.message}]` : '';
       fail(
-        modelManager
-          ? modelManager.friendlyRppgModelMessage(code)
-          : 'The pulse model could not be prepared. Try again.',
+        typeof __DEV__ !== 'undefined' && __DEV__ ? `${friendly}${detail}` : friendly,
       );
       return;
     } finally {

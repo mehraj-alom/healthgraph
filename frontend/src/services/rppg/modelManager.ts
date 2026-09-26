@@ -249,6 +249,40 @@ export async function ensureRppgModelAvailable(
   const tmp = attemptTempFile();
 
   const url = getRppgModelUrl();
+  // HTTP verdict BEFORE bytes: File.downloadFileAsync exposes no status, so
+  // a 404 error page would otherwise masquerade as a checksum failure. A
+  // cheap HEAD surfaces the real server verdict; an inconclusive HEAD
+  // (throw) falls through to the download, where size + SHA still guard
+  // integrity. Abort during HEAD is a genuine cancel.
+  try {
+    const head = await fetch(url, {
+      method: 'HEAD',
+      headers: { 'Cache-Control': 'no-cache' },
+      signal,
+    });
+    if (!head.ok) {
+      try {
+        await tmp.delete();
+      } catch {
+        /* ignore */
+      }
+      throw new RppgModelError(
+        'network',
+        `The model server answered HTTP ${head.status} for ${RPPG_MODEL_MANIFEST.filename}. Check the asset host and try again.`,
+      );
+    }
+  } catch (err: unknown) {
+    if (err instanceof RppgModelError) throw err;
+    if (signal?.aborted) {
+      try {
+        await tmp.delete();
+      } catch {
+        /* ignore */
+      }
+      throw new RppgModelError('cancelled', 'Model download cancelled.');
+    }
+    // Inconclusive (DNS/TLS/CORS on HEAD): proceed; integrity gates hold.
+  }
   try {
     await File.downloadFileAsync(url, tmp, {
       headers: { 'Cache-Control': 'no-cache' },

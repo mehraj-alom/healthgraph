@@ -144,7 +144,9 @@ jobs:
           grep -q "android.permission.CAMERA" android/app/src/main/AndroidManifest.xml
           test -d node_modules/healthgraph-ppg/android
           test -d node_modules/healthgraph-rppg/android
-          echo "Prebuild OK: gradlew present, CAMERA permission present, ppg/rppg native dirs present."
+          test -d node_modules/healthgraph-satts/android
+          test -f node_modules/healthgraph-satts/android/src/main/cpp/sanotts.c
+          echo "Prebuild OK: gradlew present, CAMERA permission present, ppg/rppg/satts native dirs present."
 
       - name: Diagnose disk immediately before Gradle
         run: |
@@ -156,6 +158,34 @@ jobs:
       - name: Gradle assembleRelease + bundleRelease (NOT Play-signed)
         run: ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
         working-directory: frontend/android
+
+      - name: Inspect release artifacts for packaged native assets
+        working-directory: frontend/android
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          test -f "$APK" && test -f "$AAB"
+          # Size-exact presence gate (bundled names are content-hashed):
+          # heartnano front_q8 109296 B, model_q8 235936 B, chime 32044 B.
+          # The 16.6 MB PhysFormer model is CDN-delivered BY DESIGN and must
+          # NOT be in the bundle — its absence here is expected, not a failure.
+          for f in "$APK" "$AAB"; do
+            echo "--- $f ---"
+            for size in 109296 235936 32044; do
+              hits=$(unzip -l "$f" | awk -v s="$size" '$1==s {print $4}')
+              if [ -z "$hits" ]; then
+                echo "MISSING asset of size $size in $f"
+                exit 1
+              fi
+              echo "present (${size} B): $hits"
+            done
+            if unzip -l "$f" | awk '$1==16668043 {found=1} END {exit !found}'; then
+              echo "NOTE: PhysFormer onnx unexpectedly bundled (harmless duplicate of CDN model)"
+            else
+              echo "expected: PhysFormer onnx absent (CDN-delivered by design)"
+            fi
+          done
 
       - name: Label test artifacts (NOT Play Store-ready)
         run: |

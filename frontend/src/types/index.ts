@@ -436,6 +436,8 @@ export type RootStackParamList = {
   MedicationCall: { occurrenceId: string };
   /** Isolated sanoTTS synthesis test (development only, no call flow). */
   SattsTest: undefined;
+  /** Isolated turn-based voice loop (development only, no call flow). */
+  VoiceTurn: undefined;
 };
 
 // ============================================================================
