@@ -86,6 +86,16 @@ describe('buildDiaryDays', () => {
       NOW,
     );
     assert.equal(days[0].primary?.key, 'c');
+    assert.equal(days[0].secondary?.key, 'b');
+  });
+
+  it('side box is empty without a runner-up', () => {
+    const days = buildDiaryDays(
+      [{ dayKey: '2026-09-26', items: [item({ key: 'a', category: 'vital', title: 'HR' })] }],
+      NOW,
+    );
+    assert.equal(days[0].primary?.key, 'a');
+    assert.equal(days[0].secondary, null);
   });
 
   it('single-item day still forms a page', () => {

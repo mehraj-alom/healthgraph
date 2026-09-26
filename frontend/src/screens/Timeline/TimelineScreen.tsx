@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Pressable,
   RefreshControl,
@@ -40,7 +41,7 @@ import {
 } from '../Dashboard/homeData';
 import type { RootStackParamList } from '@/types';
 import { buildDiaryDays, type DiaryDay, type DiaryItemInput } from './diary';
-import { DIARY_PAGE_HEIGHT, DiaryPagePreview, DiaryReportSheet } from './DiaryPaper';
+import { DIARY_PAGE_STEP, DiaryPagePreview, DiaryReportSheet, TurningPage } from './DiaryPaper';
 import { useAuth } from '@/context/AuthContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -1187,7 +1188,7 @@ export default function TimelineScreen() {
       flatRef.current?.scrollToIndex({ index, viewPosition: 0.1, animated: true });
     } catch {
       // Fallback: estimated offset (fixed page height keeps this exact).
-      flatRef.current?.scrollToOffset({ offset: index * (DIARY_PAGE_HEIGHT + 18), animated: true });
+      flatRef.current?.scrollToOffset({ offset: index * DIARY_PAGE_STEP, animated: true });
     }
     const day = diaryDays[index];
     const raw = route.params?.highlightEventId;
@@ -1196,6 +1197,25 @@ export default function TimelineScreen() {
   }, [route.params, diaryDays, navigation, openDay, resolveHighlight]);
 
   const openDayItem = diaryDays.find((d) => d.dayKey === openDayKey) ?? null;
+
+  // ---- Book paging: snap page-by-page, top-anchored turn animation -------
+  // scrollY drives each page's rotateX (native driver); a fling therefore
+  // turns pages and settles on boundaries instead of free-scrolling.
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [headerH, setHeaderH] = useState(0);
+  const snapOffsets = useMemo(
+    () => (headerH > 0 ? diaryDays.map((_, i) => headerH + i * DIARY_PAGE_STEP) : undefined),
+    [headerH, diaryDays],
+  );
+  const onBookScroll = useCallback(
+    (e: Parameters<typeof onTabScroll>[0]) => {
+      Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+        useNativeDriver: true,
+      })(e);
+      onTabScroll(e);
+    },
+    [onTabScroll, scrollY],
+  );
 
   // Single-select with toggle: tapping the active view releases back to All,
   // so a tap always shows ONLY the selected view — never a mixed state.
@@ -1340,16 +1360,20 @@ export default function TimelineScreen() {
         data={diaryDays}
         keyExtractor={(day) => day.dayKey}
         getItemLayout={(_, index) => ({
-          length: DIARY_PAGE_HEIGHT + 18,
-          offset: (DIARY_PAGE_HEIGHT + 18) * index,
+          length: DIARY_PAGE_STEP,
+          offset: (headerH > 0 ? headerH : 0) + DIARY_PAGE_STEP * index,
           index,
         })}
-        onScroll={onTabScroll}
+        onScroll={onBookScroll}
         scrollEventThrottle={16}
         windowSize={7}
         maxToRenderPerBatch={4}
         initialNumToRender={5}
         removeClippedSubviews
+        snapToOffsets={snapOffsets}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        disableIntervalMomentum
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
@@ -1359,7 +1383,9 @@ export default function TimelineScreen() {
             colors={[GV.teal]}
           />
         }
-        ListHeaderComponent={listHeader}
+        ListHeaderComponent={
+          <View onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>{listHeader}</View>
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>
@@ -1372,12 +1398,14 @@ export default function TimelineScreen() {
             </Text>
           </View>
         }
-        renderItem={({ item: day }) => (
-          <DiaryPagePreview day={day} patientName={patientName} onOpen={(key) => openDay(key)} />
+        renderItem={({ item: day, index }) => (
+          <TurningPage index={index} scrollY={scrollY} topOffset={headerH}>
+            <DiaryPagePreview day={day} patientName={patientName} onOpen={(key) => openDay(key)} />
+          </TurningPage>
         )}
         onScrollToIndexFailed={(info) => {
           flatRef.current?.scrollToOffset({
-            offset: info.index * (DIARY_PAGE_HEIGHT + 18),
+            offset: (headerH > 0 ? headerH : 0) + info.index * DIARY_PAGE_STEP,
             animated: true,
           });
         }}

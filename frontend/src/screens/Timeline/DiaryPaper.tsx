@@ -8,6 +8,7 @@
 
 import { memo, useEffect, useRef } from 'react';
 import {
+  Animated,
   Modal,
   Pressable,
   ScrollView,
@@ -20,7 +21,9 @@ import { stripSummary } from './diary';
 import { FONT } from '@/theme/guava';
 
 /** Fixed preview height: enables exact getItemLayout + scroll preservation. */
-export const DIARY_PAGE_HEIGHT = 296;
+export const DIARY_PAGE_HEIGHT = 336;
+/** Full page step including the inter-page gap (must match pageSlot). */
+export const DIARY_PAGE_STEP = DIARY_PAGE_HEIGHT + 18;
 
 export const PAPER = {
   sheet: '#f6f1e4',
@@ -41,10 +44,13 @@ interface PreviewProps {
   onOpen: (dayKey: string) => void;
 }
 
-/** One journal page: date, report header, primary block, summary strip. */
+/** One journal page, laid out like the wireframe: date + report header,
+ *  primary content box beside a narrow side box, and a full-width bottom
+ *  box for the rest. Every box shows real day data — never filler. */
 export const DiaryPagePreview = memo(function DiaryPagePreview({ day, patientName, onOpen }: PreviewProps) {
   const strip = stripSummary(day);
   const primary = day.primary;
+  const secondary = day.secondary;
   return (
     <View style={styles.pageSlot}>
       {/* Stacked pages beneath. */}
@@ -64,44 +70,91 @@ export const DiaryPagePreview = memo(function DiaryPagePreview({ day, patientNam
           </View>
           <View style={styles.reportHeadRow}>
             <Text style={styles.reportHead}>Daily Report</Text>
-            {patientName ? <Text style={styles.patient}>{patientName}</Text> : null}
+            <Text style={styles.reportDate}>{day.fullDate}</Text>
           </View>
+          {patientName ? <Text style={styles.patient}>{patientName}</Text> : null}
           <View style={styles.rule} />
-          {primary ? (
+          <View style={styles.mainRow}>
             <View style={styles.primaryWell}>
-              <Text style={styles.primaryTitle} numberOfLines={1}>
-                {primary.icon ? `${primary.icon} ` : ''}{primary.title}
-              </Text>
-              {primary.detail ? (
-                <Text style={styles.primaryDetail} numberOfLines={2}>{primary.detail}</Text>
-              ) : null}
-              <Text style={styles.primaryTime}>{primary.time}</Text>
+              {primary ? (
+                <>
+                  <Text style={styles.primaryTitle} numberOfLines={1}>
+                    {primary.icon ? `${primary.icon} ` : ''}{primary.title}
+                  </Text>
+                  {primary.detail ? (
+                    <Text style={styles.primaryDetail} numberOfLines={2}>{primary.detail}</Text>
+                  ) : null}
+                  <Text style={styles.primaryTime}>{primary.time}</Text>
+                </>
+              ) : (
+                <Text style={styles.primaryDetail}>No entries recorded.</Text>
+              )}
             </View>
-          ) : (
-            <View style={styles.primaryWell}>
-              <Text style={styles.primaryDetail}>No entries recorded.</Text>
+            <View style={styles.sideBox}>
+              <Text style={styles.sideLabel}>ALSO</Text>
+              {secondary ? (
+                <>
+                  <Text style={styles.sideIcon}>{secondary.icon || '◆'}</Text>
+                  <Text style={styles.sideTitle} numberOfLines={2}>{secondary.title}</Text>
+                  {secondary.detail ? (
+                    <Text style={styles.sideDetail} numberOfLines={1}>{secondary.detail}</Text>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <Text style={styles.sideIcon}>▤</Text>
+                  <Text style={styles.sideTitle} numberOfLines={2}>
+                    {day.total} {day.total === 1 ? 'entry' : 'entries'}
+                  </Text>
+                </>
+              )}
             </View>
-          )}
-          <View style={styles.stripRow}>
-            {strip.length > 0 ? (
-              strip.map((part, i) => (
-                <Text key={i} style={styles.stripPart} numberOfLines={1}>{part}</Text>
-              ))
-            ) : (
-              <Text style={styles.stripPart}>—</Text>
-            )}
           </View>
-          <Text style={styles.countLine}>
-            {day.total} {day.total === 1 ? 'entry' : 'entries'} · tap to open
-          </Text>
+          <View style={styles.bottomBox}>
+            <Text style={styles.bottomText} numberOfLines={1}>
+              {strip.length > 0 ? strip.join('   ') : '—'}
+            </Text>
+            <Text style={styles.bottomTap}>tap to open ›</Text>
+          </View>
         </View>
       </Pressable>
     </View>
   );
 });
 
-interface SheetProps {
-  visible: boolean;
+/**
+ * TurningPage — top-to-bottom page-turn feel for the vertical journal.
+ *
+ * Each page tilts on the X axis with perspective as it travels: tipped back
+ * while rising from below, flat at rest, tipping forward as it leaves past
+ * the top. Transform-only (native driver, 60fps); layout size never
+ * changes, so getItemLayout scroll math stays exact. Restrained ±9°.
+ */
+export function TurningPage({
+  index,
+  scrollY,
+  topOffset = 0,
+  children,
+}: {
+  index: number;
+  scrollY: Animated.Value;
+  /** List-header height above the first page (measured at runtime). */
+  topOffset?: number;
+  children: React.ReactNode;
+}) {
+  const y = topOffset === 0 ? scrollY : Animated.subtract(scrollY, topOffset);
+  const inputRange = [(index - 1) * DIARY_PAGE_STEP, index * DIARY_PAGE_STEP, (index + 1) * DIARY_PAGE_STEP];
+  const rotateX = y.interpolate({ inputRange, outputRange: ['9deg', '0deg', '-9deg'], extrapolate: 'clamp' });
+  const scale = y.interpolate({ inputRange, outputRange: [0.965, 1, 0.985], extrapolate: 'clamp' });
+  const opacity = y.interpolate({ inputRange, outputRange: [0.65, 1, 1], extrapolate: 'clamp' });
+  return (
+    <Animated.View style={{ transform: [{ perspective: 900 }, { rotateX }, { scale }], opacity }}>
+      {children}
+    </Animated.View>
+  );
+}
+
+interface SheetProps {  visible: boolean;
   day: DiaryDay | null;
   days: DiaryDay[];
   patientName: string | null;
@@ -245,18 +298,34 @@ const styles = StyleSheet.create({
   dateContext: { fontFamily: FONT.semi, fontSize: 13, color: PAPER.muted },
   reportHeadRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   reportHead: { fontFamily: FONT.semi, fontSize: 13, letterSpacing: 1.5, color: PAPER.ink },
+  reportDate: { fontSize: 11, color: PAPER.muted },
   patient: { fontSize: 12, color: PAPER.muted },
   rule: { height: 1, backgroundColor: PAPER.rule },
+  mainRow: { flexDirection: 'row', gap: 8, minHeight: 128 },
   primaryWell: {
+    flex: 1,
     backgroundColor: PAPER.well, borderRadius: 3, paddingHorizontal: 10, paddingVertical: 8, gap: 2,
     borderLeftWidth: 3, borderLeftColor: PAPER.accent,
   },
   primaryTitle: { fontFamily: FONT.semi, fontSize: 15, color: PAPER.ink },
   primaryDetail: { fontSize: 12, lineHeight: 17, color: PAPER.muted },
   primaryTime: { fontSize: 11, color: PAPER.faint, fontVariant: ['tabular-nums'] },
-  stripRow: { flexDirection: 'row', gap: 8 },
-  stripPart: { flex: 1, fontSize: 11, color: PAPER.muted },
-  countLine: { fontSize: 11, color: PAPER.faint },
+  sideBox: {
+    width: 96,
+    backgroundColor: PAPER.well, borderRadius: 3, paddingHorizontal: 8, paddingVertical: 8, gap: 3,
+    borderWidth: 1, borderColor: PAPER.rule, alignItems: 'center', justifyContent: 'center',
+  },
+  sideLabel: { fontFamily: FONT.semi, fontSize: 9, letterSpacing: 2, color: PAPER.faint },
+  sideIcon: { fontSize: 22, color: PAPER.ink },
+  sideTitle: { fontFamily: FONT.semi, fontSize: 11, lineHeight: 14, color: PAPER.ink, textAlign: 'center' },
+  sideDetail: { fontSize: 10, color: PAPER.muted, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  bottomBox: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: PAPER.well, borderRadius: 3, paddingHorizontal: 10, paddingVertical: 9,
+    borderWidth: 1, borderColor: PAPER.rule,
+  },
+  bottomText: { flex: 1, fontSize: 11, color: PAPER.muted },
+  bottomTap: { fontFamily: FONT.semi, fontSize: 11, color: PAPER.accent },
   sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#10140fdd' },
   sheetBackdropTap: { flex: 1 },
   sheet: {

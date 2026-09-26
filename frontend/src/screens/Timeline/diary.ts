@@ -52,6 +52,8 @@ export interface DiaryDay {
   counts: Partial<Record<DiaryCategory, number>>;
   /** Hero block of the preview (most report-worthy row), or null. */
   primary: DiaryItemInput | null;
+  /** Side-box runner-up (next most report-worthy, different row), or null. */
+  secondary: DiaryItemInput | null;
 }
 
 /** Report-worthiness order for the preview hero block. */
@@ -102,12 +104,11 @@ export function buildDiaryDays(
   return days.map(({ dayKey, items }) => {
     const counts: Partial<Record<DiaryCategory, number>> = {};
     for (const item of items) counts[item.category] = (counts[item.category] ?? 0) + 1;
-    let primary: DiaryItemInput | null = null;
-    for (const item of items) {
-      if (!primary || priorityOf(item.category) < priorityOf(primary.category)) primary = item;
-    }
+    const ranked = [...items].sort((a, b) => priorityOf(a.category) - priorityOf(b.category));
+    const primary = ranked[0] ?? null;
+    const secondary = ranked[1] ?? null;
     const { title, context, fullDate } = labelDay(dayKey, now);
-    return { dayKey, title, context, fullDate, items, total: items.length, counts, primary };
+    return { dayKey, title, context, fullDate, items, total: items.length, counts, primary, secondary };
   });
 }
 
@@ -123,7 +124,9 @@ export function stripSummary(day: DiaryDay, maxParts = 3): string[] {
     if (parts.length >= maxParts) break;
     const n = day.counts[cat] ?? 0;
     if (n === 0) continue;
-    if (day.primary && day.primary.category === cat && n === 1) continue;
+    // Don't restate a box the page already shows: skip singleton categories
+    // already featured as the hero or the side box.
+    if (n === 1 && (day.primary?.category === cat || day.secondary?.category === cat)) continue;
     parts.push(cat === 'medication' ? `● ${n} med${n === 1 ? '' : 's'}` : `◆ ${labelFor(cat)}${n > 1 ? ` ×${n}` : ''}`);
   }
   return parts.slice(0, maxParts);
