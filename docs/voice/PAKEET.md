@@ -32,7 +32,10 @@ an isolated environment only; no voice session, no API changes).
   of the upstream `.nemo` bundle — we ship only the sherpa int8 conversion,
   which inherits CC-BY-4.0.
 - **Download source:** `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2`
-- **Hash/checksum:** recorded in Phase 2 (sha256sum of tarball + files).
+- **Hash/checksum (measured 2026-09-26):**
+  tarball (482,468,385 bytes): `157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad`
+  unpacked `models/` (631 MB): encoder.int8.onnx 652,184,296 B, decoder.int8.onnx 7,257,753 B,
+  joiner.int8.onnx 1,739,080 B, tokens.txt 9,384 B, test_wavs/0.wav (7.43 s, 16 kHz).
 
 ## Rejected alternative
 
@@ -47,3 +50,29 @@ English-first voice turns need.)
 2 vCPU / 7.8 GB RAM with ~5.9 GB available: the warm sidecar (~1.5 GB
 budget) fits alongside api/workers/beat/db/redis. Short-turn CPU latency
 is measured in Phase 2; architecture unchanged regardless of outcome.
+
+## Phase 2 measurements (2026-09-26, isolated `/opt/healthgraph/voice-pakeet/`)
+
+venv (host Python **3.10** — 3.11 exists only inside the backend
+containers; the isolated env has no dependency on backend Python) +
+`sherpa-onnx==1.13.8` + numpy. Test input: the package's own
+`test_wavs/0.wav` (7.43 s English, non-sensitive by design). No backend,
+Postgres, Redis, or API file touched; production containers stayed
+healthy throughout.
+
+- Model download size: 460 MB tarball → 631 MB unpacked
+- Model load time: 14.2 s (warm process; load once, transcribe many)
+- RAM after load: 934 MB; peak during inference 1,064 MB (max RSS)
+- CPU usage: 108% of one core during inference (2 threads configured)
+- Test audio duration: 7.43 s
+- Transcription latency: 1.93 s cold / 1.10 s warm (RTF 0.26 / 0.15)
+- Transcription result (deterministic across runs):
+  "Well, I don't wish to see it any more, observed Phebe, turning away
+  her eyes. It is certainly very like the old portrait."
+- Internal readiness (`scripts/readiness.sh`, manual over SSH, no endpoint):
+  Pakeet process OK, Model loaded OK, Transcription OK.
+
+Verdict: the current VPS (2 vCPU / 7.8 GB, ~4–5.5 GB free alongside the
+stack) runs Pakeet reliably for short voice turns — ~1 GB steady-state,
+faster-than-real-time CPU inference, zero impact on the existing
+api/workers/beat/db/redis observed during testing.
