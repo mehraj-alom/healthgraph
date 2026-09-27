@@ -15,10 +15,8 @@ import java.nio.ByteOrder
  * is intentionally NOT here — the JS layer supplies precomputed IDs
  * (SanoTTSProvider), so no espeak/GPL layer ships on device.
  *
- * Threading: synthesize() blocks the calling thread (single utterance,
- * milliseconds of audio). Callers must dispatch off the UI thread; the
- * Expo bridge already runs module functions off the main thread, and the
- * JS provider serializes calls with its own in-flight guard.
+ * synthesize() is async (Expo runs it off the main thread) and blocks only
+ * for milliseconds of audio; the JS provider serializes calls anyway.
  */
 class HealthGraphSattsModule : Module() {
   private var handle: Long = 0L
@@ -27,8 +25,8 @@ class HealthGraphSattsModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("HealthGraphSatts")
 
-    Function("isAvailable") fun isAvailable(): Boolean {
-      return try {
+    Function("isAvailable") {
+      try {
         System.loadLibrary("satts")
         true
       } catch (e: UnsatisfiedLinkError) {
@@ -36,8 +34,8 @@ class HealthGraphSattsModule : Module() {
       }
     }
 
-    Function("loadVoices") fun loadVoices(frontPath: String, modelPath: String): Boolean {
-      return try {
+    Function("loadVoices") { frontPath: String, modelPath: String ->
+      try {
         System.loadLibrary("satts")
         closeHandle()
         val h = nativeOpen(frontPath, modelPath)
@@ -54,38 +52,41 @@ class HealthGraphSattsModule : Module() {
       }
     }
 
-    Function("getSampleRate") fun getSampleRate(): Int {
-      if (handle == 0L) return 0
-      return try {
-        nativeSampleRate(handle)
-      } catch (e: Exception) {
+    Function("getSampleRate") {
+      if (handle == 0L) {
         0
+      } else {
+        try {
+          nativeSampleRate(handle)
+        } catch (e: Exception) {
+          0
+        }
       }
     }
 
-    Function("getLastError") fun getLastError(): String {
+    Function("getLastError") {
       if (handle != 0L) {
         try {
           val native = nativeLastError(handle)
-          if (native.isNotEmpty()) return native
+          if (native.isNotEmpty()) return@Function native
         } catch (e: Exception) {
           // Fall through to the cached message.
         }
       }
-      return lastErrorText ?: "unknown native error"
+      lastErrorText ?: "unknown native error"
     }
 
     // Synthesize phoneme IDs to a 16-bit mono WAV file in the app cache.
     // Returns the file:// URI, or null on failure (see getLastError).
-    Function("synthesize") fun synthesize(ids: IntArray): String? {
+    AsyncFunction("synthesize") { ids: IntArray ->
       if (handle == 0L) {
         lastErrorText = "voices not loaded"
-        return null
+        return@AsyncFunction null
       }
-      return try {
+      try {
         val pcm = nativeSpeak(handle, ids) ?: run {
           lastErrorText = nativeLastError(handle)
-          return null
+          return@AsyncFunction null
         }
         val out = File(
           (appContext.reactContext?.cacheDir ?: appContext.cacheDirectory),
@@ -100,7 +101,7 @@ class HealthGraphSattsModule : Module() {
       }
     }
 
-    Function("close") fun close() {
+    Function("close") {
       closeHandle()
     }
 
@@ -152,5 +153,4 @@ class HealthGraphSattsModule : Module() {
   private external fun nativeLastError(h: Long): String
   private external fun nativeSampleRate(h: Long): Int
   private external fun nativeSpeak(h: Long, ids: IntArray): FloatArray?
-}
 }
