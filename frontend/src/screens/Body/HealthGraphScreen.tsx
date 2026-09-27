@@ -161,6 +161,7 @@ const DIM = 0.14;
  */
 export function nodeDomainColor(node: GraphNode): string {
   if (node.type === 'patient') return '#0F6D66';
+  if (node.type === 'date') return '#0F6D66';
   if (node.type === 'body_structure') return '#7B8AA0';
   if (node.type === 'document') return '#8A7BC8';
   if (node.type === 'medication') return '#45A29A';

@@ -37,6 +37,7 @@ import {
   DefaultLight,
   Model,
   EntitySelector,
+  Skybox,
   useCameraManipulator,
   useFilamentContext,
 } from 'react-native-filament';
@@ -45,6 +46,12 @@ import Svg, { Line } from 'react-native-svg';
 
 import { COLORS, SPACING, BORDER_RADIUS, TYPOGRAPHY } from '@/constants';
 import type { GraphNode, GraphEdge } from '@/hooks/useHealthGraph';
+import {
+  compute3DLayout,
+  type LayoutPos3D,
+  type LayoutResult,
+} from '@/services/graph/dayTreeLayout';
+
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const GRAPH_HEIGHT = SCREEN_HEIGHT * 0.55;
@@ -59,6 +66,7 @@ const NODE_COLORS: Record<string, string> = {
   observation: '#4A90C2',
   document: '#8A7BC8',
   timeline_event: '#C96A1E',
+  date: '#0F6D66',
 };
 
 const NODE_COLORS_VEC: Record<string, [number, number, number, number]> = {
@@ -67,6 +75,7 @@ const NODE_COLORS_VEC: Record<string, [number, number, number, number]> = {
   observation: [0.29, 0.56, 0.76, 1.0],
   document: [0.54, 0.48, 0.78, 1.0],
   timeline_event: [0.79, 0.42, 0.11, 1.0],
+  date: [0.06, 0.43, 0.4, 1.0],
 };
 
 const NODE_SIZES: Record<string, number> = {
@@ -75,6 +84,7 @@ const NODE_SIZES: Record<string, number> = {
   observation: 0.10,
   document: 0.08,
   timeline_event: 0.07,
+  date: 0.13,
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -83,6 +93,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   observation: 'Observation',
   document: 'Record',
   timeline_event: 'Event',
+  date: 'Day',
 };
 
 const EDGE_COLORS: Record<string, string> = {
@@ -90,6 +101,8 @@ const EDGE_COLORS: Record<string, string> = {
   AFFECTS: '#354D60',
   SOURCE_DOCUMENT: '#5A4A8C',
   LOGGED_ON: '#6A5A30',
+  HAS_DAY: '#7A8A96',
+  ON_DAY: '#9AA8B8',
 };
 
 const EDGE_COLOR_VEC: Record<string, [number, number, number, number]> = {
@@ -97,6 +110,8 @@ const EDGE_COLOR_VEC: Record<string, [number, number, number, number]> = {
   AFFECTS: [0.21, 0.30, 0.38, 0.35],
   SOURCE_DOCUMENT: [0.35, 0.29, 0.55, 0.25],
   LOGGED_ON: [0.42, 0.35, 0.19, 0.25],
+  HAS_DAY: [0.48, 0.54, 0.59, 0.4],
+  ON_DAY: [0.6, 0.66, 0.72, 0.3],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -108,205 +123,14 @@ const GLB_NODES: Record<string, number> = {
   body_structure: require('../../assets/graph-nodes/node_body_structure.glb'),
   observation: require('../../assets/graph-nodes/node_observation.glb'),
   document: require('../../assets/graph-nodes/node_document.glb'),
+  // Day markers reuse the event shell (layout-only nodes, never persisted).
+  date: require('../../assets/graph-nodes/node_event.glb'),
   timeline_event: require('../../assets/graph-nodes/node_event.glb'),
 };
 
 const GLB_EDGE = require('../../assets/graph-nodes/edge_line.glb');
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Deterministic hash for stable positions
-// ═══════════════════════════════════════════════════════════════════════════════
 
-function stableHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-  }
-  return hash;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 3D Layout Engine
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface LayoutPos3D {
-  x: number;
-  y: number;
-  z: number;
-}
-
-interface LayoutResult {
-  positions: Map<string, LayoutPos3D>;
-  center: LayoutPos3D;
-  radius: number;
-}
-
-function compute3DLayout(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-): LayoutResult {
-  const positions = new Map<string, LayoutPos3D>();
-
-  // Build adjacency: observation → body_structure (AFFECTS reverse)
-  const obsToBody = new Map<string, string>();
-  const bodyToObs = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (edge.relationship === 'AFFECTS') {
-      obsToBody.set(edge.source, edge.target);
-      const arr = bodyToObs.get(edge.target) ?? [];
-      arr.push(edge.source);
-      bodyToObs.set(edge.target, arr);
-    }
-  }
-
-  const patient = nodes.find((n) => n.type === 'patient');
-  const bodyStructures = nodes.filter((n) => n.type === 'body_structure');
-  const observations = nodes.filter((n) => n.type === 'observation');
-  const documents = nodes.filter((n) => n.type === 'document');
-  const timelineEvents = nodes.filter((n) => n.type === 'timeline_event');
-
-  // 1. Patient at center
-  if (patient) {
-    positions.set(patient.id, { x: 0, y: 0, z: 0 });
-  }
-
-  // 2. Body structures in 3D orbital layer (inner ring)
-  const bodyRingRadius = 3.0;
-  const bodyCount = bodyStructures.length || 1;
-  const bodyAngleStep = (2 * Math.PI) / bodyCount;
-
-  bodyStructures.forEach((bs, i) => {
-    const angle = bodyAngleStep * i - Math.PI / 2;
-    const hash = stableHash(bs.id);
-    const zJitter = ((hash % 100) / 100 - 0.5) * 0.8;
-    positions.set(bs.id, {
-      x: Math.cos(angle) * bodyRingRadius,
-      y: Math.sin(angle) * bodyRingRadius * 0.6,
-      z: zJitter,
-    });
-  });
-
-  // 3. Observations near their body structure (cluster)
-  const obsByBody = new Map<string, GraphNode[]>();
-  const obsWithoutBody: GraphNode[] = [];
-
-  for (const obs of observations) {
-    const bodyId = obsToBody.get(obs.id);
-    if (bodyId && positions.has(bodyId)) {
-      const arr = obsByBody.get(bodyId) ?? [];
-      arr.push(obs);
-      obsByBody.set(bodyId, arr);
-    } else {
-      obsWithoutBody.push(obs);
-    }
-  }
-
-  for (const [bodyId, obsList] of obsByBody) {
-    const bodyPos = positions.get(bodyId)!;
-    const clusterRadius = 1.2;
-    const obsAngleStep = (2 * Math.PI) / Math.max(obsList.length, 1);
-    obsList.forEach((obs, i) => {
-      const angle = obsAngleStep * i;
-      const hash = stableHash(obs.id);
-      const zJitter = ((hash % 100) / 100 - 0.5) * 0.5;
-      positions.set(obs.id, {
-        x: bodyPos.x + Math.cos(angle) * clusterRadius,
-        y: bodyPos.y + Math.sin(angle) * clusterRadius,
-        z: bodyPos.z + zJitter,
-      });
-    });
-  }
-
-  // Observations without body structure — secondary 3D ring
-  if (obsWithoutBody.length > 0) {
-    const secondaryRadius = 4.5;
-    const step = (2 * Math.PI) / obsWithoutBody.length;
-    obsWithoutBody.forEach((obs, i) => {
-      const angle = step * i;
-      const hash = stableHash(obs.id);
-      positions.set(obs.id, {
-        x: Math.cos(angle) * secondaryRadius,
-        y: Math.sin(angle) * secondaryRadius * 0.5,
-        z: ((hash % 100) / 100 - 0.5) * 0.8,
-      });
-    });
-  }
-
-  // 4. Documents near source observation
-  for (const doc of documents) {
-    let sourceObsId: string | null = null;
-    for (const edge of edges) {
-      if (edge.relationship === 'SOURCE_DOCUMENT' && edge.target === doc.id) {
-        sourceObsId = edge.source;
-        break;
-      }
-    }
-    const obsPos = sourceObsId ? positions.get(sourceObsId) : null;
-    const hash = stableHash(doc.id);
-    const offsetAngle = ((hash % 360) / 360) * Math.PI * 2;
-    const offsetDist = 0.8;
-    if (obsPos) {
-      positions.set(doc.id, {
-        x: obsPos.x + Math.cos(offsetAngle) * offsetDist,
-        y: obsPos.y + Math.sin(offsetAngle) * offsetDist,
-        z: obsPos.z + ((hash % 50) / 50 - 0.5) * 0.3,
-      });
-    } else {
-      const fallbackAngle = ((hash % 360) / 360) * Math.PI * 2;
-      positions.set(doc.id, {
-        x: Math.cos(fallbackAngle) * 5.5,
-        y: Math.sin(fallbackAngle) * 5.5 * 0.5,
-        z: 0,
-      });
-    }
-  }
-
-  // 5. Timeline events near source observation or outer ring
-  for (const te of timelineEvents) {
-    let sourceObsId: string | null = null;
-    for (const edge of edges) {
-      if (edge.relationship === 'LOGGED_ON' && edge.target === te.id) {
-        sourceObsId = edge.source;
-        break;
-      }
-    }
-    const obsPos = sourceObsId ? positions.get(sourceObsId) : null;
-    const hash = stableHash(te.id);
-    const offsetAngle = ((hash % 360) / 360) * Math.PI * 2;
-    const offsetDist = 0.8;
-    if (obsPos) {
-      positions.set(te.id, {
-        x: obsPos.x + Math.cos(offsetAngle) * offsetDist,
-        y: obsPos.y + Math.sin(offsetAngle) * offsetDist,
-        z: obsPos.z + ((hash % 50) / 50 - 0.5) * 0.3,
-      });
-    } else {
-      const fallbackAngle = ((hash % 360) / 360) * Math.PI * 2;
-      const outerRadius = 5.5;
-      positions.set(te.id, {
-        x: Math.cos(fallbackAngle) * outerRadius,
-        y: Math.sin(fallbackAngle) * outerRadius * 0.4,
-        z: ((hash % 80) / 80 - 0.5) * 0.6,
-      });
-    }
-  }
-
-  // Compute bounding sphere
-  let cx = 0, cy = 0, cz = 0, count = 0;
-  for (const pos of positions.values()) {
-    cx += pos.x; cy += pos.y; cz += pos.z; count++;
-  }
-  if (count > 0) { cx /= count; cy /= count; cz /= count; }
-
-  let maxDist = 0;
-  for (const pos of positions.values()) {
-    const dx = pos.x - cx, dy = pos.y - cy, dz = pos.z - cz;
-    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (d > maxDist) maxDist = d;
-  }
-
-  return { positions, center: { x: cx, y: cy, z: cz }, radius: maxDist };
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Natural language helpers
@@ -350,6 +174,12 @@ function generateNodeDescription(node: GraphNode): string {
       const src = node.properties?.source_type?.replace(/_/g, ' ').toLowerCase() || 'health event';
       return `A ${src} was recorded in your health timeline.`;
     }
+    case 'date': {
+      const count = node.properties?.entryCount;
+      return typeof count === 'number'
+        ? `${count} health ${count === 1 ? 'entry' : 'entries'} recorded on this day — BPM, logs, medications, meals and records.`
+        : 'Health entries recorded on this day.';
+    }
     default: return '';
   }
 }
@@ -369,6 +199,7 @@ function generateNodeWhat(node: GraphNode): string {
     }
     case 'document': return node.properties?.document_type || node.label;
     case 'timeline_event': return node.properties?.event_type?.replace(/_/g, ' ') || node.label;
+    case 'date': return `${node.label} · day`;
     default: return node.label;
   }
 }
@@ -651,22 +482,25 @@ function FilamentHealthGraphInner({
     }
   }, [cameraManipulator]);
 
-  // Group nodes by type for efficient rendering
+  // Group nodes by type for efficient rendering (day markers merged in —
+  // they are layout-only: rendered and selectable, never persisted).
+  const allNodes = useMemo(() => [...nodes, ...layout.dayNodes], [nodes, layout.dayNodes]);
+  const allEdges = useMemo(() => [...edges, ...layout.dayEdges], [edges, layout.dayEdges]);
   const nodesByType = useMemo(() => {
     const grouped = new Map<string, GraphNode[]>();
-    for (const node of nodes) {
+    for (const node of allNodes) {
       const arr = grouped.get(node.type) ?? [];
       arr.push(node);
       grouped.set(node.type, arr);
     }
     return grouped;
-  }, [nodes]);
+  }, [allNodes]);
 
   // Compute connected node IDs
   const selectedEdges = useMemo(() => {
     if (!selectedNodeId) return [];
-    return edges.filter((e) => e.source === selectedNodeId || e.target === selectedNodeId);
-  }, [selectedNodeId, edges]);
+    return allEdges.filter((e) => e.source === selectedNodeId || e.target === selectedNodeId);
+  }, [selectedNodeId, allEdges]);
 
   // Valid positions only
   const validLayout = useMemo(() => {
@@ -684,6 +518,8 @@ function FilamentHealthGraphInner({
       style={{ width: SCREEN_WIDTH, height: GRAPH_HEIGHT }}
       renderCallback={renderCallback}
     >
+      {/* White infinite canvas: flat clinical backdrop, no bounds. */}
+      <Skybox colorInHex="#FFFFFF" />
       <Camera
         cameraManipulator={cameraManipulator}
         cameraPosition={[0, 1.5, layout.radius + 4]}
@@ -712,8 +548,8 @@ function FilamentHealthGraphInner({
         </React.Fragment>
       ))}
 
-      {/* Render edges */}
-      {edges.map((edge) => {
+      {/* Render edges (clinical links + day-tree links) */}
+      {allEdges.map((edge) => {
         const from = validLayout.get(edge.source);
         const to = validLayout.get(edge.target);
         if (!from || !to) return null;
@@ -755,12 +591,13 @@ export default function FilamentHealthGraph({
   const connectedNodeIds = useMemo(() => {
     const ids = new Set<string>();
     if (!selectedNodeId) return ids;
-    for (const edge of edges) {
+    const all = [...edges, ...layout.dayEdges];
+    for (const edge of all) {
       if (edge.source === selectedNodeId) ids.add(edge.target);
       if (edge.target === selectedNodeId) ids.add(edge.source);
     }
     return ids;
-  }, [selectedNodeId, edges]);
+  }, [selectedNodeId, edges, layout.dayEdges]);
 
   const handleNodePress = useCallback((nodeId: string) => {
     onNodePress(nodeId);
@@ -809,7 +646,7 @@ const styles = StyleSheet.create({
   graphContainer: {
     width: SCREEN_WIDTH,
     height: GRAPH_HEIGHT,
-    backgroundColor: '#1B222C',
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
   },
   fallbackContainer: {
