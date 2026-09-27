@@ -351,6 +351,7 @@ export default function MedicationsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StageGradient />
+      <Text style={styles.overline}>Doses &amp; schedule</Text>
       <Text style={styles.title}>Medications</Text>
       <Text style={styles.subtitle}>Track doses and daily schedules.</Text>
 
@@ -1228,6 +1229,15 @@ const styles = StyleSheet.create({
   title: {
     ...TYPE.display,
     color: GV.card,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  overline: {
+    fontFamily: FONT.semi,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 3,
+    color: GV.teal,
     textAlign: 'center',
     marginTop: 8,
   },

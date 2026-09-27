@@ -20,7 +20,7 @@ import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useReducedMotion } from '@/theme';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { shiftDayKey, todayKeyLocal } from '@/utils/dayKey';
-import { TILE_TONES } from '@/theme/tones';
+import { TILE_TONES, toneForCategory } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 void FONT;
 import { api } from '@/services/api';
@@ -1345,6 +1345,7 @@ export default function VitalsLoggerScreen() {
           >
             <Text style={styles.backBtnText}>‹ Back</Text>
           </Pressable>
+          <Text style={styles.overline}>Daily check-in</Text>
           <Text style={styles.title}>Daily Log</Text>
           <Text style={styles.subtitle}>
             {!todayCheckinQuery.isLoading && editingGroupId != null
@@ -1438,6 +1439,8 @@ export default function VitalsLoggerScreen() {
                 key={chip.key}
                 label={chip.label}
                 selected={false}
+                color={toneForCategory(chip.key)[0]}
+                style={{ borderColor: toneForCategory(chip.key)[1] }}
                 onPress={() => {
                   chip.prefill?.();
                   if (logMode !== chip.mode) setLogMode(chip.mode);
@@ -2288,6 +2291,14 @@ const styles = StyleSheet.create({
   title: {
     ...TYPE.display,
     color: GV.card,
+    textAlign: 'center',
+  },
+  overline: {
+    fontFamily: FONT.semi,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 3,
+    color: GV.teal,
     textAlign: 'center',
   },
   subtitle: {

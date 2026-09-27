@@ -47,6 +47,8 @@ export function toneForCategory(category: string | undefined | null): Tone {
     case 'activity':
       return TILE_TONES.fitness;
     case 'nutrition':
+    case 'meals':
+    case 'food':
       return TILE_TONES.nutrition;
     case 'wellbeing':
     case 'mood':
