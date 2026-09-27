@@ -42,6 +42,7 @@ import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { Chip } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { useHealthGraph, useGraphNodeDetail, type GraphNode, type GraphEdge, type NodeDetailPayload, type GraphCitation } from '@/hooks/useHealthGraph';
+import { dayLabel, groupNodesByDay } from '@/services/graph/dayTreeLayout';
 import { useDeviceHeartNodes } from '@/hooks/useDeviceHeartNodes';
 import { isDeviceHeartNode } from '@/screens/Body/deviceNodes';
 import { useTrends } from '@/hooks/useTrends';
@@ -122,6 +123,7 @@ const NODE_SIZES: Record<string, number> = {
   food_scan: 0.11,
   food_entry: 0.07,
   ppg_measurement: 0.10,
+  date: 0.12,
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -137,6 +139,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   condition_occurrence: 'Condition',
   visit: 'Visit',
   patient_statement: 'Statement',
+  date: 'Day',
   medication_canonical: 'Medication',
   measurement: 'Measurement',
   medication_version: 'Regimen v.',
@@ -225,208 +228,59 @@ export interface NodeLabelDef {
 }
 
 function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, LayoutPos> {
+  // Inverted day tree (fixes the radial congestion): patient at top, one
+  // marker row per calendar day (newest first), each day's entries fanned
+  // beneath it — BPM/PPG, logs, medications, food, documents, everything
+  // dated. Undated nodes form a satellite annex to the left. Deterministic.
   const positions = new Map<string, LayoutPos>();
-  // Spread the skeleton with graph size so a growing graph breathes instead
-  // of cramming into the radii tuned for ~12 nodes. fitToView reframes any
-  // extents, so this only buys air, never cropping. Cluster offsets below
-  // stay fixed so local groups remain tight and readable.
-  const spread = Math.min(2.2, Math.max(1, Math.sqrt(nodes.length / 12)));
-
-  const obsToBody = new Map<string, string>();
-  for (const edge of edges) {
-    if (edge.relationship === 'AFFECTS') obsToBody.set(edge.source, edge.target);
-  }
+  const LEVEL_Y = 2.2;
+  const DAY_GAP = 2.8;
+  const ITEM_GAP = 0.85;
+  const ITEMS_PER_ROW = 12;
 
   const patient = nodes.find((n) => n.type === 'patient');
-  const bodyStructures = nodes.filter((n) => n.type === 'body_structure');
-  const observations = nodes.filter((n) => n.type === 'observation');
-  const documents = nodes.filter((n) => n.type === 'document');
-  const timelineEvents = nodes.filter((n) => n.type === 'timeline_event');
-
-  // Patient at center
   if (patient) positions.set(patient.id, { x: 0, y: 0, z: 0 });
 
-  // Body structures: tall ellipse (portrait screens are narrow + tall —
-  // the graph must fill height, not width).
-  const bodyCount = bodyStructures.length || 1;
-  bodyStructures.forEach((bs, i) => {
-    const angle = ((2 * Math.PI) / bodyCount) * i;
-    positions.set(bs.id, {
-      x: Math.cos(angle) * 0.8 * spread,
-      y: Math.sin(angle) * 1.0 * spread,
-      z: ((stableHash(bs.id) % 100) / 100 - 0.5) * 0.5,
-    });
-  });
-
-  // Observations: cluster near their body structure
-  const obsByBody = new Map<string, GraphNode[]>();
-  const obsFree: GraphNode[] = [];
-  for (const obs of observations) {
-    const bid = obsToBody.get(obs.id);
-    if (bid && positions.has(bid)) {
-      const arr = obsByBody.get(bid) ?? []; arr.push(obs); obsByBody.set(bid, arr);
-    } else { obsFree.push(obs); }
-  }
-  for (const [bid, list] of obsByBody) {
-    const bp = positions.get(bid)!;
-    const step = (2 * Math.PI) / Math.max(list.length, 1);
-    list.forEach((obs, i) => {
-      positions.set(obs.id, {
-        x: bp.x + Math.cos(step * i) * 0.3,
-        y: bp.y + Math.sin(step * i) * 0.3,
-        z: bp.z + ((stableHash(obs.id) % 60) / 60 - 0.5) * 0.25,
-      });
-    });
-  }
-  // Free observations: secondary tall ellipse
-  if (obsFree.length > 0) {
-    obsFree.forEach((obs, i) => {
-      const a = ((2 * Math.PI) / obsFree.length) * i;
-      positions.set(obs.id, {
-        x: Math.cos(a) * 1.0 * spread,
-        y: Math.sin(a) * 1.25 * spread,
-        z: ((stableHash(obs.id) % 80) / 80 - 0.5) * 0.6,
-      });
-    });
-  }
-
-  // Documents: near source observation (tight cluster)
-  // P4: accept both the legacy SOURCE_DOCUMENT link and the canonical
-  // DOCUMENTED_IN link (dual-written since P0).
-  for (const doc of documents) {
-    let src: string | null = null;
-    for (const e of edges) {
-      if ((e.relationship === 'SOURCE_DOCUMENT' || e.relationship === 'DOCUMENTED_IN') && e.target === doc.id) {
-        src = e.source; break;
-      }
-    }
-    const op = src ? positions.get(src) : null;
-    const h = stableHash(doc.id);
-    const a = ((h % 360) / 360) * Math.PI * 2;
-    if (op) {
-      positions.set(doc.id, { x: op.x + Math.cos(a) * 0.25, y: op.y + Math.sin(a) * 0.25, z: op.z + ((h % 40) / 40 - 0.5) * 0.15 });
-    } else {
-      positions.set(doc.id, { x: Math.cos(a) * 1.2 * spread, y: Math.sin(a) * 1.6 * spread, z: 0 });
-    }
-  }
-
-  // Timeline events: cluster by event_type in distinct spatial regions
-  // First: events connected to observations go near their observation
-  const eventsWithObs: GraphNode[] = [];
-  const eventsFree: GraphNode[] = [];
-  for (const te of timelineEvents) {
-    let hasObs = false;
-    for (const e of edges) {
-      if (e.relationship === 'LOGGED_ON' && e.target === te.id && !e.derived) {
-        hasObs = true; break;
-      }
-    }
-    if (hasObs) eventsWithObs.push(te); else eventsFree.push(te);
-  }
-
-  // Events with observation: cluster near their source
-  const eventsBySource = new Map<string, GraphNode[]>();
-  for (const te of eventsWithObs) {
-    let src: string | null = null;
-    for (const e of edges) { if (e.relationship === 'LOGGED_ON' && e.target === te.id && !e.derived) { src = e.source; break; } }
-    if (src && positions.has(src)) {
-      const arr = eventsBySource.get(src) ?? []; arr.push(te); eventsBySource.set(src, arr);
-    } else { eventsFree.push(te); }
-  }
-  for (const [srcId, evts] of eventsBySource) {
-    const sp = positions.get(srcId)!;
-    const r = 0.25 + evts.length * 0.02;
-    evts.forEach((te, i) => {
-      const a = ((2 * Math.PI) / Math.max(evts.length, 1)) * i;
-      const h = stableHash(te.id);
-      positions.set(te.id, {
-        x: sp.x + Math.cos(a) * r,
-        y: sp.y + Math.sin(a) * r,
-        z: sp.z + ((h % 50) / 50 - 0.5) * 0.2,
-      });
-    });
-  }
-
-  // Free events: group by event_type into distinct clusters
-  const eventsByType = new Map<string, GraphNode[]>();
-  for (const te of eventsFree) {
-    const et = (te.properties?.event_type || 'other').toLowerCase();
-    const arr = eventsByType.get(et) ?? []; arr.push(te); eventsByType.set(et, arr);
-  }
-  const typeKeys = Array.from(eventsByType.keys());
-  const typeRadiusX = 1.05 * spread;
-  const typeRadiusY = 1.75 * spread;
-  typeKeys.forEach((etype, ti) => {
-    const evts = eventsByType.get(etype)!;
-    const typeAngle = ((2 * Math.PI) / typeKeys.length) * ti;
-    const typeCenterX = Math.cos(typeAngle) * typeRadiusX;
-    const typeCenterY = Math.sin(typeAngle) * typeRadiusY;
-    evts.forEach((te, i) => {
-      const h = stableHash(te.id);
-      const localAngle = ((2 * Math.PI) / Math.max(evts.length, 1)) * i;
-      const localR = 0.12 + (i % 3) * 0.1;
-      positions.set(te.id, {
-        x: typeCenterX + Math.cos(localAngle) * localR,
-        y: typeCenterY + Math.sin(localAngle) * localR,
-        z: ((h % 60) / 60 - 0.5) * 0.3,
+  const { groups, undated } = groupNodesByDay(nodes);
+  groups.forEach((group, i) => {
+    const dayX = (i - (groups.length - 1) / 2) * DAY_GAP;
+    const dayId = `__day:${group.dayKey}`;
+    positions.set(dayId, { x: dayX, y: -LEVEL_Y, z: 0 });
+    group.items.forEach((item, j) => {
+      const row = Math.floor(j / ITEMS_PER_ROW);
+      const col = j % ITEMS_PER_ROW;
+      const rowCount = Math.min(ITEMS_PER_ROW, group.items.length - row * ITEMS_PER_ROW);
+      const h = stableHash(item.id);
+      positions.set(item.id, {
+        x: dayX + (col - (rowCount - 1) / 2) * ITEM_GAP,
+        y: -LEVEL_Y * 2 - row * 1.1,
+        z: ((h % 100) / 100 - 0.5) * 0.4,
       });
     });
   });
 
-  // P4: P0–P3 graph types — hub-optional fallback bucket.
-  // Previously any node outside the five legacy buckets was silently
-  // dropped from the canvas (buildGraph skips unpositioned nodes), which
-  // hid every Condition/Visit/Measurement/Sleep/Food/PPG node. This pass
-  // guarantees every node a deterministic position with the existing
-  // instanced-sphere pipeline — no layout rewrite, no new draw calls.
-  // Patient stays central; Visit-centered clustering is the hub
-  // alternative (members orbit their visit when it is positioned).
-  const extraNodes = nodes.filter((n) => !positions.has(n.id));
-  if (extraNodes.length > 0) {
-    // Pass 1: type-grouped outer ellipses (every node placed).
-    const byType = new Map<string, GraphNode[]>();
-    for (const n of extraNodes) {
-      const arr = byType.get(n.type) ?? []; arr.push(n); byType.set(n.type, arr);
-    }
-    const typeList = Array.from(byType.keys());
-    typeList.forEach((t, ti) => {
-      const group = byType.get(t)!;
-      const baseAngle = ((2 * Math.PI) / typeList.length) * ti;
-      const cx = Math.cos(baseAngle) * 1.5 * spread;
-      const cy = Math.sin(baseAngle) * 2.0 * spread;
-      group.forEach((n, i) => {
-        const h = stableHash(n.id);
-        const a = ((2 * Math.PI) / Math.max(group.length, 1)) * i;
-        const r = 0.15 + (i % 3) * 0.1;
-        positions.set(n.id, {
-          x: cx + Math.cos(a) * r,
-          y: cy + Math.sin(a) * r,
-          z: ((h % 60) / 60 - 0.5) * 0.4,
-        });
+  if (undated.length > 0) {
+    const leftEdge = groups.length > 0 ? (-(groups.length - 1) / 2) * DAY_GAP : 0;
+    const perRow = 5;
+    undated.forEach((node, k) => {
+      const h = stableHash(node.id);
+      positions.set(node.id, {
+        x: leftEdge - 2.4 - Math.floor(k / perRow) * 0.9,
+        y: -LEVEL_Y + ((k % perRow) - (Math.min(perRow, undated.length) - 1) / 2) * -0.9,
+        z: ((h % 100) / 100 - 0.5) * 0.4,
       });
     });
-    // Pass 2: tighten children near already-positioned parents —
-    // FoodEntry near its scan, MedicationVersion near its request, and
-    // OCCURRED_DURING members orbiting their visit.
-    const nearParent = (id: string, rel: string, radius: number) => {
-      for (const e of edges) {
-        if (e.relationship !== rel || e.target !== id) continue;
-        const pp = positions.get(e.source);
-        if (!pp) continue;
-        const h = stableHash(id);
-        const a = ((h % 360) / 360) * Math.PI * 2;
-        positions.set(id, {
-          x: pp.x + Math.cos(a) * radius,
-          y: pp.y + Math.sin(a) * radius,
-          z: pp.z + ((h % 40) / 40 - 0.5) * 0.15,
-        });
-        return;
-      }
-    };
-    for (const n of extraNodes) {
-      if (n.type === 'food_entry') nearParent(n.id, 'HAS_ENTRY', 0.22);
-      else if (n.type === 'medication_version') nearParent(n.id, 'HAS_VERSION', 0.22);
-      else nearParent(n.id, 'OCCURRED_DURING', 0.3);
+  }
+
+  // Defensive: every input node gets a position (buildGraph skips the rest).
+  for (const node of nodes) {
+    if (!positions.has(node.id)) {
+      const h = stableHash(node.id);
+      positions.set(node.id, {
+        x: ((h % 360) / 360 - 0.5) * 1.5,
+        y: -1,
+        z: 0,
+      });
     }
   }
 
@@ -683,6 +537,7 @@ class GraphSceneManager {
   private nodeHexFor(node: GraphNode): string | number {
     switch (node.type) {
       case 'patient': return '#0F6D66';
+      case 'date': return '#0F6D66';
       case 'body_structure': return '#7B8AA0';
       case 'document': return '#8A7BC8';
       case 'medication': return '#45A29A';
@@ -1468,6 +1323,42 @@ function DeviceNodeDetail({ node }: { node: GraphNode }) {
       <Text style={styles.nbRel} numberOfLines={3}>
         From your latest unsynced measurement. It joins the synced graph automatically once uploaded.
       </Text>
+    </View>
+  );
+}
+
+/** Layout-only day marker detail: entries recorded that day, tappable. */
+function DaySummaryCard({ node, items, onSelectNode }: {
+  node: GraphNode;
+  items: GraphNode[];
+  onSelectNode: (id: string) => void;
+}) {
+  const full = (() => {
+    const d = new Date(`${String(node.properties?.date ?? '')}T00:00:00`);
+    if (isNaN(d.getTime())) return node.label;
+    return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  })();
+  return (
+    <View>
+      <Text style={styles.heroValue} numberOfLines={2}>{node.label}</Text>
+      <Text style={styles.heroLabel}>
+        {full} · {items.length} {items.length === 1 ? 'entry' : 'entries'}
+      </Text>
+      {items.slice(0, 12).map((item) => (
+        <Pressable
+          key={item.id}
+          onPress={() => onSelectNode(item.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${item.label}`}
+          style={styles.heroRow}
+        >
+          <Text style={styles.heroRowKey} numberOfLines={1}>{item.label}</Text>
+          <Text style={styles.heroRowVal}>›</Text>
+        </Pressable>
+      ))}
+      {items.length > 12 ? (
+        <Text style={styles.nbRel}>+{items.length - 12} more below this day marker</Text>
+      ) : null}
     </View>
   );
 }
@@ -2358,12 +2249,7 @@ export default function HealthGraphScreen({
     }
     return out;
   }, [graphData, deviceHeartNodes]);
-  const selectedNode = useMemo(
-    () => graphNodes.find((n) => n.id === selectedNodeId) ?? null,
-    [graphNodes, selectedNodeId],
-  );
-  const isDeviceNode = isDeviceHeartNode(selectedNode);
-  const { data: nodeDetail } = useGraphNodeDetail(isDeviceNode ? null : selectedNodeId);
+
 
   // Cross-metric knowledge for semantic edges (sleep↔wellbeing, …) — same
   // feeds the dashboard already loads; no extra backend calls.
@@ -2392,6 +2278,35 @@ export default function HealthGraphScreen({
   }, [graphData, semanticEdges]);
   const flowEdgeIds = useMemo(() => new Set(semanticEdges.map((e) => e.id)), [semanticEdges]);
 
+  // Day-tree overlay: virtual date markers + tree links merged over the
+  // clinical graph. Layout-only (never persisted, never synced); the day
+  // grouping is shared with every tree renderer via groupNodesByDay.
+  const dayGroups = useMemo(() => groupNodesByDay(graphNodes), [graphNodes]);
+  const treeNodes = useMemo<GraphNode[]>(() => {
+    const days: GraphNode[] = dayGroups.groups.map((g) => ({
+      id: `__day:${g.dayKey}`,
+      type: 'date',
+      label: dayLabel(g.dayKey),
+      properties: { date: g.dayKey, entryCount: g.items.length },
+    }));
+    return [...graphNodes, ...days];
+  }, [graphNodes, dayGroups]);
+  const treeEdges = useMemo<GraphEdge[]>(() => {
+    const out: GraphEdge[] = [...allEdges];
+    const patient = graphNodes.find((n) => n.type === 'patient');
+    for (const g of dayGroups.groups) {
+      const dayId = `__day:${g.dayKey}`;
+      if (patient) {
+        out.push({ id: `__e:day:${g.dayKey}`, source: patient.id, target: dayId, type: 'TREE', relationship: 'HAS_DAY' });
+      }
+      for (const item of g.items) {
+        out.push({ id: `__e:item:${item.id}`, source: dayId, target: item.id, type: 'TREE', relationship: 'ON_DAY' });
+      }
+    }
+    return out;
+  }, [allEdges, graphNodes, dayGroups]);
+
+
   // Live pattern counts for the HUD strip under the filters.
   const patternCounts = useMemo(() => {
     let bad = 0, good = 0;
@@ -2405,7 +2320,7 @@ export default function HealthGraphScreen({
 
   // Verdict per 1-hop neighbor — drives badge dots + the neighbor card.
   const focusVerdicts = useMemo(() => {
-    const v = neighborVerdictsFor(selectedNodeId, graphNodes, allEdges, feedQ.localDetails);
+    const v = neighborVerdictsFor(selectedNodeId, treeNodes, treeEdges, feedQ.localDetails);
     if (__DEV__ && selectedNodeId) {
       // Prove the data chain: details loaded? event_time present? dates match?
       let sampleTime: string | null = null;
@@ -2423,9 +2338,28 @@ export default function HealthGraphScreen({
   }, [selectedNodeId, graphNodes, allEdges, feedQ.localDetails]);
 
   const nodesById = useMemo(
-    () => new Map(graphNodes.map((n) => [n.id, n] as [string, GraphNode])),
-    [graphNodes],
+    () => new Map(treeNodes.map((n) => [n.id, n] as [string, GraphNode])),
+    [treeNodes],
   );
+
+  const selectedNode = useMemo(
+    () => treeNodes.find((n) => n.id === selectedNodeId) ?? null,
+    [treeNodes, selectedNodeId],
+  );
+  const isDeviceNode = isDeviceHeartNode(selectedNode);
+  const isDateNode = selectedNode?.type === 'date';
+  const { data: nodeDetail } = useGraphNodeDetail(isDeviceNode || isDateNode ? null : selectedNodeId);
+  const selectedDayItems = useMemo<GraphNode[]>(() => {
+    if (!isDateNode || !selectedNodeId) return [];
+    const out: GraphNode[] = [];
+    for (const e of treeEdges) {
+      if (e.source === selectedNodeId && e.relationship === 'ON_DAY') {
+        const n = nodesById.get(e.target);
+        if (n) out.push(n);
+      }
+    }
+    return out;
+  }, [isDateNode, selectedNodeId, treeEdges, nodesById]);
 
   // Floating labels: patient → structures → observations → meds, capped so
   // the canvas reads instead of crowds (8 embedded, 24 full screen).
@@ -2433,6 +2367,7 @@ export default function HealthGraphScreen({
     if (!graphData) return [];
     const rank: Record<string, number> = {
       patient: 0,
+      date: 1,
       body_structure: 1,
       observation: 2,
       condition_occurrence: 2,
@@ -2455,7 +2390,7 @@ export default function HealthGraphScreen({
       concept: 8,
     };
     const cap = embedded ? 8 : 24;
-    return [...graphNodes]
+    return [...treeNodes]
       .sort((a, b) => (rank[a.type] ?? 9) - (rank[b.type] ?? 9))
       .slice(0, cap)
       .map((n) => ({
@@ -2463,7 +2398,7 @@ export default function HealthGraphScreen({
         text: (n.label || CATEGORY_LABELS[n.type] || n.type).slice(0, 22),
         color: nodeDomainColor(n),
       }));
-  }, [graphNodes, embedded]);
+  }, [treeNodes, embedded]);
 
   // In focus mode the dimmed nodes' labels dim with them.
   const labelDimIds = useMemo<Set<string> | null>(() => {
@@ -2634,8 +2569,8 @@ export default function HealthGraphScreen({
         )
       ) : (
         <NativeCanvas
-          nodes={graphNodes}
-          edges={allEdges}
+          nodes={treeNodes}
+          edges={treeEdges}
           layout={layout}
           selectedNodeId={selectedNodeId}
           onNodeTap={handleNodeTap}
@@ -2722,12 +2657,14 @@ export default function HealthGraphScreen({
             {sheetMode === 'neighbors' ? (
               <NeighborFocusCard
                 node={selectedNode}
-                nodes={graphNodes}
-                edges={allEdges}
+                nodes={treeNodes}
+                edges={treeEdges}
                 verdicts={focusVerdicts}
                 onSelectNode={handleSelectNode}
                 onShowDetails={() => setSheetMode('full')}
               />
+            ) : isDateNode && selectedNode ? (
+              <DaySummaryCard node={selectedNode} items={selectedDayItems} onSelectNode={handleSelectNode} />
             ) : nodeDetail ? (
               <NodeDetailContent
                 nodeDetail={nodeDetail}
@@ -2735,7 +2672,7 @@ export default function HealthGraphScreen({
                 onViewBody={handleViewBody}
                 onOpenDocument={(docId: string) => navigation.navigate('DocumentDetail', { documentId: docId } as any)}
                 localDetails={feedQ.localDetails}
-                allEdges={allEdges}
+                allEdges={treeEdges}
                 nodesById={nodesById}
               />
             ) : isDeviceNode && selectedNode ? (

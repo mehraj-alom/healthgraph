@@ -8,6 +8,39 @@ import type { GraphNode, GraphEdge } from '@/hooks/useHealthGraph';
 
 export type { GraphNode, GraphEdge };
 
+export interface DayGroup {
+  dayKey: string;
+  items: GraphNode[];
+}
+
+/**
+ * Group dated nodes newest-first; collect the undated. Shared by day-tree
+ * renderers so grouping can never disagree between views. Patient nodes
+ * are skipped unless includePatient is set (callers position the root).
+ */
+export function groupNodesByDay(
+  nodes: GraphNode[],
+  options?: { includePatient?: boolean },
+): { groups: DayGroup[]; undated: GraphNode[] } {
+  const byDay = new Map<string, GraphNode[]>();
+  const undated: GraphNode[] = [];
+  for (const node of nodes) {
+    if (node.type === 'patient' && options?.includePatient !== true) continue;
+    const day = nodeDayKey(node);
+    if (!day) {
+      undated.push(node);
+      continue;
+    }
+    const arr = byDay.get(day) ?? [];
+    arr.push(node);
+    byDay.set(day, arr);
+  }
+  const groups = [...byDay.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([dayKey, items]) => ({ dayKey, items }));
+  return { groups, undated };
+}
+
 // Deterministic hash for stable positions
 // ═══════════════════════════════════════════════════════════════════════════════
 

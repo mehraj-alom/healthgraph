@@ -351,8 +351,8 @@ describe('batch 4 wiring', () => {
     assert.ok(screen.includes('isDeviceNode'), 'device branch');
     assert.ok(screen.includes('DeviceNodeDetail'), 'local detail (no spinner trap)');
     assert.ok(
-      screen.includes('isDeviceNode ? null : selectedNodeId'),
-      'server detail query skipped for device nodes',
+      screen.includes('useGraphNodeDetail(isDeviceNode || isDateNode ? null'),
+      'server detail query skipped for device + layout-only day nodes',
     );
   });
 

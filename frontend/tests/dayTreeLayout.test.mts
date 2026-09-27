@@ -5,8 +5,10 @@
  * Undated nodes form a satellite annex. Day markers/edges are layout-only
  * (never persisted). Deterministic across runs.
  */
-import { describe, it } from 'node:test';
+import { describe, it, test } from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   compute3DLayout,
   dayLabel,
@@ -110,4 +112,39 @@ describe('compute3DLayout day tree', () => {
       assert.deepEqual([p.x, p.y, p.z], [q.x, q.y, q.z]);
     }
   });
+});
+
+declare const __dirname: string;
+
+function repoRoot(): string {
+  const bases: string[] = [];
+  try {
+    if (typeof __dirname === 'string') bases.push(path.resolve(__dirname, '..'));
+  } catch {
+    // ESM/strip-types runtimes have no __dirname: fall through to cwd.
+  }
+  bases.push(process.cwd(), path.join(process.cwd(), 'frontend'));
+  for (const b of bases) {
+    try {
+      if (fs.existsSync(path.join(b, 'App.tsx'))) return b;
+    } catch {
+      // Ignore and try the next candidate.
+    }
+  }
+  throw new Error('repo root not found (App.tsx missing)');
+}
+
+const ROOT = repoRoot();
+function src(rel: string): string {
+  return fs.readFileSync(path.join(ROOT, rel), 'utf8');
+}
+
+test('mounted canvas renders the day tree (not the radial layout)', () => {
+  const s = src('src/screens/Body/HealthGraphScreen.tsx');
+  assert.ok(s.includes('groupNodesByDay(graphNodes)'), 'shared day grouping drives the canvas');
+  assert.ok(s.includes('nodes={treeNodes}'), 'canvas renders tree nodes');
+  assert.ok(s.includes('edges={treeEdges}'), 'canvas renders tree edges');
+  assert.ok(!s.includes('obsToBody'), 'radial body-cluster layout removed');
+  assert.ok(s.includes('DaySummaryCard'), 'day markers open a day summary');
+  assert.ok(s.includes("useGraphNodeDetail(isDeviceNode || isDateNode ? null"), 'no backend fetch for layout-only days');
 });
