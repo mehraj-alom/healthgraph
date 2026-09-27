@@ -21,6 +21,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Button, Card, Chip, EmptyState, Input, Modal, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { todayKeyLocal } from '@/utils/dayKey';
 import { EXTRA_TONES, TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { getCachedPatientId } from '@/services/patientIdentity';
@@ -94,13 +95,7 @@ export default function CycleScreen() {
     }, [load]),
   );
 
-  const todayKey = () => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
+  const todayKey = () => todayKeyLocal();
 
   const openAdd = useCallback(() => {
     setEditing(null);

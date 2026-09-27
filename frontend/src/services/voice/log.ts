@@ -19,14 +19,12 @@ import {
 } from '@/services/nutritionService';
 import type { DailyCheckInDetail } from '@/types';
 import { appendVoiceNote, buildVoiceNoteLine, VOICE_NOTES_CAP } from './logPure';
+import { todayKeyLocal } from '@/utils/dayKey';
 
 export { VOICE_NOTES_CAP };
 
 function todayLocal(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-    now.getDate(),
-  ).padStart(2, '0')}`;
+  return todayKeyLocal();
 }
 
 function clockNow(): string {

@@ -9,6 +9,7 @@
  */
 
 import { getDatabase, withSerializedTransaction } from '@/db/connection';
+import { todayKeyLocal } from '@/utils/dayKey';
 import type {
   DailyCheckInRequest,
   DailyCheckInDetail,
@@ -74,11 +75,7 @@ function nowIso(): string {
 }
 
 function todayLocalDateString(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return todayKeyLocal();
 }
 
 function parseJsonPayload(value: string): Record<string, unknown> {

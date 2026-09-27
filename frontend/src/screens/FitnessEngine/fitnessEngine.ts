@@ -23,8 +23,9 @@
  * enter this module. Copy is descriptive counts only — never fitter or
  * healthier, never causal.
  *
- * Zero imports: safe for node unit tests.
+ * Zero imports except the pure day-key module: safe for node unit tests.
  */
+import { shiftDayKey as shiftDayKeyCanonical } from '@/utils/dayKey';
 
 /** The Batch 6A engine id that activates this engine. */
 export const FITNESS_ENGINE_ID = 'fitness';
@@ -46,12 +47,7 @@ export interface FitnessSession {
 }
 
 function shiftDayKey(dayKey: string, deltaDays: number): string {
-  const d = new Date(`${dayKey}T12:00:00`);
-  d.setDate(d.getDate() + deltaDays);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return shiftDayKeyCanonical(dayKey, deltaDays);
 }
 
 /** Earliest date (inclusive) of a trailing-N-day window ending todayKey. */
