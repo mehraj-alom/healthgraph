@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Skeleton, Card, Chip, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { useTrends } from '@/hooks/useTrends';
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
@@ -545,7 +546,7 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
               <View style={styles.symptomSelector}>
                 {trend.symptom_time_series.map((ts) => {
                   return (
-                    <Chip key={ts.concept_id} label={ts.display_name} selected={ts.concept_id === activeSymptomId} color={GV.cta} onPress={() => setSelectedSymptom(ts.concept_id)} />
+                    <Chip key={ts.concept_id} label={ts.display_name} selected={ts.concept_id === activeSymptomId} color={TILE_TONES.discipline[0]} onPress={() => setSelectedSymptom(ts.concept_id)} />
                   );
                 })}
               </View>

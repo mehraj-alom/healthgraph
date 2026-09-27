@@ -32,6 +32,7 @@ import { MEDICAL_DISCLAIMER } from '@/constants';
 import { useAuth } from '@/context/AuthContext';
 import { getSelectedPlan, type PricingPlan } from '@/screens/Onboarding/PricingScreen';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { toneForCategory } from '@/theme/tones';
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { useDocuments } from '@/context/DocumentsContext';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
@@ -285,6 +286,7 @@ function SuggestionRow({
   suggestion: SuggestionDef;
   onPress: () => void;
 }) {
+  const dot = toneForCategory(suggestion.category)[0];
   return (
     <Pressable
       onPress={onPress}
@@ -293,6 +295,7 @@ function SuggestionRow({
       style={styles.suggestionRow}
       hitSlop={{ top: 6, bottom: 6 }}
     >
+      <View style={[styles.suggestionDot, { backgroundColor: dot }]} />
       <Text style={styles.suggestionText} numberOfLines={1}>{suggestion.text}</Text>
     </Pressable>
   );
@@ -1085,7 +1088,8 @@ const styles = StyleSheet.create({
 
   // Starters — plain text rows, small and tight. No cards, no numerals.
   suggestionsContainer: { paddingHorizontal: SPACE.screenH, paddingBottom: 4, gap: 0 },
-  suggestionRow: { paddingVertical: 5 },
+  suggestionRow: { paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  suggestionDot: { width: 8, height: 8, borderRadius: 4 },
   suggestionText: { ...TYPE.body, fontSize: 13, lineHeight: 17, color: '#FFFFFF' },
 
   // ── Messages: two voices, never twin bubbles. ──

@@ -48,6 +48,7 @@ import {
   requestReminderPermissions,
 } from '@/services/reminderNotifications';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 void FONT;
 import { Button, Card, Chip, Input, SectionHeader } from '@/components';
@@ -1094,6 +1095,7 @@ function AddMedicationModal({
                   label={ROUTE_LABELS[r]}
                   size="large"
                   selected={route === r}
+                  color={TILE_TONES.weight[0]}
                   onPress={() => setRoute((prev) => (prev === r ? '' : r))}
                   accessibilityLabel={`Route ${ROUTE_LABELS[r]}`}
                 />
@@ -1110,6 +1112,7 @@ function AddMedicationModal({
                   label={FREQUENCY_LABELS[freq]}
                   size="large"
                   selected={frequency === freq}
+                  color={TILE_TONES.discipline[0]}
                   onPress={() => setFrequency(freq)}
                   accessibilityLabel={`Frequency ${FREQUENCY_LABELS[freq]}`}
                 />

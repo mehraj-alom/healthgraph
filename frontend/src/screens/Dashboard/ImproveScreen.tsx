@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { toneForCategory } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { SPOKE_GUIDANCE, GUIDANCE_FALLBACK } from '@/components/home/HGraphMap';
 import type { ImproveMetric, RootStackParamList } from '@/types';
@@ -50,8 +51,10 @@ export default function ImproveScreen() {
         ? { title: 'Watch for', items: g.raise }
         : { title: 'Ease off', items: g.lower };
     const dotColor = maintain ? GV.cta : GV.fx.amber;
+    const tone = toneForCategory(m.id)[0];
     return (
       <View key={m.id} style={styles.card}>
+        <View style={[styles.toneStrip, { backgroundColor: tone }]} />
         <View style={styles.cardTopRow}>
           <View style={[styles.toneDot, { backgroundColor: dotColor }]} />
           <Text style={styles.toneLabel}>
@@ -219,6 +222,11 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 9999,
+  },
+  toneStrip: {
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 8,
   },
   toneLabel: {
     ...TYPE.chip,

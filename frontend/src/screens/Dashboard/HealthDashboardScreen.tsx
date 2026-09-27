@@ -44,6 +44,7 @@ import Animated, {
 import Svg, { Path, Rect, Circle, G, Line } from 'react-native-svg';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { toneForCategory } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { domainHueForStream } from '@/theme/dashboardApple';
 
@@ -868,13 +869,14 @@ function FeedCustomSheet({
         <View style={feedSheet.chips}>
           {pickable.map((s) => {
             const on = activeA === s.def.id;
+            const tone = toneForCategory(s.def.id)[0];
             return (
               <Pressable
                 key={`a-${s.def.id}`}
                 onPress={() => setPickA(on ? null : s.def.id)}
                 style={({ pressed }) => [
                   feedSheet.chip,
-                  on && feedSheet.chipOn,
+                  on && [feedSheet.chipOn, { backgroundColor: tone, borderColor: tone }],
                   pressed && { opacity: 0.7 },
                 ]}
                 accessibilityRole="button"
@@ -890,13 +892,14 @@ function FeedCustomSheet({
         <View style={feedSheet.chips}>
           {pickable.map((s) => {
             const on = activeB === s.def.id;
+            const tone = toneForCategory(s.def.id)[0];
             return (
               <Pressable
                 key={`b-${s.def.id}`}
                 onPress={() => setPickB(on ? null : s.def.id)}
                 style={({ pressed }) => [
                   feedSheet.chip,
-                  on && feedSheet.chipOn,
+                  on && [feedSheet.chipOn, { backgroundColor: tone, borderColor: tone }],
                   pressed && { opacity: 0.7 },
                 ]}
                 accessibilityRole="button"

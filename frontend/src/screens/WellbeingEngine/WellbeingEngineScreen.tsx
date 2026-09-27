@@ -23,6 +23,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { useWellbeingEngine } from '@/hooks/useWellbeingEngine';
 import {
@@ -102,7 +103,7 @@ export default function WellbeingEngineScreen() {
         ) : (
           <>
             <SectionHeader title="This week" />
-            <Card>
+            <Card style={styles.toneCard}>
               <Text style={styles.bigValue}>
                 {`${summary.ratedDays} ${summary.ratedDays === 1 ? 'rated day' : 'rated days'}`}
               </Text>
@@ -113,7 +114,7 @@ export default function WellbeingEngineScreen() {
               value == null ? null : (
                 <View key={title}>
                   <SectionHeader title={title} />
-                  <Card>
+                  <Card style={styles.toneCard}>
                     <Text style={styles.bigValue}>{formatRating(value)}</Text>
                     {line ? <Text style={styles.change}>{line}</Text> : null}
                     <Text style={styles.provenance}>User-entered 1–5 ratings.</Text>
@@ -160,6 +161,7 @@ const styles = StyleSheet.create({
   loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
   fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
   bigValue: { ...TYPE.display, fontSize: 40, color: GV.ink, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  toneCard: { borderLeftWidth: 4, borderLeftColor: TILE_TONES.wellbeing[1] },
   change: { ...TYPE.body, color: GV.body, textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
   provenance: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 8 },
   avgSub: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 4 },

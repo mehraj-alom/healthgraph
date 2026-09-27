@@ -20,6 +20,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { mv, mvType } from '@/theme/movements';
 import { AM, amType, amShadow } from '@/theme/dashboardApple';
+import { toneForCategory } from '@/theme/tones';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { useMedications } from '@/hooks/useMedications';
 import { useTrends } from '@/hooks/useTrends';
@@ -244,6 +245,14 @@ export default function DashboardScreen() {
     () => dimensions.find((d) => d.id === selectedDimId) ?? null,
     [dimensions, selectedDimId],
   );
+  // Selected petal + pill wear the dimension's category tone.
+  const dimPalette: OverallPalette = useMemo(
+    () => ({
+      ...OVERALL_PALETTE,
+      petalSelected: selectedDim ? toneForCategory(selectedDim.id)[0] : AM.ink,
+    }),
+    [selectedDim],
+  );
 
   const sleep = metrics.data?.latest_sleep ?? null;
   const activity = metrics.data?.today_activity ?? null;
@@ -430,7 +439,7 @@ export default function DashboardScreen() {
             selectedDimensionId={selectedDimId}
             onSelectDimension={selectDimension}
             onSelectHub={clearSelection}
-            palette={OVERALL_PALETTE}
+            palette={dimPalette}
           />
           <StatusPill
             variant="lime"

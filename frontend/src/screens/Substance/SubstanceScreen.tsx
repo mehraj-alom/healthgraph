@@ -22,6 +22,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Button, Card, Chip, EmptyState, Input, Modal, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { EXTRA_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import {
@@ -41,6 +42,13 @@ const CATEGORY_COPY: Record<SubstanceCategory, { label: string; hint: string }> 
   alcohol: { label: 'Alcohol', hint: 'Drinks and occasions' },
   tobacco: { label: 'Tobacco / nicotine', hint: 'Smoked, vaped or chewed' },
   other: { label: 'Other', hint: 'Anything else you track' },
+};
+
+/** Category tones: warm sand, cool slate, pine teal. */
+const SUBSTANCE_TONES: Record<SubstanceCategory, string> = {
+  alcohol: EXTRA_TONES.sand[0],
+  tobacco: EXTRA_TONES.slate[0],
+  other: EXTRA_TONES.pine[0],
 };
 
 function formatWhen(iso: string): string {
@@ -295,7 +303,7 @@ export default function SubstanceScreen() {
                 selected={category === c}
                 onPress={() => setCategory(c)}
                 size="medium"
-                color={GV.cta}
+                color={SUBSTANCE_TONES[c]}
               />
             ))}
           </View>

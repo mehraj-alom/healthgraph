@@ -21,6 +21,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Input, NumberInput } from '@/components';
 import { MarkerHighlight } from '@/components/MarkerHighlight';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
+import { CategoryTile } from '@/components/CategoryTile';
 import { StageGradient } from '@/components/StageGradient';
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
@@ -494,25 +496,23 @@ export default function SettingsScreen() {
             Profile syncs to your account on save; health logs sync automatically.
           </Text>
         </View>
-        <View style={styles.miniRows}>
-          <Pressable
-            style={styles.miniRow}
-            onPress={() => navigation.navigate('OnboardingSetup')}
-            accessibilityRole="button"
+        <View style={styles.miniTiles}>
+          <CategoryTile
+            tone={TILE_TONES.wellbeing}
+            label="Goals & focus areas"
+            hint="Edit what matters"
+            active={false}
             accessibilityLabel="Edit goals and focus areas"
-          >
-            <Text style={styles.miniRowText}>Goals & focus areas</Text>
-            <Text style={styles.miniRowChevron}>›</Text>
-          </Pressable>
-          <Pressable
-            style={styles.miniRow}
-            onPress={() => navigation.navigate('HealthAreas')}
-            accessibilityRole="button"
+            onPress={() => navigation.navigate('OnboardingSetup')}
+          />
+          <CategoryTile
+            tone={TILE_TONES.heart}
+            label="Health areas"
+            hint="Browse engines"
+            active={false}
             accessibilityLabel="View health areas"
-          >
-            <Text style={styles.miniRowText}>Health areas</Text>
-            <Text style={styles.miniRowChevron}>›</Text>
-          </Pressable>
+            onPress={() => navigation.navigate('HealthAreas')}
+          />
         </View>
 
         {/* ── Account Section ── */}
@@ -639,6 +639,10 @@ const styles = StyleSheet.create({
   // Compact deliberate-change rows (small, quiet — the drawer's Health
   // section is their primary home).
   miniRows: {
+    gap: 8,
+  },
+  miniTiles: {
+    flexDirection: 'row',
     gap: 8,
   },
   miniRow: {

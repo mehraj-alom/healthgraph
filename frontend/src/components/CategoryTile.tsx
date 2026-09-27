@@ -1,0 +1,152 @@
+/**
+ * CategoryTile — the shared duotone selection tile.
+ *
+ * One component for "pick a health category" surfaces: muted duotone
+ * gradient, label, optional hint/icon, teal ring + check when active.
+ * `surface="ink"` matches the onboarding tiles (dark); `surface="wash"`
+ * renders the same hues as a soft wash for light screens.
+ */
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import { FONT, GV } from '@/theme/guava';
+import { withAlpha, type Tone } from '@/theme/tones';
+
+interface CategoryTileProps {
+  tone: Tone;
+  label: string;
+  hint?: string;
+  glyph?: string;
+  active?: boolean;
+  onPress: () => void;
+  accessibilityLabel?: string;
+  surface?: 'ink' | 'wash';
+  fullWidth?: boolean;
+}
+
+export function CategoryTile({
+  tone,
+  label,
+  hint,
+  glyph,
+  active = false,
+  onPress,
+  accessibilityLabel,
+  surface = 'ink',
+  fullWidth = false,
+}: CategoryTileProps) {
+  const gid = `ct-${label.replace(/[^a-z0-9]/gi, '').slice(0, 12)}`;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: active }}
+      accessibilityLabel={accessibilityLabel ?? `${label}${hint ? `. ${hint}` : ''}`}
+      style={({ pressed }) => [
+        styles.tile,
+        fullWidth && styles.tileFull,
+        surface === 'wash' && styles.tileWash,
+        active && styles.tileOn,
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      {surface === 'ink' ? (
+        <Svg style={styles.art} width="100%" height="100%" preserveAspectRatio="none">
+          <Defs>
+            <LinearGradient id={gid} x1="0" y1="0" x2="0.7" y2="1">
+              <Stop offset="0" stopColor={tone[0]} stopOpacity={1} />
+              <Stop offset="1" stopColor={tone[1]} stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${gid})`} />
+          <Rect x={0} y={0} width="100%" height="100%" fill="#000000" opacity={0.22} />
+        </Svg>
+      ) : (
+        <View style={[styles.washArt, { backgroundColor: withAlpha(tone[1], 0.22) }]} pointerEvents="none" />
+      )}
+      {glyph ? <Text style={[styles.glyph, surface === 'wash' && { color: tone[0] }]}>{glyph}</Text> : null}
+      {active ? (
+        <View style={styles.check}>
+          <Text style={styles.checkGlyph}>✓</Text>
+        </View>
+      ) : null}
+      <Text style={[styles.tileLabel, surface === 'wash' && { color: GV.ink }]} numberOfLines={2}>
+        {label}
+      </Text>
+      {hint ? (
+        <Text style={[styles.tileHint, surface === 'wash' && { color: GV.body }]} numberOfLines={2}>
+          {hint}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  tile: {
+    flex: 1,
+    minHeight: 104,
+    borderRadius: 16,
+    overflow: 'hidden',
+    padding: 12,
+    justifyContent: 'flex-end',
+    gap: 2,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  tileFull: {
+    flexBasis: '100%',
+  },
+  tileWash: {
+    backgroundColor: GV.card,
+    borderColor: GV.line,
+  },
+  tileOn: {
+    borderColor: GV.teal,
+  },
+  art: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  washArt: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  glyph: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  check: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: GV.teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkGlyph: {
+    color: '#06231B',
+    fontSize: 13,
+    fontFamily: FONT.bold,
+  },
+  tileLabel: {
+    fontFamily: FONT.semi,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
+  },
+  tileHint: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: GV.fog,
+  },
+});

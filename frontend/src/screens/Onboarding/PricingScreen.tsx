@@ -12,6 +12,7 @@ import { BlurView } from 'expo-blur';
 
 import { Reveal } from '@/components/home/Reveal';
 import { FONT, GV, SPACE, TYPE } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { StageGradient } from '@/components/StageGradient';
 
@@ -95,6 +96,13 @@ const TIERS: TierDef[] = [
   },
 ];
 
+/** Tier bands: Free wellbeing, General heart, All-in fitness. */
+const TIER_TONES: Record<PricingPlan, string> = {
+  free: TILE_TONES.wellbeing[0],
+  general: TILE_TONES.heart[0],
+  allin: TILE_TONES.fitness[0],
+};
+
 const VALUE_ROWS = [
   '3 days free before paid plans start',
   'Cancel anytime, keep access till then',
@@ -175,6 +183,7 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
                     pressed && { opacity: 0.85 },
                   ]}
                 >
+                  <View style={[styles.tierBand, { backgroundColor: TIER_TONES[tier.id] }]} />
                   <View style={styles.tierHead}>
                     <View style={styles.tierNameRow}>
                       <Text style={styles.tierName}>{tier.name}</Text>
@@ -323,6 +332,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.11)',
     padding: 16,
     gap: 6,
+  },
+  tierBand: {
+    height: 4,
+    borderRadius: 2,
+    marginBottom: 6,
   },
   tierOn: {
     borderColor: GV.teal,

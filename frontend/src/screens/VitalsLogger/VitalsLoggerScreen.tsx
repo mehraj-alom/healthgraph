@@ -19,6 +19,7 @@ import { Button, Card, Chip, DialInput, Input, LogCelebration, SectionHeader, Sl
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useReducedMotion } from '@/theme';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 void FONT;
 import { api } from '@/services/api';
@@ -305,10 +306,12 @@ function ScaleSelector({
   value,
   onChange,
   labels,
+  tone = GV.cta,
 }: {
   value: number | null;
   onChange: (v: number) => void;
   labels: Record<number, string>;
+  tone?: string;
 }) {
   return (
     <View>
@@ -319,7 +322,7 @@ function ScaleSelector({
             <Pressable
               key={n}
               onPress={() => onChange(n)}
-              style={[styles.scaleDot, selected && styles.scaleDotSelected]}
+              style={[styles.scaleDot, selected && [styles.scaleDotSelected, { backgroundColor: tone, borderColor: tone }]]}
               accessibilityRole="radio"
               accessibilityState={{ selected }}
               accessibilityLabel={`${n} out of 5`}
@@ -417,10 +420,12 @@ function QualitySelector({
   value,
   onChange,
   labels,
+  tone = GV.cta,
 }: {
   value: number | null;
   onChange: (v: number) => void;
   labels: Record<number, string>;
+  tone?: string;
 }) {
   return (
     <View style={styles.qualityRow}>
@@ -430,7 +435,7 @@ function QualitySelector({
           <Pressable
             key={n}
             onPress={() => onChange(n)}
-            style={[styles.qualityDot, selected && styles.qualityDotSelected]}
+            style={[styles.qualityDot, selected && [styles.qualityDotSelected, { backgroundColor: tone, borderColor: tone }]]}
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             accessibilityLabel={labels[n] || `${n} out of 5`}
@@ -461,6 +466,7 @@ function OptionChips({
   value,
   onChange,
   color,
+  tone,
   allowClear = false,
   label,
 }: {
@@ -468,19 +474,21 @@ function OptionChips({
   value: string;
   onChange: (v: string) => void;
   color: string;
+  /** Category duotone deep color: selected chips wear the section tone. */
+  tone?: string;
   allowClear?: boolean;
   label: string;
 }) {
+  const selectedBg = tone ?? color;
   return (
     <View style={styles.optRow}>
       {options.map((opt) => {
         const selected = value === opt;
-        void color;
         return (
           <Pressable
             key={opt}
             onPress={() => onChange(selected && allowClear ? '' : opt)}
-            style={[styles.optChip, selected && styles.optChipSelected]}
+            style={[styles.optChip, selected && [styles.optChipSelected, { backgroundColor: selectedBg, borderColor: selectedBg }]]}
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             accessibilityLabel={`${opt}${selected ? ', selected' : ''}`}
@@ -1520,7 +1528,9 @@ export default function VitalsLoggerScreen() {
                   />
                   <View style={styles.fieldSpacer} />
                   <Text style={styles.fieldLabel}>Appetite</Text>
-                  <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={APPETITE_LABELS} />
+                  <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={APPETITE_LABELS}
+                    tone={TILE_TONES.nutrition[0]}
+                    />
                   <View style={styles.fieldSpacer} />
                 </>
               )}
@@ -1629,6 +1639,7 @@ export default function VitalsLoggerScreen() {
               value={sleepQuality}
               onChange={setSleepQuality}
               labels={SLEEP_QUALITY_LABELS}
+              tone={TILE_TONES.sleep[0]}
             />
             {sleepQuality != null && (
               <Text style={styles.qualityHint}>
@@ -1853,7 +1864,7 @@ export default function VitalsLoggerScreen() {
             {errors.meals ? <Text style={styles.fieldError}>{errors.meals}</Text> : null}
             <View style={styles.fieldSpacer} />
             <Text style={styles.fieldLabel}>Appetite</Text>
-            <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={APPETITE_LABELS} />
+            <ScaleSelector value={appetiteLevel} onChange={setAppetiteLevel} labels={APPETITE_LABELS} tone={TILE_TONES.nutrition[0]} />
             <View style={styles.fieldSpacer} />
             <Pressable
               onPress={() => navigation.navigate('FoodScan')}
@@ -1992,9 +2003,12 @@ export default function VitalsLoggerScreen() {
             <Text style={styles.fieldLabel}>Mood</Text>
             <MoodSelector value={mood} onChange={setMood} />
 
+
             <View style={styles.fieldSpacer} />
             <Text style={styles.fieldLabel}>Energy</Text>
-            <ScaleSelector value={energy} onChange={setEnergy} labels={ENERGY_LABELS} />
+            <ScaleSelector value={energy} onChange={setEnergy} labels={ENERGY_LABELS}
+              tone={TILE_TONES.wellbeing[0]}
+              />
 
             <View style={styles.fieldSpacer} />
             <Text style={styles.fieldLabel}>Stress</Text>
@@ -2495,8 +2509,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   moodPillSelected: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: TILE_TONES.wellbeing[0],
+    borderColor: TILE_TONES.wellbeing[0],
   },
   moodPillText: {
     ...TYPE.chip,
@@ -2524,6 +2538,7 @@ const styles = StyleSheet.create({
     backgroundColor: GV.cta,
     borderColor: GV.cta,
   },
+
   scaleDotText: {
     ...TYPE.button,
     color: GV.body,

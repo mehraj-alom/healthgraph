@@ -17,6 +17,7 @@
 
 import { StyleSheet, Text, View } from 'react-native';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { EXTRA_TONES, toneForCategory } from '@/theme/tones';
 import { PressScale } from '@/components/PressScale';
 import type { HealthAreaState } from '@/screens/HealthAreas/areas';
 import type { HealthAreaId } from '@/screens/HealthAreas/areas';
@@ -54,6 +55,13 @@ export function HealthAreaTile({
 }) {
   const label = a11yLabel(area, change);
   const tint = AREA_TINT[area.id] ?? GV.paper;
+  // Category tone bar: the pastel wash stays, the duotone deep color marks
+  // the left edge so areas read by family at a glance.
+  const toneBar =
+    area.id === 'skin' ? EXTRA_TONES.slate[0]
+    : area.id === 'substance' ? EXTRA_TONES.sand[0]
+    : area.id === 'cycle' ? EXTRA_TONES.berry[0]
+    : toneForCategory(area.id)[0];
   return (
     <PressScale
       onPress={onPress}
@@ -63,7 +71,7 @@ export function HealthAreaTile({
       style={styles.tileOuter}
     >
       <View
-        style={[styles.tile, { backgroundColor: tint }]}
+        style={[styles.tile, { backgroundColor: tint, borderLeftWidth: 4, borderLeftColor: toneBar }]}
         accessible
         accessibilityLabel={label}
       >

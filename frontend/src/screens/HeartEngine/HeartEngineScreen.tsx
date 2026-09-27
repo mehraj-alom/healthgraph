@@ -24,6 +24,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { useHeartEngine } from '@/hooks/useHeartEngine';
 import {
@@ -84,7 +85,7 @@ export default function HeartEngineScreen() {
         ) : (
           <>
             <SectionHeader title="Latest" />
-            <Card>
+            <Card style={{ borderLeftWidth: 4, borderLeftColor: TILE_TONES.heart[1] }}>
               <Text style={styles.bigValue}>{formatBpm(latest.bpm)}</Text>
               <Text style={styles.avgSub}>
                 {`${methodLabel(latest.method)} · ${formatMeasuredAt(latest.measuredAt)}`}

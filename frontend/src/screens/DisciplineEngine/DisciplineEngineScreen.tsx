@@ -23,6 +23,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { useDisciplineEngine } from '@/hooks/useDisciplineEngine';
 
@@ -165,7 +166,7 @@ const styles = StyleSheet.create({
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   dot: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  dotOn: { backgroundColor: '#7CF5D3' },
+  dotOn: { backgroundColor: TILE_TONES.discipline[1] },
   dotOff: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
   cellDay: { ...TYPE.caption, fontSize: 12, color: GV.fog, fontVariant: ['tabular-nums'] },
   weekTotal: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 8 },

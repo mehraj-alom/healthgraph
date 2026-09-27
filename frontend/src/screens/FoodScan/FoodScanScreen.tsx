@@ -23,6 +23,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
+import { CategoryTile } from '@/components/CategoryTile';
 import { StageGradient } from '@/components/StageGradient';
 import { HealthFact } from '@/components/HealthFact';
 import { useReducedMotion } from '@/theme';
@@ -228,32 +230,26 @@ export default function FoodScanScreen() {
       </View>
 
       <View style={styles.modeRow} accessibilityRole="tablist">
-        {(['photo', 'barcode'] as const).map((m) => {
-          const active = mode === m;
-          return (
-            <Pressable
-              key={m}
-              onPress={() => {
-                setBarcodeResult(null);
-                setBarcodeImage(null);
-                reset();
-                setMode(m);
-              }}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={m === 'photo' ? 'Scan by photo' : 'Scan by barcode'}
-              style={({ pressed }) => [
-                styles.modeTab,
-                active && styles.modeTabActive,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={[styles.modeTabText, active && styles.modeTabTextActive]}>
-                {m === 'photo' ? 'Photo' : 'Barcode'}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {([
+          { key: 'photo', label: 'Photo', hint: 'VLM estimate', tone: TILE_TONES.nutrition, glyph: '◉' },
+          { key: 'barcode', label: 'Barcode', hint: 'Packaged facts', tone: TILE_TONES.weight, glyph: '▤' },
+        ] as const).map((m) => (
+          <CategoryTile
+            key={m.key}
+            tone={m.tone}
+            label={m.label}
+            hint={m.hint}
+            glyph={m.glyph}
+            active={mode === m.key}
+            accessibilityLabel={m.key === 'photo' ? 'Scan by photo' : 'Scan by barcode'}
+            onPress={() => {
+              setBarcodeResult(null);
+              setBarcodeImage(null);
+              reset();
+              setMode(m.key);
+            }}
+          />
+        ))}
       </View>
 
       {resolving ? (
@@ -440,27 +436,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: SPACE.screenH,
     paddingBottom: 4,
-  },
-  modeTab: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: GV.line,
-    minHeight: 48,
-    justifyContent: 'center',
-  },
-  modeTabActive: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
-  },
-  modeTabText: {
-    ...TYPE.button,
-    color: GV.cta,
-  },
-  modeTabTextActive: {
-    color: '#FFFFFF',
   },
   frame: {
     height: FRAME_H,

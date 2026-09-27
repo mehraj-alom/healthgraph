@@ -24,6 +24,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { useFitnessEngine } from '@/hooks/useFitnessEngine';
 import {
@@ -175,7 +176,7 @@ const styles = StyleSheet.create({
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   dot: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  dotOn: { backgroundColor: '#4FD1C5' },
+  dotOn: { backgroundColor: TILE_TONES.fitness[1] },
   dotOff: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
   dotCount: { fontSize: 10, fontWeight: '700', color: GV.ink },
   cellDay: { ...TYPE.caption, fontSize: 12, color: GV.fog, fontVariant: ['tabular-nums'] },

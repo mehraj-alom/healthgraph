@@ -13,18 +13,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { Reveal } from '@/components/home/Reveal';
 import { FONT, GV, TYPE } from '@/theme/guava';
+import { EXTRA_TONES, TILE_TONES } from '@/theme/tones';
 import { FOCUS_AREAS } from './options';
 
 /** Muted photographic duotones, one mood per area (top → bottom). */
-const TILE_TONES: Readonly<Record<string, readonly [string, string]>> = {
-  sleep: ['#33325A', '#57507A'],
-  weight: ['#36444F', '#5C6E7C'],
-  discipline: ['#544653', '#7C6272'],
-  fitness: ['#6B4A3A', '#96684A'],
-  nutrition: ['#46543A', '#6E7F4E'],
-  wellbeing: ['#454550', '#66666F'],
-  heart: ['#37605A', '#56837B'],
-};
+const FALLBACK_TONE = EXTRA_TONES.slate;
 
 export function FocusTile({
   id,
@@ -41,7 +34,7 @@ export function FocusTile({
   onToggle: () => void;
   fullWidth?: boolean;
 }) {
-  const tone = TILE_TONES[id] ?? (['#3A3F55', '#5A6078'] as const);
+  const tone = (TILE_TONES as Readonly<Record<string, readonly [string, string]>>)[id] ?? FALLBACK_TONE;
   return (
     <Pressable
       onPress={onToggle}

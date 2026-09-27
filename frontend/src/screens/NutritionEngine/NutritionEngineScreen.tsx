@@ -23,6 +23,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { useNutritionEngine } from '@/hooks/useNutritionEngine';
 import {
@@ -135,6 +136,7 @@ export default function NutritionEngineScreen() {
                 <Card>
                   {typeCounts.map(({ type, count }) => (
                     <View key={type} style={styles.typeRow}>
+                      <View style={[styles.typeDot, { backgroundColor: TILE_TONES.nutrition[1] }]} />
                       <Text style={styles.typeLabel}>{type}</Text>
                       <Text style={styles.typeCount}>{`${count} of ${classifiedMeals}`}</Text>
                     </View>
@@ -193,8 +195,9 @@ const styles = StyleSheet.create({
   avgSub: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 4 },
   change: { ...TYPE.body, color: GV.body, textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
   provenance: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 8 },
-  typeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
-  typeLabel: { ...TYPE.body, color: GV.ink },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  typeDot: { width: 8, height: 8, borderRadius: 4 },
+  typeLabel: { ...TYPE.body, color: GV.ink, flex: 1 },
   typeCount: { ...TYPE.body, color: GV.body, fontVariant: ['tabular-nums'] },
   list: { gap: SPACE.cardGap },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },

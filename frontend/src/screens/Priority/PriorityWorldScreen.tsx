@@ -27,6 +27,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Chip, EmptyState, SectionHeader } from '@/components';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { toneForCategory } from '@/theme/tones';
+import { CategoryTile } from '@/components/CategoryTile';
 import { StageGradient } from '@/components/StageGradient';
 import HGraphMap from '@/components/home/HGraphMap';
 import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
@@ -154,23 +156,16 @@ export default function PriorityWorldScreen() {
                 const def = ENGINES[entry.id as keyof typeof ENGINES];
                 if (!def?.route) return null;
                 return (
-                  <Card key={entry.id}>
-                    <Pressable
-                      onPress={() => goEngine(def.route?.name ?? '', def.route?.params)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Open ${entry.title}`}
-                      style={styles.row}
-                    >
-                      <Text style={styles.glyph}>{def.glyph}</Text>
-                      <View style={styles.rowMain}>
-                        <Text style={styles.rowTitle}>{entry.title}</Text>
-                        <Text style={styles.rowSub} numberOfLines={1}>
-                          {def.description}
-                        </Text>
-                      </View>
-                      <Text style={styles.chev}>›</Text>
-                    </Pressable>
-                  </Card>
+                  <CategoryTile
+                    key={entry.id}
+                    tone={toneForCategory(entry.id)}
+                    label={entry.title}
+                    hint={def.description}
+                    glyph={def.glyph}
+                    active={false}
+                    accessibilityLabel={`Open ${entry.title}`}
+                    onPress={() => goEngine(def.route?.name ?? '', def.route?.params)}
+                  />
                 );
               })}
             </View>

@@ -16,6 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '@/services/api';
 import { Button, Chip } from '@/components';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { toneForTimelineFilter } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { perfStart } from '@/utils/perfLog';
@@ -764,7 +765,7 @@ export default function TimelineScreen() {
                 key={f.key}
                 label={f.label}
                 selected={active}
-                color={GV.cta}
+                color={f.key === 'all' ? GV.cta : toneForTimelineFilter(f.key)[0]}
                 size="medium"
                 onPress={() => toggleFilter(f.key)}
               />

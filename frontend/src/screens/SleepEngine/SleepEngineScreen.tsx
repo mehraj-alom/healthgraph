@@ -25,6 +25,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { useSleepEngine } from '@/hooks/useSleepEngine';
 import {
@@ -184,7 +185,7 @@ const styles = StyleSheet.create({
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   bar: { width: 16, height: 44, borderRadius: 8, justifyContent: 'flex-end' },
-  barOn: { backgroundColor: '#7C6FF0' },
+  barOn: { backgroundColor: TILE_TONES.sleep[1] },
   barOff: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
   cellDay: { ...TYPE.caption, fontSize: 12, color: GV.fog, fontVariant: ['tabular-nums'] },
   weekTotal: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 8 },

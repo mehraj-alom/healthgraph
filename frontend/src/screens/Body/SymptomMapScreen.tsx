@@ -7,6 +7,7 @@ import { SymptomBodyMap } from '@/components/SymptomBodyMap';
 import { Card, Chip, Slider } from '@/components';
 import { usePainHistory } from '@/hooks/usePainHistory';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { TILE_TONES } from '@/theme/tones';
 void FONT;
 import type { RootStackParamList } from '@/types';
 
@@ -67,6 +68,7 @@ export default function SymptomMapScreen() {
               label="Mark today"
               size="large"
               selected={mode === 'mark'}
+              color={TILE_TONES.discipline[0]}
               onPress={() => setMode('mark')}
               accessibilityLabel="Mark pain on the figure"
             />
@@ -74,6 +76,7 @@ export default function SymptomMapScreen() {
               label="History"
               size="large"
               selected={mode === 'history'}
+              color={TILE_TONES.weight[0]}
               onPress={() => setMode('history')}
               accessibilityLabel="Browse pain history by day"
             />

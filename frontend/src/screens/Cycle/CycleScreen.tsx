@@ -21,6 +21,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Button, Card, Chip, EmptyState, Input, Modal, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { EXTRA_TONES, TILE_TONES } from '@/theme/tones';
 import { StageGradient } from '@/components/StageGradient';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import {
@@ -39,6 +40,13 @@ const KIND_COPY: Record<CycleKind, { label: string; hint: string }> = {
   'period-start': { label: 'Period start', hint: 'First day of bleeding' },
   'period-end': { label: 'Period end', hint: 'Last day of bleeding' },
   note: { label: 'Note', hint: 'Symptom or observation' },
+};
+
+/** Kind tones: start berry, end pine (complete), note slate. */
+const CYCLE_TONES: Record<CycleKind, string> = {
+  'period-start': EXTRA_TONES.berry[0],
+  'period-end': TILE_TONES.heart[0],
+  note: EXTRA_TONES.slate[0],
 };
 
 function spanTitle(start: string | null, endExclusive: string | null): string {
@@ -254,7 +262,7 @@ export default function CycleScreen() {
                 selected={kind === k}
                 onPress={() => setKind(k)}
                 size="medium"
-                color={GV.cta}
+                color={CYCLE_TONES[k]}
                 accessibilityLabel={`${KIND_COPY[k].label}. ${KIND_COPY[k].hint}`}
               />
             ))}
