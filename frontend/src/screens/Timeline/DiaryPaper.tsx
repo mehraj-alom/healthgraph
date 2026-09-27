@@ -18,25 +18,13 @@ import {
 } from 'react-native';
 import type { DiaryDay } from './diary';
 import { stripSummary } from './diary';
+import { PAPER } from './paperTheme';
 import { FONT } from '@/theme/guava';
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { ReportDocumentView } from './ReportDocumentView';
 
 /** Fixed page height: the wheel sizes every sheet and its stage from this. */
 export const DIARY_PAGE_HEIGHT = 336;
-
-export const PAPER = {
-  sheet: '#f6f1e4',
-  sheetEdge: '#e4dcc8',
-  spine: '#d8cfae',
-  ink: '#2b2620',
-  muted: '#6f675a',
-  faint: '#a39a86',
-  rule: '#ddd3bd',
-  well: '#efe8d6',
-  accent: '#0b5c40',
-  highlight: '#b98a1d',
-} as const;
 
 /** One journal page, laid out like the wireframe: date + report header,
  *  primary content box beside a narrow side box, and a full-width bottom

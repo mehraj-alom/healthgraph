@@ -27,7 +27,7 @@ import {
   type ReportRow,
   type ReportSection,
 } from './reportDocument';
-import { PAPER } from './DiaryPaper';
+import { PAPER } from './paperTheme';
 import { FONT } from '@/theme/guava';
 import { getMedications } from '@/db/queries/medications';
 import {

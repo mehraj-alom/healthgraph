@@ -118,6 +118,24 @@ test('report is a formal document with header, sections, footer, disclaimer', ()
   assert.ok(v.includes('No dose recorded'), 'never implies taken from scheduled');
 });
 
+test('no import cycle between the sheet and the document view (regression)', () => {
+  // A DiaryPaper ↔ ReportDocumentView cycle once crashed the app at load:
+  // Metro evaluated one side with partial exports, so PAPER was undefined
+  // when StyleSheet.create ran ("Cannot read property 'muted' of undefined").
+  // PAPER lives in dependency-free paperTheme.ts; neither view module may
+  // import the other for module-scope values.
+  const paper = src(PAPER);
+  const view = src('src/screens/Timeline/ReportDocumentView.tsx');
+  assert.ok(!view.includes("from './DiaryPaper'"), 'document view never imports the sheet module');
+  assert.ok(view.includes("from './paperTheme'"), 'document view takes PAPER from the leaf module');
+  assert.ok(paper.includes("from './paperTheme'"), 'sheet takes PAPER from the leaf module');
+  const theme = src('src/screens/Timeline/paperTheme.ts');
+  assert.ok(
+    !theme.split('\n').some((line) => line.startsWith('import ')),
+    'theme module has no import statements at all',
+  );
+});
+
 test('no fabricated legal identity anywhere near the report', () => {
   for (const f of [PAPER, SCREEN, WHEEL, 'src/screens/Timeline/ReportDocumentView.tsx']) {
     const srcText = src(f);
