@@ -59,8 +59,43 @@ const EXPLORE_FEATURES: FeatureDef[] = [
   { title: 'Health Graph', sub: 'Full overview', route: 'HealthGraph', params: { source: 'graph' } },
 ];
 
-const TERMS_COPY =
-  'Your health data belongs to you. Records you upload are processed to build your timeline and insights, and stay on this device and your private account. HealthGraph is a wellness companion, not a medical device — nothing here is medical advice, diagnosis, or treatment. If something feels urgent, contact a clinician. You can request deletion of your data at any time from Account settings.';
+/**
+ * Sidebar icon tiles (Apple HIG sidebar pattern, translated): one familiar
+ * monochrome glyph per destination in the app accent. Color serves a single
+ * purpose — navigation identity — and never carries status.
+ */
+const ROW_GLYPHS: Record<string, string> = {
+  Medications: '◐',
+  Priority: '★',
+  DailyLog: '◔',
+  PpgMeasure: '♥',
+  FoodScan: '◉',
+  DocumentUpload: '▲',
+  SymptomMap: '✚',
+  Chat: '✎',
+  Timeline: '◷',
+  Body: '⛉',
+  HealthGraph: '⬡',
+  DocumentDetail: '▤',
+  Account: '◍',
+  Terms: '§',
+  Privacy: '⬔',
+};
+
+function RowIcon({ glyph, label }: { glyph: string; label: string }) {
+  return (
+    <View
+      style={styles.rowIcon}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={label}
+    >
+      <Text style={styles.rowGlyph}>{glyph}</Text>
+    </View>
+  );
+}
+
+const TERMS_COPY =  'Your health data belongs to you. Records you upload are processed to build your timeline and insights, and stay on this device and your private account. HealthGraph is a wellness companion, not a medical device — nothing here is medical advice, diagnosis, or treatment. If something feels urgent, contact a clinician. You can request deletion of your data at any time from Account settings.';
 
 const PRIVACY_COPY =
   'Daily logs, vitals, and documents sync to your account so they survive reinstalls. We never sell personal health data. Processing happens only to power the features you use — timeline, correlations, chat answers. Sign out keeps your local data on the device; uninstalling removes it.';
@@ -83,12 +118,14 @@ function WaveRow({
   sub,
   label,
   last,
+  glyph,
   onPress,
 }: {
   title: string;
   sub: string;
   label: string;
   last: boolean;
+  glyph?: string;
   onPress: () => void;
 }) {
   const reduced = useReducedMotion();
@@ -138,6 +175,7 @@ function WaveRow({
       ]}
     >
       <View style={styles.rowClip}>
+        {glyph ? <RowIcon glyph={glyph} label={`${title} icon`} /> : null}
         <View style={styles.rowText}>
           <Text style={styles.rowTitle}>{title}</Text>
           <Text style={styles.rowSub} numberOfLines={2}>{sub}</Text>
@@ -318,7 +356,11 @@ export function ProfileSheet({
               {photoUri ? (
                 <Image source={{ uri: photoUri }} style={styles.avatar} />
               ) : (
-                <View style={[styles.avatar, styles.avatarEmpty]} />
+                <View style={[styles.avatar, styles.avatarEmpty]} accessible accessibilityRole="image" accessibilityLabel="Profile avatar">
+                  <Text style={styles.avatarInitials}>
+                    {(user?.email?.trim().charAt(0) ?? 'H').toUpperCase()}
+                  </Text>
+                </View>
               )}
               <View style={styles.headMeta}>
                 <Text style={styles.title} accessibilityRole="header">Profile</Text>
@@ -345,6 +387,7 @@ export function ProfileSheet({
                 sub="Schedule & doses"
                 label="Open medications"
                 last={false}
+                glyph={ROW_GLYPHS.Medications}
                 onPress={() => go('Medications')}
               />
               <WaveRow
@@ -352,6 +395,7 @@ export function ProfileSheet({
                 sub={prioritySub}
                 label="Open my priorities world"
                 last
+                glyph={ROW_GLYPHS.Priority}
                 onPress={() => go('Priority')}
               />
             </View>
@@ -370,6 +414,7 @@ export function ProfileSheet({
                     pressed && { opacity: 0.6 },
                   ]}
                 >
+                  <RowIcon glyph={ROW_GLYPHS[f.route] ?? '·'} label={`${f.title} icon`} />
                   <View style={styles.rowText}>
                     <Text style={styles.rowTitle}>{f.title}</Text>
                     <Text style={styles.rowSub}>{f.sub}</Text>
@@ -393,6 +438,7 @@ export function ProfileSheet({
                     pressed && { opacity: 0.6 },
                   ]}
                 >
+                  <RowIcon glyph={ROW_GLYPHS[f.route] ?? '·'} label={`${f.title} icon`} />
                   <View style={styles.rowText}>
                     <Text style={styles.rowTitle}>{f.title}</Text>
                     <Text style={styles.rowSub}>{f.sub}</Text>
@@ -413,13 +459,14 @@ export function ProfileSheet({
                     onPress={() => go('DocumentDetail', { documentId: d.document_id })}
                     accessibilityRole="button"
                     accessibilityLabel={`Open record from ${fmtDocDate(d.created_at)}`}
-                    style={({ pressed }) => [
-                      styles.row,
-                      i < recentDocs.length - 1 && styles.rowDivider,
-                      pressed && { opacity: 0.6 },
-                    ]}
-                  >
-                    <View style={styles.rowText}>
+                  style={({ pressed }) => [
+                    styles.row,
+                    i < recentDocs.length - 1 && styles.rowDivider,
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  <RowIcon glyph={ROW_GLYPHS.DocumentDetail} label="Medical report icon" />
+                  <View style={styles.rowText}>
                       <Text style={styles.rowTitle}>Medical report</Text>
                       <Text style={styles.rowSub}>
                         {fmtDocDate(d.created_at)} · {d.status.toLowerCase().replace('_', ' ')}
@@ -537,6 +584,7 @@ export function ProfileSheet({
                   pressed && { opacity: 0.6 },
                 ]}
               >
+                <RowIcon glyph={ROW_GLYPHS.Account} label="Account icon" />
                 <View style={styles.rowText}>
                   <Text style={styles.rowTitle}>Account</Text>
                   <Text style={styles.rowSub}>Settings and sign out</Text>
@@ -563,6 +611,10 @@ export function ProfileSheet({
                         pressed && { opacity: 0.6 },
                       ]}
                     >
+                      <RowIcon
+                        glyph={item.key === 'terms' ? ROW_GLYPHS.Terms : ROW_GLYPHS.Privacy}
+                        label={`${item.title} icon`}
+                      />
                       <View style={styles.rowText}>
                         <Text style={styles.rowTitle}>{item.title}</Text>
                       </View>
@@ -674,6 +726,28 @@ const styles = StyleSheet.create({
   },
   avatarEmpty: {
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontFamily: FONT.semi,
+    fontSize: 22,
+    lineHeight: 26,
+    color: '#FFFFFF',
+  },
+  // Sidebar icon tile: one monochrome accent glyph per destination.
+  rowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: 'rgba(79, 209, 197, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowGlyph: {
+    fontSize: 16,
+    lineHeight: 20,
+    color: GV.teal,
   },
   title: {
     ...TYPE.display,
@@ -689,10 +763,10 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   sectionLabel: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    lineHeight: 18,
-    letterSpacing: 0.5,
+    fontFamily: FONT.semi,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 1.5,
     color: GV.fog,
     marginTop: 16,
     marginBottom: 8,
@@ -741,7 +815,7 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, gap: 1 },
   rowTitle: {
     fontFamily: FONT.medium,
-    fontSize: 16,
+    fontSize: 17,
     lineHeight: 22,
     color: '#FFFFFF',
   },
