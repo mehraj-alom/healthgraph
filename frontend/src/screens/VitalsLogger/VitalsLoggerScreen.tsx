@@ -144,12 +144,22 @@ const VITAL_UNIT_OPTIONS = ['bpm', 'mmHg', 'mg/dL', '°F', '°C', 'kg', '%'] as 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const dateToday = () => new Date().toISOString().slice(0, 10);
+/** Local calendar day (YYYY-MM-DD). NEVER UTC: toISOString() shifts the day
+ *  for timezones ahead of UTC (IST evenings logged "today" landed yesterday,
+ *  invisible on the timeline's local-day pages). */
+const dateToday = (): string => {
+  const now = new Date();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${m}-${day}`;
+};
 
 const shiftDate = (value: string, days: number) => {
-  const date = new Date(`${value}T00:00:00`);
+  const date = new Date(`${value}T12:00:00`);
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${m}-${day}`;
 };
 
 const formatRelativeDate = (dateStr: string): string => {

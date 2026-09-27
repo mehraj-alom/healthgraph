@@ -31,6 +31,7 @@ import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useAuth } from '@/context/AuthContext';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { usePremiumEntitled } from '@/services/premium';
+import { todayKey } from '@/screens/Onboarding/momentum';
 import {
   listScanSessions,
   setScanStatus,
@@ -193,8 +194,9 @@ export default function MedicationsScreen() {
     void deleteScanSession(session.session_id).then(() => loadScanSessions());
   }, [loadScanSessions]);
 
-  // Get today's date for schedule
-  const today = new Date().toISOString().split('T')[0];
+  // Local calendar day: UTC slicing (toISOString) shifts the day for
+  // timezones ahead of UTC and desyncs the schedule from the logger.
+  const today = todayKey();
 
   // Fetch data
   const { data: medications, isLoading: medicationsLoading, refetch: refetchMedications } = useMedications();
