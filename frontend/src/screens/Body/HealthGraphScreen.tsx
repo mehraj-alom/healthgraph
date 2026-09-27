@@ -65,37 +65,39 @@ type Route = RouteProp<RootStackParamList, 'HealthGraph'>;
 // Visual constants
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ═══ Domain color system (night instrument — color is information) ═══
+// ═══ Domain color system (clean light canvas — color is information) ═══
+// Soft matte hues in four families (teal / olive-amber / steel blue /
+// terracotta), tuned to read on a white canvas under soft studio light.
 // Sleep indigo · energy amber · move teal · fuel sky · heart rose ·
-// mind violet. Off-track verdicts speak soft coral, on-track teal.
+// mind violet. Off-track verdicts speak terracotta, on-track deep teal.
 // (Per-node hues resolve in nodeDomainColor below — the single source.)
 
 const NODE_COLORS: Record<string, string> = {
-  patient: '#FFFFFF',
-  body_structure: '#7C8DA6',
-  observation: '#4FD1C5',
+  patient: '#0F6D66',
+  body_structure: '#7B8AA0',
+  observation: '#4E8F88',
   document: '#8A7BC8',
-  timeline_event: '#F5A623',
-  medication: '#4FD1C5',
-  medication_taken_event: '#3AA79D',
+  timeline_event: '#C08A3B',
+  medication: '#45A29A',
+  medication_taken_event: '#3D8E85',
   // P0 Concept-lite (shared terminology reference, terminal for traversal).
   concept: '#9AA8B8',
   // P1 clinical graph expansion.
-  medication_request: '#4FD1C5',
-  condition_occurrence: '#F28B7E',
-  visit: '#5B6B82',
-  patient_statement: '#B8A6E8',
-  medication_canonical: '#3AA79D',
+  medication_request: '#45A29A',
+  condition_occurrence: '#C26E54',
+  visit: '#64748C',
+  patient_statement: '#A394D6',
+  medication_canonical: '#9AA8B8',
   // P2 measurement split + regimen versions.
-  measurement: '#F27E93',
-  medication_version: '#3AA79D',
+  measurement: '#D4818D',
+  medication_version: '#3D8E85',
   // P3 longitudinal personal-health domains (USER_REPORTED/device hues).
-  sleep_episode: '#7C6FF0',
-  activity_event: '#4FD1C5',
-  nutrition_intake: '#6EC1E4',
-  food_scan: '#6EC1E4',
-  food_entry: '#6EC1E4',
-  ppg_measurement: '#F27E93',
+  sleep_episode: '#7E74D8',
+  activity_event: '#4AA39B',
+  nutrition_intake: '#6BAFD4',
+  food_scan: '#6BAFD4',
+  food_entry: '#6BAFD4',
+  ppg_measurement: '#D4818D',
 };
 
 const NODE_SIZES: Record<string, number> = {
@@ -158,33 +160,33 @@ const DIM = 0.14;
  * sleep dot is indigo everywhere it appears.
  */
 export function nodeDomainColor(node: GraphNode): string {
-  if (node.type === 'patient') return '#FFFFFF';
-  if (node.type === 'body_structure') return '#7C8DA6';
+  if (node.type === 'patient') return '#0F6D66';
+  if (node.type === 'body_structure') return '#7B8AA0';
   if (node.type === 'document') return '#8A7BC8';
-  if (node.type === 'medication') return '#4FD1C5';
-  if (node.type === 'medication_taken_event') return '#3AA79D';
+  if (node.type === 'medication') return '#45A29A';
+  if (node.type === 'medication_taken_event') return '#3D8E85';
   // P0–P3 graph types resolve by type first (metric sniffing below stays
   // as a fallback for legacy observation/timeline_event nodes).
   if (node.type === 'concept' || node.type === 'medication_canonical') return '#9AA8B8';
-  if (node.type === 'medication_request') return '#4FD1C5';
-  if (node.type === 'condition_occurrence') return '#F28B7E';
-  if (node.type === 'visit') return '#5B6B82';
-  if (node.type === 'patient_statement') return '#B8A6E8';
-  if (node.type === 'measurement' || node.type === 'ppg_measurement') return '#F27E93';
-  if (node.type === 'medication_version') return '#3AA79D';
-  if (node.type === 'sleep_episode') return '#7C6FF0';
-  if (node.type === 'activity_event') return '#4FD1C5';
-  if (node.type === 'nutrition_intake' || node.type === 'food_scan' || node.type === 'food_entry') return '#6EC1E4';
+  if (node.type === 'medication_request') return '#45A29A';
+  if (node.type === 'condition_occurrence') return '#C26E54';
+  if (node.type === 'visit') return '#64748C';
+  if (node.type === 'patient_statement') return '#A394D6';
+  if (node.type === 'measurement' || node.type === 'ppg_measurement') return '#D4818D';
+  if (node.type === 'medication_version') return '#3D8E85';
+  if (node.type === 'sleep_episode') return '#7E74D8';
+  if (node.type === 'activity_event') return '#4AA39B';
+  if (node.type === 'nutrition_intake' || node.type === 'food_scan' || node.type === 'food_entry') return '#6BAFD4';
   const hay = `${node.label ?? ''} ${node.properties?.observation_type ?? ''} ${node.properties?.category ?? ''} ${node.properties?.event_type ?? ''}`.toLowerCase();
-  if (/(heart|pulse|bpm|blood|pressure|oxygen|spo2|glucose|temperatur|respir|hrv)/.test(hay)) return '#F27E93';
-  if (/(sleep|wake|bedtime|insomnia)/.test(hay)) return '#7C6FF0';
-  if (/(energy)/.test(hay)) return '#F5A623';
-  if (/(activ|move|exercise|walk|step|workout|strain)/.test(hay)) return '#4FD1C5';
-  if (/(water|drink|hydrat|meal|nutri|appetite|food|calori)/.test(hay)) return '#6EC1E4';
-  if (/(wellbeing|well-being|mood)/.test(hay)) return '#4FD1C5';
-  if (/(stress|anxiety|pain|symptom|ache)/.test(hay)) return '#B8A6E8';
-  if (node.type === 'timeline_event') return '#F5A623';
-  if (node.type === 'observation') return '#9A9AA5';
+  if (/(heart|pulse|bpm|blood|pressure|oxygen|spo2|glucose|temperatur|respir|hrv)/.test(hay)) return '#D4818D';
+  if (/(sleep|wake|bedtime|insomnia)/.test(hay)) return '#7E74D8';
+  if (/(energy)/.test(hay)) return '#C08A3B';
+  if (/(activ|move|exercise|walk|step|workout|strain)/.test(hay)) return '#4AA39B';
+  if (/(water|drink|hydrat|meal|nutri|appetite|food|calori)/.test(hay)) return '#6BAFD4';
+  if (/(wellbeing|well-being|mood)/.test(hay)) return '#4AA39B';
+  if (/(stress|anxiety|pain|symptom|ache)/.test(hay)) return '#A394D6';
+  if (node.type === 'timeline_event') return '#C08A3B';
+  if (node.type === 'observation') return '#8E9AA6';
   return '#9AA8B8';
 }
 
@@ -223,6 +225,11 @@ export interface NodeLabelDef {
 
 function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, LayoutPos> {
   const positions = new Map<string, LayoutPos>();
+  // Spread the skeleton with graph size so a growing graph breathes instead
+  // of cramming into the radii tuned for ~12 nodes. fitToView reframes any
+  // extents, so this only buys air, never cropping. Cluster offsets below
+  // stay fixed so local groups remain tight and readable.
+  const spread = Math.min(2.2, Math.max(1, Math.sqrt(nodes.length / 12)));
 
   const obsToBody = new Map<string, string>();
   for (const edge of edges) {
@@ -244,8 +251,8 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Layo
   bodyStructures.forEach((bs, i) => {
     const angle = ((2 * Math.PI) / bodyCount) * i;
     positions.set(bs.id, {
-      x: Math.cos(angle) * 0.8,
-      y: Math.sin(angle) * 1.0,
+      x: Math.cos(angle) * 0.8 * spread,
+      y: Math.sin(angle) * 1.0 * spread,
       z: ((stableHash(bs.id) % 100) / 100 - 0.5) * 0.5,
     });
   });
@@ -275,8 +282,8 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Layo
     obsFree.forEach((obs, i) => {
       const a = ((2 * Math.PI) / obsFree.length) * i;
       positions.set(obs.id, {
-        x: Math.cos(a) * 1.0,
-        y: Math.sin(a) * 1.25,
+        x: Math.cos(a) * 1.0 * spread,
+        y: Math.sin(a) * 1.25 * spread,
         z: ((stableHash(obs.id) % 80) / 80 - 0.5) * 0.6,
       });
     });
@@ -298,7 +305,7 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Layo
     if (op) {
       positions.set(doc.id, { x: op.x + Math.cos(a) * 0.25, y: op.y + Math.sin(a) * 0.25, z: op.z + ((h % 40) / 40 - 0.5) * 0.15 });
     } else {
-      positions.set(doc.id, { x: Math.cos(a) * 1.2, y: Math.sin(a) * 1.6, z: 0 });
+      positions.set(doc.id, { x: Math.cos(a) * 1.2 * spread, y: Math.sin(a) * 1.6 * spread, z: 0 });
     }
   }
 
@@ -346,8 +353,8 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Layo
     const arr = eventsByType.get(et) ?? []; arr.push(te); eventsByType.set(et, arr);
   }
   const typeKeys = Array.from(eventsByType.keys());
-  const typeRadiusX = 1.05;
-  const typeRadiusY = 1.75;
+  const typeRadiusX = 1.05 * spread;
+  const typeRadiusY = 1.75 * spread;
   typeKeys.forEach((etype, ti) => {
     const evts = eventsByType.get(etype)!;
     const typeAngle = ((2 * Math.PI) / typeKeys.length) * ti;
@@ -384,8 +391,8 @@ function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, Layo
     typeList.forEach((t, ti) => {
       const group = byType.get(t)!;
       const baseAngle = ((2 * Math.PI) / typeList.length) * ti;
-      const cx = Math.cos(baseAngle) * 1.5;
-      const cy = Math.sin(baseAngle) * 2.0;
+      const cx = Math.cos(baseAngle) * 1.5 * spread;
+      const cy = Math.sin(baseAngle) * 2.0 * spread;
       group.forEach((n, i) => {
         const h = stableHash(n.id);
         const a = ((2 * Math.PI) / Math.max(group.length, 1)) * i;
@@ -499,71 +506,41 @@ class GraphSceneManager {
 
   // Shared node geometry + single material (per-node color via instanceColor).
   private sphereGeo: THREE.SphereGeometry | null = null;
-  private nodeMaterial: THREE.MeshBasicMaterial | null = null;
+  private nodeMaterial: THREE.Material | null = null;
 
-  // Edge visibility — dark canvas wants punch, not haze.
-  private edgeBaseOp = 1.0;
-  private derivedOp = 0.5;
+  // Edge visibility — thin quiet lines on the light canvas.
+  private edgeBaseOp = 0.65;
+  private derivedOp = 0.45;
 
   constructor(width = SCREEN_WIDTH, height = SCREEN_HEIGHT - 120, theme: 'dark' | 'panel' = 'dark') {
     this.viewport = { width, height };
     this.scene = new THREE.Scene();
-    // Night instrument canvas (panel matches the dashboard insight card).
-    const bgHex = theme === 'panel' ? 0x16161c : 0x0b0b0f;
+    // Clean light canvas (panel keeps the dark dashboard insight card).
+    const bgHex = theme === 'panel' ? 0x16161c : 0xffffff;
     this.scene.background = new THREE.Color(bgHex);
 
     this.camera = new THREE.PerspectiveCamera(55, width / Math.max(height, 1), 0.1, 100);
     this.camera.position.set(0, 1.0, 6.5);
     this.camera.lookAt(0, 0, 0);
 
-    // Flat precise instruments need no lights (unlit basic material below).
+    // Soft studio light for the matte spheres below. Ambient + hemisphere
+    // only (dimensionless intensities, stable across three.js versions) —
+    // no point source needed at this scene scale.
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xdfe5e1, 0.75));
 
-    // Depth cue + atmosphere: soft fog, a faint polar grid to ground the
-    // constellation, and slow dust motes so the void feels designed.
-    this.scene.fog = new THREE.Fog(bgHex, 10, 20);
-    const grid = new THREE.PolarGridHelper(4.2, 12, 6, 48, 0x2a2a33, 0x2a2a33);
-    const gridMat = grid.material as THREE.LineBasicMaterial;
-    gridMat.transparent = true;
-    gridMat.opacity = 0.5;
-    gridMat.toneMapped = false;
-    grid.position.y = -2.4;
-    this.scene.add(grid);
-    this.gridHelper = grid;
-
-    const DUST = 60;
-    const dustPos = new Float32Array(DUST * 3);
-    for (let i = 0; i < DUST; i++) {
-      const bx = (Math.random() - 0.5) * 7;
-      const by = Math.random() * 5 - 2.5;
-      const bz = (Math.random() - 0.5) * 7;
-      this.dustBase.push(new THREE.Vector3(bx, by, bz));
-      this.dustPhase.push(Math.random() * Math.PI * 2);
-      dustPos[i * 3] = bx; dustPos[i * 3 + 1] = by; dustPos[i * 3 + 2] = bz;
-    }
-    const dustGeo = new THREE.BufferGeometry();
-    const dustAttr = new THREE.Float32BufferAttribute(dustPos, 3);
-    dustAttr.setUsage(THREE.DynamicDrawUsage);
-    dustGeo.setAttribute('position', dustAttr);
-    this.dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({
-      color: 0x9a9aa5,
-      size: 0.035,
-      transparent: true,
-      opacity: 0.35,
-      toneMapped: false,
-      depthWrite: false,
-      sizeAttenuation: true,
-    }));
-    this.dust.frustumCulled = false;
-    this.dust.renderOrder = 0;
-    this.scene.add(this.dust);
+    // No grid, dust, or fog: the canvas stays an empty, readable surface.
 
     // Shared sphere geometry (low poly for performance)
     this.sphereGeo = new THREE.SphereGeometry(1, 20, 14);
 
-    // Single shared node material — unlit so domain hues stay crisp and
-    // saturated on the dark canvas. Per-node color via instanceColor.
-    this.nodeMaterial = new THREE.MeshBasicMaterial({
+    // Single shared node material — matte standard material so each domain
+    // hue renders as a softly shaded sphere on the light canvas.
+    // Per-node color via instanceColor.
+    this.nodeMaterial = new THREE.MeshStandardMaterial({
       color: 0xffffff,
+      roughness: 0.5,
+      metalness: 0.1,
       toneMapped: false,
     });
 
@@ -571,9 +548,9 @@ class GraphSceneManager {
     this.halo = new THREE.Mesh(
       new THREE.RingGeometry(0.62, 0.7, 48),
       new THREE.MeshBasicMaterial({
-        color: 0x4fd1c5,
+        color: 0x0f6d66,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.55,
         side: THREE.DoubleSide,
         toneMapped: false,
         depthWrite: false,
@@ -704,11 +681,11 @@ class GraphSceneManager {
 
   private nodeHexFor(node: GraphNode): string | number {
     switch (node.type) {
-      case 'patient': return '#FFFFFF';
-      case 'body_structure': return '#7C8DA6';
+      case 'patient': return '#0F6D66';
+      case 'body_structure': return '#7B8AA0';
       case 'document': return '#8A7BC8';
-      case 'medication': return '#4FD1C5';
-      case 'medication_taken_event': return '#3AA79D';
+      case 'medication': return '#45A29A';
+      case 'medication_taken_event': return '#3D8E85';
       default: return nodeDomainColor(node);
     }
   }
@@ -716,41 +693,41 @@ class GraphSceneManager {
   private edgeBaseColor(relationship: string): THREE.Color {
     if (!this.edgePalette) {
       this.edgePalette = {
-        HAS_OBSERVATION: new THREE.Color(0x7c8da6),
-        AFFECTS: new THREE.Color(0xe0746b),
+        HAS_OBSERVATION: new THREE.Color(0x6e7f96),
+        AFFECTS: new THREE.Color(0xc46a60),
         SOURCE_DOCUMENT: new THREE.Color(0x8a7bc8),
         DOCUMENTED_IN: new THREE.Color(0x8a7bc8),
-        LOGGED_ON: new THREE.Color(0xf5a623),
-        HAS_TIMELINE_EVENT: new THREE.Color(0x55606e),
-        DERIVED_SAME_TYPE: new THREE.Color(0x4a5568),
-        DERIVED_SAME_BODY_SITE: new THREE.Color(0x4fd1c5),
-        DERIVED_SAME_DAY: new THREE.Color(0x3a4356),
-        CORRELATES: new THREE.Color(0x4fd1c5),
-        INVERSES: new THREE.Color(0xe0746b),
+        LOGGED_ON: new THREE.Color(0xbe8a3c),
+        HAS_TIMELINE_EVENT: new THREE.Color(0x6b7686),
+        DERIVED_SAME_TYPE: new THREE.Color(0x707a89),
+        DERIVED_SAME_BODY_SITE: new THREE.Color(0x43a099),
+        DERIVED_SAME_DAY: new THREE.Color(0x707a89),
+        CORRELATES: new THREE.Color(0x43a099),
+        INVERSES: new THREE.Color(0xc46a60),
         // P0–P3 clinical + lifestyle topology (same hues as node domains).
-        HAS_CONDITION: new THREE.Color(0xf28b7e),
-        HAS_VISIT: new THREE.Color(0x5b6b82),
-        HAS_STATEMENT: new THREE.Color(0xb8a6e8),
-        HAS_MEDICATION_REQUEST: new THREE.Color(0x4fd1c5),
-        PRESCRIBES: new THREE.Color(0x3aa79d),
-        PRESCRIBED_FOR: new THREE.Color(0xf28b7e),
-        REASON_STATED_BY_PATIENT: new THREE.Color(0xb8a6e8),
-        ABOUT: new THREE.Color(0xb8a6e8),
-        RESULTS_FROM: new THREE.Color(0x3aa79d),
-        OCCURRED_DURING: new THREE.Color(0x5b6b82),
-        HAS_MEASUREMENT: new THREE.Color(0xf27e93),
+        HAS_CONDITION: new THREE.Color(0xc26e54),
+        HAS_VISIT: new THREE.Color(0x64748c),
+        HAS_STATEMENT: new THREE.Color(0xa394d6),
+        HAS_MEDICATION_REQUEST: new THREE.Color(0x45a29a),
+        PRESCRIBES: new THREE.Color(0x3d8e85),
+        PRESCRIBED_FOR: new THREE.Color(0xc26e54),
+        REASON_STATED_BY_PATIENT: new THREE.Color(0xa394d6),
+        ABOUT: new THREE.Color(0xa394d6),
+        RESULTS_FROM: new THREE.Color(0x3d8e85),
+        OCCURRED_DURING: new THREE.Color(0x64748c),
+        HAS_MEASUREMENT: new THREE.Color(0xd4818d),
         HAS_CODE: new THREE.Color(0x9aa8b8),
-        HAS_VERSION: new THREE.Color(0x3aa79d),
-        SUPERSEDES: new THREE.Color(0x3aa79d),
-        HAS_SLEEP: new THREE.Color(0x7c6ff0),
-        HAS_ACTIVITY: new THREE.Color(0x4fd1c5),
-        HAS_NUTRITION: new THREE.Color(0x6ec1e4),
-        HAS_FOOD_SCAN: new THREE.Color(0x6ec1e4),
-        HAS_ENTRY: new THREE.Color(0x6ec1e4),
-        HAS_BIOMETRIC: new THREE.Color(0xf27e93),
+        HAS_VERSION: new THREE.Color(0x3d8e85),
+        SUPERSEDES: new THREE.Color(0x3d8e85),
+        HAS_SLEEP: new THREE.Color(0x7e74d8),
+        HAS_ACTIVITY: new THREE.Color(0x4aa39b),
+        HAS_NUTRITION: new THREE.Color(0x6bafd4),
+        HAS_FOOD_SCAN: new THREE.Color(0x6bafd4),
+        HAS_ENTRY: new THREE.Color(0x6bafd4),
+        HAS_BIOMETRIC: new THREE.Color(0xd4818d),
       };
     }
-    return this.edgePalette[relationship] ?? new THREE.Color(0x55606e);
+    return this.edgePalette[relationship] ?? new THREE.Color(0x6b7686);
   }
 
   private isSemanticEdge(edge: GraphEdge, flowEdgeIds: Set<string>): boolean {
@@ -804,7 +781,7 @@ class GraphSceneManager {
 
       const tubular = Math.max(6, Math.min(14, Math.round(len * 5)));
       const semantic = this.isSemanticEdge(edge, flowEdgeIds);
-      const radius = semantic ? 0.03 : 0.018;
+      const radius = semantic ? 0.03 : 0.014;
       // Hub spokes (patient fan) carry little information — rest them so
       // semantic + clinical arcs star.
       const hubFan = edge.relationship === 'HAS_TIMELINE_EVENT' ? 0.5 : 1;
@@ -871,7 +848,7 @@ class GraphSceneManager {
     const mat = new THREE.MeshBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.95,
+      opacity: 0.6,
       toneMapped: false,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -905,8 +882,8 @@ class GraphSceneManager {
         speed: 0.1 + (((stableHash(this.arcs[i].edgeId) % 100) + 100) % 100) / 100 * 0.12,
       });
       const c = this.arcs[i].semantic
-        ? new THREE.Color(0xffffff)
-        : new THREE.Color(0x9a9aa5);
+        ? new THREE.Color(0x0f6d66)
+        : new THREE.Color(0x8e9aa6);
       this.pulseMesh?.setColorAt(k, c);
     });
     if (this.pulseMesh?.instanceColor) this.pulseMesh.instanceColor.needsUpdate = true;
@@ -1017,7 +994,7 @@ class GraphSceneManager {
           c.copy(base.color);
         } else if (id === sel) {
           this.selScale[i] = 1.4;
-          c.copy(base.color).lerp(new THREE.Color(0xffffff), 0.35);
+          c.copy(base.color).lerp(new THREE.Color(0x1c2321), 0.25);
         } else if (this.neighborVerdicts.has(id)) {
           this.selScale[i] = 1.12;
           c.copy(base.color);
@@ -1035,13 +1012,13 @@ class GraphSceneManager {
       if (this.hitMesh) this.hitMesh.instanceMatrix.needsUpdate = true;
     }
 
-    // Edges: incident edges take the neighbor's verdict color (teal = healthy,
-    // soft coral = strained), everything else dims — recolored in place.
+    // Edges: incident edges take the neighbor's verdict color (deep teal =
+    // healthy, terracotta = strained), everything else dims — recolored in place.
     if (this.edgeColorAttr) {
       const arr = this.edgeColorAttr.array as Float32Array;
       const tmp = new THREE.Color();
-      const good = new THREE.Color(0x4fd1c5);
-      const bad = new THREE.Color(0xe0746b);
+      const good = new THREE.Color(0x0f6d66);
+      const bad = new THREE.Color(0xb5502b);
       for (const r of this.edgeRanges) {
         const other = sel != null
           ? (r.source === sel ? r.target : r.target === sel ? r.source : null)
@@ -1071,8 +1048,8 @@ class GraphSceneManager {
   private updateBadges() {
     if (!this.badgeMesh) return;
     let k = 0;
-    const good = new THREE.Color(0x4fd1c5);
-    const bad = new THREE.Color(0xe0746b);
+    const good = new THREE.Color(0x0f6d66);
+    const bad = new THREE.Color(0xb5502b);
     if (this.selectedId) {
       for (const [id, v] of this.neighborVerdicts) {
         if (k >= MAX_BADGES) break;
@@ -1204,6 +1181,21 @@ class GraphSceneManager {
   handlePinch(scale: number) {
     this.lastInteract = this.clock;
     this.zoom = Math.max(0.3, Math.min(3, this.zoom * scale));
+  }
+
+  /**
+   * Two-finger pan: drag the constellation across the canvas so a growing
+   * graph stays explorable. Pixel deltas are scaled into world units
+   * (tighter when zoomed in) and clamped to a halo around the fitted
+   * extents — an infinite-feeling canvas that can never lose the graph.
+   */
+  handlePan(dxPx: number, dyPx: number) {
+    this.lastInteract = this.clock;
+    const s = 0.008 / Math.max(this.zoom, 0.3);
+    const limX = this.fitExtent.x * 1.6 + 0.5;
+    const limY = this.fitExtent.y * 1.6 + 0.5;
+    this.panX = Math.max(-limX, Math.min(limX, this.panX + dxPx * s));
+    this.panY = Math.max(-limY, Math.min(limY, this.panY - dyPx * s));
   }
 
   resetView() {
@@ -1866,7 +1858,15 @@ function NeighborFocusCard({
     }
     const rank = (v: NeighborVerdict) => (v === 'bad' ? 0 : v === 'good' ? 1 : 2);
     out.sort((a, b) => rank(a.verdict) - rank(b.verdict) || Number(b.semantic) - Number(a.semantic));
-    return out.slice(0, 8);
+    // One row per neighbor: the same pair is often linked twice
+    // (dual-written relations, derived + server edges). Keep the
+    // best-ranked row so React keys stay unique.
+    const seen = new Set<string>();
+    return out.filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    }).slice(0, 8);
   }, [node.id, nodes, edges, verdicts, byId]);
 
   const bad = rows.filter((r) => r.verdict === 'bad').length;
@@ -1951,7 +1951,7 @@ function NativeCanvas({
   // can race the query resolving, so never rely on callback-closure data.
   const dataRef = useRef({ nodes, edges, layout, flowEdgeIds });
   dataRef.current = { nodes, edges, layout, flowEdgeIds };
-  const gestureState = useRef({ lastX: 0, lastY: 0, startX: 0, startY: 0, startTime: 0, moved: false, lastDist: 0, isPinching: false, longPressTimer: null as ReturnType<typeof setTimeout> | null, longPressFired: false });
+  const gestureState = useRef({ lastX: 0, lastY: 0, startX: 0, startY: 0, startTime: 0, moved: false, lastDist: 0, lastCX: 0, lastCY: 0, isPinching: false, longPressTimer: null as ReturnType<typeof setTimeout> | null, longPressFired: false });
   // Latest long-press callback (props change across renders).
   const longPressRef = useRef(onNodeLongPress);
   longPressRef.current = onNodeLongPress;
@@ -2131,6 +2131,8 @@ function NativeCanvas({
       const dx = touches[0].pageX - touches[1].pageX;
       const dy = touches[0].pageY - touches[1].pageY;
       gestureState.current.lastDist = Math.sqrt(dx * dx + dy * dy);
+      gestureState.current.lastCX = (touches[0].pageX + touches[1].pageX) / 2;
+      gestureState.current.lastCY = (touches[0].pageY + touches[1].pageY) / 2;
       gestureState.current.isPinching = true;
     }
   };
@@ -2154,11 +2156,18 @@ function NativeCanvas({
       const dx = touches[0].pageX - touches[1].pageX;
       const dy = touches[0].pageY - touches[1].pageY;
       const dist = Math.sqrt(dx * dx + dy * dy);
+      const cx = (touches[0].pageX + touches[1].pageX) / 2;
+      const cy = (touches[0].pageY + touches[1].pageY) / 2;
       gestureState.current.moved = true;
       if (gestureState.current.lastDist > 0) {
         sceneRef.current.handlePinch(dist / gestureState.current.lastDist);
       }
       gestureState.current.lastDist = dist;
+      // Centroid drag pans the canvas; spread change pinches. Both at once
+      // is a natural trackpad-style explore gesture.
+      sceneRef.current.handlePan(cx - gestureState.current.lastCX, cy - gestureState.current.lastCY);
+      gestureState.current.lastCX = cx;
+      gestureState.current.lastCY = cy;
     }
   };
 
@@ -2287,18 +2296,18 @@ const labelStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     maxWidth: 140,
-    backgroundColor: GV.stage,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
-    borderColor: GV.stageline,
+    borderColor: '#DCE2DE',
     borderRadius: SPACE.rPill,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   pillSelected: {
-    borderColor: GV.teal,
+    borderColor: '#0F6D66',
   },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  text: { color: '#FFFFFF', fontSize: 11, fontFamily: FONT.semi, flexShrink: 1 },
+  text: { color: '#1C2321', fontSize: 11, fontFamily: FONT.semi, flexShrink: 1 },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2336,10 +2345,18 @@ export default function HealthGraphScreen({
   // — layout, labels, neighbors, canvas, detail — sees one node list.
   // Server rows keep their server nodes; prefixed ids cannot collide.
   const deviceHeartNodes = useDeviceHeartNodes();
-  const graphNodes: GraphNode[] = useMemo(
-    () => [...(graphData?.nodes ?? []), ...deviceHeartNodes],
-    [graphData, deviceHeartNodes],
-  );
+  const graphNodes: GraphNode[] = useMemo(() => {
+    // Dedupe by id (first wins): duplicate ids double-draw spheres/tubes
+    // and trip React's duplicate-key warning in labels and neighbor rows.
+    const seen = new Set<string>();
+    const out: GraphNode[] = [];
+    for (const n of [...(graphData?.nodes ?? []), ...deviceHeartNodes]) {
+      if (seen.has(n.id)) continue;
+      seen.add(n.id);
+      out.push(n);
+    }
+    return out;
+  }, [graphData, deviceHeartNodes]);
   const selectedNode = useMemo(
     () => graphNodes.find((n) => n.id === selectedNodeId) ?? null,
     [graphNodes, selectedNodeId],
@@ -2360,10 +2377,18 @@ export default function HealthGraphScreen({
     nodes: graphNodes,
   }), [trendsQ.data, metricsQ.data, feedQ.localDetails, graphNodes]);
 
-  const allEdges = useMemo<GraphEdge[]>(
-    () => [...(graphData?.edges ?? []), ...semanticEdges],
-    [graphData, semanticEdges],
-  );
+  const allEdges = useMemo<GraphEdge[]>(() => {
+    // Dedupe by edge id: duplicate tubes stack opacity and read as one
+    // thick dark arc (a big share of the "congested" look).
+    const seen = new Set<string>();
+    const out: GraphEdge[] = [];
+    for (const e of [...(graphData?.edges ?? []), ...semanticEdges]) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push(e);
+    }
+    return out;
+  }, [graphData, semanticEdges]);
   const flowEdgeIds = useMemo(() => new Set(semanticEdges.map((e) => e.id)), [semanticEdges]);
 
   // Live pattern counts for the HUD strip under the filters.
@@ -2452,6 +2477,19 @@ export default function HealthGraphScreen({
   const availableCategories = useMemo(() => {
     if (graphNodes.length === 0) return [];
     return Array.from(new Set(graphNodes.map((n) => n.type))).filter((t) => t !== 'patient');
+  }, [graphNodes]);
+
+  // Legend entries: top categories by node count (reference look, capped).
+  const legendItems = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const n of graphNodes) {
+      if (n.type === 'patient') continue;
+      counts.set(n.type, (counts.get(n.type) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([type]) => type);
   }, [graphNodes]);
 
   const layout = useMemo(() => {
@@ -2653,6 +2691,25 @@ export default function HealthGraphScreen({
         </View>
       )}
 
+      {/* Overlay: gesture hint (full-screen, floats over the canvas) */}
+      {!embedded && !isEmpty && (
+        <View style={styles.hintPill} pointerEvents="none">
+          <Text style={styles.hintTxt}>Drag to rotate · Pinch to zoom · Two-finger drag to pan</Text>
+        </View>
+      )}
+
+      {/* Overlay: type legend (full-screen, top visible categories) */}
+      {!embedded && !isEmpty && legendItems.length > 0 && (
+        <View style={styles.legendBox} pointerEvents="none">
+          {legendItems.map((type) => (
+            <View key={type} style={styles.legendRow}>
+              <View style={[styles.legendDot, { backgroundColor: nodeDomainColor({ id: '', type } as GraphNode) }]} />
+              <Text style={styles.legendTxt} numberOfLines={1}>{CATEGORY_LABELS[type] || type}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* Overlay: Dynamic node-attached popup */}
       {showDetail && popupPlacement && selectedNode != null && (
         <View style={[styles.popup, embedded && styles.popupEmbedded, { left: popupPlacement.x, top: popupPlacement.y }]}>
@@ -2743,6 +2800,34 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   patternStripText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink, fontSize: 11 },
+  hintPill: {
+    position: 'absolute',
+    top: 188,
+    right: 16,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderWidth: 1,
+    borderColor: GV.line,
+    borderRadius: SPACE.rPill,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    zIndex: 10,
+  },
+  hintTxt: { fontSize: 11, color: GV.body },
+  legendBox: {
+    position: 'absolute',
+    left: 16,
+    bottom: 84,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: GV.line,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    zIndex: 10,
+  },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 1 },
+  legendDot: { width: 9, height: 9, borderRadius: 4.5 },
+  legendTxt: { fontSize: 12, color: GV.ink, fontFamily: FONT.semi },
 
   canvasWrap: { flex: 1, backgroundColor: GV.stage },
   glView: { width: SCREEN_WIDTH, height: CANVAS_HEIGHT },
