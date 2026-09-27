@@ -161,8 +161,12 @@ class TestFrontendIntegration:
     def test_layout_bucket_positions_everything(self):
         with open("frontend/src/screens/Body/HealthGraphScreen.tsx") as f:
             src = f.read()
-        assert "hub-optional fallback bucket" in src
-        assert "HAS_ENTRY" in src and "OCCURRED_DURING" in src
+        # Day-tree layout: every node positioned (dated under day markers,
+        # undated in the satellite annex, defensive fallback for the rest).
+        assert "groupNodesByDay" in src
+        assert "__day:" in src
+        assert "HAS_DAY" in src and "ON_DAY" in src
+        assert "Defensive: every input node gets a position" in src
 
     def test_detail_renders_badges_quotes_citations(self):
         with open("frontend/src/screens/Body/HealthGraphScreen.tsx") as f:

@@ -32,6 +32,8 @@ export interface FoodScanItem {
   carbs_g: number;
   fat_g: number;
   confidence: FoodScanConfidence;
+  /** Retail barcode when the item came from a barcode scan (else absent). */
+  barcode?: string;
 }
 
 export interface FoodScanResult {

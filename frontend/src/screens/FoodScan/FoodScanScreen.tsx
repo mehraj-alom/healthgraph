@@ -29,6 +29,9 @@ import { useReducedMotion } from '@/theme';
 import { useFoodScan } from '@/hooks/useFoodScan';
 import type { RootStackParamList } from '@/types';
 import ScanResultSheet from './ScanResultSheet';
+import BarcodeScanner from './BarcodeScanner';
+import { barcodeResultFor, type BarcodeProduct } from '@/services/barcode';
+import type { FoodScanResult } from '@/services/nutritionService';
 
 void FONT;
 
@@ -119,6 +122,12 @@ export default function FoodScanScreen() {
   } = useFoodScan();
 
   const [tipIndex, setTipIndex] = useState(0);
+  // Scan mode: photo (VLM estimate) or barcode (packaged facts). The photo
+  // flow is untouched; barcode builds a reviewable result through the same
+  // sheet + logging path, defaulting to a 100 g portion.
+  const [mode, setMode] = useState<'photo' | 'barcode'>('photo');
+  const [barcodeResult, setBarcodeResult] = useState<FoodScanResult | null>(null);
+  const [barcodeImage, setBarcodeImage] = useState<string | null>(null);
   const sweep = useSharedValue(0);
 
   // Rotate aiming tips while the live viewfinder is up.
@@ -157,7 +166,7 @@ export default function FoodScanScreen() {
   };
 
   // ── Result ──────────────────────────────────────────────────────────────
-  if (stage === 'done' && result && photoUri) {
+  if ((stage === 'done' && result && photoUri) || barcodeResult) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <StageGradient />
@@ -178,9 +187,14 @@ export default function FoodScanScreen() {
             <Text style={styles.title}>Scan food</Text>
           </View>
           <ScanResultSheet
-            photoUri={photoUri}
-            result={result}
-            onRetake={reset}
+            photoUri={barcodeResult ? barcodeImage : photoUri}
+            photoLabel={barcodeResult ? 'Product image' : undefined}
+            result={(barcodeResult ?? result)!}
+            onRetake={() => {
+              setBarcodeResult(null);
+              setBarcodeImage(null);
+              reset();
+            }}
             onLogged={goBack}
           />
           <Text style={styles.disclaimer}>
@@ -211,6 +225,35 @@ export default function FoodScanScreen() {
         </Pressable>
         <Text style={styles.title}>Scan food</Text>
         <Text style={styles.subtitle}>Point at your meal, then capture.</Text>
+      </View>
+
+      <View style={styles.modeRow} accessibilityRole="tablist">
+        {(['photo', 'barcode'] as const).map((m) => {
+          const active = mode === m;
+          return (
+            <Pressable
+              key={m}
+              onPress={() => {
+                setBarcodeResult(null);
+                setBarcodeImage(null);
+                reset();
+                setMode(m);
+              }}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={m === 'photo' ? 'Scan by photo' : 'Scan by barcode'}
+              style={({ pressed }) => [
+                styles.modeTab,
+                active && styles.modeTabActive,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={[styles.modeTabText, active && styles.modeTabTextActive]}>
+                {m === 'photo' ? 'Photo' : 'Barcode'}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {resolving ? (
@@ -252,6 +295,18 @@ export default function FoodScanScreen() {
               <Text style={styles.secondaryCtaText}>Open Settings</Text>
             </Pressable>
           </View>
+        </View>
+      ) : (
+      <>
+      {mode === 'barcode' ? (
+        <View style={styles.barcodeWrap}>
+          <BarcodeScanner
+            onProduct={(product: BarcodeProduct, barcode: string) => {
+              setBarcodeResult(barcodeResultFor(product, 100, barcode));
+              setBarcodeImage(product.image_url || null);
+            }}
+            onCancel={() => setMode('photo')}
+          />
         </View>
       ) : (
         <View style={styles.finder}>
@@ -313,6 +368,8 @@ export default function FoodScanScreen() {
           </Text>
         </View>
       )}
+      </>
+      )}
 
       {/* Analyzing overlay: typing dots + honest status copy. */}
       {busy ? (
@@ -372,6 +429,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.screenH,
     paddingBottom: 24,
     gap: SPACE.cardGap,
+  },
+  barcodeWrap: {
+    flex: 1,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 24,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: SPACE.screenH,
+    paddingBottom: 4,
+  },
+  modeTab: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: GV.line,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  modeTabActive: {
+    backgroundColor: GV.cta,
+    borderColor: GV.cta,
+  },
+  modeTabText: {
+    ...TYPE.button,
+    color: GV.cta,
+  },
+  modeTabTextActive: {
+    color: '#FFFFFF',
   },
   frame: {
     height: FRAME_H,

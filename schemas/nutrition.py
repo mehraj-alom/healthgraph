@@ -68,6 +68,23 @@ class FoodScanOut(BaseModel):
     entries: list[FoodEntryOut] = Field(default_factory=list)
 
 
+class BarcodeNutrientsOut(BaseModel):
+    kcal_per_100g: float = Field(ge=0)
+    protein_g: float = Field(ge=0)
+    carbs_g: float = Field(ge=0)
+    fat_g: float = Field(ge=0)
+
+
+class BarcodeProductOut(BaseModel):
+    barcode: str
+    name: str
+    brand: str = ""
+    nutrients: BarcodeNutrientsOut
+    serving_size: str = ""
+    image_url: str = ""
+    source: str = "openfoodfacts"
+
+
 class FoodCorrectIn(BaseModel):
     entry_id: UUID
     corrected_label: str = Field(min_length=1, max_length=255)

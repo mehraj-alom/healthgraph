@@ -43,11 +43,14 @@ function scale(value: number, factor: number): number {
 
 export default function ScanResultSheet({
   photoUri,
+  photoLabel = 'Photo of your meal',
   result,
   onRetake,
   onLogged,
 }: {
-  photoUri: string;
+  /** Local photo URI, remote product image, or null (no thumbnail). */
+  photoUri: string | null;
+  photoLabel?: string;
   result: FoodScanResult;
   onRetake: () => void;
   onLogged: (serverSaved: boolean) => void;
@@ -75,6 +78,8 @@ export default function ScanResultSheet({
           protein: scale(item.protein_g, factor),
           carbs: scale(item.carbs_g, factor),
           fat: scale(item.fat_g, factor),
+          // Retail barcode survives portion edits into the breakdown row.
+          ...(item.barcode ? { barcode: item.barcode } : {}),
         };
       }),
     [result.items, grams],
@@ -144,7 +149,9 @@ export default function ScanResultSheet({
   return (
     <View style={styles.sheet}>
       <View style={styles.headRow}>
-        <Image source={{ uri: photoUri }} style={styles.thumb} accessibilityLabel="Photo of your meal" />
+        {photoUri ? (
+          <Image source={{ uri: photoUri }} style={styles.thumb} accessibilityLabel={photoLabel} />
+        ) : null}
         <View style={styles.headText}>
           <Text style={styles.title}>Estimate</Text>
           <View style={styles.confRow}>

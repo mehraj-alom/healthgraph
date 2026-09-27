@@ -23,6 +23,8 @@ export interface FoodScanItemRow {
   carbs_g: number;
   fat_g: number;
   confidence: string;
+  /** Retail barcode when the row came from a barcode scan (else absent). */
+  barcode?: string;
 }
 
 export interface FoodScanBreakdown {
@@ -77,6 +79,9 @@ function cleanItems(items: readonly unknown[]): FoodScanItemRow[] {
       carbs_g: cleanNumber(r.carbs_g),
       fat_g: cleanNumber(r.fat_g),
       confidence: typeof r.confidence === 'string' ? r.confidence.slice(0, 16) : '',
+      ...(typeof r.barcode === 'string' && /^[0-9]{8,14}$/.test(r.barcode)
+        ? { barcode: r.barcode }
+        : {}),
     });
   }
   return out.slice(0, 20);

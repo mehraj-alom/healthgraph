@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.api.dependencies import get_authenticated_patient_id
-from app.services.nutrition import usda, vlm
+from app.services.nutrition import openfoodfacts, usda, vlm
 from app.services.nutrition.vlm import NutritionError, VlmItem
 from core.config import settings
 from core.db import get_db
@@ -18,6 +18,8 @@ from models.privacy import log_audit
 from models.visits import VisitType
 from schemas.nutrition import (
     AnalyzeResponse,
+    BarcodeNutrientsOut,
+    BarcodeProductOut,
     FoodCorrectIn,
     FoodScanLog,
     FoodScanOut,
@@ -211,6 +213,50 @@ def analyze_photo(photo: PhotoDep, patient_id: PatientIdDep) -> AnalyzeResponse:
         total_kcal=total_kcal,
         confidence=confidence,
         note=note,
+    )
+
+
+# Barcode lookup is a cheap unauthenticated-upstream proxy (no key, no
+# patient data leaves — only the digits). Lighter limits than the paid VLM
+# pipeline: 60/min per patient, fail-open only in local.
+_barcode_limiter = RateLimiter()
+
+
+@router.get("/barcode/{code}", response_model=BarcodeProductOut)
+def lookup_barcode(
+    code: str,
+    patient_id: PatientIdDep,
+) -> BarcodeProductOut:
+    """Resolve a retail barcode via Open Food Facts (free, unlimited)."""
+    _barcode_limiter.check(
+        str(patient_id), "nutrition_barcode", limit=60,
+        window_seconds=60, fail_open=settings.APP_ENV == "local",
+    )
+    normalized = openfoodfacts.normalize_barcode(code)
+    if normalized is None:
+        raise HTTPException(
+            status_code=400,
+            detail="That barcode is not a valid EAN-8, UPC-A, or EAN-13 code. Try again or enter the product manually.",
+        )
+    product = openfoodfacts.lookup_by_barcode(normalized)
+    if product is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No product found for that barcode. Try a photo scan or enter it manually.",
+        )
+    return BarcodeProductOut(
+        barcode=product.barcode,
+        name=product.name,
+        brand=product.brand,
+        nutrients=BarcodeNutrientsOut(
+            kcal_per_100g=product.nutrients.kcal_per_100g,
+            protein_g=product.nutrients.protein_g,
+            carbs_g=product.nutrients.carbs_g,
+            fat_g=product.nutrients.fat_g,
+        ),
+        serving_size=product.serving_size,
+        image_url=product.image_url,
+        source=product.source,
     )
 
 
