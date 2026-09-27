@@ -89,12 +89,12 @@ export function HealthAreaTile({
             </Text>
           ) : null}
         </View>
-        <Text
-          style={styles.tileValue}
-          numberOfLines={2}
-          maxFontSizeMultiplier={1.5}
-        >
-          {area.headline}
+          <Text
+            style={styles.tileValue}
+            numberOfLines={3}
+            maxFontSizeMultiplier={1.5}
+          >
+            {area.headline}
         </Text>
         {change ? (
           <Text
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(20, 32, 29, 0.08)',
     borderRadius: SPACE.rCard,
     padding: 12,
-    minHeight: 104,
+    minHeight: 116,
     justifyContent: 'flex-start',
   },
   tileHead: {

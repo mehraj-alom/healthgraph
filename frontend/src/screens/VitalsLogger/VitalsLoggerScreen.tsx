@@ -2331,6 +2331,7 @@ const styles = StyleSheet.create({
     ...TYPE.title,
     color: GV.ink,
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
   dateBadgeMonth: {
     ...TYPE.caption,
@@ -2402,6 +2403,7 @@ const styles = StyleSheet.create({
     ...TYPE.button,
     color: GV.ink,
     marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
   todayNote: {
     ...TYPE.caption,

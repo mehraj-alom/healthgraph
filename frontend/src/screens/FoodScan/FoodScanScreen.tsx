@@ -240,6 +240,7 @@ export default function FoodScanScreen() {
             label={m.label}
             hint={m.hint}
             glyph={m.glyph}
+            compact
             active={mode === m.key}
             accessibilityLabel={m.key === 'photo' ? 'Scan by photo' : 'Scan by barcode'}
             onPress={() => {

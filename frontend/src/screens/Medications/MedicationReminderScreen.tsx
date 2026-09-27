@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     color: GV.card,
     textAlign: 'center',
   },
-  subline: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  subline: { ...TYPE.body, color: GV.fog, textAlign: 'center', fontVariant: ['tabular-nums'] },
   duo: { flexDirection: 'row', gap: 12 },
   half: {
     flex: 1,

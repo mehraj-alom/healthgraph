@@ -21,6 +21,8 @@ interface CategoryTileProps {
   accessibilityLabel?: string;
   surface?: 'ink' | 'wash';
   fullWidth?: boolean;
+  /** Compact rows (mode toggles): shorter tile, single-line hint. */
+  compact?: boolean;
 }
 
 export function CategoryTile({
@@ -33,6 +35,7 @@ export function CategoryTile({
   accessibilityLabel,
   surface = 'ink',
   fullWidth = false,
+  compact = false,
 }: CategoryTileProps) {
   const gid = `ct-${label.replace(/[^a-z0-9]/gi, '').slice(0, 12)}`;
   return (
@@ -43,6 +46,7 @@ export function CategoryTile({
       accessibilityLabel={accessibilityLabel ?? `${label}${hint ? `. ${hint}` : ''}`}
       style={({ pressed }) => [
         styles.tile,
+        compact && styles.tileCompact,
         fullWidth && styles.tileFull,
         surface === 'wash' && styles.tileWash,
         active && styles.tileOn,
@@ -63,17 +67,17 @@ export function CategoryTile({
       ) : (
         <View style={[styles.washArt, { backgroundColor: withAlpha(tone[1], 0.22) }]} pointerEvents="none" />
       )}
-      {glyph ? <Text style={[styles.glyph, surface === 'wash' && { color: tone[0] }]}>{glyph}</Text> : null}
+      {glyph ? <Text style={[styles.glyph, compact && styles.glyphCompact, surface === 'wash' && { color: tone[0] }]}>{glyph}</Text> : null}
       {active ? (
         <View style={styles.check}>
           <Text style={styles.checkGlyph}>✓</Text>
         </View>
       ) : null}
-      <Text style={[styles.tileLabel, surface === 'wash' && { color: GV.ink }]} numberOfLines={2}>
+      <Text style={[styles.tileLabel, compact && styles.tileLabelCompact, surface === 'wash' && { color: GV.ink }]} numberOfLines={compact ? 1 : 2}>
         {label}
       </Text>
       {hint ? (
-        <Text style={[styles.tileHint, surface === 'wash' && { color: GV.body }]} numberOfLines={2}>
+        <Text style={[styles.tileHint, surface === 'wash' && { color: GV.body }]} numberOfLines={1}>
           {hint}
         </Text>
       ) : null}
@@ -92,6 +96,10 @@ const styles = StyleSheet.create({
     gap: 2,
     borderWidth: 2,
     borderColor: 'transparent',
+  },
+  tileCompact: {
+    minHeight: 88,
+    padding: 10,
   },
   tileFull: {
     flexBasis: '100%',
@@ -122,6 +130,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 2,
   },
+  glyphCompact: {
+    fontSize: 15,
+    marginBottom: 0,
+  },
   check: {
     position: 'absolute',
     top: 8,
@@ -143,6 +155,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     color: '#FFFFFF',
+  },
+  tileLabelCompact: {
+    fontSize: 14,
+    lineHeight: 18,
   },
   tileHint: {
     fontSize: 12,

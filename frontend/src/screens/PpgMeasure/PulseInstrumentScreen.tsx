@@ -414,7 +414,6 @@ export default function PulseInstrumentScreen() {
               </View>
             )}
             <TactileButton title="Begin measurement check" onPress={beginCheck} accessibilityLabel="Begin automatic measurement check" />
-            <Text style={styles.disclaimer}>Wellness measurements only. Not a medical device — not for diagnosis or treatment.</Text>
           </Panel>
         )}
 

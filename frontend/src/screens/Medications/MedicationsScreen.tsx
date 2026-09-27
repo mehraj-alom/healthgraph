@@ -1386,6 +1386,11 @@ const styles = StyleSheet.create({
     ...TYPE.chip,
     color: GV.muted,
     textTransform: 'uppercase',
+    backgroundColor: GV.wash,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 9999,
+    overflow: 'hidden',
   },
   medicationDetails: {
     flexDirection: 'row',
@@ -1396,6 +1401,7 @@ const styles = StyleSheet.create({
   medicationDetail: {
     ...TYPE.body,
     color: GV.body,
+    fontVariant: ['tabular-nums'],
   },
   scheduleRow: {
     flexDirection: 'row',
@@ -1409,6 +1415,7 @@ const styles = StyleSheet.create({
   scheduleTimes: {
     ...TYPE.body,
     color: GV.body,
+    fontVariant: ['tabular-nums'],
   },
   dateRow: {
     flexDirection: 'row',
@@ -1423,6 +1430,7 @@ const styles = StyleSheet.create({
   dateValue: {
     ...TYPE.body,
     color: GV.body,
+    fontVariant: ['tabular-nums'],
   },
   dateSeparator: {
     ...TYPE.body,

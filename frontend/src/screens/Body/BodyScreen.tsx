@@ -2018,10 +2018,12 @@ export default function BodyScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Header — gender toggle hides while the download prompt owns the
+          gender choice, so the decision never appears twice on screen. */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>3D Body</Text>
 
+        {showGenderPrompt == null ? (
         <View style={styles.genderToggle}>
           <TouchableOpacity
             style={[styles.genderButton, gender === 'male' && styles.genderButtonActive]}
@@ -2040,6 +2042,7 @@ export default function BodyScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+        ) : null}
       </View>
 
       {/* 3D Canvas with download overlay behind */}
