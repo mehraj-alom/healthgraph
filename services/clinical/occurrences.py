@@ -11,9 +11,11 @@ All helpers are deterministic and evidence-backed:
 Callers own the transaction (helpers flush, never commit) and enqueue the
 matching outbox rows. Neo4j projection stays idempotent MERGE.
 """
+import contextlib
 import uuid
 from datetime import date, datetime, timezone
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.clinical_assertion import classify_assertion
@@ -33,6 +35,21 @@ def _as_date(value: datetime | date | None) -> date:
     return value
 
 
+@contextlib.contextmanager
+def _savepoint(db: Session):
+    """Savepoint around a racy INSERT, or a no-op for stub sessions.
+
+    A real SQLAlchemy Session always has begin_nested; the in-memory fakes
+    used by the pure unit tests do not, so degrade to a plain block there.
+    """
+    begin_nested = getattr(db, "begin_nested", None)
+    if begin_nested is None:
+        yield
+        return
+    with begin_nested():
+        yield
+
+
 def get_or_create_visit(
     db: Session,
     patient_id: uuid.UUID,
@@ -44,33 +61,51 @@ def get_or_create_visit(
 ) -> Visit:
     """Deterministic visit grouping: one row per (patient, date, type)."""
     day = _as_date(when)
-    visit = db.scalar(
+    visit = _select_visit(db, patient_id, day, visit_type)
+    if visit is not None:
+        return visit
+
+    visit = Visit(
+        visit_id=uuid.uuid4(),
+        patient_id=patient_id,
+        visit_date=day,
+        visit_type=visit_type,
+        source=source,
+    )
+    # Concurrent inserts for the same (patient, date, type) race on
+    # uq_visit_patient_date_type: savepoint the insert so a losing flush
+    # rolls back only this row, then adopt the winner's row. Without this
+    # the IntegrityError poisoned the whole check-in transaction → 500.
+    try:
+        with _savepoint(db):
+            db.add(visit)
+            db.flush()
+    except IntegrityError:
+        visit = _select_visit(db, patient_id, day, visit_type)
+        if visit is None:
+            raise
+        return visit
+
+    if enqueue:
+        enqueue_visit(
+            db,
+            visit_id=visit.visit_id,
+            patient_id=patient_id,
+            visit_date=day.isoformat(),
+            visit_type=visit_type,
+            source=source,
+        )
+    return visit
+
+
+def _select_visit(db: Session, patient_id: uuid.UUID, day: date, visit_type):
+    return db.scalar(
         select(Visit).where(
             Visit.patient_id == patient_id,
             Visit.visit_date == day,
             Visit.visit_type == visit_type,
         )
     )
-    if visit is None:
-        visit = Visit(
-            visit_id=uuid.uuid4(),
-            patient_id=patient_id,
-            visit_date=day,
-            visit_type=visit_type,
-            source=source,
-        )
-        db.add(visit)
-        db.flush()
-        if enqueue:
-            enqueue_visit(
-                db,
-                visit_id=visit.visit_id,
-                patient_id=patient_id,
-                visit_date=day.isoformat(),
-                visit_type=visit_type,
-                source=source,
-            )
-    return visit
 
 
 def find_or_create_condition(
@@ -96,12 +131,7 @@ def find_or_create_condition(
     """Find-or-create by (patient, normalized name); assertion-classified."""
     raw = (name or "").strip()
     normalized = MedicalTermNormalizer.lexical_text(raw) or raw.lower()
-    condition = db.scalar(
-        select(ConditionOccurrence).where(
-            ConditionOccurrence.patient_id == patient_id,
-            ConditionOccurrence.normalized_name == normalized,
-        )
-    )
+    condition = _select_condition(db, patient_id, normalized)
     if condition is not None:
         return condition
     assertion = classify_assertion(evidence_text or raw)
@@ -127,8 +157,18 @@ def find_or_create_condition(
         evidence_text=(evidence_text or assertion.snippet)[:500],
         extraction_method=extraction_method,
     )
-    db.add(condition)
-    db.flush()
+    # Concurrent inserts for the same (patient, normalized name) race on
+    # uq_condition_patient_normalized: savepoint the insert so a losing
+    # flush rolls back only this row, then adopt the winner's row.
+    try:
+        with _savepoint(db):
+            db.add(condition)
+            db.flush()
+    except IntegrityError:
+        existing = _select_condition(db, patient_id, normalized)
+        if existing is None:
+            raise
+        return existing
     db.refresh(condition)
     if enqueue:
         enqueue_condition(
@@ -155,6 +195,15 @@ def find_or_create_condition(
             pg_updated_at=condition.updated_at.isoformat() if condition.updated_at else None,
         )
     return condition
+
+
+def _select_condition(db: Session, patient_id: uuid.UUID, normalized: str):
+    return db.scalar(
+        select(ConditionOccurrence).where(
+            ConditionOccurrence.patient_id == patient_id,
+            ConditionOccurrence.normalized_name == normalized,
+        )
+    )
 
 
 def sync_medication_graph_context(db: Session, medication: Medication) -> dict:

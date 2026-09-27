@@ -7,7 +7,7 @@ from sqlalchemy import select, delete, func
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_authenticated_patient_id
-from core.db import get_db
+from core.db import acquire_daily_checkin_lock, get_db
 from logger import logger
 
 from models.events import (
@@ -127,6 +127,13 @@ def submit_daily_checkin(
     If the same key is reused with a different payload, 409 is returned.
     """
     from services.idempotency import compute_request_hash, check_idempotency, store_idempotency_key
+
+    # Serialize concurrent check-ins for this (patient, day) BEFORE the
+    # idempotency check: two racing POSTs would otherwise both pass the
+    # check, both find-or-create the deterministic Visit, and the loser's
+    # flush would IntegrityError into a generic 500. The transaction-scoped
+    # lock makes the second request wait, then replay the stored response.
+    acquire_daily_checkin_lock(db, patient_id, payload.log_date)
 
     # Compute request hash for comparison
     request_hash = compute_request_hash(payload.model_dump())
@@ -947,6 +954,10 @@ def update_daily_checkin(
     If the same key is reused with a different payload, 409 is returned.
     """
     from services.idempotency import compute_request_hash, check_idempotency, store_idempotency_key
+
+    # Serialize concurrent check-ins for this (patient, day) BEFORE the
+    # idempotency check (same race as POST — see submit_daily_checkin).
+    acquire_daily_checkin_lock(db, patient_id, payload.log_date)
 
     # Compute request hash for comparison
     request_hash = compute_request_hash(payload.model_dump())

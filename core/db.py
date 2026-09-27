@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from core.config import settings
@@ -33,3 +33,28 @@ def get_db():
         raise
     finally:
         db.close()
+
+
+def acquire_daily_checkin_lock(db, patient_id, day) -> None:
+    """Serialize concurrent daily check-ins for one (patient, day).
+
+    Transaction-scoped Postgres advisory lock. Two POSTs racing for the
+    same day would otherwise both find-or-create the deterministic Visit
+    (uq_visit_patient_date_type) and the losing flush would IntegrityError
+    into a generic 500 for the whole check-in. The lock is released
+    automatically when the transaction commits or rolls back.
+
+    Only counts/ids are logged — never health data. No-ops on non-Postgres
+    backends (e.g. SQLite in tests), where the savepoint fallbacks still
+    cover the narrow race.
+    """
+    bind = db.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    # Two int4 keys: a fixed namespace + a stable per-(patient, day) hash.
+    day_key = int(day.strftime("%Y%m%d"))
+    patient_key = int(patient_id.int % 2_147_483_647)
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(:patient_key, :day_key)"),
+        {"patient_key": patient_key, "day_key": day_key},
+    )
