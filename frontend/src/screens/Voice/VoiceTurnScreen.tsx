@@ -18,6 +18,7 @@ import { requestRecordingPermissionsAsync, useAudioRecorder } from 'expo-audio';
 import { api } from '@/services/api';
 import { createPakeetProvider } from '@/services/voice/stt';
 import { createPakeetTransport } from '@/services/voice/transport';
+import { logVoiceTurn } from '@/services/voice/log';
 import { VoiceError } from '@/services/voice/errors';
 import { FONT } from '@/theme/guava';
 
@@ -114,6 +115,16 @@ export default function VoiceTurnScreen() {
       setReply(text);
       setPhase('DONE');
       setStatus('Turn complete. Playback of this reply needs on-device text phonemization (voice-session phase).');
+      // Journal the completed turn (best-effort): a failed log never fails
+      // an already-completed turn; the sync engine retries offline saves.
+      try {
+        const saved = await logVoiceTurn(out.text, text);
+        if (saved && !saved.serverSaved) {
+          setStatus((s) => `${s} Saved on this device; will sync when back online.`);
+        }
+      } catch {
+        // Swallowed by design (see above).
+      }
     } catch (e) {
       setPhase('ERROR');
       setStatus(
@@ -188,6 +199,7 @@ export default function VoiceTurnScreen() {
         </Pressable>
         <Text style={styles.fineprint}>
           Short-lived turn only: no streaming, no session state, no medication-call contact. Response audio waits on on-device g2p.
+          Completed turns are saved to today's journal as notes.
         </Text>
       </ScrollView>
     </SafeAreaView>

@@ -124,10 +124,11 @@ function todayLocal(): string {
  * upsert (which replaces the day's events) preserves everything the user
  * already logged. Only the nutrition block is extended.
  */
-function detailToRequest(
+export function detailToRequest(
   existing: DailyCheckInDetail | null,
   logDate: string,
-  nutrition: NonNullable<DailyCheckInRequest['nutrition']>,
+  nutrition?: NonNullable<DailyCheckInRequest['nutrition']>,
+  notes?: string | null,
 ): DailyCheckInRequest {
   const sleep =
     existing?.sleep_duration_minutes != null
@@ -178,7 +179,35 @@ function detailToRequest(
       ...(m.dosage_unit ? { dosage_unit: m.dosage_unit } : {}),
     })),
     nutrition,
-    ...(existing?.notes ? { notes: existing.notes } : {}),
+    ...((notes ?? existing?.notes) ? { notes: (notes ?? existing!.notes) as string } : {}),
+  };
+}
+
+/**
+ * Nutrition block rebuilt from today's existing log WITHOUT adding anything:
+ * meals, kcal, label, water, and appetite pass through untouched. Used by
+ * writers (like voice turns) that only touch other sections of the day.
+ * Returns undefined when the day has no nutrition data at all, so no empty
+ * nutrition event is created.
+ */
+export function preservedNutritionBlock(
+  existing: DailyCheckInDetail | null,
+): NonNullable<DailyCheckInRequest['nutrition']> | undefined {
+  if (
+    existing?.meals_count == null &&
+    existing?.calories_kcal == null &&
+    existing?.water_ml == null &&
+    existing?.appetite_level == null &&
+    (existing?.food_label?.trim() ?? '') === ''
+  ) {
+    return undefined;
+  }
+  return {
+    ...(existing?.water_ml != null ? { water_ml: existing.water_ml } : {}),
+    ...(existing?.meals_count != null ? { meals_count: existing.meals_count } : {}),
+    ...(existing?.appetite_level != null ? { appetite_level: existing.appetite_level } : {}),
+    ...(existing?.calories_kcal != null ? { calories_kcal: existing.calories_kcal } : {}),
+    ...(existing?.food_label?.trim() ? { food_label: existing.food_label.trim().slice(0, 250) } : {}),
   };
 }
 
@@ -238,6 +267,24 @@ export async function logScannedMeal(
 
   const payload = detailToRequest(existing, logDate, nutrition);
 
+  return persistDailyLog(payload, existing);
+}
+
+/**
+ * Shared daily-log save sequence (offline-first): local SQLite mirror
+ * (also enqueues the sync-engine mutation), then direct server POST/PUT
+ * with idempotency-key + keyless retry, then group-id reconciliation.
+ * Extracted verbatim from the meal path so every day-writer (meals, voice
+ * turns) persists through identical semantics.
+ */
+export async function persistDailyLog(
+  payload: DailyCheckInRequest,
+  existing: DailyCheckInDetail | null,
+): Promise<{ groupId: string; serverSaved: boolean }> {
+  const patientId = getCachedPatientId();
+  if (!patientId) {
+    throw new Error('Your session has expired. Please sign in again.');
+  }
   // Step 1: local SQLite mirror (offline-first) — also enqueues the
   // sync-engine mutation.
   const groupId = await dbUpsertDailyLog(patientId, payload);
@@ -279,7 +326,7 @@ export async function logScannedMeal(
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
     if (__DEV__) {
       console.warn(
-        `[FoodScan] API_SYNC_FAILURE method=${method} path=${path} status=${status ?? 'none'}`,
+        `[DailyLog] API_SYNC_FAILURE method=${method} path=${path} status=${status ?? 'none'}`,
       );
     }
     // Local save already succeeded — the sync engine retries the queued
