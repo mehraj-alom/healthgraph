@@ -27,6 +27,11 @@ export interface DiaryItemInput {
   title: string;
   /** One-line detail (value, dose, detail text...). May be empty. */
   detail: string;
+  /**
+   * Secondary detail line (lab reference range + abnormal flag). Derived
+   * from the same origin item — never invented. Absent when none.
+   */
+  meta?: string | null;
   /** Glyph for the preview strip (may be empty). */
   icon: string;
   /** Document deep-link target, when the row carries evidence. */

@@ -1,15 +1,13 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
-  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
-  SectionList,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -21,7 +19,6 @@ import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { StageGradient } from '@/components/StageGradient';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { perfStart } from '@/utils/perfLog';
-import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import {
   getDailyLogs as dbGetDailyLogs,
   getDailyLogEvents as dbGetDailyLogEvents,
@@ -31,17 +28,14 @@ import { HealthFact } from '@/components/HealthFact';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getRecentRppgMeasurements } from '@/db/queries/rppg';
 import {
-  listFoodScanBreakdowns,
-  type FoodScanBreakdown,
-} from '@/db/queries/foodScans';
-import {
   storyItemFromLogEvent,
   localDateString,
   type HomeStoryItem,
 } from '../Dashboard/homeData';
 import type { RootStackParamList } from '@/types';
 import { buildDiaryDays, type DiaryDay, type DiaryItemInput } from './diary';
-import { DIARY_PAGE_STEP, DiaryPagePreview, DiaryReportSheet, TurningPage } from './DiaryPaper';
+import { DiaryReportSheet } from './DiaryPaper';
+import { TimelineWheel } from './TimelineWheel';
 import { useAuth } from '@/context/AuthContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -164,19 +158,6 @@ const SERVER_DAILY_TYPES = new Set([
   'PATIENT_NOTE',
 ]);
 
-// Marker colors per category — Guava functional hues, flat tiles on white.
-// `bg` mirrors `color` (solid tile, white glyph); both flow into RowShell.
-const CATEGORY_MARKER: Record<EventCategory, { color: string; bg: string }> = {
-  daily_log:     { color: GV.fx.green, bg: GV.fx.green },
-  medical_record:{ color: GV.fx.blue, bg: GV.fx.blue },
-  symptom:       { color: GV.fx.pink, bg: GV.fx.pink },
-  pain:          { color: GV.fx.amber, bg: GV.fx.amber },
-  vital:         { color: GV.fx.sky, bg: GV.fx.sky },
-  medication:    { color: GV.fx.green, bg: GV.fx.green },
-  observation:   { color: GV.fx.purple, bg: GV.fx.purple },
-  other:         { color: GV.fx.brown, bg: GV.fx.brown },
-};
-
 // ---------------------------------------------------------------------------
 // Filters
 // ---------------------------------------------------------------------------
@@ -213,41 +194,11 @@ function dateKey(item: TimelineItem): string {
   return new Date(item.event_time).toLocaleDateString('en-CA');
 }
 
-function displayDate(dateStr: string): string {
-  const today = new Date();
-  const date = new Date(dateStr + 'T00:00:00');
-  const diffDays = Math.floor(
-    (today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
-  );
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
 function timeDisplay(eventTime: string): string {
   return new Date(eventTime).toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
   });
-}
-
-function sourceLabel(source: string): string {
-  switch (source) {
-    case 'PATIENT_REPORTED': return 'Patient';
-    case 'AI_INFERRED': return 'AI';
-    case 'DOCTOR_ENTERED': return 'Doctor';
-    case 'IMAGING_REPORT': return 'Imaging';
-    case 'LAB_REPORT': return 'Lab';
-    case 'DEVICE_WEARABLE': return 'Device';
-    case 'imaging_report': return 'Imaging';
-    case 'lab_report': return 'Lab';
-    case 'device_wearable': return 'Device';
-    default: return source.replaceAll('_', ' ');
-  }
 }
 
 /** Quality word for on-device pulse rows (matches the measure screens). */
@@ -256,33 +207,6 @@ function pulseQualityLabel(quality: number): string {
   if (quality >= 0.5) return 'Fair';
   return 'Poor';
 }
-
-function trendLabel(trend: string): string {  switch (trend) {
-    case 'improving': return '↓ Improving';
-    case 'worsening': return '↑ Worsening';
-    case 'stable': return '→ Stable';
-    case 'resolved': return '✓ Resolved';
-    default: return trend;
-  }
-}
-
-function statusColor(status: string): string {
-  switch (status) {
-    case 'normal': return GV.fx.green;
-    case 'mild_attention': return GV.fx.amber;
-    case 'warning': return GV.danger;
-    case 'critical': return GV.danger;
-    default: return GV.muted;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Local (on-device) daily-log entries — the value-rich timeline rows
-// ---------------------------------------------------------------------------
 
 /** Local story category → timeline category. */
 function localCategory(item: HomeStoryItem): EventCategory {
@@ -306,432 +230,11 @@ function localCategory(item: HomeStoryItem): EventCategory {
   }
 }
 
-/** One glyph family for every marker — system-font geometric shapes, never
- * mixed emoji styles. Color (domain hue) carries the meaning. */
-const CATEGORY_GLYPH: Record<EventCategory, string> = {
-  daily_log: '●',
-  medical_record: '□',
-  symptom: '◆',
-  pain: '!',
-  vital: '✚',
-  medication: '△',
-  observation: '◇',
-  other: '○',
-};
-
-/** Local story sub-category → marker glyph (same family, same rule). */
-function localGlyph(category: HomeStoryItem['category']): string {
-  switch (category) {
-    case 'sleep': return '●';
-    case 'wellbeing': return '○';
-    case 'activity': return '▲';
-    case 'nutrition': return '■';
-    case 'note': return '✎';
-    case 'symptom': return '◆';
-    case 'pain': return '!';
-    case 'vital': return '✚';
-    case 'medication': return '△';
-    case 'document': return '□';
-    default: return '○';
-  }
-}
-
-/** Preferred accent per local category — domain hues, one per family. */
-function localAccent(item: HomeStoryItem): { color: string; bg: string } {
-  const base = CATEGORY_MARKER[localCategory(item)];
-  switch (item.category) {
-    case 'sleep':
-      return { color: GV.fx.purple, bg: GV.fx.purple };
-    case 'activity':
-      return { color: GV.fx.green, bg: GV.fx.green };
-    case 'nutrition':
-      return { color: GV.fx.sky, bg: GV.fx.sky };
-    case 'wellbeing':
-    case 'note':
-      return { color: GV.fx.amber, bg: GV.fx.amber };
-    default:
-      return base;
-  }
-}
-
-/**
- * Split a "value · spec · spec" detail line into a chart hero (first value)
- * and a muted spec line, without repeating the card title:
- * "Headache · 6/10 · 45 min" → hero "6/10", sub "45 min".
- */
-function splitHero(title: string, detail: string): { hero: string; sub: string | null } {
-  let d = detail.trim();
-  if (d.toLowerCase().startsWith(title.toLowerCase())) {
-    d = d.slice(title.length).replace(/^[\s·:|-]+/, '');
-  }
-  const parts = d.split('·').map((s) => s.trim()).filter(Boolean);
-  if (parts.length === 0) return { hero: title, sub: null };
-  return { hero: parts[0]!, sub: parts.length > 1 ? parts.slice(1).join(' · ') : null };
-}
-
-/**
- * A logged moment with its actual values — e.g. "Sleep / 7h 30m · quality
- * 4/5", "Resting pulse / 72 bpm", "Paracetamol · 500 mg". Built from the
- * on-device daily log (full payload values), never just "reported by patient".
- */
 /**
  * Compact ledger row — one calm line per moment: title left, value right,
  * time + specs beneath. Expandable rows reveal their details inline
  * (progressive disclosure); terminal rows render everything up front.
  */
-function RowShell({
-  color,
-  bg,
-  glyph,
-  title,
-  value,
-  subline,
-  a11yLabel,
-  expanded,
-  onToggle,
-  children,
-}: {
-  color: string;
-  glyph: string;
-  title: string;
-  value: string | null;
-  subline: string;
-  a11yLabel: string;
-  expanded: boolean | null;
-  onToggle?: () => void;
-  children?: React.ReactNode;
-  bg: string;
-}) {
-  const expandable = expanded !== null;
-  const body = (
-    <>
-      <View style={styles.rowTop}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {title}
-        </Text>
-        {value ? (
-          <Text style={styles.rowValue} numberOfLines={1}>
-            {value}
-          </Text>
-        ) : null}
-        {expandable ? (
-          <Text style={styles.rowChev}>{expanded ? '⌄' : '›'}</Text>
-        ) : null}
-      </View>
-      <Text style={styles.rowSub} numberOfLines={1}>
-        {subline}
-      </Text>
-      {expandable && expanded ? (
-        <View style={styles.rowDetails}>{children}</View>
-      ) : null}
-    </>
-  );
-  return (
-    <View style={styles.eventRow}>
-      <View style={styles.timelineTrack}>
-        <View style={[styles.marker, { backgroundColor: color }]}>
-          <Text style={[styles.markerGlyph, { color: '#FFFFFF' }]}>{glyph}</Text>
-        </View>
-        <View style={styles.timelineLine} />
-      </View>
-      <View style={styles.rowBody}>
-        {expandable ? (
-          <Pressable
-            onPress={onToggle}
-            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityState={{ expanded }}
-            accessibilityLabel={a11yLabel}
-          >
-            {body}
-          </Pressable>
-        ) : (
-          <View accessible accessibilityLabel={a11yLabel}>
-            {body}
-          </View>
-        )}
-      </View>
-    </View>
-  );
-}
-
-/**
- * What the camera saw, per saved scan for the day: food names, grams,
- * kcal and macros, newest scan first. Estimates, labelled as estimates.
- * Rendered only inside an expanded nutrition row (loads on expand).
- */
-function NutritionScanDetails({ dayKey }: { dayKey: string }) {
-  const [scans, setScans] = useState<FoodScanBreakdown[] | null>(null);
-  useEffect(() => {
-    let live = true;
-    (async () => {
-      try {
-        const patientId = getCachedPatientId();
-        if (!patientId) {
-          if (live) setScans([]);
-          return;
-        }
-        const rows = await listFoodScanBreakdowns(patientId, dayKey).catch(() => []);
-        if (live) setScans(rows);
-      } catch {
-        if (live) setScans([]);
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, [dayKey]);
-  if (!scans || scans.length === 0) return null;
-  return (
-    <View style={styles.scanBlock}>
-      {scans.map((scan) => (
-        <View key={scan.scan_id} style={styles.scanMeal}>
-          <View style={styles.dataRow}>
-            <Text style={styles.dataLabel} numberOfLines={1}>
-              {scan.meal_label}
-            </Text>
-            <Text style={styles.dataValue}>~{scan.total_kcal} kcal</Text>
-          </View>
-          {scan.items.map((food, i) => (
-            <View key={`${scan.scan_id}-${i}`} style={styles.dataRow}>
-              <Text style={styles.dataLabel} numberOfLines={1}>
-                {food.label} · {food.grams}g
-              </Text>
-              <Text style={styles.dataValue} numberOfLines={1}>
-                {food.kcal} kcal · P {food.protein_g}g · C {food.carbs_g}g · F {food.fat_g}g
-              </Text>
-            </View>
-          ))}
-        </View>
-      ))}
-      <Text style={styles.scanNote}>Estimate, not exact. Saved on this device.</Text>
-    </View>
-  );
-}
-
-function LoggedCard({ item, time }: { item: HomeStoryItem; time: string }) {
-  const category = localCategory(item);
-  const { color, bg } = localAccent(item);
-  const { hero, sub } = splitHero(item.title, item.detail);
-  const [open, setOpen] = useState(false);
-  // Local rows are user-entered on this device (never server-inferred):
-  // the expanded detail says so explicitly, matching the source badges on
-  // server rows. Vitals measured by the camera appear on the dial, not here.
-  return (
-    <RowShell
-      color={color}
-      bg={bg}
-      glyph={localGlyph(item.category)}
-      title={item.title}
-      value={hero}
-      subline={sub ? `${time} · ${sub}` : time}
-      a11yLabel={`${item.title}, ${hero}`}
-      expanded={open}
-      onToggle={() => setOpen((o) => !o)}
-    >
-      <View style={styles.badgeRow}>
-        <View style={styles.sourceBadge}>
-          <Text style={styles.sourceBadgeText}>On this device</Text>
-        </View>
-        <View style={styles.sourceBadge}>
-          <Text style={styles.sourceBadgeText}>
-            {item.category === 'vital' ? 'Entered by you' : 'You logged'}
-          </Text>
-        </View>
-      </View>
-      {item.detail ? (
-        <View style={styles.noteBlock}>
-          <Text style={styles.noteText}>{item.detail}</Text>
-        </View>
-      ) : null}
-      {item.category === 'nutrition' && open ? (
-        <NutritionScanDetails dayKey={item.dayKey} />
-      ) : null}
-    </RowShell>
-  );
-}
-
-function ObservationCard({ observation, time }: { observation: TimelineObservation; time: string }) {
-  const category = classifyItem(observation);
-  const { color, bg } = CATEGORY_MARKER[category];
-  const severityPct = Math.round(observation.visual_severity_score * 100);
-  const [open, setOpen] = useState(false);
-  const title = observation.finding_display_name;
-  const value = `${severityPct}%`;
-  const sub = `${time} · ${trendLabel(observation.trend)}`;
-
-  return (
-    <RowShell
-      color={color}
-      bg={bg}
-      glyph={CATEGORY_GLYPH[category]}
-      title={title}
-      value={value}
-      subline={sub}
-      a11yLabel={`${title}, severity ${value}, ${sub}`}
-      expanded={open}
-      onToggle={() => setOpen((o) => !o)}
-    >
-      {/* Body structure */}
-      <View style={styles.badgeRow}>
-        <View style={styles.sourceBadge}>
-          <Text style={styles.sourceBadgeText}>
-            {observation.structure_id.replace(/_/g, ' ')}
-          </Text>
-        </View>
-        {observation.source_type && (
-          <View style={styles.sourceBadge}>
-            <Text style={styles.sourceBadgeText}>
-              {sourceLabel(observation.source_type)}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Severity bar */}
-      <View style={styles.dataRow}>
-        <Text style={styles.dataLabel}>Severity</Text>
-        <View style={styles.severityBarContainer}>
-          <View style={styles.severityBarTrack}>
-            <View
-              style={[
-                styles.severityBarFill,
-                {
-                  width: `${severityPct}%`,
-                  backgroundColor: statusColor(observation.visual_status),
-                },
-              ]}
-            />
-          </View>
-          <Text style={styles.dataValue}>{severityPct}%</Text>
-        </View>
-      </View>
-
-      {/* Finding code */}
-      {observation.finding_code && (
-        <View style={styles.dataRow}>
-          <Text style={styles.dataLabel}>Code</Text>
-          <Text style={[styles.dataValue, { fontSize: 12 }]}>
-            {observation.finding_code}
-          </Text>
-        </View>
-      )}
-
-      {/* Clinical summary */}
-      {observation.clinical_summary && (
-        <View style={styles.noteBlock}>
-          <Text style={styles.noteText}>{observation.clinical_summary}</Text>
-        </View>
-      )}
-    </RowShell>
-  );
-}
-
-function EventCard({
-  event,
-  time,
-  onDocumentPress,
-}: {
-  event: TimelineEvent;
-  time: string;
-  onDocumentPress: (docId: string) => void;
-}) {
-  const category = classifyItem(event);
-  const { color, bg } = CATEGORY_MARKER[category];
-  const [open, setOpen] = useState(false);
-
-  const title = titleFor(event);
-  const measure =
-    event.vital_sign && event.vital_sign.value != null
-      ? `${event.vital_sign.value}${event.vital_sign.unit ? ` ${event.vital_sign.unit}` : ''}`
-      : event.lab_result
-        ? `${event.lab_result.value}${event.lab_result.unit ? ` ${event.lab_result.unit}` : ''}`
-        : null;
-  const hasDetails = Boolean(
-    event.vital_sign?.value != null ||
-      event.lab_result ||
-      event.safe_notes ||
-      event.evidence,
-  );
-
-  return (
-    <RowShell
-      color={color}
-      bg={bg}
-      glyph={CATEGORY_GLYPH[category]}
-      title={title}
-      value={measure}
-      subline={time}
-      a11yLabel={measure ? `${title}, ${measure}` : title}
-      expanded={hasDetails ? open : null}
-      onToggle={hasDetails ? () => setOpen((o) => !o) : undefined}
-    >
-      {/* Source badges */}
-      <View style={styles.badgeRow}>
-        <View style={styles.sourceBadge}>
-          <Text style={styles.sourceBadgeText}>{sourceLabel(event.source_type)}</Text>
-        </View>
-        {event.verification_status ? (
-          <View style={styles.sourceBadge}>
-            <Text style={styles.sourceBadgeText}>
-              {event.verification_status.replaceAll('_', ' ').toLowerCase()}
-            </Text>
-          </View>
-        ) : null}
-        {event.evidence && (
-          <Pressable
-            onPress={() => onDocumentPress(event.evidence!.document_id)}
-            style={({ pressed }) => [styles.docLink, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.docLinkText}>View document</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {/* Data rows (vital value already shown in the row) */}
-      {event.lab_result && (
-        <View style={styles.dataRow}>
-          <Text style={styles.dataLabel}>Result</Text>
-          <View>
-            <Text style={styles.dataValue}>
-              {event.lab_result.value}{' '}
-              <Text style={styles.dataUnit}>{event.lab_result.unit ?? ''}</Text>
-            </Text>
-            {event.lab_result.reference_range && (
-              <Text style={styles.dataRef}>
-                Ref: {event.lab_result.reference_range}
-              </Text>
-            )}
-            {event.lab_result.abnormal_flag && (
-              <Text style={[styles.dataFlag, { color: GV.danger }]}>
-                Flag: {event.lab_result.abnormal_flag}
-              </Text>
-            )}
-          </View>
-        </View>
-      )}
-
-      {event.safe_notes && (
-        <View style={styles.noteBlock}>
-          <Text style={styles.noteText}>{event.safe_notes}</Text>
-        </View>
-      )}
-
-      {event.evidence && (
-        <Pressable
-          style={({ pressed }) => [styles.evidenceBlock, pressed && { opacity: 0.7 }]}
-          onPress={() => onDocumentPress(event.evidence!.document_id)}
-        >
-          <Text style={styles.evidenceTitle}>Source evidence</Text>
-          <Text style={styles.evidenceText} numberOfLines={3}>
-            {event.evidence.extracted_text}
-          </Text>
-        </Pressable>
-      )}
-    </RowShell>
-  );
-}
-
 /** Append duration + fever temperature tokens to a symptom detail line. */
 function withSymptomExtras(detail: string, payload: Record<string, unknown>): string {
   const extras: string[] = [];
@@ -816,18 +319,12 @@ function enrichLocalItem(
   return item;
 }
 
-// Memoized rows — props come from memoized arrays, so refresh toggles and
-// unrelated parent renders skip every card.
-const MemoLoggedCard = memo(LoggedCard);
-const MemoObservationCard = memo(ObservationCard);
-const MemoEventCard = memo(EventCard);
-
-// ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
 
 export default function TimelineScreen() {
   const navigation = useNavigation<Nav>();
+  const { height: windowH } = useWindowDimensions();
   const [filter, setFilter] = useState<FilterKey>('all');
 
   // ── On-device daily logs (full values) + concept names ──
@@ -999,34 +496,6 @@ export default function TimelineScreen() {
     [navigation],
   );
 
-  // Side tabs hide on scroll down, return on scroll up (pulse tab stays).
-  const onTabScroll = useHideTabBarOnScroll();
-
-  // Stable row renderer: a pure function of (item, goToDocument). Previously
-  // an inline closure recreated on every parent render, defeating
-  // SectionList's row memoization for rows whose props never changed.
-  // Rows mount static — no entrance motion anywhere on this screen.
-  const renderTimelineItem = useCallback(
-    ({ item }: { item: PreparedItem }) => {
-      const node = item.node;
-      const time = item.time;
-      if (node.kind === 'local') {
-        return <MemoLoggedCard item={node.item} time={time} />;
-      }
-      if (node.kind === 'observation') {
-        return <MemoObservationCard observation={node.item} time={time} />;
-      }
-      return (
-        <MemoEventCard
-          event={node.item}
-          time={time}
-          onDocumentPress={goToDocument}
-        />
-      );
-    },
-    [goToDocument],
-  );
-
   const serverItems = query.data ?? [];
 
   // Hide server daily-log duplicates only for days the on-device log covers
@@ -1117,14 +586,14 @@ export default function TimelineScreen() {
     const node = item.node;
     if (node.kind === 'local') {
       const s = node.item;
-      return { key: item.key, time: item.time, category: item.category, title: s.title, detail: s.detail, icon: s.icon ?? '', documentId: null, node };
+      return { key: item.key, time: item.time, category: item.category, title: s.title, detail: s.detail, meta: null, icon: s.icon ?? '', documentId: null, node };
     }
     if (node.kind === 'observation') {
       const o = node.item;
       return {
         key: item.key, time: item.time, category: item.category,
         title: o.finding_display_name, detail: (o.clinical_summary ?? '').slice(0, 120),
-        icon: '', documentId: null, node,
+        meta: null, icon: '', documentId: null, node,
       };
     }
     const ev = node.item;
@@ -1133,9 +602,14 @@ export default function TimelineScreen() {
       : ev.vital_sign
         ? `${ev.vital_sign.value} ${ev.vital_sign.unit}`
         : (ev.safe_notes ?? '').slice(0, 120);
+    // Reference range + abnormal flag ride as a secondary line — real
+    // values from the same record, surfaced in the document view.
+    const metaBits: string[] = [];
+    if (ev.lab_result?.reference_range) metaBits.push(`Ref: ${ev.lab_result.reference_range}`);
+    if (ev.lab_result?.abnormal_flag) metaBits.push(`Flag: ${ev.lab_result.abnormal_flag}`);
     return {
       key: item.key, time: item.time, category: item.category,
-      title: titleFor(ev), detail, icon: '',
+      title: titleFor(ev), detail, meta: metaBits.length ? metaBits.join(' · ') : null, icon: '',
       documentId: ev.evidence?.document_id ?? null, node,
     };
   }
@@ -1149,9 +623,13 @@ export default function TimelineScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Timeline'>>();
   const { userProfile } = useAuth();
   const patientName = userProfile?.displayName ?? null;
-  const flatRef = useRef<FlatList<DiaryDay> | null>(null);
   const [openDayKey, setOpenDayKey] = useState<string | null>(null);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  const [focusDayKey, setFocusDayKey] = useState<string | null>(null);
+  const [focusNonce, setFocusNonce] = useState(0);
+  // Day currently in front of the wheel. Drives the page indicator only;
+  // updates once per page settle, never per animation frame.
+  const [activeDayKey, setActiveDayKey] = useState<string | null>(null);
   const consumedAiNav = useRef<string | null>(null);
 
   const openDay = useCallback((dayKey: string, highlight: string | null = null) => {
@@ -1172,10 +650,9 @@ export default function TimelineScreen() {
     [],
   );
 
-  // AI navigation: search → date → scroll the journal to that page → open
-  // its 2/3 report → highlight the evidence row. Consumed once per param so
-  // focus returns never re-trigger it; the FlatList stays mounted behind
-  // the sheet, so dismissing returns to the exact scroll position.
+  // AI navigation: search → date → bring that page to the front of the
+  // wheel → open its 2/3 report → highlight the evidence row. Consumed
+  // once per param so focus returns never re-trigger it.
   useEffect(() => {
     const target = route.params?.dateKey;
     if (!target || diaryDays.length === 0) return;
@@ -1184,12 +661,8 @@ export default function TimelineScreen() {
     const index = diaryDays.findIndex((d) => d.dayKey === target);
     if (index < 0) return;
     consumedAiNav.current = stamp;
-    try {
-      flatRef.current?.scrollToIndex({ index, viewPosition: 0.1, animated: true });
-    } catch {
-      // Fallback: estimated offset (fixed page height keeps this exact).
-      flatRef.current?.scrollToOffset({ offset: index * DIARY_PAGE_STEP, animated: true });
-    }
+    setFocusDayKey(target);
+    setFocusNonce((n) => n + 1);
     const day = diaryDays[index];
     const raw = route.params?.highlightEventId;
     openDay(target, raw ? resolveHighlight(day, raw) : null);
@@ -1197,25 +670,23 @@ export default function TimelineScreen() {
   }, [route.params, diaryDays, navigation, openDay, resolveHighlight]);
 
   const openDayItem = diaryDays.find((d) => d.dayKey === openDayKey) ?? null;
+  const patientId = getCachedPatientId();
 
-  // ---- Book paging: snap page-by-page, top-anchored turn animation -------
-  // scrollY drives each page's rotateX (native driver); a fling therefore
-  // turns pages and settles on boundaries instead of free-scrolling.
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const [headerH, setHeaderH] = useState(0);
-  const snapOffsets = useMemo(
-    () => (headerH > 0 ? diaryDays.map((_, i) => headerH + i * DIARY_PAGE_STEP) : undefined),
-    [headerH, diaryDays],
-  );
-  const onBookScroll = useCallback(
-    (e: Parameters<typeof onTabScroll>[0]) => {
-      Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-        useNativeDriver: true,
-      })(e);
-      onTabScroll(e);
-    },
-    [onTabScroll, scrollY],
-  );
+  // Page-indicator model: index + month label for the day in front.
+  const indicator = useMemo(() => {
+    if (diaryDays.length === 0) return null;
+    const idx = Math.max(
+      0,
+      diaryDays.findIndex((d) => d.dayKey === activeDayKey),
+    );
+    const day = diaryDays[idx];
+    if (!day) return null;
+    const month = new Date(`${day.dayKey}T00:00:00`).toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    });
+    return { idx, text: `${month} · ${idx + 1} of ${diaryDays.length}`, fullDate: day.fullDate };
+  }, [diaryDays, activeDayKey]);
 
   // Single-select with toggle: tapping the active view releases back to All,
   // so a tap always shows ONLY the selected view — never a mixed state.
@@ -1240,26 +711,13 @@ export default function TimelineScreen() {
     [visibleServer],
   );
 
-  // Header (back + hero + tappable stats + filter rail), memoized so filter
-  // changes and refresh toggles don't re-measure/re-mount the list chrome.
+  // Header (tappable stats + filter rail). No back control: this stack
+  // route relies on the platform back path (swipe-back on iOS, system
+  // back on Android).
   const listHeader = useMemo(
     () => (
       <View>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={8}
-        >
-          <Text style={styles.backBtnText}>‹ Back</Text>
-        </Pressable>
-        {/* Hero — one static title line on stage. No entrance motion. */}
-        <View style={styles.heroScroll}>
-          <Text style={styles.title}>Health Timeline</Text>
-        </View>
-
-        {/* …metrics below it. Everything here scrolls away together. */}
+        {/* Metrics band. Everything here scrolls away together. */}
         {(() => {
           const stats = [
             { key: 'logged', n: loggedCount, label: loggedCount === 1 ? 'entry logged' : 'entries logged', color: GV.ink },
@@ -1307,6 +765,7 @@ export default function TimelineScreen() {
                 label={f.label}
                 selected={active}
                 color={GV.cta}
+                size="medium"
                 onPress={() => toggleFilter(f.key)}
               />
             );
@@ -1325,6 +784,7 @@ export default function TimelineScreen() {
   if (query.isLoading) {
     return (
       <SafeAreaView style={styles.container}>
+        <StageGradient variant="navy" />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={GV.teal} />
           <Text style={styles.centerText}>Loading timeline…</Text>
@@ -1337,6 +797,7 @@ export default function TimelineScreen() {
   if (query.isError) {
     return (
       <SafeAreaView style={styles.container}>
+        <StageGradient variant="navy" />
         <View style={styles.center}>
           <Text style={styles.centerText}>We couldn't load your timeline.</Text>
           <Button title="Try again" onPress={() => void query.refetch()} />
@@ -1351,30 +812,10 @@ export default function TimelineScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StageGradient />
-      {/* The timeline IS the book: virtualized stack of daily report pages.
-          Fixed page height → exact getItemLayout → AI scroll + preserved
-          position on sheet dismiss (the list never unmounts). */}
-      <FlatList
-        ref={flatRef}
-        data={diaryDays}
-        keyExtractor={(day) => day.dayKey}
-        getItemLayout={(_, index) => ({
-          length: DIARY_PAGE_STEP,
-          offset: (headerH > 0 ? headerH : 0) + DIARY_PAGE_STEP * index,
-          index,
-        })}
-        onScroll={onBookScroll}
-        scrollEventThrottle={16}
-        windowSize={7}
-        maxToRenderPerBatch={4}
-        initialNumToRender={5}
-        removeClippedSubviews
-        snapToOffsets={snapOffsets}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        disableIntervalMomentum
+      <StageGradient variant="navy" />
+      <ScrollView
         contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1383,49 +824,65 @@ export default function TimelineScreen() {
             colors={[GV.teal]}
           />
         }
-        ListHeaderComponent={
-          <View onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>{listHeader}</View>
-        }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>
-              {filter === 'all' ? 'No events yet' : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase() ?? 'events'} yet`}
-            </Text>
-            <Text style={styles.emptyText}>
-              {filter === 'all'
-                ? 'Saved daily logs, medical records, observations, and verified records will appear here.'
-                : 'Try another filter, or log something today and come back.'}
+      >
+        {listHeader}
+        {/* Page position: month + "n of N" for the day in front. The wheel
+            snaps page-by-page, so this is its page control. */}
+        {indicator ? (
+          <View style={styles.pageIndicatorRow}>
+            <Text
+              style={styles.pageIndicator}
+              accessibilityRole="text"
+              accessibilityLabel={`Showing ${indicator.fullDate}, page ${indicator.idx + 1} of ${diaryDays.length}`}
+            >
+              {indicator.text}
             </Text>
           </View>
-        }
-        renderItem={({ item: day, index }) => (
-          <TurningPage index={index} scrollY={scrollY} topOffset={headerH}>
-            <DiaryPagePreview day={day} patientName={patientName} onOpen={(key) => openDay(key)} />
-          </TurningPage>
-        )}
-        onScrollToIndexFailed={(info) => {
-          flatRef.current?.scrollToOffset({
-            offset: (headerH > 0 ? headerH : 0) + info.index * DIARY_PAGE_STEP,
-            animated: true,
-          });
-        }}
-      />
-      {/* The opened page: 2/3 report over the untouched timeline. Full rows
+        ) : null}
+        {/* The journal IS the wheel: ~fixed-height daily report pages stacked
+            on an invisible vertical wheel. Dragging up/down turns it; the
+            newest page sits in front and every older page fans out behind. */}
+        <View style={[styles.wheelBox, { height: Math.max(400, Math.min(560, windowH * 0.52)) }]}>
+          {diaryDays.length > 0 ? (
+            <TimelineWheel
+              days={diaryDays}
+              patientName={patientName}
+              focusDayKey={focusDayKey}
+              focusNonce={focusNonce}
+              onOpen={(key) => openDay(key)}
+              onActiveChange={(key) => setActiveDayKey(key)}
+            />
+          ) : (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>
+                {filter === 'all'
+                  ? 'No events yet'
+                  : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase() ?? 'events'} yet`}
+              </Text>
+              <Text style={styles.emptyText}>
+                {filter === 'all'
+                  ? 'Saved daily logs, medical records, observations, and verified records will appear here.'
+                  : 'Try another filter, or log something today and come back.'}
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+      {/* The opened page: 2/3 report over the untouched wheel. Full rows
           reuse the existing card renderers (same components, same handlers). */}
       <DiaryReportSheet
         visible={openDayKey !== null}
         day={openDayItem}
         days={diaryDays}
         patientName={patientName}
+        patientId={patientId}
         highlightKey={highlightKey}
-        renderRow={(diaryItem, _highlighted) =>
-          renderTimelineItem({ item: diaryItem.node as PreparedItem })
-        }
         onClose={closeSheet}
         onSelectDay={(dayKey) => {
           setHighlightKey(null);
           setOpenDayKey(dayKey);
         }}
+        onDocumentPress={(docId) => goToDocument(docId)}
       />
     </SafeAreaView>
   );
@@ -1460,33 +917,30 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: SPACE.screenH,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
 
   // Header content lives in the list header (scrolls away together).
-  backBtn: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: SPACE.rPill,
-    backgroundColor: GV.card,
-    marginBottom: 16,
+  // Wheel stage: pages overlay absolutely; height is set inline from the
+  // window so the deck breathes on tall phones and tablets.
+  wheelBox: {
+    marginTop: SPACE.cardGap,
   },
-  backBtnText: {
-    ...TYPE.chip,
-    color: GV.ink,
+  // Page position caption — the wheel's page control.
+  pageIndicatorRow: {
+    alignItems: 'flex-end',
+    paddingRight: 4,
+    marginTop: SPACE.cardGap,
   },
-  heroScroll: {
-    marginBottom: 16,
-  },
-  // Screen title on stage — Poppins, centered.
-  title: {
-    ...TYPE.display,
-    color: '#FFFFFF',
-    textAlign: 'center',
+  pageIndicator: {
+    fontFamily: FONT.semi,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 1.5,
+color: GV.fog,
+    fontVariant: ['tabular-nums'],
   },
 
-  // Stat strip — one white card, divided tappable stats, dark numerals.
   statStrip: {
     flexDirection: 'row',
     backgroundColor: GV.card,
@@ -1515,7 +969,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.body,
   },
   statLabelActive: {
     color: GV.ink,
@@ -1530,270 +984,24 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
 
-  // Day section — a white card: header caps the top, rows fill the middle,
-  // sectionFoot caps the bottom. Radius 20, no shadow, dark text.
-  dateDivider: {
-    backgroundColor: GV.card,
-    borderTopLeftRadius: SPACE.rCard,
-    borderTopRightRadius: SPACE.rCard,
-    paddingHorizontal: SPACE.cardPad,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  dateHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dateHeading: {
-    ...TYPE.title,
-    color: GV.ink,
-  },
-  dateCountPill: {
-    minWidth: 24,
-    height: 20,
-    borderRadius: SPACE.rPill,
-    backgroundColor: GV.wash,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  dateCountText: {
-    ...TYPE.chip,
-    color: GV.ink,
-    fontVariant: ['tabular-nums'],
-  },
-  dateRule: {
-    flex: 1,
-    height: 1,
-    backgroundColor: GV.line,
-  },
-  // Bottom cap of the day card; the gap below separates day cards.
-  sectionFoot: {
-    backgroundColor: GV.card,
-    borderBottomLeftRadius: SPACE.rCard,
-    borderBottomRightRadius: SPACE.rCard,
-    height: 12,
-    marginBottom: SPACE.cardGap,
-  },
-
   // Event row — ledger rows inside the white day card. The glyph tile is
   // the only hue: a small flat fx square, white glyph, hairline rail.
-  eventRow: {
-    flexDirection: 'row',
-    backgroundColor: GV.card,
-    paddingRight: 8,
-  },
 
   // Timeline track (glyph tile + vertical line)
-  timelineTrack: {
-    width: 44,
-    alignItems: 'center',
-  },
-  marker: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-    backgroundColor: GV.wash,
-  },
-  markerGlyph: {
-    fontSize: 15,
-    fontFamily: FONT.bold,
-  },
-  timelineLine: {
-    flex: 1,
-    width: 2,
-    backgroundColor: GV.line,
-    marginTop: 4,
-    marginBottom: -8,
-  },
 
   // Compact row body — title left, value right, specs beneath.
-  rowBody: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 4,
-  },
-  rowTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rowTitle: {
-    flex: 1,
-    ...TYPE.button,
-    fontSize: 15,
-    lineHeight: 20,
-    color: GV.ink,
-  },
-  rowValue: {
-    ...TYPE.button,
-    fontSize: 15,
-    color: GV.ink,
-    fontVariant: ['tabular-nums'],
-  },
-  rowChev: {
-    fontSize: 18,
-    fontFamily: FONT.semi,
-    color: GV.muted,
-    width: 16,
-    textAlign: 'center',
-  },
-  rowSub: {
-    ...TYPE.caption,
-    color: GV.muted,
-    fontVariant: ['tabular-nums'],
-  },
-  rowDetails: {
-    marginTop: 12,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: GV.line,
-    gap: 0,
-  },
 
   // Badges — quiet pills on white
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  sourceBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: SPACE.rPill,
-    backgroundColor: GV.wash,
-  },
-  sourceBadgeText: {
-    ...TYPE.chip,
-    color: GV.muted,
-    fontSize: 10,
-  },
-  docLink: {
-    marginLeft: 'auto',
-  },
-  docLinkText: {
-    ...TYPE.chip,
-    color: GV.ink,
-  },
 
   // Data rows — hairline rules on white
-  dataRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: GV.line,
-    marginTop: 8,
-    gap: 8,
-  },
-  dataLabel: {
-    ...TYPE.caption,
-    color: GV.muted,
-    minWidth: 60,
-  },
-  dataValue: {
-    ...TYPE.button,
-    fontSize: 15,
-    color: GV.ink,
-    flex: 1,
-    textAlign: 'right',
-    fontVariant: ['tabular-nums'],
-  },
-  dataUnit: {
-    ...TYPE.caption,
-    color: GV.muted,
-  },
-  dataRef: {
-    ...TYPE.caption,
-    color: GV.muted,
-    marginTop: 2,
-    textAlign: 'right',
-  },
-  dataFlag: {
-    ...TYPE.chip,
-    color: GV.danger,
-    marginTop: 2,
-    textAlign: 'right',
-  },
 
   // Severity bar (for observations)
-  severityBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  severityBarTrack: {
-    width: 80,
-    height: 6,
-    backgroundColor: GV.line,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  severityBarFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
 
   // Note block
-  noteBlock: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: GV.line,
-  },
-  noteText: {
-    ...TYPE.caption,
-    color: GV.body,
-    lineHeight: 20,
-  },
 
   // Scanned-meal breakdown (nutrition rows, on-device estimates)
-  scanBlock: {
-    marginTop: 8,
-    padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: GV.line,
-    backgroundColor: GV.wash,
-    borderRadius: 8,
-    gap: 4,
-  },
-  scanMeal: {
-    gap: 0,
-  },
-  scanNote: {
-    ...TYPE.caption,
-    fontSize: 12,
-    color: GV.muted,
-    marginTop: 4,
-  },
 
   // Evidence — flat wash slip on white
-  evidenceBlock: {
-    marginTop: 8,
-    backgroundColor: GV.wash,
-    borderRadius: 8,
-    padding: 12,
-  },
-  evidenceTitle: {
-    ...TYPE.chip,
-    color: GV.muted,
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  evidenceText: {
-    ...TYPE.caption,
-    color: GV.body,
-    lineHeight: 18,
-  },
 
   // Empty state
   empty: {
