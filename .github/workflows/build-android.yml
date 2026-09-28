@@ -63,6 +63,15 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # Native compile (reanimated C++) needs room: drop the heavy
+      # SDKs this job never touches.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - name: Install dependencies
         run: npm ci
 
@@ -73,7 +82,7 @@ jobs:
 
       - name: Assemble debug APK
         working-directory: frontend/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
