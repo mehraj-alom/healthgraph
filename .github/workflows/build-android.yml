@@ -72,7 +72,8 @@ jobs:
         run: npx expo prebuild --platform android --no-install
 
       - name: Assemble debug APK
-        run: ./android/gradlew assembleDebug --no-daemon
+        working-directory: frontend/android
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
