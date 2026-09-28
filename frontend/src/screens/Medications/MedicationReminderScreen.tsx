@@ -17,8 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '@/components';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { StageGradient } from '@/components/StageGradient';
+import { GV, TYPE, FONT } from '@/theme/guava';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { getReminderInstance } from '@/db/queries/reminderInstances';
 import type { ReminderInstance } from '@/db/queries/reminderInstances';
@@ -32,6 +31,7 @@ import {
   type SnoozeOption,
 } from '@/services/medicationReminders';
 import type { RootStackParamList } from '@/types';
+import { solidForMedication } from './MedicationsScreen';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'MedicationReminder'>;
@@ -61,6 +61,7 @@ export default function MedicationReminderScreen() {
   const route = useRoute<Route>();
   const { occurrenceId, action } = route.params;
   const [instance, setInstance] = useState<ReminderInstance | null>(null);
+  const [medId, setMedId] = useState('');
   const [medName, setMedName] = useState('Medication');
   const [doseText, setDoseText] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -100,6 +101,7 @@ export default function MedicationReminderScreen() {
           setGone(true);
         } else {
           setInstance(row);
+          setMedId(row.medication_id);
           const med = await getMedicationById(patientId, row.medication_id).catch(() => null);
           if (!live) return;
           if (med) {
@@ -211,11 +213,12 @@ export default function MedicationReminderScreen() {
     }
   }, [loaded, gone, doneMessage, action, doTaken, doSnooze]);
 
+  const solid = solidForMedication(medId || occurrenceId, 0);
+  const initial = (medName.trim().charAt(0) || 'M').toUpperCase();
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StageGradient />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.overline}>Medication reminder</Text>
         {!loaded ? (
           <Text style={styles.status}>Loading reminder…</Text>
         ) : gone || !instance ? (
@@ -234,100 +237,115 @@ export default function MedicationReminderScreen() {
           </View>
         ) : (
           <>
-            <Text style={styles.medName} numberOfLines={2}>
-              {medName}
-            </Text>
-            <Text style={styles.subline}>
-              {doseText ? `${doseText} · ` : ''}
-              {isDueNow(instance.scheduled_at) ? 'Now' : formatWhen(instance.scheduled_at)}
-            </Text>
-            <View style={styles.duo}>
-              <Pressable
-                onPress={() => void doTaken()}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityLabel={`Record ${medName} taken`}
-                hitSlop={4}
-                style={({ pressed }) => [
-                  styles.half,
-                  styles.takenBtn,
-                  pressed && !busy && { opacity: 0.8 },
-                  busy && { opacity: 0.6 },
-                ]}
-              >
-                <Text style={[styles.halfText, styles.takenText]}>✓ Taken</Text>
-              </Pressable>
+            <View style={styles.caller}>
+              <View style={[styles.avatar, { backgroundColor: solid }]}>
+                <Text style={styles.avatarInitial}>{initial}</Text>
+              </View>
+              <Text style={styles.medName} numberOfLines={2}>
+                {medName}
+              </Text>
+              <Text style={styles.subline}>
+                {doseText ? `${doseText} · ` : ''}
+                {isDueNow(instance.scheduled_at) ? 'Now' : formatWhen(instance.scheduled_at)}
+              </Text>
+            </View>
+            <View style={styles.controls}>
+              <View style={styles.callRow}>
+                <View style={styles.callCol}>
+                  <Pressable
+                    onPress={() => setShowSheet(true)}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel="Still not taken, show delay options"
+                    hitSlop={4}
+                    style={({ pressed }) => [
+                      styles.callBtn,
+                      styles.declineBtn,
+                      pressed && !busy && { opacity: 0.8 },
+                      busy && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={styles.callGlyph}>✕</Text>
+                  </Pressable>
+                  <Text style={styles.callLabel}>Not taken</Text>
+                </View>
+                <View style={styles.callCol}>
+                  <Pressable
+                    onPress={() => void doTaken()}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Record ${medName} taken`}
+                    hitSlop={4}
+                    style={({ pressed }) => [
+                      styles.callBtn,
+                      styles.acceptBtn,
+                      pressed && !busy && { opacity: 0.8 },
+                      busy && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={styles.callGlyph}>✓</Text>
+                  </Pressable>
+                  <Text style={styles.callLabel}>Taken</Text>
+                </View>
+              </View>
               <Pressable
                 onPress={() => setShowSheet(true)}
                 disabled={busy}
                 accessibilityRole="button"
-                accessibilityLabel="Still not taken, show delay options"
+                accessibilityLabel="Remind me later, show delay options"
                 hitSlop={4}
                 style={({ pressed }) => [
-                  styles.half,
-                  styles.notTakenBtn,
-                  pressed && !busy && { opacity: 0.8 },
+                  styles.laterBtn,
+                  pressed && !busy && { opacity: 0.7 },
                   busy && { opacity: 0.6 },
                 ]}
               >
-                <Text style={[styles.halfText, styles.notTakenText]}>Still not taken</Text>
+                <Text style={styles.laterText}>Remind me later</Text>
               </Pressable>
+              {showSheet ? (
+                <View style={styles.sheet}>
+                  <Text style={styles.snoozeTitle}>Remind me</Text>
+                  {instance.snooze_count >= MAX_SNOOZE_COUNT ? (
+                    <Text style={styles.snoozeNote}>
+                      Snooze limit reached for this dose.
+                    </Text>
+                  ) : (
+                    options.map((opt, idx) => (
+                      <Pressable
+                        key={opt.key}
+                        onPress={() => void doSnooze(opt.minutes)}
+                        disabled={busy}
+                        accessibilityRole="button"
+                        accessibilityLabel={opt.label}
+                        hitSlop={8}
+                        style={({ pressed }) => [
+                          styles.snoozeRow,
+                          idx > 0 && styles.snoozeDivider,
+                          pressed && !busy && { opacity: 0.7 },
+                        ]}
+                      >
+                        <Text style={styles.snoozeLabel}>{opt.label}</Text>
+                        <Text style={styles.snoozeChev}>›</Text>
+                      </Pressable>
+                    ))
+                  )}
+                  <Pressable
+                    onPress={() => setShowSheet(false)}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel, keep this reminder"
+                    hitSlop={8}
+                    style={({ pressed }) => [
+                      styles.snoozeRow,
+                      styles.snoozeDivider,
+                      pressed && !busy && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Text style={styles.snoozeLabel}>Cancel — keep this reminder</Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
-            <Pressable
-              onPress={() => setShowSheet(true)}
-              disabled={busy}
-              accessibilityRole="button"
-              accessibilityLabel="Remind me later, show delay options"
-              hitSlop={4}
-              style={({ pressed }) => [
-                styles.laterBtn,
-                pressed && !busy && { opacity: 0.7 },
-                busy && { opacity: 0.6 },
-              ]}
-            >
-              <Text style={styles.laterText}>↻ Remind me later</Text>
-            </Pressable>
-            {showSheet ? (
-              <View style={styles.card}>
-                <Text style={styles.snoozeTitle}>Remind me</Text>
-                {instance.snooze_count >= MAX_SNOOZE_COUNT ? (
-                  <Text style={styles.snoozeNote}>
-                    Snooze limit reached for this dose.
-                  </Text>
-                ) : (
-                  options.map((opt) => (
-                    <Pressable
-                      key={opt.key}
-                      onPress={() => void doSnooze(opt.minutes)}
-                      disabled={busy}
-                      accessibilityRole="button"
-                      accessibilityLabel={opt.label}
-                      hitSlop={8}
-                      style={({ pressed }) => [
-                        styles.snoozeRow,
-                        pressed && !busy && { opacity: 0.7 },
-                      ]}
-                    >
-                      <Text style={styles.snoozeLabel}>{opt.label}</Text>
-                      <Text style={styles.snoozeChev}>›</Text>
-                    </Pressable>
-                  ))
-                )}
-                <Pressable
-                  onPress={() => setShowSheet(false)}
-                  disabled={busy}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel, keep this reminder"
-                  hitSlop={8}
-                  style={({ pressed }) => [
-                    styles.snoozeRow,
-                    pressed && !busy && { opacity: 0.7 },
-                  ]}
-                >
-                  <Text style={styles.snoozeLabel}>Cancel — keep this reminder</Text>
-                </Pressable>
-              </View>
-            ) : null}
           </>
         )}
       </ScrollView>
@@ -335,67 +353,106 @@ export default function MedicationReminderScreen() {
   );
 }
 
+const NAVY = '#080A11';
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: GV.stage },
+  safe: { flex: 1, backgroundColor: NAVY },
   content: {
     flexGrow: 1,
-    paddingHorizontal: SPACE.screenH,
-    paddingVertical: SPACE.sectionGap,
+    paddingHorizontal: 24,
+    paddingTop: 24,
     paddingBottom: 32,
     gap: 12,
+    justifyContent: 'space-between',
+  },
+  status: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 48 },
+  caller: { alignItems: 'center', gap: 8, paddingTop: 32 },
+  avatar: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    marginBottom: 4,
   },
-  overline: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 3,
-    color: GV.teal,
-    textAlign: 'center',
-  },
-  status: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  medName: {
+  avatarInitial: {
     fontFamily: FONT.semi,
     fontSize: 34,
     lineHeight: 40,
-    letterSpacing: -0.4,
-    color: GV.card,
+    color: '#FFFFFF',
+  },
+  medName: {
+    fontFamily: FONT.semi,
+    fontSize: 32,
+    lineHeight: 38,
+    letterSpacing: -0.3,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   subline: { ...TYPE.body, color: GV.fog, textAlign: 'center', fontVariant: ['tabular-nums'] },
-  duo: { flexDirection: 'row', gap: 12 },
-  half: {
-    flex: 1,
-    minHeight: 60,
-    borderRadius: 16,
+  controls: { gap: 12 },
+  callRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+    paddingVertical: 8,
+  },
+  callCol: { alignItems: 'center', gap: 8, minWidth: 96 },
+  callBtn: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
   },
-  takenBtn: { backgroundColor: '#DFF2E7' },
-  notTakenBtn: { backgroundColor: '#FBE9ED' },
-  halfText: { fontFamily: FONT.semi, fontSize: 16, lineHeight: 22, textAlign: 'center' },
-  takenText: { color: GV.cta },
-  notTakenText: { color: GV.danger },
+  acceptBtn: { backgroundColor: GV.cta },
+  declineBtn: { backgroundColor: GV.danger },
+  callGlyph: {
+    fontFamily: FONT.semi,
+    fontSize: 30,
+    lineHeight: 34,
+    color: '#FFFFFF',
+  },
+  callLabel: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
   laterBtn: {
     minHeight: 56,
-    borderRadius: 16,
+    borderRadius: 9999,
     borderWidth: 1,
-    borderColor: GV.stageline,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  laterText: { fontFamily: FONT.semi, fontSize: 16, lineHeight: 22, color: GV.card },
+  laterText: { fontFamily: FONT.semi, fontSize: 16, lineHeight: 22, color: '#FFFFFF' },
   card: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-    gap: SPACE.cardGap,
+    backgroundColor: TILE_BG,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+    padding: 20,
+    gap: 12,
+    marginTop: 48,
   },
-  goneTitle: { ...TYPE.title, color: GV.ink, textAlign: 'center' },
-  goneBody: { ...TYPE.body, color: GV.body, textAlign: 'center' },
-  snoozeTitle: { ...TYPE.button, fontSize: 15, color: GV.ink },
-  snoozeNote: { ...TYPE.body, color: GV.body },
+  goneTitle: { ...TYPE.title, color: '#FFFFFF', textAlign: 'center' },
+  goneBody: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  sheet: {
+    backgroundColor: TILE_BG,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+    padding: 16,
+    gap: 4,
+  },
+  snoozeTitle: { fontFamily: FONT.semi, fontSize: 15, lineHeight: 20, color: '#FFFFFF' },
+  snoozeNote: { ...TYPE.body, color: GV.fog },
   snoozeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -403,6 +460,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: 48,
   },
-  snoozeLabel: { ...TYPE.button, fontSize: 15, color: GV.ink },
-  snoozeChev: { fontSize: 20, color: GV.muted },
+  snoozeDivider: { borderTopWidth: 1, borderTopColor: HAIRLINE_ON_NAVY },
+  snoozeLabel: { fontFamily: FONT.semi, fontSize: 15, lineHeight: 20, color: '#FFFFFF' },
+  snoozeChev: { fontSize: 20, color: GV.fog },
 });

@@ -1,12 +1,23 @@
 /**
- * MedicationsScreen — Manage medications, view schedule, record taken events.
+ * MedicationsScreen — GoalsStep reference style.
  *
- * Provides:
- * - List of active medications
- * - Add/Edit medication form
- * - Daily schedule view
- * - Record medication taken
- * - Medication history
+ * Design Read: health product screen for patients, with a calm
+ * onboarding-picker language, leaning toward the GoalsStep navy +
+ * duotone bento tiles.
+ * Dials: VARIANCE 6 / MOTION 4 / DENSITY 3.
+ * Shape rule: tiles radius 8 (reference lock), pills only for
+ * segmented + buttons. One accent (teal) + CTA green for Take.
+ * Single eyebrow (live status). Sentence case throughout.
+ *
+ * Reference tokens (from OnboardingSetupScreen + GoalsStep + FocusStep):
+ * - Backdrop #20263D, tile base #2A3049, duotones from TILE_TONES
+ * - Overline semi 12/16 ls 3 teal centered; headline semi 32/38
+ *   white centered ls -0.3; sub body fog centered
+ * - Tiles: 2-col grid, radius 8, 2px transparent border (teal when
+ *   expanded), gradient art + black 0.22 overlay, label medium
+ *   15/20 white centered with shadow; odd last tile full-width h112
+ *
+ * Logic is untouched (same hooks, same API, same navigation).
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
@@ -48,16 +59,40 @@ import {
   isReminderRuntimeSupported,
   requestReminderPermissions,
 } from '@/services/reminderNotifications';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { TILE_TONES } from '@/theme/tones';
-import { StageGradient } from '@/components/StageGradient';
-void FONT;
-import { Button, Card, Chip, Input, SectionHeader } from '@/components';
+import { GV, TYPE, FONT } from '@/theme/guava';
+import { Button, Card, Chip, Input } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import type { Medication, MedicationFrequency, MedicationRoute, MedicationStatus, DailyMedicationSchedule, MedicationTakenEvent } from '@/types';
 import type { RootStackParamList } from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+// Reference backdrop in black; tile base + duotone solids unchanged.
+const NAVY = '#080A11';
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
+// Solid tile fills — one full colour per medication (no split gradient).
+// Stable per medication id so each new medication keeps its own colour.
+// Exported: the reminder (incoming-call) screen uses the same palette.
+export const MED_SOLIDS: readonly string[] = [
+  '#57507A',
+  '#96684A',
+  '#5C6E7C',
+  '#6E7F4E',
+  '#56837B',
+  '#66666F',
+  '#5A6078',
+];
+
+export function solidForMedication(medicationId: string, fallbackIndex: number): string {
+  let hash = 0;
+  for (let i = 0; i < medicationId.length; i++) {
+    hash = (hash * 31 + medicationId.charCodeAt(i)) >>> 0;
+  }
+  if (hash === 0) return MED_SOLIDS[fallbackIndex % MED_SOLIDS.length];
+  return MED_SOLIDS[hash % MED_SOLIDS.length];
+}
 
 // ── Frequency labels ──
 const FREQUENCY_LABELS: Record<MedicationFrequency, string> = {
@@ -88,7 +123,7 @@ const ROUTE_LABELS: Record<MedicationRoute, string> = {
   OTHER: 'Other',
 };
 
-// ── Status dot hues — small flat icons inside white cards only ──
+// ── Status dot hues — small flat dots on dark tiles ──
 const STATUS_DOTS: Record<MedicationStatus, string> = {
   ACTIVE: GV.fx.green,
   SCHEDULED: GV.fx.blue,
@@ -127,6 +162,172 @@ function scanStatusCopy(status: ScanSession['status']): string {
     case 'reviewed':
       return 'Done. Medicines confirmed from this scan.';
   }
+}
+
+// ── Navy segmented control (reference segments language) ─────────────────
+// Track white 8% + hairline; selected is solid white with navy text
+// (mirrors segmentOn). 44pt targets.
+
+function NavySegmented({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: { key: 'active' | 'schedule' | 'history'; label: string }[];
+  value: 'active' | 'schedule' | 'history';
+  onChange: (k: 'active' | 'schedule' | 'history') => void;
+}) {
+  return (
+    <View
+      style={styles.segmentTrack}
+      accessibilityRole="tablist"
+      accessibilityLabel="Medication views"
+    >
+      {tabs.map((t) => {
+        const selected = value === t.key;
+        return (
+          <Pressable
+            key={t.key}
+            onPress={() => onChange(t.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            accessibilityLabel={t.label}
+            hitSlop={4}
+            style={({ pressed }) => [
+              styles.segment,
+              selected && styles.segmentSelected,
+              pressed && !selected && { opacity: 0.7 },
+            ]}
+          >
+            <Text
+              style={[styles.segmentText, selected && styles.segmentTextSelected]}
+              numberOfLines={1}
+            >
+              {t.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ── Med tile: FocusTile language for a medication ────────────────────────
+// Solid full-colour box with name + details only. Tap shows the
+// Edit/Pause/Stop menu floating ABOVE the box (sibling overlay, never
+// inside the tile), with a teal 2px ring while open.
+
+function MedTile({
+  index,
+  medication,
+  fullWidth,
+  expanded,
+  onToggle,
+  onEdit,
+  onPause,
+  onResume,
+  onStop,
+}: {
+  index: number;
+  medication: Medication;
+  fullWidth?: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+}) {
+  const solid = solidForMedication(medication.medication_id, index);
+  const frequencyLabel = FREQUENCY_LABELS[medication.frequency] || medication.frequency;
+  const doseLine = [
+    medication.strength ? `${medication.strength}${medication.strength_unit ? ` ${medication.strength_unit}` : ''}` : null,
+    medication.dose_amount ? `${medication.dose_amount}${medication.dose_unit ? ` ${medication.dose_unit}` : ''}` : null,
+  ].filter(Boolean).join(' · ');
+  const timeLine = medication.scheduled_times && medication.scheduled_times.length > 0
+    ? medication.scheduled_times.map(formatTime).join(' · ')
+    : frequencyLabel;
+
+  return (
+    <View style={[styles.tileWrap, fullWidth && styles.tileWrapFull, expanded && styles.tileWrapOpen]}>
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={`${medication.name} details`}
+        accessibilityState={{ expanded }}
+        style={({ pressed }) => [
+          styles.tile,
+          { backgroundColor: solid },
+          fullWidth && styles.tileFull,
+          expanded && styles.tileOn,
+          pressed && { opacity: 0.88 },
+        ]}
+      >
+        <View style={[styles.statusDot, { backgroundColor: STATUS_DOTS[medication.status] }]} />
+        <Text style={styles.tileLabel} numberOfLines={2}>
+          {medication.name}
+        </Text>
+        {doseLine ? (
+          <Text style={styles.tileMeta} numberOfLines={1}>
+            {doseLine}
+          </Text>
+        ) : null}
+        <Text style={styles.tileMeta} numberOfLines={1}>
+          {timeLine}
+        </Text>
+      </Pressable>
+      {expanded ? (
+        <Pressable
+          onPress={onToggle}
+          accessibilityRole="button"
+          accessibilityLabel="Close menu"
+          style={styles.tileOverlay}
+        >
+          <View style={styles.popoverMenu}>
+            <Pressable
+              onPress={onEdit}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${medication.name}`}
+              hitSlop={8}
+              style={({ pressed }) => [styles.popoverBtn, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.popoverBtnText}>Edit</Text>
+            </Pressable>
+            {medication.status === 'ACTIVE' ? (
+              <Pressable
+                onPress={onPause}
+                accessibilityRole="button"
+                accessibilityLabel={`Pause ${medication.name}`}
+                hitSlop={8}
+                style={({ pressed }) => [styles.popoverBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.popoverBtnText}>Pause</Text>
+              </Pressable>
+            ) : medication.status === 'PAUSED' ? (
+              <Pressable
+                onPress={onResume}
+                accessibilityRole="button"
+                accessibilityLabel={`Resume ${medication.name}`}
+                hitSlop={8}
+                style={({ pressed }) => [styles.popoverBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.popoverBtnText}>Resume</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={onStop}
+              accessibilityRole="button"
+              accessibilityLabel={`Stop ${medication.name}`}
+              hitSlop={8}
+              style={({ pressed }) => [styles.popoverBtn, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.popoverBtnText}>Stop</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      ) : null}
+    </View>
+  );
 }
 
 // ── MAIN COMPONENT ──
@@ -194,6 +395,12 @@ export default function MedicationsScreen() {
     void deleteScanSession(session.session_id).then(() => loadScanSessions());
   }, [loadScanSessions]);
 
+  const openAdd = useCallback(() => {
+    setEditingMedication(null);
+    setScanSourceDocId(null);
+    setShowAddModal(true);
+  }, []);
+
   // Local calendar day: UTC slicing (toISOString) shifts the day for
   // timezones ahead of UTC and desyncs the schedule from the logger.
   const today = todayKey();
@@ -207,6 +414,25 @@ export default function MedicationsScreen() {
     () => medications.filter(m => m.status === 'ACTIVE'),
     [medications],
   );
+
+  const todayTaken = useMemo(() => schedule.filter((s) => s.taken).length, [schedule]);
+  const todayTotal = schedule.length;
+  const todayPct = todayTotal > 0 ? todayTaken / todayTotal : 0;
+  const nextDose = useMemo(() => {
+    const pending = schedule
+      .filter((s) => !s.taken)
+      .slice()
+      .sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time));
+    return pending[0] ?? null;
+  }, [schedule]);
+
+  // Headline + sub mirror the reference rhythm (big centered title,
+  // one short helper line). No eyebrow line above the title.
+  const sub = nextDose
+    ? `Next · ${nextDose.medication.name} at ${formatTime(nextDose.scheduled_time)}`
+    : activeMedications.length > 0
+      ? 'Tap a tile to edit, pause, or stop.'
+      : 'Add your medications to begin.';
 
   // Handle medication taken — local-first with server reconciliation
   const handleTakeDose = useCallback(async (medication: Medication, scheduledTime: string) => {
@@ -350,117 +576,6 @@ export default function MedicationsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StageGradient />
-      <Text style={styles.overline}>Doses &amp; schedule</Text>
-      <Text style={styles.title}>Medications</Text>
-      <Text style={styles.subtitle}>Track doses and daily schedules.</Text>
-
-      <View style={styles.addWrap}>
-        <Button
-          title="Add"
-          onPress={() => {
-            setEditingMedication(null);
-            setScanSourceDocId(null);
-            setShowAddModal(true);
-          }}
-          accessibilityLabel="Add medication"
-        />
-        <Button
-          title="Scan prescription"
-          variant="outline"
-          onPress={openScanner}
-          accessibilityLabel="Scan prescription pages"
-        />
-      </View>
-
-      {__DEV__ ? (
-        <View style={styles.addWrap}>
-          <Button
-            title="Preview reminder"
-            variant="ghost"
-            onPress={() => void previewReminder()}
-            accessibilityLabel="Preview medication reminder (development only)"
-          />
-          <Button
-            title="Voice test (sanoTTS, isolated)"
-            variant="ghost"
-            onPress={() => navigation.navigate('SattsTest')}
-            accessibilityLabel="Open isolated sanoTTS voice test (development only)"
-          />
-          <Button
-            title="Voice turn test (isolated)"
-            variant="ghost"
-            onPress={() => navigation.navigate('VoiceTurn')}
-            accessibilityLabel="Open isolated turn-based voice test (development only)"
-          />
-        </View>
-      ) : null}
-
-      {scanSessions.length > 0 && (
-        <Card style={styles.scanCard}>
-          <Text style={styles.scanTitle}>Scanned prescriptions</Text>
-          {scanSessions.map((session) => (
-            <View key={session.session_id} style={styles.scanRow}>
-              <View style={styles.scanInfo}>
-                <Text style={styles.scanName}>
-                  {session.document_ids.length === 1
-                    ? '1 page'
-                    : `${session.document_ids.length} pages`}
-                  {session.status === 'reviewed' ? ' · reviewed ✓' : ''}
-                </Text>
-                <Text style={styles.scanSub}>{scanStatusCopy(session.status)}</Text>
-              </View>
-              {session.status !== 'reviewed' && session.document_ids.length > 0 && (
-                <Pressable
-                  onPress={() => addMedicationFromScan(session)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add medication from this scan"
-                  style={styles.scanAddBtn}
-                >
-                  <Text style={styles.scanAddText}>Add med</Text>
-                </Pressable>
-              )}
-              <Pressable
-                onPress={() => dismissScanSession(session)}
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss scanned prescription"
-                hitSlop={8}
-                style={styles.scanDismissBtn}
-              >
-                <Text style={styles.scanDismissText}>✕</Text>
-              </Pressable>
-            </View>
-          ))}
-        </Card>
-      )}
-
-      <Card style={styles.tabCard}>
-        <View style={styles.tabRow}>
-          <Chip
-            label={`Active (${activeMedications.length})`}
-            size="large"
-            selected={selectedTab === 'active'}
-            onPress={() => setSelectedTab('active')}
-            accessibilityLabel="Show active medications"
-          />
-          <Chip
-            label="Today's Schedule"
-            size="large"
-            selected={selectedTab === 'schedule'}
-            onPress={() => setSelectedTab('schedule')}
-            accessibilityLabel="Show today's schedule"
-          />
-          <Chip
-            label="History"
-            size="large"
-            selected={selectedTab === 'history'}
-            onPress={() => setSelectedTab('history')}
-            accessibilityLabel="Show medication history"
-          />
-        </View>
-      </Card>
-
-      {/* Content */}
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -473,14 +588,125 @@ export default function MedicationsScreen() {
               refetchMedications();
               refetchSchedule();
             }}
-            tintColor={GV.cta}
+            tintColor="#FFFFFF"
           />
         }
       >
+        {/* Reference hero: big centered title, one helper. */}
+        <Text style={styles.headline}>Medications.</Text>
+        <Text style={styles.sub} numberOfLines={2}>{sub}</Text>
+
+        {todayTotal > 0 ? (
+          <View style={styles.progressWrap} accessibilityLabel={`${todayTaken} of ${todayTotal} doses taken`}>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { flex: todayPct }]} />
+              <View style={{ flex: Math.max(0, 1 - todayPct) }} />
+            </View>
+          </View>
+        ) : null}
+
+        <NavySegmented
+          value={selectedTab}
+          onChange={setSelectedTab}
+          tabs={[
+            { key: 'active', label: `Active · ${activeMedications.length}` },
+            { key: 'schedule', label: `Today · ${todayTaken}/${todayTotal}` },
+            { key: 'history', label: 'History' },
+          ]}
+        />
+
+        <View style={styles.actionRow}>
+          <Pressable
+            onPress={openAdd}
+            accessibilityRole="button"
+            accessibilityLabel="Add medication"
+            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.addBtnText}>Add</Text>
+          </Pressable>
+          <Pressable
+            onPress={openScanner}
+            accessibilityRole="button"
+            accessibilityLabel="Scan prescription pages"
+            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.scanBtnText}>Scan prescription</Text>
+          </Pressable>
+        </View>
+
+        {__DEV__ ? (
+          <View style={styles.devRow}>
+            <Pressable
+              onPress={() => void previewReminder()}
+              accessibilityRole="button"
+              accessibilityLabel="Preview medication reminder (development only)"
+              style={styles.devHit}
+            >
+              <Text style={styles.devText}>Preview reminder</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('SattsTest')}
+              accessibilityRole="button"
+              accessibilityLabel="Open isolated sanoTTS voice test (development only)"
+              style={styles.devHit}
+            >
+              <Text style={styles.devText}>Voice test</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('VoiceTurn')}
+              accessibilityRole="button"
+              accessibilityLabel="Open isolated turn-based voice test (development only)"
+              style={styles.devHit}
+            >
+              <Text style={styles.devText}>Voice turn</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {scanSessions.length > 0 && (
+          <View style={styles.scanCard}>
+            <Text style={styles.scanTitle}>Scanned prescriptions</Text>
+            {scanSessions.map((session) => (
+              <View key={session.session_id} style={styles.scanRow}>
+                <View style={styles.scanInfo}>
+                  <Text style={styles.scanName}>
+                    {session.document_ids.length === 1
+                      ? '1 page'
+                      : `${session.document_ids.length} pages`}
+                    {session.status === 'reviewed' ? ' · reviewed ✓' : ''}
+                  </Text>
+                  <Text style={styles.scanSub}>{scanStatusCopy(session.status)}</Text>
+                </View>
+                {session.status !== 'reviewed' && session.document_ids.length > 0 && (
+                  <Pressable
+                    onPress={() => addMedicationFromScan(session)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add medication from this scan"
+                    hitSlop={8}
+                    style={({ pressed }) => [styles.scanAddBtn, pressed && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.scanAddText}>Add med</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => dismissScanSession(session)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss scanned prescription"
+                  hitSlop={8}
+                  style={styles.scanDismissBtn}
+                >
+                  <Text style={styles.scanDismissText}>✕</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+
         {selectedTab === 'active' && (
-          <ActiveMedicationsTab
+          <ActiveTilesTab
             medications={activeMedications}
             isLoading={medicationsLoading}
+            onAdd={openAdd}
             onEdit={(med) => {
               setEditingMedication(med);
               setShowAddModal(true);
@@ -500,7 +726,7 @@ export default function MedicationsScreen() {
         )}
 
         {selectedTab === 'history' && (
-          <HistoryTab medications={medications} />
+          <HistoryTab medications={medications} onResume={handleResumeMedication} />
         )}
       </ScrollView>
 
@@ -540,11 +766,12 @@ export default function MedicationsScreen() {
   );
 }
 
-// ── Active Medications Tab ──
+// ── Active tiles tab (reference 2-col grid) ──
 
-function ActiveMedicationsTab({
+function ActiveTilesTab({
   medications,
   isLoading,
+  onAdd,
   onEdit,
   onPause,
   onResume,
@@ -552,15 +779,18 @@ function ActiveMedicationsTab({
 }: {
   medications: Medication[];
   isLoading: boolean;
+  onAdd: () => void;
   onEdit: (med: Medication) => void;
   onPause: (med: Medication) => void;
   onResume: (med: Medication) => void;
   onStop: (med: Medication) => void;
 }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={GV.cta} />
+        <ActivityIndicator size="large" color="#FFFFFF" />
         <HealthFact style={styles.medFact} />
       </View>
     );
@@ -568,127 +798,56 @@ function ActiveMedicationsTab({
 
   if (medications.length === 0) {
     return (
-      <Card style={styles.emptyCard}>
-        <Text style={styles.emptyTitle}>No Active Medications</Text>
+      <View style={styles.emptyWrap}>
+        <Text style={styles.emptyTitle}>No active medications</Text>
         <Text style={styles.emptyText}>
           Add your medications to track doses and schedules.
         </Text>
-      </Card>
+        <Pressable
+          onPress={onAdd}
+          accessibilityRole="button"
+          accessibilityLabel="Add medication"
+          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.addBtnText}>Add medication</Text>
+        </Pressable>
+      </View>
     );
   }
 
+  const rows: Medication[][] = [];
+  for (let i = 0; i < medications.length; i += 2) {
+    rows.push(medications.slice(i, i + 2));
+  }
+
   return (
-    <View style={styles.medicationsList}>
-      {medications.map((medication) => (
-        <MedicationCard
-          key={medication.medication_id}
-          medication={medication}
-          onEdit={() => onEdit(medication)}
-          onPause={() => onPause(medication)}
-          onResume={() => onResume(medication)}
-          onStop={() => onStop(medication)}
-        />
+    <View style={styles.grid} accessibilityRole="list">
+      {rows.map((row, r) => (
+        <View key={r} style={styles.row}>
+          {row.map((med) => {
+            const globalIndex = r * 2 + row.indexOf(med);
+            return (
+              <MedTile
+                key={med.medication_id}
+                index={globalIndex}
+                medication={med}
+                fullWidth={row.length === 1}
+                expanded={expandedId === med.medication_id}
+                onToggle={() => setExpandedId((cur) => (cur === med.medication_id ? null : med.medication_id))}
+                onEdit={() => { setExpandedId(null); onEdit(med); }}
+                onPause={() => { setExpandedId(null); onPause(med); }}
+                onResume={() => { setExpandedId(null); onResume(med); }}
+                onStop={() => { setExpandedId(null); onStop(med); }}
+              />
+            );
+          })}
+        </View>
       ))}
     </View>
   );
 }
 
-// ── Medication Card ──
-
-function MedicationCard({
-  medication,
-  onEdit,
-  onPause,
-  onResume,
-  onStop,
-}: {
-  medication: Medication;
-  onEdit: () => void;
-  onPause: () => void;
-  onResume: () => void;
-  onStop: () => void;
-}) {
-  const [showActions, setShowActions] = useState(false);
-
-  const statusDot = STATUS_DOTS[medication.status];
-  const frequencyLabel = FREQUENCY_LABELS[medication.frequency] || medication.frequency;
-
-  return (
-    <Card style={styles.medicationCard}>
-      <Pressable
-        style={styles.medicationHeader}
-        onPress={() => setShowActions(!showActions)}
-        accessibilityRole="button"
-        accessibilityLabel={`${medication.name} details`}
-        accessibilityState={{ expanded: showActions }}
-      >
-        <View style={styles.medicationInfo}>
-          <View style={styles.medicationNameRow}>
-            <View style={[styles.statusDot, { backgroundColor: statusDot }]} />
-            <Text style={styles.medicationName}>{medication.name}</Text>
-            <Text style={styles.statusText}>
-              {getStatusLabel(medication.status)}
-            </Text>
-          </View>
-
-          <View style={styles.medicationDetails}>
-            {medication.strength && (
-              <Text style={styles.medicationDetail}>
-                {medication.strength}{medication.strength_unit ? ` ${medication.strength_unit}` : ''}
-              </Text>
-            )}
-            {medication.dose_amount && (
-              <Text style={styles.medicationDetail}>
-                {medication.dose_amount}{medication.dose_unit ? ` ${medication.dose_unit}` : ''}
-              </Text>
-            )}
-            <Text style={styles.medicationDetail}>{frequencyLabel}</Text>
-          </View>
-
-          {medication.scheduled_times && medication.scheduled_times.length > 0 && (
-            <View style={styles.scheduleRow}>
-              <Text style={styles.scheduleLabel}>Schedule:</Text>
-              <Text style={styles.scheduleTimes}>
-                {medication.scheduled_times.map(formatTime).join(', ')}
-              </Text>
-            </View>
-          )}
-
-          {medication.start_date && (
-            <View style={styles.dateRow}>
-              <Text style={styles.dateLabel}>Started:</Text>
-              <Text style={styles.dateValue}>{formatDate(medication.start_date)}</Text>
-              {medication.end_date && (
-                <>
-                  <Text style={styles.dateSeparator}>→</Text>
-                  <Text style={styles.dateValue}>{formatDate(medication.end_date)}</Text>
-                </>
-              )}
-            </View>
-          )}
-        </View>
-
-        <Text style={styles.chevron}>{showActions ? '‹' : '›'}</Text>
-      </Pressable>
-
-      {showActions && (
-        <View style={styles.medicationActions}>
-          <Chip label="Edit" size="large" selected={false} onPress={onEdit} accessibilityLabel={`Edit ${medication.name}`} />
-
-          {medication.status === 'ACTIVE' ? (
-            <Chip label="Pause" size="large" selected={false} onPress={onPause} accessibilityLabel={`Pause ${medication.name}`} />
-          ) : medication.status === 'PAUSED' ? (
-            <Chip label="Resume" size="large" selected={false} onPress={onResume} accessibilityLabel={`Resume ${medication.name}`} />
-          ) : null}
-
-          <Chip label="Stop" size="large" selected={false} onPress={onStop} accessibilityLabel={`Stop ${medication.name}`} />
-        </View>
-      )}
-    </Card>
-  );
-}
-
-// ── Schedule Tab ──
+// ── Schedule Tab (full-width dark tiles, reference radius) ──
 
 function ScheduleTab({
   schedule,
@@ -702,7 +861,7 @@ function ScheduleTab({
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={GV.cta} />
+        <ActivityIndicator size="large" color="#FFFFFF" />
         <HealthFact style={styles.medFact} />
       </View>
     );
@@ -710,12 +869,12 @@ function ScheduleTab({
 
   if (schedule.length === 0) {
     return (
-      <Card style={styles.emptyCard}>
-        <Text style={styles.emptyTitle}>No Medications Scheduled</Text>
+      <View style={styles.emptyWrap}>
+        <Text style={styles.emptyTitle}>Nothing scheduled today</Text>
         <Text style={styles.emptyText}>
           Add medications to see your daily schedule.
         </Text>
-      </Card>
+      </View>
     );
   }
 
@@ -727,20 +886,29 @@ function ScheduleTab({
     return acc;
   }, {} as Record<string, DailyMedicationSchedule[]>);
 
+  const sortedTimes = Object.keys(groupedByTime).sort((a, b) => a.localeCompare(b));
+
   return (
     <View style={styles.scheduleContainer}>
-      {Object.entries(groupedByTime).map(([time, items]) => (
-        <Card key={time} style={styles.timeGroupCard}>
-          <SectionHeader title={formatTime(time)} />
-          {items.map((item) => (
-            <ScheduleItem
-              key={`${item.medication.medication_id}-${item.scheduled_time}`}
-              item={item}
-              onTakeDose={() => onTakeDose(item.medication as any, item.scheduled_time)}
-            />
-          ))}
-        </Card>
-      ))}
+      {sortedTimes.map((time) => {
+        const items = groupedByTime[time];
+        const done = items.filter((i) => i.taken).length;
+        return (
+          <View key={time} style={styles.timeGroup}>
+            <View style={styles.timeHead}>
+              <Text style={styles.timeTitle}>{formatTime(time)}</Text>
+              <Text style={styles.timeCount}>{done}/{items.length} taken</Text>
+            </View>
+            {items.map((item) => (
+              <ScheduleItem
+                key={`${item.medication.medication_id}-${item.scheduled_time}`}
+                item={item}
+                onTakeDose={() => onTakeDose(item.medication as any, item.scheduled_time)}
+              />
+            ))}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -759,15 +927,15 @@ function ScheduleItem({
   return (
     <View style={styles.scheduleItem}>
       <View style={styles.scheduleItemInfo}>
-        <Text style={styles.scheduleItemName}>{medication.name}</Text>
-        <Text style={styles.scheduleItemDetails}>
+        <Text style={styles.scheduleItemName} numberOfLines={1}>{medication.name}</Text>
+        <Text style={styles.scheduleItemDetails} numberOfLines={1}>
           {medication.strength}{medication.strength_unit ? ` ${medication.strength_unit}` : ''}
-          {medication.dose_amount ? ` • ${medication.dose_amount}${medication.dose_unit ? ` ${medication.dose_unit}` : ''}` : ''}
+          {medication.dose_amount ? ` · ${medication.dose_amount}${medication.dose_unit ? ` ${medication.dose_unit}` : ''}` : ''}
         </Text>
       </View>
 
       {taken ? (
-        <View style={styles.takenBadge}>
+        <View style={styles.takenBadge} accessibilityLabel={`${medication.name} taken`}>
           <View style={styles.takenIcon}>
             <Text style={styles.takenGlyph}>✓</Text>
           </View>
@@ -781,7 +949,15 @@ function ScheduleItem({
           </View>
         </View>
       ) : (
-        <Button title="Take" onPress={onTakeDose} size="small" accessibilityLabel={`Take ${medication.name}`} />
+        <Pressable
+          onPress={onTakeDose}
+          accessibilityRole="button"
+          accessibilityLabel={`Take ${medication.name}`}
+          hitSlop={4}
+          style={({ pressed }) => [styles.takeBtn, pressed && { opacity: 0.8 }]}
+        >
+          <Text style={styles.takeBtnText}>Take</Text>
+        </Pressable>
       )}
     </View>
   );
@@ -789,62 +965,83 @@ function ScheduleItem({
 
 // ── History Tab ──
 
-function HistoryTab({ medications }: { medications: Medication[] }) {
+function HistoryTab({ medications, onResume }: { medications: Medication[]; onResume: (med: Medication) => void }) {
   const [selectedMedication, setSelectedMedication] = useState<string | null>(null);
   const { data: history, isLoading } = useMedicationTakenEvents(selectedMedication || '');
+  const pausedMeds = useMemo(() => medications.filter((m) => m.status === 'PAUSED'), [medications]);
 
   if (medications.length === 0) {
     return (
-      <Card style={styles.emptyCard}>
-        <Text style={styles.emptyTitle}>No Medication History</Text>
+      <View style={styles.emptyWrap}>
+        <Text style={styles.emptyTitle}>No history yet</Text>
         <Text style={styles.emptyText}>
           Add medications to track your history.
         </Text>
-      </Card>
+      </View>
     );
   }
 
   return (
     <View style={styles.historyContainer}>
-      <Card style={styles.pickerCard}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.pickerRow}>
+      {pausedMeds.length > 0 ? (
+        <View style={styles.historyCard}>
+          <Text style={styles.pausedTitle}>Paused · resume anytime</Text>
+          {pausedMeds.map((med) => (
+            <View key={med.medication_id} style={styles.historyItem}>
+              <View style={styles.historyItemInfo}>
+                <Text style={styles.historyItemName} numberOfLines={1}>{med.name}</Text>
+                <Text style={styles.historyItemDate}>Paused</Text>
+              </View>
+              <Pressable
+                onPress={() => onResume(med)}
+                accessibilityRole="button"
+                accessibilityLabel={`Resume ${med.name}`}
+                hitSlop={4}
+                style={({ pressed }) => [styles.takeBtn, pressed && { opacity: 0.8 }]}
+              >
+                <Text style={styles.takeBtnText}>Resume</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.pickerRow}>
+          <Chip
+            label="All"
+            size="large"
+            selected={!selectedMedication}
+            onPress={() => setSelectedMedication(null)}
+            accessibilityLabel="Show all medication history"
+          />
+          {medications.map((med) => (
             <Chip
-              label="All"
+              key={med.medication_id}
+              label={med.name}
               size="large"
-              selected={!selectedMedication}
-              onPress={() => setSelectedMedication(null)}
-              accessibilityLabel="Show all medication history"
+              selected={selectedMedication === med.medication_id}
+              onPress={() => setSelectedMedication(med.medication_id)}
+              accessibilityLabel={`Show history for ${med.name}`}
             />
-            {medications.map((med) => (
-              <Chip
-                key={med.medication_id}
-                label={med.name}
-                size="large"
-                selected={selectedMedication === med.medication_id}
-                onPress={() => setSelectedMedication(med.medication_id)}
-                accessibilityLabel={`Show history for ${med.name}`}
-              />
-            ))}
-          </View>
-        </ScrollView>
-      </Card>
+          ))}
+        </View>
+      </ScrollView>
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={GV.cta} />
+          <ActivityIndicator size="large" color="#FFFFFF" />
           <HealthFact style={styles.medFact} />
         </View>
       ) : history.length === 0 ? (
-        <Card style={styles.emptyCard}>
+        <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>No dose history recorded.</Text>
-        </Card>
+        </View>
       ) : (
-        <Card style={styles.historyCard}>
+        <View style={styles.historyCard}>
           {history.map((event) => (
             <HistoryItem key={event.event_id} event={event} medications={medications} />
           ))}
-        </Card>
+        </View>
       )}
     </View>
   );
@@ -866,7 +1063,7 @@ function HistoryItem({
   return (
     <View style={styles.historyItem}>
       <View style={styles.historyItemInfo}>
-        <Text style={styles.historyItemName}>{medication?.name || 'Unknown'}</Text>
+        <Text style={styles.historyItemName} numberOfLines={1}>{medication?.name || 'Unknown'}</Text>
         <Text style={styles.historyItemDate}>
           {new Date(event.taken_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
           {' at '}
@@ -874,7 +1071,7 @@ function HistoryItem({
         </Text>
       </View>
       <View style={styles.historyStatus}>
-        <View style={[styles.statusDot, { backgroundColor: statusDot }]} />
+        <View style={[styles.statusDotSm, { backgroundColor: statusDot }]} />
         <Text style={styles.historyStatusText}>
           {event.status}
         </Text>
@@ -883,7 +1080,7 @@ function HistoryItem({
   );
 }
 
-// ── Add/Edit Medication Modal ──
+// ── Add/Edit Medication Modal (sheet over navy; white wells like Chat) ──
 
 function AddMedicationModal({
   visible,
@@ -999,9 +1196,6 @@ function AddMedicationModal({
             <Text style={styles.modalCancel}>Cancel</Text>
           </Pressable>
           <Text style={styles.modalTitle}>{medication ? 'Edit Medication' : 'Add Medication'}</Text>
-          {sourceDocumentId && !medication ? (
-            <Text style={styles.scanLinkHint}>Linked to your scanned prescription. Review each field before saving.</Text>
-          ) : null}
           <Button
             title={saving ? 'Saving...' : 'Save'}
             onPress={() => void handleSave()}
@@ -1010,6 +1204,9 @@ function AddMedicationModal({
             accessibilityLabel="Save medication"
           />
         </View>
+        {sourceDocumentId && !medication ? (
+          <Text style={styles.scanLinkHint}>Linked to your scanned prescription. Review each field before saving.</Text>
+        ) : null}
 
         <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentContainer}>
           <Card style={styles.fieldCard}>
@@ -1098,7 +1295,6 @@ function AddMedicationModal({
                   label={ROUTE_LABELS[r]}
                   size="large"
                   selected={route === r}
-                  color={TILE_TONES.weight[0]}
                   onPress={() => setRoute((prev) => (prev === r ? '' : r))}
                   accessibilityLabel={`Route ${ROUTE_LABELS[r]}`}
                 />
@@ -1115,7 +1311,6 @@ function AddMedicationModal({
                   label={FREQUENCY_LABELS[freq]}
                   size="large"
                   selected={frequency === freq}
-                  color={TILE_TONES.discipline[0]}
                   onPress={() => setFrequency(freq)}
                   accessibilityLabel={`Frequency ${FREQUENCY_LABELS[freq]}`}
                 />
@@ -1219,116 +1414,210 @@ function AddMedicationModal({
   );
 }
 
-// ── STYLES ──
+// ── STYLES — GoalsStep reference system ─────────────────────────────────
+// Backdrop #20263D. Tiles radius 8 with duotone art + black 0.22.
+// Header centered: overline teal / headline white 32 / sub fog.
+// Pills only for segmented + buttons. Times tabular-nums.
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: NAVY,
   },
-  title: {
-    ...TYPE.display,
-    color: GV.card,
-    textAlign: 'center',
-    marginTop: 8,
+  content: {
+    flex: 1,
   },
-  overline: {
+  contentContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 40,
+    gap: 12,
+  },
+  headline: {
     fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 3,
-    color: GV.teal,
+    fontSize: 32,
+    lineHeight: 38,
+    color: '#FFFFFF',
     textAlign: 'center',
-    marginTop: 8,
+    letterSpacing: -0.3,
   },
-  subtitle: {
+  sub: {
     ...TYPE.body,
     color: GV.fog,
     textAlign: 'center',
-    marginBottom: 8,
+    alignSelf: 'center',
+    maxWidth: 330,
+    fontVariant: ['tabular-nums'],
   },
-  addWrap: {
-    paddingHorizontal: SPACE.screenH,
-    marginBottom: SPACE.cardGap,
+  progressWrap: {
+    alignItems: 'center',
+    paddingTop: 2,
+  },
+  progressTrack: {
     flexDirection: 'row',
-    gap: 8,
+    width: 160,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    overflow: 'hidden',
   },
-  scanCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-    marginHorizontal: SPACE.screenH,
-    marginBottom: SPACE.cardGap,
+  progressFill: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 2,
+  },
+  segmentTrack: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 9999,
+    padding: 4,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+    marginTop: 4,
+  },
+  segment: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 9999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  segmentSelected: {
+    backgroundColor: '#FFFFFF',
+  },
+  segmentText: {
+    fontFamily: FONT.semi,
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(255, 255, 255, 0.75)',
+  },
+  segmentTextSelected: {
+    color: NAVY,
+  },
+  actionRow: {
+    flexDirection: 'row',
     gap: 12,
   },
+  addBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 9999,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  addBtnText: {
+    fontFamily: FONT.semi,
+    fontSize: 15,
+    lineHeight: 20,
+    color: NAVY,
+  },
+  scanBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 9999,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  scanBtnText: {
+    fontFamily: FONT.semi,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
+  },
+  devRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    justifyContent: 'center',
+  },
+  devHit: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  devText: {
+    fontFamily: FONT.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  scanCard: {
+    backgroundColor: TILE_BG,
+    borderRadius: 8,
+    padding: 16,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+  },
   scanTitle: {
-    ...TYPE.title,
-    color: GV.ink,
+    fontFamily: FONT.semi,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
   scanRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingVertical: 12,
+    minHeight: 44,
+    borderTopWidth: 1,
+    borderTopColor: HAIRLINE_ON_NAVY,
   },
   scanInfo: {
     flex: 1,
     gap: 2,
   },
   scanName: {
-    ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#FFFFFF',
   },
   scanSub: {
-    ...TYPE.caption,
-    color: GV.muted,
+    fontFamily: FONT.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: GV.fog,
   },
   scanAddBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: GV.cta,
+    borderColor: GV.teal,
   },
   scanAddText: {
-    ...TYPE.caption,
     fontFamily: FONT.semi,
-    color: GV.cta,
+    fontSize: 13,
+    lineHeight: 18,
+    color: GV.teal,
   },
   scanDismissBtn: {
-    minWidth: 32,
-    minHeight: 32,
+    minWidth: 44,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   scanDismissText: {
-    ...TYPE.body,
-    color: GV.muted,
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.6)',
   },
   scanLinkHint: {
     ...TYPE.caption,
-    color: GV.cta,
-    marginTop: 4,
-  },
-  tabCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-    marginHorizontal: SPACE.screenH,
-    marginBottom: SPACE.cardGap,
-  },
-  tabRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingHorizontal: SPACE.screenH,
-    paddingBottom: 40,
-    gap: SPACE.cardGap,
+    color: GV.teal,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    textAlign: 'center',
   },
   loadingContainer: {
     alignItems: 'center',
@@ -1339,136 +1628,162 @@ const styles = StyleSheet.create({
   },
   medFact: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     textAlign: 'center',
     maxWidth: 300,
   },
-  emptyCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-    alignItems: 'center',
-    gap: 8,
+  // Reference grid — each cell is a relative wrap so the action
+  // menu can float ABOVE its own tile without resizing it.
+  grid: {
+    gap: 12,
+    marginTop: 4,
   },
-  emptyTitle: {
-    ...TYPE.title,
-    color: GV.ink,
-    textAlign: 'center',
-  },
-  emptyText: {
-    ...TYPE.body,
-    color: GV.body,
-    textAlign: 'center',
-  },
-  medicationsList: {
-    gap: SPACE.cardGap,
-  },
-  medicationCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-  },
-  medicationHeader: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 44,
+    gap: 12,
   },
-  medicationInfo: {
+  tileWrap: {
+    flex: 1,
+    position: 'relative',
+  },
+  tileWrapFull: {
     flex: 1,
   },
-  medicationNameRow: {
+  tileWrapOpen: {
+    zIndex: 10,
+    elevation: 8,
+  },
+  // Menu sits directly ON the tile (zero gap): full-cover dim
+  // overlay with the three actions centered on the box.
+  tileOverlay: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    right: 2,
+    bottom: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(10, 14, 30, 0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  popoverMenu: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    justifyContent: 'space-evenly',
+    gap: 2,
+  },
+  popoverBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  popoverBtnText: {
+    fontFamily: FONT.semi,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#FFFFFF',
+  },
+  tile: {
+    width: '100%',
+    aspectRatio: 1.5,
+    borderRadius: 8,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    backgroundColor: TILE_BG,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    gap: 2,
+  },
+  tileFull: {
+    aspectRatio: undefined,
+    minHeight: 112,
+  },
+  tileOn: {
+    borderColor: GV.teal,
   },
   statusDot: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  medicationName: {
-    ...TYPE.title,
-    color: GV.ink,
-    flex: 1,
+  tileLabel: {
+    fontFamily: FONT.medium,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    paddingHorizontal: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  statusText: {
-    ...TYPE.chip,
-    color: GV.muted,
-    textTransform: 'uppercase',
-    backgroundColor: GV.wash,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 9999,
-    overflow: 'hidden',
+  tileMeta: {
+    fontFamily: FONT.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0, 0, 0, 0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  medicationDetails: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  emptyWrap: {
+    alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    paddingVertical: 24,
   },
-  medicationDetail: {
-    ...TYPE.body,
-    color: GV.body,
-    fontVariant: ['tabular-nums'],
-  },
-  scheduleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  scheduleLabel: {
-    ...TYPE.caption,
-    color: GV.muted,
-  },
-  scheduleTimes: {
-    ...TYPE.body,
-    color: GV.body,
-    fontVariant: ['tabular-nums'],
-  },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  dateLabel: {
-    ...TYPE.caption,
-    color: GV.muted,
-  },
-  dateValue: {
-    ...TYPE.body,
-    color: GV.body,
-    fontVariant: ['tabular-nums'],
-  },
-  dateSeparator: {
-    ...TYPE.body,
-    color: GV.muted,
-  },
-  chevron: {
-    ...TYPE.title,
-    color: GV.muted,
-    minWidth: 44,
+  emptyTitle: {
+    fontFamily: FONT.semi,
+    fontSize: 18,
+    lineHeight: 24,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
-  medicationActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingTop: 12,
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: GV.line,
+  emptyText: {
+    ...TYPE.body,
+    color: GV.fog,
+    textAlign: 'center',
+    maxWidth: 300,
+    marginBottom: 8,
   },
   scheduleContainer: {
-    gap: SPACE.cardGap,
+    gap: 12,
+    marginTop: 4,
   },
-  timeGroupCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-    gap: 0,
+  timeGroup: {
+    backgroundColor: TILE_BG,
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+  },
+  timeHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    gap: 8,
+  },
+  timeTitle: {
+    fontFamily: FONT.semi,
+    fontSize: 18,
+    lineHeight: 24,
+    color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
+  },
+  timeCount: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: GV.fog,
+    fontVariant: ['tabular-nums'],
   },
   scheduleItem: {
     flexDirection: 'row',
@@ -1476,21 +1791,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
     paddingVertical: 12,
-    minHeight: 44,
-    borderBottomWidth: 1,
-    borderBottomColor: GV.line,
+    minHeight: 56,
+    borderTopWidth: 1,
+    borderTopColor: HAIRLINE_ON_NAVY,
   },
   scheduleItemInfo: {
     flex: 1,
+    gap: 2,
   },
   scheduleItemName: {
-    ...TYPE.button,
-    color: GV.ink,
+    fontFamily: FONT.semi,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
   },
   scheduleItemDetails: {
-    ...TYPE.caption,
-    color: GV.body,
+    fontFamily: FONT.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: GV.fog,
     marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
   takenBadge: {
     flexDirection: 'row',
@@ -1499,35 +1820,51 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   takenIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: GV.fx.green,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: GV.teal,
     alignItems: 'center',
     justifyContent: 'center',
   },
   takenGlyph: {
-    ...TYPE.chip,
-    color: GV.card,
+    color: '#06231B',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 16,
   },
   takenTexts: {
     alignItems: 'flex-start',
   },
   takenText: {
-    ...TYPE.chip,
-    color: GV.body,
+    fontFamily: FONT.semi,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#FFFFFF',
   },
   takenTime: {
-    ...TYPE.caption,
-    color: GV.muted,
+    fontFamily: FONT.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: GV.fog,
+    fontVariant: ['tabular-nums'],
+  },
+  takeBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    borderRadius: 9999,
+    backgroundColor: '#FFFFFF',
+  },
+  takeBtnText: {
+    fontFamily: FONT.semi,
+    fontSize: 14,
+    lineHeight: 18,
+    color: NAVY,
   },
   historyContainer: {
-    gap: SPACE.cardGap,
-  },
-  pickerCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    gap: 12,
+    marginTop: 4,
   },
   pickerRow: {
     flexDirection: 'row',
@@ -1535,9 +1872,18 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   historyCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    backgroundColor: TILE_BG,
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+  },
+  pausedTitle: {
+    fontFamily: FONT.semi,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
   historyItem: {
     flexDirection: 'row',
@@ -1545,42 +1891,54 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
     paddingVertical: 12,
-    minHeight: 44,
-    borderBottomWidth: 1,
-    borderBottomColor: GV.line,
+    minHeight: 56,
+    borderTopWidth: 1,
+    borderTopColor: HAIRLINE_ON_NAVY,
   },
   historyItemInfo: {
     flex: 1,
+    gap: 2,
   },
   historyItemName: {
-    ...TYPE.button,
-    color: GV.ink,
+    fontFamily: FONT.semi,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
   },
   historyItemDate: {
-    ...TYPE.caption,
-    color: GV.muted,
+    fontFamily: FONT.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: GV.fog,
     marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
   historyStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
+  statusDotSm: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   historyStatusText: {
-    ...TYPE.chip,
-    color: GV.body,
-    textTransform: 'uppercase',
+    fontFamily: FONT.semi,
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: NAVY,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     paddingVertical: 8,
     minHeight: 56,
   },
@@ -1595,7 +1953,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     ...TYPE.title,
-    color: GV.card,
+    color: '#FFFFFF',
     flex: 1,
     textAlign: 'center',
   },
@@ -1603,24 +1961,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalContentContainer: {
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     paddingBottom: 40,
-    gap: SPACE.cardGap,
+    gap: 12,
   },
   fieldCard: {
     backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    borderRadius: 8,
+    padding: 16,
   },
   fieldLabel: {
-    ...TYPE.caption,
-    color: GV.muted,
-    marginBottom: 8,
+    ...TYPE.button,
+    fontSize: 15,
+    color: GV.ink,
+    marginBottom: 4,
   },
   fieldHint: {
     ...TYPE.caption,
     color: GV.muted,
     marginBottom: 8,
+    lineHeight: 18,
   },
   fieldRow: {
     flexDirection: 'row',

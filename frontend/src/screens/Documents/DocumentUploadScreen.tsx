@@ -25,7 +25,6 @@ import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import { Button, Card } from '@/components';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { StageGradient } from '@/components/StageGradient';
 import {
   useDocuments,
   type ProcessingStage,
@@ -217,11 +216,10 @@ export default function DocumentUploadScreen() {
 
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <StageGradient />
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>
-              {terminal ? 'Document Status' : 'Processing Medical Record'}
+              {terminal ? 'Status' : 'Processing'}
             </Text>
             <Text style={styles.subtitle}>{selectedFile?.name ?? ''}</Text>
           </View>
@@ -324,6 +322,8 @@ export default function DocumentUploadScreen() {
                   variant="outline"
                   onPress={handleDone}
                   fullWidth
+                  style={styles.outlineBtn}
+                  textStyle={styles.outlineBtnText}
                 />
               )}
             </View>
@@ -342,23 +342,33 @@ export default function DocumentUploadScreen() {
   // =====================================================================
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StageGradient />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Add Medical Record</Text>
-          <Text style={styles.subtitle}>
-            Upload a PDF or image of a medical document for OCR processing.
-          </Text>
+          <Text style={styles.title}>Records</Text>
         </View>
 
         {!selectedFile ? (
-          <Pressable style={styles.dropZone} onPress={pickFile}>
-            <Text style={styles.dropIcon}>+</Text>
-            <Text style={styles.dropTitle}>Tap to choose a file</Text>
-            <Text style={styles.dropSubtitle}>
-              PDF, PNG, JPG, or JPEG{'\n'}Maximum {formatFileSize(MAX_FILE_SIZE)}
+          <View style={styles.choiceWrap}>
+            <Pressable
+              onPress={pickFile}
+              accessibilityRole="button"
+              accessibilityLabel="Upload a new document"
+              style={({ pressed }) => [styles.choicePrimary, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.choicePrimaryText}>Upload new</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('Documents' as never)}
+              accessibilityRole="button"
+              accessibilityLabel="View past uploads"
+              style={({ pressed }) => [styles.choiceSecondary, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.choiceSecondaryText}>Past uploads</Text>
+            </Pressable>
+            <Text style={styles.choiceHint}>
+              PDF, PNG, JPG · max {formatFileSize(MAX_FILE_SIZE)}
             </Text>
-          </Pressable>
+          </View>
         ) : (
           <Card padding="md" style={styles.previewCard}>
             <View style={styles.previewRow}>
@@ -398,15 +408,9 @@ export default function DocumentUploadScreen() {
 
         <View style={styles.actions}>
           <Button
-            title="Upload & Process"
+            title="Upload"
             onPress={handleUpload}
             disabled={!selectedFile || anotherUploadRunning}
-            fullWidth
-          />
-          <Button
-            title="Cancel"
-            variant="ghost"
-            onPress={() => navigation.goBack()}
             fullWidth
           />
         </View>
@@ -424,81 +428,134 @@ export default function DocumentUploadScreen() {
 // Styles
 // ---------------------------------------------------------------------------
 
+const NAVY = '#080A11';
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: GV.stage },
+  container: { flex: 1, backgroundColor: NAVY },
   content: {
-    paddingHorizontal: SPACE.screenH,
+    flexGrow: 1,
+    paddingHorizontal: 24,
     paddingBottom: 32,
-    gap: SPACE.cardGap,
+    gap: 12,
   },
-  header: { paddingVertical: 16 },
-  title: { ...TYPE.display, color: '#FFFFFF' },
+  header: { paddingVertical: 16, alignItems: 'center' },
+  title: {
+    fontFamily: FONT.semi,
+    fontSize: 32,
+    lineHeight: 38,
+    letterSpacing: -0.3,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
   subtitle: {
     ...TYPE.body,
     color: GV.fog,
+    textAlign: 'center',
     marginTop: 8,
   },
+  outlineBtn: {
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  outlineBtnText: {
+    color: '#FFFFFF',
+  },
 
-  // File picker — flat white card
-  dropZone: {
-    borderRadius: SPACE.rCard,
-    backgroundColor: GV.card,
-    paddingVertical: 48,
-    paddingHorizontal: SPACE.cardPad,
+  // Two choices, middle of the screen
+  choiceWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 32,
+  },
+  choicePrimary: {
+    minHeight: 56,
+    borderRadius: 9999,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
-  dropIcon: { ...TYPE.display, color: GV.muted },
-  dropTitle: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink },
-  dropSubtitle: {
+  choicePrimaryText: {
+    ...TYPE.button,
+    fontSize: 16,
+    color: NAVY,
+  },
+  choiceSecondary: {
+    minHeight: 56,
+    borderRadius: 9999,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choiceSecondaryText: {
+    ...TYPE.button,
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+  choiceHint: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
 
   // Preview
-  previewCard: { marginTop: 8 },
+  previewCard: {
+    marginTop: 8,
+    backgroundColor: TILE_BG,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   previewIcon: {
     width: 52,
     height: 52,
-    borderRadius: 12,
-    backgroundColor: GV.wash,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  previewIconText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.fx.blue },
+  previewIconText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.teal },
   previewInfo: { flex: 1, gap: 2 },
-  previewName: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink },
-  previewMeta: { ...TYPE.caption, color: GV.muted },
+  previewName: { ...TYPE.body, fontFamily: FONT.semi, color: '#FFFFFF' },
+  previewMeta: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
   changeFile: {
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: GV.line,
+    borderTopColor: HAIRLINE_ON_NAVY,
     alignItems: 'center',
   },
-  changeFileText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.cta },
+  changeFileText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.teal },
 
-  // Errors — flat wash well
+  // Errors — dark well
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   errorIcon: { ...TYPE.title, color: GV.danger },
   errorText: { ...TYPE.caption, color: GV.danger, flex: 1 },
-  errorInfo: { ...TYPE.caption, color: GV.body, flex: 1 },
+  errorInfo: { ...TYPE.caption, color: GV.fog, flex: 1 },
 
   // Actions
   actions: { gap: 8, marginTop: 8 },
 
   // Processing
-  processingCard: { gap: 16 },
+  processingCard: {
+    gap: 16,
+    backgroundColor: TILE_BG,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
   stageRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -521,8 +578,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   stageLabel: { ...TYPE.body },
-  stageLabelActive: { color: GV.ink, fontFamily: FONT.semi },
-  stageLabelInactive: { color: GV.muted },
+  stageLabelActive: { color: '#FFFFFF', fontFamily: FONT.semi },
+  stageLabelInactive: { color: GV.fog },
   stageSpinner: { marginLeft: 8 },
   stageLine: {
     position: 'absolute',

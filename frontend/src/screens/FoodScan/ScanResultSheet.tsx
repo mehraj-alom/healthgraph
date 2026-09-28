@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { useToast } from '@/components/Toast';
 import { Chip } from '@/components';
@@ -39,6 +39,43 @@ function kcalRange(totalKcal: number, confidence: FoodScanConfidence): string {
 
 function scale(value: number, factor: number): number {
   return Math.round(value * factor * 10) / 10;
+}
+
+/** Tap-to-type grams: shows the value, opens the keyboard on tap,
+ *  commits a clamped number on submit or blur. */
+function GramInput({
+  grams,
+  label,
+  onCommit,
+}: {
+  grams: number;
+  label: string;
+  onCommit: (grams: number) => void;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const commit = (raw: string) => {
+    const parsed = parseInt(raw.replace(/[^0-9]/g, ''), 10);
+    if (Number.isFinite(parsed)) {
+      onCommit(Math.min(5000, Math.max(MIN_G, parsed)));
+    }
+    setText(null);
+  };
+  return (
+    <TextInput
+      value={text ?? String(grams)}
+      onChangeText={setText}
+      onSubmitEditing={(e) => commit(e.nativeEvent.text)}
+      onBlur={() => {
+        if (text != null) commit(text);
+      }}
+      keyboardType="number-pad"
+      returnKeyType="done"
+      maxLength={5}
+      accessibilityRole="spinbutton"
+      accessibilityLabel={`${label} grams, tap to type`}
+      style={styles.stepValue}
+    />
+  );
 }
 
 export default function ScanResultSheet({
@@ -206,7 +243,13 @@ export default function ScanResultSheet({
               >
                 <Text style={styles.stepGlyph}>−</Text>
               </Pressable>
-              <Text style={styles.stepValue}>{row.grams}g</Text>
+              <GramInput
+                grams={row.grams}
+                label={row.item.label}
+                onCommit={(g) =>
+                  setGrams((prev) => prev.map((v, j) => (j === i ? g : v)))
+                }
+              />
               <Pressable
                 onPress={() => adjust(i, STEP_G)}
                 accessibilityRole="button"
@@ -261,12 +304,18 @@ export default function ScanResultSheet({
   );
 }
 
+const NAVY = '#080A11';
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
 const styles = StyleSheet.create({
   sheet: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-    gap: SPACE.cardGap,
+    backgroundColor: TILE_BG,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderRadius: 8,
+    padding: 16,
+    gap: 12,
   },
   headRow: {
     flexDirection: 'row',
@@ -276,8 +325,8 @@ const styles = StyleSheet.create({
   thumb: {
     width: 56,
     height: 56,
-    borderRadius: 16,
-    backgroundColor: GV.wash,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   headText: {
     flex: 1,
@@ -285,7 +334,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...TYPE.title,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   confRow: {
     flexDirection: 'row',
@@ -299,42 +348,43 @@ const styles = StyleSheet.create({
   },
   confText: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
   },
   retake: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: SPACE.rPill,
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   retakeText: {
     ...TYPE.chip,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   hero: {
     fontFamily: FONT.semi,
     fontSize: 40,
     lineHeight: 46,
-    color: GV.ink,
+    color: '#FFFFFF',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
   range: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
   sectionLabel: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 2,
-    color: GV.teal,
+    ...TYPE.title,
+    fontSize: 17,
+    color: '#FFFFFF',
     marginTop: 4,
   },
   sectionHint: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
   },
   chips: {
     flexDirection: 'row',
@@ -348,8 +398,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: GV.wash,
-    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -370,12 +420,12 @@ const styles = StyleSheet.create({
   itemLabel: {
     ...TYPE.button,
     fontSize: 15,
-    color: GV.ink,
+    color: '#FFFFFF',
     flex: 1,
   },
   itemMacros: {
     ...TYPE.caption,
-    color: GV.body,
+    color: GV.fog,
     fontVariant: ['tabular-nums'],
   },
   stepper: {
@@ -384,10 +434,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   stepBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: GV.card,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -395,18 +445,23 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semi,
     fontSize: 18,
     lineHeight: 22,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   stepValue: {
     ...TYPE.chip,
-    color: GV.ink,
-    minWidth: 44,
+    color: '#FFFFFF',
+    minWidth: 56,
+    minHeight: 44,
     textAlign: 'center',
+    textAlignVertical: 'center',
     fontVariant: ['tabular-nums'],
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 4,
   },
   note: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
   },
   error: {
     ...TYPE.caption,

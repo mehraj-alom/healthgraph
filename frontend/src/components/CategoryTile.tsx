@@ -23,6 +23,10 @@ interface CategoryTileProps {
   fullWidth?: boolean;
   /** Compact rows (mode toggles): shorter tile, single-line hint. */
   compact?: boolean;
+  /** Center glyph + label in the middle of the tile. */
+  center?: boolean;
+  /** Larger label for two-choice pickers. */
+  large?: boolean;
 }
 
 export function CategoryTile({
@@ -36,8 +40,13 @@ export function CategoryTile({
   surface = 'ink',
   fullWidth = false,
   compact = false,
+  center = false,
+  large = false,
 }: CategoryTileProps) {
   const gid = `ct-${label.replace(/[^a-z0-9]/gi, '').slice(0, 12)}`;
+  // Identical pair = flat skill fill: paint it directly so the colour
+  // covers the tile edge to edge with no gradient banding.
+  const solid = surface === 'ink' && tone[0] === tone[1] ? tone[0] : undefined;
   return (
     <Pressable
       onPress={onPress}
@@ -48,12 +57,17 @@ export function CategoryTile({
         styles.tile,
         compact && styles.tileCompact,
         fullWidth && styles.tileFull,
+        center && styles.tileCenter,
         surface === 'wash' && styles.tileWash,
+        // Base tone under the art: the tile is fully coloured even
+        // where the gradient layer ends.
+        surface === 'ink' && { backgroundColor: tone[0] },
+        solid != null && { backgroundColor: solid },
         active && styles.tileOn,
         pressed && { opacity: 0.85 },
       ]}
     >
-      {surface === 'ink' ? (
+      {solid != null ? null : surface === 'ink' ? (
         <Svg style={styles.art} width="100%" height="100%" preserveAspectRatio="none">
           <Defs>
             <LinearGradient id={gid} x1="0" y1="0" x2="0.7" y2="1">
@@ -67,13 +81,13 @@ export function CategoryTile({
       ) : (
         <View style={[styles.washArt, { backgroundColor: withAlpha(tone[1], 0.22) }]} pointerEvents="none" />
       )}
-      {glyph ? <Text style={[styles.glyph, compact && styles.glyphCompact, surface === 'wash' && { color: tone[0] }]}>{glyph}</Text> : null}
+      {glyph ? <Text style={[styles.glyph, compact && styles.glyphCompact, center && styles.glyphCenter, surface === 'wash' && { color: tone[0] }]}>{glyph}</Text> : null}
       {active ? (
         <View style={styles.check}>
           <Text style={styles.checkGlyph}>✓</Text>
         </View>
       ) : null}
-      <Text style={[styles.tileLabel, compact && styles.tileLabelCompact, surface === 'wash' && { color: GV.ink }]} numberOfLines={compact ? 1 : 2}>
+      <Text style={[styles.tileLabel, compact && styles.tileLabelCompact, center && styles.tileLabelCenter, large && styles.tileLabelLarge, surface === 'wash' && { color: GV.ink }]} numberOfLines={compact ? 1 : 2}>
         {label}
       </Text>
       {hint ? (
@@ -103,6 +117,10 @@ const styles = StyleSheet.create({
   },
   tileFull: {
     flexBasis: '100%',
+  },
+  tileCenter: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tileWash: {
     backgroundColor: GV.card,
@@ -134,6 +152,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 0,
   },
+  glyphCenter: {
+    textAlign: 'center',
+    marginBottom: 4,
+  },
   check: {
     position: 'absolute',
     top: 8,
@@ -159,6 +181,13 @@ const styles = StyleSheet.create({
   tileLabelCompact: {
     fontSize: 14,
     lineHeight: 18,
+  },
+  tileLabelCenter: {
+    textAlign: 'center',
+  },
+  tileLabelLarge: {
+    fontSize: 19,
+    lineHeight: 24,
   },
   tileHint: {
     fontSize: 12,

@@ -13,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '@/context/AuthContext';
+import { useAnatomy } from '@/context/AnatomyContext';
+import type { Gender } from '@/services/anatomyDownload';
 import { useProfilePhoto } from '@/hooks/useProfilePhoto';
 import { useHabitTracker } from '@/hooks/useHabitTracker';
 import { HabitGrid } from '@/screens/Settings/HabitGrid';
@@ -38,6 +40,75 @@ import {
 import type { PatientProfile, RootStackParamList } from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+// ---------------------------------------------------------------------------
+// 3D anatomy storage (device downloads, moved here from the 3D Body
+// screen so that screen stays focused on the model).
+// ---------------------------------------------------------------------------
+
+function AnatomyStorageSection() {
+  const { maleStatus, femaleStatus, deleteGender } = useAnatomy();
+  const [confirmDelete, setConfirmDelete] = useState<Gender | null>(null);
+
+  const handleDelete = async (g: Gender) => {
+    await deleteGender(g);
+    setConfirmDelete(null);
+  };
+
+  return (
+    <>
+      <MarkerHighlight textStyle={styles.sectionTitle}>Storage</MarkerHighlight>
+      <Card padding="lg" level={1} style={styles.card}>
+        {(['male', 'female'] as Gender[]).map((g) => {
+          const status = g === 'male' ? maleStatus : femaleStatus;
+          const label = g === 'male' ? 'Male' : 'Female';
+          const installed = status.state === 'INSTALLED';
+          return (
+            <View key={g} style={styles.storageRow}>
+              <View style={styles.storageInfo}>
+                <Text style={styles.fieldValue}>{label} anatomy</Text>
+                <Text style={styles.menuRowSubtitle}>
+                  {installed ? 'Downloaded' : 'Not downloaded'}
+                </Text>
+              </View>
+              {installed ? (
+                confirmDelete === g ? (
+                  <View style={styles.storageConfirmRow}>
+                    <Pressable
+                      style={styles.storageBtn}
+                      onPress={() => void handleDelete(g)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${label} anatomy download`}
+                    >
+                      <Text style={styles.storageDeleteText}>Delete</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.storageBtn}
+                      onPress={() => setConfirmDelete(null)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel deletion"
+                    >
+                      <Text style={styles.storageCancelText}>Cancel</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={styles.storageBtn}
+                    onPress={() => setConfirmDelete(g)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${label} anatomy download`}
+                  >
+                    <Text style={styles.storageDeleteText}>Delete</Text>
+                  </Pressable>
+                )
+              ) : null}
+            </View>
+          );
+        })}
+      </Card>
+    </>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -515,6 +586,9 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* ── 3D anatomy downloads ── */}
+        <AnatomyStorageSection />
+
         {/* ── Account Section ── */}
         <MarkerHighlight textStyle={styles.sectionTitle}>Account</MarkerHighlight>
         <Button
@@ -612,6 +686,35 @@ const styles = StyleSheet.create({
   },
   card: {
     gap: 16,
+  },
+  storageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 56,
+  },
+  storageInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  storageConfirmRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  storageBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  storageDeleteText: {
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.danger,
+  },
+  storageCancelText: {
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    color: GV.muted,
   },
   field: {
     gap: 8,

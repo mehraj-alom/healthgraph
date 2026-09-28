@@ -25,7 +25,6 @@ import Animated, {
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { TILE_TONES } from '@/theme/tones';
 import { CategoryTile } from '@/components/CategoryTile';
-import { StageGradient } from '@/components/StageGradient';
 import { HealthFact } from '@/components/HealthFact';
 import { useReducedMotion } from '@/theme';
 import { useFoodScan } from '@/hooks/useFoodScan';
@@ -41,16 +40,6 @@ type Nav = NativeStackNavigationProp<RootStackParamList, 'FoodScan'>;
 
 const FRAME_H = 320;
 const SWEEP_MS = 2800;
-
-/**
- * Aiming tips, rotated on a timer. These are framing guidance — not sensor
- * readings — so the hint line never claims to measure light or distance.
- */
-const AIM_TIPS = [
-  'Hold steady for a clear shot',
-  'Move closer to fill the frame',
-  'Use good light for the estimate',
-] as const;
 
 /** Typing-dots indicator (functional motion only; static under reduced motion). */
 function TypingDots() {
@@ -123,23 +112,20 @@ export default function FoodScanScreen() {
     reset,
   } = useFoodScan();
 
-  const [tipIndex, setTipIndex] = useState(0);
-  // Scan mode: photo (VLM estimate) or barcode (packaged facts). The photo
-  // flow is untouched; barcode builds a reviewable result through the same
-  // sheet + logging path, defaulting to a 100 g portion.
+  const sweep = useSharedValue(0);
   const [mode, setMode] = useState<'photo' | 'barcode'>('photo');
+  // Pick-first flow: the first screen is the selection (Meal vs
+  // Barcode). Choosing one opens its camera. Change returns here.
+  const [chosen, setChosen] = useState<'photo' | 'barcode' | null>(null);
+  const pick = (m: 'photo' | 'barcode') => {
+    setBarcodeResult(null);
+    setBarcodeImage(null);
+    reset();
+    setMode(m);
+    setChosen(m);
+  };
   const [barcodeResult, setBarcodeResult] = useState<FoodScanResult | null>(null);
   const [barcodeImage, setBarcodeImage] = useState<string | null>(null);
-  const sweep = useSharedValue(0);
-
-  // Rotate aiming tips while the live viewfinder is up.
-  useEffect(() => {
-    if (stage !== 'idle') return;
-    const timer = setInterval(() => {
-      setTipIndex((i) => (i + 1) % AIM_TIPS.length);
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [stage]);
 
   // Slow top-to-bottom teal sweep; static when reduced motion is requested.
   useEffect(() => {
@@ -171,21 +157,11 @@ export default function FoodScanScreen() {
   if ((stage === 'done' && result && photoUri) || barcodeResult) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StageGradient />
         <ScrollView
           contentContainerStyle={styles.resultContent}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Pressable
-              onPress={goBack}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-              hitSlop={8}
-              style={styles.backBtn}
-            >
-              <Text style={styles.backBtnText}>‹ Back</Text>
-            </Pressable>
             <Text style={styles.title}>Scan food</Text>
           </View>
           <ScanResultSheet
@@ -214,46 +190,32 @@ export default function FoodScanScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StageGradient />
       <View style={styles.header}>
-        <Pressable
-          onPress={goBack}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={8}
-          style={styles.backBtn}
-        >
-          <Text style={styles.backBtnText}>‹ Back</Text>
-        </Pressable>
         <Text style={styles.title}>Scan food</Text>
-        <Text style={styles.subtitle}>Point at your meal, then capture.</Text>
       </View>
 
+      {chosen == null ? (
       <View style={styles.modeRow} accessibilityRole="tablist">
         {([
-          { key: 'photo', label: 'Photo', hint: 'VLM estimate', tone: TILE_TONES.nutrition, glyph: '◉' },
-          { key: 'barcode', label: 'Barcode', hint: 'Packaged facts', tone: TILE_TONES.weight, glyph: '▤' },
+          { key: 'photo', label: 'Meal', tone: TILE_TONES.nutrition },
+          { key: 'barcode', label: 'Barcode', tone: TILE_TONES.weight },
         ] as const).map((m) => (
-          <CategoryTile
-            key={m.key}
-            tone={m.tone}
-            label={m.label}
-            hint={m.hint}
-            glyph={m.glyph}
-            compact
-            active={mode === m.key}
-            accessibilityLabel={m.key === 'photo' ? 'Scan by photo' : 'Scan by barcode'}
-            onPress={() => {
-              setBarcodeResult(null);
-              setBarcodeImage(null);
-              reset();
-              setMode(m.key);
-            }}
-          />
+          <View key={m.key} style={styles.pickWrap}>
+            <CategoryTile
+              tone={m.tone}
+              label={m.label}
+              center
+              large
+              active={mode === m.key && chosen != null}
+              accessibilityLabel={m.key === 'photo' ? 'Scan a meal by photo' : 'Scan by barcode'}
+              onPress={() => pick(m.key)}
+            />
+          </View>
         ))}
       </View>
+      ) : null}
 
-      {resolving ? (
+      {chosen == null ? null : resolving ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={GV.teal} />
           <Text style={styles.hint}>Preparing camera…</Text>
@@ -302,11 +264,20 @@ export default function FoodScanScreen() {
               setBarcodeResult(barcodeResultFor(product, 100, barcode));
               setBarcodeImage(product.image_url || null);
             }}
-            onCancel={() => setMode('photo')}
+            onCancel={() => setChosen(null)}
           />
         </View>
       ) : (
         <View style={styles.finder}>
+          <Pressable
+            onPress={() => setChosen(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Change scan type"
+            hitSlop={8}
+            style={styles.changeHit}
+          >
+            <Text style={styles.changeText}>Change</Text>
+          </Pressable>
           <View style={styles.frame}>
             <CameraView
               ref={cameraRef}
@@ -318,47 +289,48 @@ export default function FoodScanScreen() {
             {stage === 'idle' ? (
               <Animated.View style={[styles.sweep, sweepStyle]} pointerEvents="none" />
             ) : null}
+            {stage !== 'error' ? (
+              <View style={styles.captureFloat} pointerEvents="box-none">
+                <Pressable
+                  onPress={() => void capture()}
+                  disabled={!cameraReady || busy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Capture meal photo"
+                  accessibilityState={{ disabled: !cameraReady || busy, busy }}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.captureBtn,
+                    pressed && cameraReady && !busy && { transform: [{ scale: 0.94 }] },
+                    (!cameraReady || busy) && { opacity: 0.55 },
+                  ]}
+                >
+                  <View style={styles.captureInner} />
+                </Pressable>
+              </View>
+            ) : null}
           </View>
 
-          <Text style={styles.hint}>{AIM_TIPS[tipIndex]}</Text>
-
           {stage === 'error' ? (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Scan did not complete</Text>
-              <Text style={styles.cardBody}>
-                {error ?? 'The photo could not be analyzed. Please try again.'}
-              </Text>
-              <Pressable
-                onPress={reset}
-                accessibilityRole="button"
-                accessibilityLabel="Try again"
-                style={({ pressed }) => [
-                  styles.cta,
-                  pressed && { backgroundColor: GV.ctaPressed },
-                ]}
-              >
-                <Text style={styles.ctaText}>Try again</Text>
-              </Pressable>
+            <View style={styles.errorWrap}>
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Scan did not complete</Text>
+                <Text style={styles.cardBody}>
+                  {error ?? 'The photo could not be analyzed. Please try again.'}
+                </Text>
+                <Pressable
+                  onPress={reset}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try again"
+                  style={({ pressed }) => [
+                    styles.cta,
+                    pressed && { backgroundColor: GV.ctaPressed },
+                  ]}
+                >
+                  <Text style={styles.ctaText}>Try again</Text>
+                </Pressable>
+              </View>
             </View>
-          ) : (
-            <View style={styles.captureRow}>
-              <Pressable
-                onPress={() => void capture()}
-                disabled={!cameraReady || busy}
-                accessibilityRole="button"
-                accessibilityLabel="Capture meal photo"
-                accessibilityState={{ disabled: !cameraReady || busy, busy }}
-                hitSlop={8}
-                style={({ pressed }) => [
-                  styles.captureBtn,
-                  pressed && cameraReady && !busy && { transform: [{ scale: 0.94 }] },
-                  (!cameraReady || busy) && { opacity: 0.55 },
-                ]}
-              >
-                <View style={styles.captureInner} />
-              </Pressable>
-            </View>
-          )}
+          ) : null}
 
           <Text style={styles.disclaimer}>
             Estimates only. Not exact nutrition advice.
@@ -384,63 +356,71 @@ export default function FoodScanScreen() {
   );
 }
 
+const NAVY = '#080A11';
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: NAVY,
   },
   header: {
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     paddingTop: 8,
-    gap: 4,
-  },
-  backBtn: {
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  backBtnText: {
-    ...TYPE.button,
-    fontSize: 16,
-    color: GV.fog,
+    paddingBottom: 4,
+    alignItems: 'center',
   },
   title: {
-    ...TYPE.display,
-    color: GV.card,
+    fontFamily: FONT.semi,
+    fontSize: 32,
+    lineHeight: 38,
+    letterSpacing: -0.3,
+    color: '#FFFFFF',
     textAlign: 'center',
-  },
-  subtitle: {
-    ...TYPE.body,
-    color: GV.fog,
-    textAlign: 'center',
-    marginBottom: 8,
   },
   center: {
     flex: 1,
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     alignItems: 'stretch',
     justifyContent: 'center',
   },
   finder: {
     flex: 1,
-    paddingHorizontal: SPACE.screenH,
-    paddingBottom: 24,
-    gap: SPACE.cardGap,
+    paddingBottom: 16,
+    gap: 12,
   },
   barcodeWrap: {
     flex: 1,
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     paddingBottom: 24,
   },
   modeRow: {
+    flex: 1,
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: SPACE.screenH,
-    paddingBottom: 4,
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+  },
+  pickWrap: {
+    flex: 1,
+    height: 150,
+  },
+  changeHit: {
+    alignSelf: 'flex-end',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    marginRight: 12,
+  },
+  changeText: {
+    ...TYPE.caption,
+    color: GV.fog,
   },
   frame: {
-    height: FRAME_H,
-    borderRadius: SPACE.rCard,
+    flex: 1,
+    minHeight: 320,
     overflow: 'hidden',
     backgroundColor: '#000',
   },
@@ -512,6 +492,17 @@ const styles = StyleSheet.create({
     maxWidth: 300,
     marginTop: 8,
   },
+  captureFloat: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorWrap: {
+    paddingHorizontal: 24,
+  },
   captureRow: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -521,31 +512,35 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: GV.pulse,
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   captureInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: GV.card,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#FFFFFF',
   },
   card: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-    gap: SPACE.cardGap,
+    backgroundColor: TILE_BG,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderRadius: 8,
+    padding: 16,
+    gap: 12,
     alignItems: 'stretch',
   },
   cardTitle: {
     ...TYPE.title,
-    color: GV.ink,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   cardBody: {
     ...TYPE.body,
-    color: GV.body,
+    color: GV.fog,
     textAlign: 'center',
   },
   cta: {
@@ -560,7 +555,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   secondaryCta: {
-    backgroundColor: GV.wash,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     borderRadius: SPACE.rPill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -568,7 +565,7 @@ const styles = StyleSheet.create({
   },
   secondaryCtaText: {
     ...TYPE.button,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   disclaimer: {
     ...TYPE.caption,
@@ -582,7 +579,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     alignItems: 'stretch',
     justifyContent: 'center',
   },
@@ -598,8 +595,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   resultContent: {
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     paddingBottom: 32,
-    gap: SPACE.cardGap,
+    gap: 12,
   },
 });

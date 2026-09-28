@@ -28,7 +28,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { GV, TYPE, SPACE } from '@/theme/guava';
+import { GV, TYPE } from '@/theme/guava';
 import { lookupBarcode, normalizeBarcode, type BarcodeProduct } from '@/services/barcode';
 
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
@@ -243,13 +243,17 @@ export default function BarcodeScanner({
 
 const FRAME_H = 180;
 
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
 const styles = StyleSheet.create({
   finder: { flex: 1, gap: 12 },
   frame: {
-    height: FRAME_H + 48,
-    borderRadius: 20,
+    flex: 1,
+    minHeight: FRAME_H + 48,
+    borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#0B1F1A',
+    backgroundColor: '#000',
   },
   camera: { flex: 1 },
   corners: { ...StyleSheet.absoluteFill, padding: 24 },
@@ -278,44 +282,53 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   resolvingText: { ...TYPE.body, color: '#FFFFFF' },
-  error: { ...TYPE.body, color: '#B3261E', textAlign: 'center' },
+  error: { ...TYPE.body, color: GV.danger, textAlign: 'center' },
   actions: { gap: 8, paddingBottom: 8 },
   manualBox: { gap: 8 },
-  manualLabel: { ...TYPE.chip, color: GV.body },
+  manualLabel: { ...TYPE.chip, color: GV.fog },
   input: {
     fontSize: 16,
-    color: GV.ink,
-    backgroundColor: GV.card,
-    borderRadius: 12,
+    color: '#14151D',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
+    minHeight: 52,
     fontVariant: ['tabular-nums'],
   },
   manualRow: { flexDirection: 'row', gap: 8 },
   manualBtn: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
-  card: { backgroundColor: GV.card, borderRadius: 20, padding: SPACE.cardPad, gap: 12, width: '100%' },
-  cardTitle: { ...TYPE.title, color: GV.ink },
-  cardBody: { ...TYPE.body, color: GV.body, lineHeight: 21 },
+  card: {
+    backgroundColor: TILE_BG,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderRadius: 8,
+    padding: 16,
+    gap: 12,
+    width: '100%',
+  },
+  cardTitle: { ...TYPE.title, color: '#FFFFFF', textAlign: 'center' },
+  cardBody: { ...TYPE.body, color: GV.fog, textAlign: 'center', lineHeight: 21 },
   hint: { ...TYPE.body, color: GV.fog },
   cta: {
     backgroundColor: GV.cta,
-    borderRadius: 14,
+    borderRadius: 9999,
     paddingVertical: 14,
     alignItems: 'center',
-    minHeight: 48,
+    minHeight: 52,
     justifyContent: 'center',
   },
   ctaDisabled: { opacity: 0.5 },
   ctaText: { ...TYPE.button, color: '#FFFFFF' },
   secondaryCta: {
-    borderRadius: 14,
+    borderRadius: 9999,
     paddingVertical: 13,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: GV.line,
-    minHeight: 48,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    minHeight: 52,
     justifyContent: 'center',
   },
-  secondaryCtaText: { ...TYPE.button, color: GV.cta },
+  secondaryCtaText: { ...TYPE.button, color: '#FFFFFF' },
 });

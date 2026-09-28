@@ -1739,7 +1739,14 @@ function InfoPanel({ structureId, bodyStateData, onClose, onViewGraph }: InfoPan
         <Text style={styles.infoPanelTitle}>
           {mapping?.displayName ?? structureId}
         </Text>
-        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+        <TouchableOpacity
+          onPress={onClose}
+          style={styles.closeButton}
+          accessibilityRole="button"
+          accessibilityLabel="Close details"
+          hitSlop={8}
+          activeOpacity={0.7}
+        >
           <Text style={styles.closeButtonText}>✕</Text>
         </TouchableOpacity>
       </View>
@@ -1812,65 +1819,6 @@ function InfoPanel({ structureId, bodyStateData, onClose, onViewGraph }: InfoPan
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Storage management section (shown below layer toggles)
-// ---------------------------------------------------------------------------
-
-function StorageManagementSection() {
-  const { maleStatus, femaleStatus, deleteGender, refreshStatus } = useAnatomy();
-  const [confirmDelete, setConfirmDelete] = useState<Gender | null>(null);
-
-  const handleDelete = async (g: Gender) => {
-    await deleteGender(g);
-    setConfirmDelete(null);
-  };
-
-  return (
-    <View style={styles.storageSection}>
-      <Text style={styles.storageSectionTitle}>3D Anatomy Storage</Text>
-      {(['male', 'female'] as Gender[]).map((g) => {
-        const status = g === 'male' ? maleStatus : femaleStatus;
-        const label = g === 'male' ? 'Male' : 'Female';
-        const installed = status.state === 'INSTALLED';
-        return (
-          <View key={g} style={styles.storageRow}>
-            <View style={styles.storageInfo}>
-              <Text style={styles.storageLabel}>{label} Anatomy</Text>
-              <Text style={styles.storageStatus}>
-                {installed ? '✓ Installed' : 'Not installed'}
-              </Text>
-            </View>
-            {installed && (
-              confirmDelete === g ? (
-                <View style={styles.storageConfirmRow}>
-                  <TouchableOpacity
-                    style={styles.storageConfirmBtn}
-                    onPress={() => handleDelete(g)}
-                  >
-                    <Text style={styles.storageConfirmText}>Delete</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.storageCancelBtn}
-                    onPress={() => setConfirmDelete(null)}
-                  >
-                    <Text style={styles.storageCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.storageDeleteBtn}
-                  onPress={() => setConfirmDelete(g)}
-                >
-                  <Text style={styles.storageDeleteText}>Delete</Text>
-                </TouchableOpacity>
-              )
-            )}
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main BodyScreen Component
 // ---------------------------------------------------------------------------
@@ -2018,12 +1966,13 @@ export default function BodyScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header — gender toggle hides while the download prompt owns the
-          gender choice, so the decision never appears twice on screen. */}
+      {/* Header — the download card owns the gender choice while it
+          is on screen, so the header toggle hides then and returns as
+          the switcher once the anatomy is installed. Never twice. */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>3D Body</Text>
 
-        {showGenderPrompt == null ? (
+        {showGenderPrompt == null && !showOverlay ? (
         <View style={styles.genderToggle}>
           <TouchableOpacity
             style={[styles.genderButton, gender === 'male' && styles.genderButtonActive]}
@@ -2071,16 +2020,16 @@ export default function BodyScreen() {
         )}
       </View>
 
-      {/* Layer Toggle Row */}
+      {/* Layer Toggle Row — centered under the canvas */}
       <ScrollView
         style={styles.layerList}
+        contentContainerStyle={styles.chipRowContent}
         horizontal
         showsHorizontalScrollIndicator={false}
       >
         {genderSystemKeys.map((sysKey) => {
           const colorVal = SYSTEM_COLORS[sysKey];
           if (colorVal === undefined) return null;
-          const hexColor = '#' + colorVal.toString(16).padStart(6, '0');
           const active = layerVisibility[sysKey] ?? false;
           return (
             <TouchableOpacity
@@ -2091,7 +2040,6 @@ export default function BodyScreen() {
               ]}
               onPress={() => toggleLayer(sysKey)}
             >
-              <View style={[styles.layerDot, { backgroundColor: active ? '#FFFFFF' : hexColor }]} />
               <Text style={[styles.layerChipText, active && styles.layerChipTextActive]}>
                 {SYSTEM_LABELS[sysKey] ?? sysKey}
               </Text>
@@ -2100,19 +2048,24 @@ export default function BodyScreen() {
         })}
       </ScrollView>
 
-      {/* Info Panel */}
-      <InfoPanel
-        structureId={selectedStructure}
-        bodyStateData={bodyStateData}
-        onClose={handleClosePanel}
-        onViewGraph={(id) =>
-          navigation.navigate('HealthGraph', { focusStructureId: id })
-        }
-      />
+      {/* Info Panel — only when the anatomy is on screen. While the
+          download card owns the canvas, taps below must not stack a
+          second card over it. */}
+      {selectedStructure != null && !showOverlay ? (
+        <InfoPanel
+          structureId={selectedStructure}
+          bodyStateData={bodyStateData}
+          onClose={handleClosePanel}
+          onViewGraph={(id) =>
+            navigation.navigate('HealthGraph', { focusStructureId: id })
+          }
+        />
+      ) : null}
 
-      {/* Structure Quick-Select */}
+      {/* Structure Quick-Select — centered under the canvas */}
       <ScrollView
         style={styles.structureList}
+        contentContainerStyle={styles.chipRowContent}
         horizontal
         showsHorizontalScrollIndicator={false}
       >
@@ -2131,6 +2084,7 @@ export default function BodyScreen() {
                 mapping.mappingType === 'UNAVAILABLE' && styles.structureChipUnavailable,
               ]}
               onPress={() => {
+                if (showOverlay) return;
                 if (mapping.mappingType !== 'UNAVAILABLE') {
                   setSelectedStructure(sid);
                   sceneRef.current?.selectStructure(sid);
@@ -2151,9 +2105,6 @@ export default function BodyScreen() {
         })}
       </ScrollView>
 
-      {/* Storage Management */}
-      <StorageManagementSection />
-
       <Text style={styles.disclaimer}>
         For general wellness only. Not a medical device.
       </Text>
@@ -2165,48 +2116,61 @@ export default function BodyScreen() {
 // Styles
 // ---------------------------------------------------------------------------
 
+const NAVY = '#080A11';
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: NAVY,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     paddingTop: 40,
     paddingBottom: 8,
+    gap: 12,
   },
   headerTitle: {
-    ...TYPE.display,
+    fontFamily: FONT.semi,
+    fontSize: 30,
+    lineHeight: 37,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
+    flex: 1,
   },
   genderToggle: {
     flexDirection: 'row',
-    backgroundColor: GV.card,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
     borderRadius: SPACE.rPill,
-    padding: 2,
+    padding: 4,
+    gap: 4,
   },
   genderButton: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    minHeight: 44,
+    justifyContent: 'center',
     borderRadius: SPACE.rPill,
   },
   genderButtonActive: {
-    backgroundColor: GV.cta,
+    backgroundColor: '#FFFFFF',
   },
   genderButtonText: {
     ...TYPE.chip,
-    color: GV.body,
+    color: 'rgba(255, 255, 255, 0.75)',
   },
   genderButtonTextActive: {
-    color: '#FFFFFF',
+    color: NAVY,
   },
   canvasContainer: {
     width: SCREEN_WIDTH,
     height: CANVAS_HEIGHT,
-    backgroundColor: GV.stage,
+    backgroundColor: NAVY,
     overflow: 'hidden',
   },
   webCanvas: {
@@ -2221,7 +2185,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: GV.stage,
+    backgroundColor: NAVY,
   },
   loadingText: {
     ...TYPE.body,
@@ -2240,35 +2204,40 @@ const styles = StyleSheet.create({
     height: CANVAS_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: GV.card,
-    padding: SPACE.cardPad,
-    gap: SPACE.cardGap,
+    backgroundColor: TILE_BG,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderRadius: 8,
+    padding: 20,
+    gap: 12,
   },
   nativePlaceholderIcon: {
     ...TYPE.display,
-    color: GV.muted,
+    color: GV.fog,
     marginBottom: 8,
   },
   nativePlaceholderTitle: {
     ...TYPE.title,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   nativePlaceholderText: {
     ...TYPE.body,
-    color: GV.body,
+    color: GV.fog,
     textAlign: 'center',
   },
   nativePlaceholderHint: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     textAlign: 'center',
   },
   infoPanel: {
-    backgroundColor: GV.card,
-    marginHorizontal: SPACE.screenH,
-    marginTop: SPACE.cardGap,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    backgroundColor: TILE_BG,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+    marginHorizontal: 24,
+    marginTop: 12,
+    borderRadius: 8,
+    padding: 16,
   },
   infoPanelHeader: {
     flexDirection: 'row',
@@ -2278,20 +2247,21 @@ const styles = StyleSheet.create({
   },
   infoPanelTitle: {
     ...TYPE.title,
-    color: GV.ink,
+    color: '#FFFFFF',
     flex: 1,
   },
   closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: GV.wash,
+    minWidth: 44,
+    minHeight: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeButtonText: {
-    fontSize: 14,
-    color: GV.body,
+    fontSize: 16,
+    lineHeight: 20,
+    color: '#FFFFFF',
   },
   graphLink: {
     marginTop: 12,
@@ -2312,23 +2282,23 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
   },
   infoValue: {
     ...TYPE.caption,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   infoNotes: {
     ...TYPE.caption,
-    color: GV.body,
+    color: GV.fog,
     marginTop: 8,
   },
   statusCard: {
     marginTop: 8,
     padding: 8,
-    backgroundColor: GV.wash,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 8,
   },
   statusHeader: {
     flexDirection: 'row',
@@ -2344,96 +2314,106 @@ const styles = StyleSheet.create({
   statusText: {
     ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    color: '#FFFFFF',
     flex: 1,
   },
   trendText: {
     ...TYPE.caption,
-    color: GV.body,
+    color: GV.fog,
   },
   summaryText: {
     ...TYPE.caption,
-    color: GV.body,
+    color: GV.fog,
     marginTop: 8,
   },
   noObservationCard: {
     marginTop: 8,
     padding: 16,
-    backgroundColor: GV.wash,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 8,
     alignItems: 'center',
   },
   noObservationText: {
     ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.muted,
+    color: '#FFFFFF',
   },
   noObservationSubtext: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     marginTop: 4,
   },
   layerList: {
-    maxHeight: 40,
+    maxHeight: 56,
     marginTop: 8,
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
+    paddingVertical: 4,
+  },
+  chipRowContent: {
+    flexGrow: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   layerChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: GV.card,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    minHeight: 44,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     borderRadius: SPACE.rPill,
     marginRight: 8,
   },
   layerChipActive: {
-    backgroundColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   layerChipInactive: {
     opacity: 1,
   },
-  layerDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 4,
-  },
   layerChipText: {
     ...TYPE.chip,
-    color: GV.ink,
-  },
-  layerChipTextActive: {
     color: '#FFFFFF',
   },
+  layerChipTextActive: {
+    color: NAVY,
+  },
   layerChipTextInactive: {
-    color: GV.muted,
+    color: '#FFFFFF',
   },
   structureList: {
-    maxHeight: 40,
+    maxHeight: 56,
     marginTop: 8,
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
+    paddingVertical: 4,
   },
   structureChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: GV.card,
+    paddingHorizontal: 16,
+    minHeight: 44,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     borderRadius: SPACE.rPill,
     marginRight: 8,
     marginBottom: 2,
   },
   structureChipActive: {
-    backgroundColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   structureChipUnavailable: {
     opacity: 0.4,
   },
   structureChipText: {
     ...TYPE.caption,
-    color: GV.body,
+    color: '#FFFFFF',
   },
   structureChipTextActive: {
-    color: '#FFFFFF',
+    color: NAVY,
   },
   disclaimer: {
     ...TYPE.caption,
@@ -2441,73 +2421,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 24,
     paddingVertical: 8,
-  },
-  // Storage management
-  storageSection: {
-    marginHorizontal: SPACE.screenH,
-    marginTop: 8,
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-  },
-  storageSectionTitle: {
-    ...TYPE.caption,
-    fontFamily: FONT.semi,
-    color: GV.ink,
-    marginBottom: 8,
-  },
-  storageRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  storageInfo: {
-    flex: 1,
-  },
-  storageLabel: {
-    ...TYPE.body,
-    color: GV.ink,
-  },
-  storageStatus: {
-    ...TYPE.caption,
-    color: GV.muted,
-  },
-  storageDeleteBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: GV.wash,
-  },
-  storageDeleteText: {
-    ...TYPE.caption,
-    fontFamily: FONT.semi,
-    color: GV.danger,
-  },
-  storageConfirmRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  storageConfirmBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: GV.danger,
-  },
-  storageConfirmText: {
-    ...TYPE.caption,
-    fontFamily: FONT.semi,
-    color: '#FFFFFF',
-  },
-  storageCancelBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: GV.wash,
-  },
-  storageCancelText: {
-    ...TYPE.caption,
-    fontFamily: FONT.semi,
-    color: GV.body,
   },
 });

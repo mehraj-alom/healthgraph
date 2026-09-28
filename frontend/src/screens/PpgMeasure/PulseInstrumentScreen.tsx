@@ -387,15 +387,11 @@ export default function PulseInstrumentScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} scrollEventThrottle={16}>
-        <EngravedLabel>PULSE INSTRUMENT · ON-DEVICE</EngravedLabel>
-
         {machine.phase === 'IDLE' && (
           <Panel>
-            <Text style={styles.title}>Pulse</Text>
+            <Text style={styles.title}>Pulse.</Text>
             <Text style={styles.body}>
-              One automatic path: the instrument first checks whether the camera can read your face.
-              When the face signal is genuinely usable it measures that way — otherwise it tells you
-              why and switches to fingertip. Both run entirely on this device.
+              Face first, fingertip as backup. All on this device.
             </Text>
             {(recentRppg || recentPpg) && (
               <View style={styles.recents}>
@@ -413,13 +409,13 @@ export default function PulseInstrumentScreen() {
                 )}
               </View>
             )}
-            <TactileButton title="Begin measurement check" onPress={beginCheck} accessibilityLabel="Begin automatic measurement check" />
+            <TactileButton title="Begin check" onPress={beginCheck} accessibilityLabel="Begin automatic measurement check" />
           </Panel>
         )}
 
         {(machine.phase === 'CHECKING' || machine.phase === 'FACE_RUN') && (
           <Panel>
-            <EngravedLabel>{machine.phase === 'CHECKING' ? 'CHECKING FACE SIGNAL' : 'FACE MEASUREMENT'}</EngravedLabel>
+            <EngravedLabel>{machine.phase === 'CHECKING' ? 'Checking face signal' : 'Face measurement'}</EngravedLabel>
             <Well style={styles.previewWell}>
               {faceActive && (
                 <RppgCameraPreviewBoundary style={styles.preview}>
@@ -447,7 +443,7 @@ export default function PulseInstrumentScreen() {
 
         {machine.phase === 'FACE_UNAVAILABLE' && (
           <Panel>
-            <EngravedLabel>FACE PATH · STANDBY</EngravedLabel>
+            <EngravedLabel>Face path · standby</EngravedLabel>
             <Text style={styles.titleSm}>{FACE_UNAVAILABLE_TITLE}</Text>
             <Text style={styles.body}>{machine.reason ?? FACE_UNAVAILABLE_BODY}</Text>
             <View style={styles.tips}>
@@ -455,28 +451,28 @@ export default function PulseInstrumentScreen() {
               <Text style={styles.tip}>· Keep your face inside the guide oval.</Text>
               <Text style={styles.tip}>· Hold still for a few seconds.</Text>
             </View>
-            <TactileButton title="Switch to fingertip measurement" onPress={chooseFingertip} accessibilityLabel="Switch to fingertip measurement" />
+            <TactileButton title="Use fingertip" onPress={chooseFingertip} accessibilityLabel="Switch to fingertip measurement" />
             <TactileButton title="Retry face scan" onPress={retryFace} variant="secondary" />
           </Panel>
         )}
 
         {machine.phase === 'FINGERTIP_READY' && (
           <Panel>
-            <EngravedLabel>FINGERTIP PATH · ARMED</EngravedLabel>
+            <EngravedLabel>Fingertip path · ready</EngravedLabel>
             <Text style={styles.titleSm}>Fingertip measurement</Text>
             <View style={styles.tips}>
               {FINGERTIP_INSTRUCTIONS.map((line, i) => (
                 <Text key={i} style={styles.tip}>{`${i + 1}. ${line}`}</Text>
               ))}
             </View>
-            <TactileButton title="Begin fingertip measurement" onPress={beginFingertip} accessibilityLabel="Begin fingertip measurement" />
+            <TactileButton title="Begin fingertip" onPress={beginFingertip} accessibilityLabel="Begin fingertip measurement" />
             <TactileButton title="Back" onPress={cancelRun} variant="secondary" />
           </Panel>
         )}
 
         {machine.phase === 'FINGERTIP_RUN' && (
           <Panel>
-            <EngravedLabel>FINGERTIP MEASUREMENT</EngravedLabel>
+            <EngravedLabel>Fingertip measurement</EngravedLabel>
             <Well style={styles.previewWell}>
               {fingertipActive && <PpgCameraPreview style={styles.preview} />}
               <View style={styles.overlayFloat}>
@@ -502,7 +498,7 @@ export default function PulseInstrumentScreen() {
 
         {machine.phase === 'COMPLETE' && (
           <Panel>
-            <EngravedLabel>MEASUREMENT COMPLETE</EngravedLabel>
+            <EngravedLabel>Measurement complete</EngravedLabel>
             {machine.completedMode === 'face' && rppg.result?.heartRateBpm != null && (
               <View style={styles.resultBlock}>
                 <View style={styles.readout}>
@@ -571,7 +567,7 @@ export default function PulseInstrumentScreen() {
 
         {machine.phase === 'ERROR' && (
           <Panel>
-            <EngravedLabel>INSTRUMENT FAULT</EngravedLabel>
+            <EngravedLabel>Instrument fault</EngravedLabel>
             <Text style={styles.titleSm}>Measurement could not finish</Text>
             <Text style={styles.body}>{machine.reason ?? 'An unexpected error stopped the measurement. Try again.'}</Text>
             <TactileButton title="Back to start" onPress={measureAgain} />
@@ -586,12 +582,13 @@ export default function PulseInstrumentScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: INST.face },
-  content: { paddingHorizontal: 16, paddingBottom: 32, paddingTop: 8, gap: 16 },
+  content: { paddingHorizontal: 24, paddingBottom: 32, paddingTop: 8, gap: 12 },
   title: {
     fontFamily: FONT.semi,
-    fontSize: 28,
-    lineHeight: 34,
-    color: INST.steel,
+    fontSize: 32,
+    lineHeight: 38,
+    letterSpacing: -0.3,
+    color: '#FFFFFF',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
@@ -599,12 +596,12 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semi,
     fontSize: 20,
     lineHeight: 26,
-    color: INST.steel,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
-  body: { fontSize: 14, lineHeight: 20, color: INST.dim, textAlign: 'center' },
+  body: { fontSize: 15, lineHeight: 22, color: '#A7B8B2', textAlign: 'center' },
   hint: { fontSize: 14, lineHeight: 20, color: INST.amber, textAlign: 'center' },
-  guideNote: { fontSize: 11, lineHeight: 15, color: INST.engraved, textAlign: 'center', letterSpacing: 0.5 },
+  guideNote: { fontSize: 12, lineHeight: 17, color: INST.engraved, textAlign: 'center' },
   tips: { gap: 8, paddingHorizontal: 4 },
   tip: { fontSize: 13, lineHeight: 19, color: INST.steel },
   meta: { fontSize: 12, lineHeight: 17, color: INST.dim, textAlign: 'center', fontVariant: ['tabular-nums'] },

@@ -1,32 +1,23 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SymptomBodyMap } from '@/components/SymptomBodyMap';
-import { Card, Chip, Slider } from '@/components';
+import { Card, Slider } from '@/components';
 import { usePainHistory } from '@/hooks/usePainHistory';
+import { useAnatomy } from '@/context/AnatomyContext';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { TILE_TONES } from '@/theme/tones';
-void FONT;
-import type { RootStackParamList } from '@/types';
-
-type Nav = NativeStackNavigationProp<RootStackParamList>;
-type Mode = 'mark' | 'history';
 
 const HISTORY_DAYS = 30;
 
 /**
- * Symptom map — two tools sharing one figure:
- * - Mark: tap the figure to mark where it hurts (local state).
- * - History: scrub 30 days of logged pain on a slider and watch the
- *   affected areas move. Driven by on-device pain logs; demo data stands
- *   in until real logs exist. Reached from the stack, not the tab bar.
+ * Symptom map — one figure, tappable today, scrubbable history.
+ * The day slider sits directly under the figure. Tapping marks sore
+ * spots for today; scrubbing back shows logged days read-only.
  */
 export default function SymptomMapScreen() {
-  const navigation = useNavigation<Nav>();
-  const [mode, setMode] = useState<Mode>('mark');
   const { history, loading, unmapped, isSample } = usePainHistory(HISTORY_DAYS);
+  // Model follows the app's anatomy choice. No toggle on this screen.
+  const { selectedGender } = useAnatomy();
   const [dayIndex, setDayIndex] = useState(HISTORY_DAYS - 1);
 
   const activeDay = history[Math.min(dayIndex, history.length - 1)] ?? history[history.length - 1];
@@ -45,61 +36,18 @@ export default function SymptomMapScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={styles.backBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={8}
-        >
-          <Text style={styles.backBtnText}>‹ Back</Text>
-        </Pressable>
-
-        <Text style={styles.title}>Where does it hurt?</Text>
+        <Text style={styles.title}>Symptom Map</Text>
         <Text style={styles.subtitle}>
-          {mode === 'mark'
-            ? 'Tap the figure to mark sore spots. Switch sides to check your back, too.'
-            : 'Scrub through the last 30 days to see where pain showed up.'}
+          From your log.
         </Text>
 
-        <Card style={styles.controlCard}>
-          <View style={styles.modeRow}>
-            <Chip
-              label="Mark today"
-              size="large"
-              selected={mode === 'mark'}
-              color={TILE_TONES.discipline[0]}
-              onPress={() => setMode('mark')}
-              accessibilityLabel="Mark pain on the figure"
-            />
-            <Chip
-              label="History"
-              size="large"
-              selected={mode === 'history'}
-              color={TILE_TONES.weight[0]}
-              onPress={() => setMode('history')}
-              accessibilityLabel="Browse pain history by day"
-            />
-          </View>
-        </Card>
-
-        {mode === 'mark' ? (
-          <>
-            <Card style={styles.mapCard}>
-              <SymptomBodyMap
-                data={[
-                  { slug: 'lower-back', intensity: 2 },
-                  { slug: 'deltoids', intensity: 1, side: 'left' },
-                ]}
-              />
-            </Card>
-            <Text style={styles.sampleNote}>
-              Sample markings. Connect your own symptom data to replace them.
-            </Text>
-          </>
-        ) : (
-          <>
-            <Card style={styles.controlCard}>
+        <Card style={styles.mapCard}>
+          <SymptomBodyMap
+            key={`day-${dayIndex}`}
+            data={activeDay?.marks ?? []}
+            gender={selectedGender}
+            tappable={false}
+            belowFigure={
               <View style={styles.dayRow}>
                 <Pressable
                   onPress={() => stepDay(-1)}
@@ -118,7 +66,6 @@ export default function SymptomMapScreen() {
                     min={0}
                     max={todayIndex}
                     step={1}
-                    label="Day"
                     displayValue={activeDay?.label ?? ''}
                     showValue
                     disabled={loading || history.length === 0}
@@ -136,64 +83,57 @@ export default function SymptomMapScreen() {
                   <Text style={styles.stepGlyph}>›</Text>
                 </Pressable>
               </View>
-              {dayIndex !== todayIndex ? (
-                <Pressable
-                  onPress={() => setDayIndex(todayIndex)}
-                  style={styles.todayBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel="Jump to today"
-                  hitSlop={8}
-                >
-                  <Text style={styles.todayText}>Jump to today</Text>
-                </Pressable>
-              ) : null}
-            </Card>
-            <Card style={styles.mapCard}>
-              <SymptomBodyMap
-                data={activeDay?.marks ?? []}
-                tappable={false}
-              />
-            </Card>
-            <Text style={styles.sampleNote}>
-              {loading
-                ? 'Reading your logs…'
-                : isSample
-                  ? 'Sample history. Log pain for a few days to see your own.'
-                  : unmapped > 0
-                    ? `${unmapped} entr${unmapped === 1 ? 'y' : 'ies'} had no mappable location and ${unmapped === 1 ? 'was' : 'were'} skipped.`
-                    : 'From your logged pain entries.'}
-            </Text>
-          </>
-        )}
+            }
+          />
+          {dayIndex !== todayIndex ? (
+            <Pressable
+              onPress={() => setDayIndex(todayIndex)}
+              style={styles.todayBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Jump to today"
+              hitSlop={8}
+            >
+              <Text style={styles.todayText}>Jump to today</Text>
+            </Pressable>
+          ) : null}
+        </Card>
+        {dayIndex !== todayIndex ? (
+          <Text style={styles.sampleNote}>
+            {loading
+              ? 'Reading your logs…'
+              : isSample
+                ? 'Sample history. Log pain for a few days to see your own.'
+                : unmapped > 0
+                  ? `${unmapped} entr${unmapped === 1 ? 'y' : 'ies'} had no mappable location and ${unmapped === 1 ? 'was' : 'were'} skipped.`
+                  : 'From your logged pain entries.'}
+          </Text>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+const NAVY = '#080A11';
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: NAVY,
   },
   content: {
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: 40,
-    gap: SPACE.cardGap,
-  },
-  backBtn: {
-    alignSelf: 'flex-start',
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingRight: 8,
-  },
-  backBtnText: {
-    ...TYPE.caption,
-    color: GV.fog,
+    gap: 12,
   },
   title: {
-    ...TYPE.display,
-    color: GV.card,
+    fontFamily: FONT.semi,
+    fontSize: 32,
+    lineHeight: 38,
+    letterSpacing: -0.3,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   subtitle: {
@@ -202,20 +142,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
-  controlCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-  },
   mapCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
-    marginTop: SPACE.cardGap,
-  },
-  modeRow: {
-    flexDirection: 'row',
-    gap: SPACE.cardGap,
+    backgroundColor: TILE_BG,
+    borderWidth: 1,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 12,
   },
   dayRow: {
     flexDirection: 'row',
@@ -237,7 +170,7 @@ const styles = StyleSheet.create({
   },
   stepGlyph: {
     ...TYPE.title,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   todayBtn: {
     alignSelf: 'flex-end',
@@ -247,7 +180,7 @@ const styles = StyleSheet.create({
   },
   todayText: {
     ...TYPE.caption,
-    color: GV.body,
+    color: GV.fog,
     textDecorationLine: 'underline',
   },
   sampleNote: {

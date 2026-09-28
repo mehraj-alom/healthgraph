@@ -13,9 +13,7 @@ import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { StageGradient } from '@/components/StageGradient';
-import { MarkerHighlight } from '@/components/MarkerHighlight';
+import { GV, TYPE, FONT } from '@/theme/guava';
 import { Skeleton } from '@/components/Skeleton';
 import { HealthFact } from '@/components/HealthFact';
 import { useHealthAreas } from '@/hooks/useHealthAreas';
@@ -149,10 +147,9 @@ export default function HealthAreasScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StageGradient />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <MarkerHighlight textStyle={styles.title}>Everything you track</MarkerHighlight>
+          <Text style={styles.title}>Everything you track.</Text>
           <Text style={styles.sub}>This page fills in as you log.</Text>
         </View>
 
@@ -263,30 +260,37 @@ export default function HealthAreasScreen() {
   );
 }
 
+const NAVY = '#080A11';
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: NAVY,
   },
   content: {
-    paddingHorizontal: SPACE.screenH,
-    paddingTop: 6,
+    paddingHorizontal: 24,
+    paddingTop: 8,
     paddingBottom: 32,
-    gap: 20,
+    gap: 12,
   },
   hero: {
     gap: 6,
+    alignItems: 'center',
   },
   title: {
-    ...TYPE.display,
-    color: GV.card,
-    textAlign: 'left',
-    letterSpacing: -0.4,
+    fontFamily: FONT.semi,
+    fontSize: 32,
+    lineHeight: 38,
+    letterSpacing: -0.3,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   sub: {
     ...TYPE.body,
     color: GV.fog,
-    textAlign: 'left',
+    textAlign: 'center',
   },
   section: {
     gap: 8,
@@ -306,16 +310,14 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACE.cardGap,
+    gap: 12,
     marginTop: 4,
   },
   skelTile: {
     flexGrow: 1,
     flexBasis: '47%',
-    backgroundColor: '#EFF3F1',
-    borderWidth: 1,
-    borderColor: 'rgba(20, 32, 29, 0.08)',
-    borderRadius: SPACE.rCard,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 8,
     padding: 12,
     gap: 8,
     minHeight: 104,
@@ -327,11 +329,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   groupedCard: {
-    backgroundColor: '#EFF3F1',
+    backgroundColor: TILE_BG,
     borderWidth: 1,
-    borderColor: 'rgba(20, 32, 29, 0.08)',
-    borderRadius: SPACE.rCard,
-    paddingHorizontal: SPACE.cardPad,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderRadius: 8,
+    paddingHorizontal: 16,
     paddingVertical: 4,
     marginTop: 4,
   },
@@ -344,7 +346,7 @@ const styles = StyleSheet.create({
   },
   tlDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: GV.line,
+    borderBottomColor: HAIRLINE_ON_NAVY,
   },
   rail: {
     width: 10,
@@ -360,7 +362,7 @@ const styles = StyleSheet.create({
   railLine: {
     flex: 1,
     width: StyleSheet.hairlineWidth,
-    backgroundColor: GV.line,
+    backgroundColor: HAIRLINE_ON_NAVY,
     marginTop: 4,
   },
   activityMain: {
@@ -370,36 +372,36 @@ const styles = StyleSheet.create({
   activityTitle: {
     ...TYPE.button,
     fontSize: 15,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   activitySub: {
     ...TYPE.caption,
-    color: GV.body,
+    color: GV.fog,
     fontVariant: ['tabular-nums'],
   },
   sourceText: {
     ...TYPE.caption,
     fontSize: 12,
-    color: GV.muted,
+    color: GV.fog,
     paddingTop: 2,
   },
   emptyCard: {
-    backgroundColor: '#EFF3F1',
+    backgroundColor: TILE_BG,
     borderWidth: 1,
-    borderColor: 'rgba(20, 32, 29, 0.08)',
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderRadius: 8,
+    padding: 16,
     gap: 4,
     marginTop: 4,
   },
   emptyTitle: {
     ...TYPE.title,
-    color: GV.ink,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   emptyBody: {
     ...TYPE.body,
-    color: GV.body,
+    color: GV.fog,
     textAlign: 'center',
   },
 });

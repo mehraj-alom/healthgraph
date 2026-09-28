@@ -13,7 +13,8 @@ import Body, {
 } from 'react-native-body-highlighter';
 import { useTheme } from '@/theme';
 import { radius, spacing } from '@/theme/tokens';
-import { Chip } from './Chip';
+import { CategoryTile } from './CategoryTile';
+import { TILE_TONES } from '@/theme/tones';
 import { formatPartName } from './bodyParts';
 
 export type BodySide = 'front' | 'back';
@@ -40,13 +41,19 @@ interface SymptomBodyMapProps {
   onBodyPartPress?: (part: SelectedBodyPart) => void;
   /** Initial view side. Toggles stay local. */
   side?: BodySide;
-  /** Initial model. Toggles stay local. */
+  /**
+   * Model follows the app's anatomy choice (3D Body). No toggle here:
+   * first-time selection lives with the anatomy download, and a
+   * Settings switch can override this prop in future.
+   */
   gender?: BodyGender;
   /**
    * When false the figure is display-only: taps are ignored and the clear
-   * button hides. Used for history playback, where the data owns the view.
+   * chip hides. Used for history playback, where the data owns the view.
    */
   tappable?: boolean;
+  /** Rendered directly under the figure (e.g. the day slider). */
+  belowFigure?: React.ReactNode;
 }
 
 /**
@@ -61,13 +68,15 @@ export function SymptomBodyMap({
   data = [],
   onBodyPartPress,
   side: initialSide = 'front',
-  gender: initialGender = 'male',
+  gender: genderProp,
   tappable = true,
+  belowFigure,
 }: SymptomBodyMapProps) {
   const { colors, typography } = useTheme();
   const { width } = useWindowDimensions();
   const [side, setSide] = useState<BodySide>(initialSide);
-  const [gender, setGender] = useState<BodyGender>(initialGender);
+  // No marking by tapping here: the figure only ever shows logged data.
+  const gender: BodyGender = genderProp ?? 'male';
   // Locally tapped parts at moderate intensity, keyed by slug + side.
   const [tapped, setTapped] = useState<Map<string, SymptomDatum>>(new Map());
 
@@ -129,65 +138,8 @@ export function SymptomBodyMap({
 
   return (
     <View>
-      {/* View toggles — large targets, one-handed reachable above the figure. */}
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleGroup}>
-          <Text
-            style={[
-              styles.toggleLabel,
-              typography.captionStrong,
-              { color: colors.textSecondary },
-            ]}
-          >
-            View
-          </Text>
-          <View style={styles.chips}>
-            <Chip
-              label="Front"
-              size="large"
-              selected={side === 'front'}
-              onPress={() => setSide('front')}
-              accessibilityLabel="Show front view"
-            />
-            <Chip
-              label="Back"
-              size="large"
-              selected={side === 'back'}
-              onPress={() => setSide('back')}
-              accessibilityLabel="Show back view"
-            />
-          </View>
-        </View>
-        <View style={styles.toggleGroup}>
-          <Text
-            style={[
-              styles.toggleLabel,
-              typography.captionStrong,
-              { color: colors.textSecondary },
-            ]}
-          >
-            Model
-          </Text>
-          <View style={styles.chips}>
-            <Chip
-              label="Male"
-              size="large"
-              selected={gender === 'male'}
-              onPress={() => setGender('male')}
-              accessibilityLabel="Show male model"
-            />
-            <Chip
-              label="Female"
-              size="large"
-              selected={gender === 'female'}
-              onPress={() => setGender('female')}
-              accessibilityLabel="Show female model"
-            />
-          </View>
-        </View>
-      </View>
-
-      {/* Figure — flat fills only, intensity heats amber → orange → red. */}
+      {/* Figure — flat fills only, intensity heats amber → orange → red.
+          Marked names float on the figure itself; no separate section. */}
       <View
         style={[styles.figure, { backgroundColor: colors.surface }]}
         accessibilityRole="image"
@@ -204,123 +156,89 @@ export function SymptomBodyMap({
           defaultStrokeWidth={1}
           onBodyPartPress={handleBodyPartPress}
         />
-      </View>
-
-      {/* Legend — the actual ramp stops, honestly labelled. */}
-      <View
-        style={styles.legend}
-        accessibilityRole="text"
-        accessibilityLabel="Pain scale: mild, moderate, severe"
-      >
-        {(
-          [
-            { label: 'Mild', color: ramp[0] },
-            { label: 'Moderate', color: ramp[1] },
-            { label: 'Severe', color: ramp[2] },
-          ] as const
-        ).map((s) => (
-          <View key={s.label} style={styles.legendItem}>
-            <View style={[styles.swatch, { backgroundColor: s.color }]} />
-            <Text
-              style={[
-                styles.legendLabel,
-                typography.caption,
-                { color: colors.textPrimary },
-              ]}
-            >
-              {s.label}
-            </Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Readout — real selection only, guidance when empty. */}
-      <View
-        style={[
-          styles.readout,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <Text
-          style={[
-            styles.readoutTitle,
-            typography.captionStrong,
-            { color: colors.textSecondary },
-          ]}
-        >
-          {readout.length > 0 ? 'Marked areas' : 'Nothing marked yet'}
-        </Text>
         {readout.length > 0 ? (
-          <Text
-            style={[
-              styles.readoutText,
-              typography.body,
-              { color: colors.textPrimary },
-            ]}
-            accessibilityLiveRegion="polite"
-          >
-            {readout.join(', ')}
-          </Text>
-        ) : (
-          <Text
-            style={[
-              styles.readoutHint,
-              typography.body,
-              { color: colors.textSecondary },
-            ]}
-          >
-            {tappable
-              ? 'Tap a body part to mark where it hurts. Tap again to clear it.'
-              : 'No pain logged that day.'}
-          </Text>
-        )}
-        {tappable && readout.length > 0 ? (
-          <Pressable
-            onPress={() => setTapped(new Map())}
-            accessibilityRole="button"
-            accessibilityLabel="Clear all marked areas"
-            hitSlop={8}
-            style={({ pressed }) => [
-              styles.clearBtn,
-              pressed && styles.clearBtnPressed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.clearText,
-                typography.captionStrong,
-                { color: colors.textSecondary },
-              ]}
-            >
-              Clear all
-            </Text>
-          </Pressable>
+          <View style={styles.nameFloat} pointerEvents="box-none">
+            <View style={styles.nameRow}>
+              {readout.map((name) => (
+                <View key={name} style={styles.nameChip}>
+                  <Text style={styles.nameText} numberOfLines={1}>{name}</Text>
+                </View>
+              ))}
+              {tappable ? (
+                <Pressable
+                  onPress={() => setTapped(new Map())}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear all marked areas"
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.clearChip,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={styles.clearChipText}>✕</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
         ) : null}
+        {/* Legend rides on the figure's own white space. */}
+        <View
+          style={styles.legendFloat}
+          pointerEvents="none"
+          accessibilityRole="text"
+          accessibilityLabel="Pain scale: mild, moderate, severe"
+        >
+          {(
+            [
+              { label: 'Mild', color: ramp[0] },
+              { label: 'Moderate', color: ramp[1] },
+              { label: 'Severe', color: ramp[2] },
+            ] as const
+          ).map((s) => (
+            <View key={s.label} style={styles.legendItem}>
+              <View style={[styles.swatch, { backgroundColor: s.color }]} />
+              <Text
+                style={[
+                  styles.legendLabel,
+                  typography.caption,
+                  { color: '#1D1B17' },
+                ]}
+              >
+                {s.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {belowFigure}
+
+      {/* Front/Back in two gradient tones, just under the slider. */}
+      <View style={styles.sideRow}>
+        <CategoryTile
+          tone={TILE_TONES.sleep}
+          label="Front"
+          center
+          compact
+          active={side === 'front'}
+          onPress={() => setSide('front')}
+          accessibilityLabel="Show front view"
+        />
+        <CategoryTile
+          tone={TILE_TONES.heart}
+          label="Back"
+          center
+          compact
+          active={side === 'back'}
+          onPress={() => setSide('back')}
+          accessibilityLabel="Show back view"
+        />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  toggleRow: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  toggleGroup: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  toggleLabel: {
-    opacity: 0.75,
-  },
-  chips: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
   figure: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -328,11 +246,60 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     overflow: 'hidden',
   },
-  legend: {
+  nameFloat: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 10,
+    alignItems: 'center',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+    maxWidth: '92%',
+  },
+  nameChip: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  nameText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: '#1D1B17',
+  },
+  clearChip: {
+    backgroundColor: '#1D1B17',
+    borderRadius: 9999,
+    minWidth: 32,
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  clearChipText: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  legendFloat: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: spacing.xl,
-    marginTop: spacing.md,
+    gap: 16,
+  },
+  sideRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
   },
   legendItem: {
     flexDirection: 'row',
@@ -345,31 +312,4 @@ const styles = StyleSheet.create({
     borderRadius: 7,
   },
   legendLabel: {},
-  readout: {
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  readoutTitle: {
-    opacity: 0.75,
-  },
-  readoutText: {},
-  readoutHint: {
-    opacity: 0.8,
-  },
-  clearBtn: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.xs,
-    paddingVertical: spacing.xs,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  clearBtnPressed: {
-    opacity: 0.6,
-  },
-  clearText: {
-    textDecorationLine: 'underline',
-  },
 });

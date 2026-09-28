@@ -419,6 +419,8 @@ export type RootStackParamList = {
   Settings: undefined;
   DocumentUpload: undefined;
   DocumentDetail: { documentId: string };
+  /** Past uploads list (device + server documents). */
+  Documents: undefined;
   HealthGraph: { focusStructureId?: string; source?: 'body' | 'graph' } | undefined;
   Medications: undefined;
   /** Tappable symptom body map (front/back, male/female, local state). */

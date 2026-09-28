@@ -1,42 +1,38 @@
 /**
  * HealthAreaCard - bento tiles for live areas, grouped rows for the rest.
  *
- * Color discipline (mobile-taste calibration): no rainbow. Tiles are
- * quiet white surfaces where hierarchy comes from type alone — small
- * muted label, large ink value, one CTA-green change line. Rows are
- * text plus chevron with hairline dividers. The only color on either
- * is the change line, never decoration.
- * - Value first. The real number is the hero of each tile (20 SemiBold,
- *   tabular). The area name sits small above it.
- * - Cards group by role. Live tiles are tappable objects in a 2 column
- *   bento grid. Quiet rows live inside one inset grouped card with
- *   hairline dividers, never twelve identical cards.
- * - Press feedback runs on the UI thread via PressScale (spring 0.97).
- *   Reduced motion collapses to opacity.
+ * healthgraph skill: solid full-colour tiles (one colour per area from
+ * the tone catalog), white centered type, radius 8. Rows are white text
+ * on the dark grouped card with hairline dividers. Value first: the
+ * real number is the hero of each tile (20 SemiBold, tabular).
+ * Press feedback runs on the UI thread via PressScale (spring 0.97).
+ * Reduced motion collapses to opacity.
  */
 
 import { StyleSheet, Text, View } from 'react-native';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { EXTRA_TONES, toneForCategory } from '@/theme/tones';
+import { GV, TYPE, FONT } from '@/theme/guava';
 import { PressScale } from '@/components/PressScale';
 import type { HealthAreaState } from '@/screens/HealthAreas/areas';
 import type { HealthAreaId } from '@/screens/HealthAreas/areas';
 
-/** Light pastel wash per area — soft color, ink text stays readable. */
-export const AREA_TINT: Record<HealthAreaId, string> = {
-  heart: '#FBE7EC',
-  sleep: '#E9E3F7',
-  activity: '#DDF2E7',
-  nutrition: '#FBEFD8',
-  weight: '#DFF0F8',
-  wellbeing: '#DCEFE8',
-  medications: '#E0EBFA',
-  records: '#EFE6D8',
-  skin: '#E9ECEE',
-  substance: '#E9ECEE',
-  cycle: '#FBE7EC',
-  discipline: '#DCEFE8',
+/** Solid fill per area — the soft tone, full-bleed, white type on top. */
+export const AREA_SOLID: Record<HealthAreaId, string> = {
+  heart: '#56837B',
+  sleep: '#57507A',
+  activity: '#96684A',
+  nutrition: '#6E7F4E',
+  weight: '#5C6E7C',
+  wellbeing: '#66666F',
+  medications: '#57507A',
+  records: '#5C6E7C',
+  skin: '#5A6078',
+  substance: '#8A7A5C',
+  cycle: '#8A4A55',
+  discipline: '#66666F',
 };
+
+/** Back-compat tint map (kept so existing imports keep working). */
+export const AREA_TINT: Record<HealthAreaId, string> = AREA_SOLID;
 
 function a11yLabel(area: HealthAreaState, change?: string | null): string {
   return `${area.label}. ${area.headline}${change ? `. ${change}` : ''}`;
@@ -54,14 +50,7 @@ export function HealthAreaTile({
   onPress?: () => void;
 }) {
   const label = a11yLabel(area, change);
-  const tint = AREA_TINT[area.id] ?? GV.paper;
-  // Category tone bar: the pastel wash stays, the duotone deep color marks
-  // the left edge so areas read by family at a glance.
-  const toneBar =
-    area.id === 'skin' ? EXTRA_TONES.slate[0]
-    : area.id === 'substance' ? EXTRA_TONES.sand[0]
-    : area.id === 'cycle' ? EXTRA_TONES.berry[0]
-    : toneForCategory(area.id)[0];
+  const solid = AREA_SOLID[area.id] ?? '#5A6078';
   return (
     <PressScale
       onPress={onPress}
@@ -71,24 +60,17 @@ export function HealthAreaTile({
       style={styles.tileOuter}
     >
       <View
-        style={[styles.tile, { backgroundColor: tint, borderLeftWidth: 4, borderLeftColor: toneBar }]}
+        style={[styles.tile, { backgroundColor: solid }]}
         accessible
         accessibilityLabel={label}
       >
-        <View style={styles.tileHead}>
-          <Text
-            style={styles.tileLabel}
-            numberOfLines={1}
-            maxFontSizeMultiplier={1.4}
-          >
-            {area.label}
-          </Text>
-          {onPress ? (
-            <Text style={styles.tileChev} maxFontSizeMultiplier={1.4}>
-              ›
-            </Text>
-          ) : null}
-        </View>
+        <Text
+          style={styles.tileLabel}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.4}
+        >
+          {area.label}
+        </Text>
           <Text
             style={styles.tileValue}
             numberOfLines={3}
@@ -174,36 +156,25 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   tile: {
-    borderWidth: 1,
-    borderColor: 'rgba(20, 32, 29, 0.08)',
-    borderRadius: SPACE.rCard,
+    borderRadius: 8,
     padding: 12,
     minHeight: 116,
-    justifyContent: 'flex-start',
-  },
-  tileHead: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 2,
   },
   tileLabel: {
     ...TYPE.caption,
-    color: GV.muted,
-    letterSpacing: 0.5,
-    flex: 1,
-  },
-  tileChev: {
-    fontSize: 18,
-    lineHeight: 22,
-    color: GV.muted,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
   },
   tileValue: {
     fontFamily: FONT.semi,
     fontSize: 20,
     lineHeight: 24,
     letterSpacing: -0.4,
-    color: GV.ink,
+    color: '#FFFFFF',
+    textAlign: 'center',
     fontVariant: ['tabular-nums'],
     marginTop: 4,
   },
@@ -211,13 +182,14 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semi,
     fontSize: 13,
     lineHeight: 18,
-    color: GV.cta,
+    color: 'rgba(255, 255, 255, 0.85)',
+    textAlign: 'center',
     fontVariant: ['tabular-nums'],
     marginTop: 4,
   },
   rowOuter: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: GV.line,
+    borderBottomColor: 'rgba(255, 255, 255, 0.12)',
   },
   rowLast: {
     borderBottomWidth: 0,
@@ -237,14 +209,14 @@ const styles = StyleSheet.create({
     fontFamily: FONT.regular,
     fontSize: 17,
     lineHeight: 23,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   rowSub: {
     ...TYPE.caption,
-    color: GV.body,
+    color: GV.fog,
   },
   rowChev: {
     fontSize: 20,
-    color: GV.muted,
+    color: GV.fog,
   },
 });

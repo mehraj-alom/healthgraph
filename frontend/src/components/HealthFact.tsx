@@ -29,7 +29,7 @@ export const HEALTH_FACTS: readonly string[] = [
   'A regular bedtime matters as much as sleep length.',
 ];
 
-const ROTATE_MS = 6000;
+const ROTATE_MS = 12000;
 
 export function HealthFact({ style }: { style?: StyleProp<TextStyle> }) {
   const reduced = useReducedMotion();

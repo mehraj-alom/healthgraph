@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
-  ActivityIndicator,
+  Animated,
   AppState,
+  Easing,
+  Image,
   LogBox,
   Platform,
   StyleSheet,
@@ -36,10 +38,11 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AnatomyProvider } from '@/context/AnatomyContext';
 import { DocumentsProvider } from '@/context/DocumentsContext';
 
-import { ThemeProvider } from '@/theme';
+import { ThemeProvider, useReducedMotion } from '@/theme';
 import { BootSplash, ToastProvider } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { UmbrellaTabBar } from '@/components';
+import Svg, { Circle } from 'react-native-svg';
 
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
 import OnboardingSetupScreen from '@/screens/Onboarding/OnboardingSetupScreen';
@@ -53,6 +56,7 @@ import TimelineScreen from '@/screens/Timeline/TimelineScreen';
 import ChatScreen from '@/screens/Chat/ChatScreen';
 import DocumentUploadScreen from '@/screens/Documents/DocumentUploadScreen';
 import DocumentDetailScreen from '@/screens/Documents/DocumentDetailScreen';
+import DocumentsScreen from '@/screens/Documents/DocumentsScreen';
 import SettingsScreen from '@/screens/Settings/SettingsScreen';
 import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
@@ -254,6 +258,134 @@ function MainTabs() {
 }
 
 /* ============================================================================
+ * Loading screen — black skill backdrop, assembling logo, buffering ring,
+ * quote pinned to the bottom on a long rotation so it can be read.
+ * ========================================================================== */
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const LOADING_LOGO = require('./assets/logo.png');
+const LOGO_W = 220;
+const LOGO_H = 56;
+
+function LoadingScreen() {
+  const reduced = useReducedMotion();
+  // Logo starts split apart and comes together on mount.
+  const assemble = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  // Buffering ring spins while loading.
+  const spin = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduced) {
+      assemble.setValue(1);
+      return;
+    }
+    Animated.timing(assemble, {
+      toValue: 1,
+      duration: 900,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 1100,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduced, assemble, spin]);
+
+  const leftHalf = {
+    opacity: assemble,
+    transform: [
+      {
+        translateX: assemble.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-26, 0],
+        }),
+      },
+    ],
+  };
+  const rightHalf = {
+    opacity: assemble,
+    transform: [
+      {
+        translateX: assemble.interpolate({
+          inputRange: [0, 1],
+          outputRange: [26, 0],
+        }),
+      },
+    ],
+  };
+  const ringSpin = {
+    transform: [
+      {
+        rotate: spin.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['0deg', '360deg'],
+        }),
+      },
+    ],
+  };
+
+  return (
+    <View
+      style={styles.loadingContainer}
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading HealthGraph"
+    >
+      <View style={styles.loadingTop} />
+      <View style={styles.loadingMiddle}>
+        <View style={styles.logoRow} accessibilityLabel="HealthGraph">
+          <Animated.View style={[styles.logoHalf, leftHalf]}>
+            <Image
+              source={LOADING_LOGO}
+              style={[styles.logoImg, { left: 0 }]}
+              resizeMode="contain"
+            />
+          </Animated.View>
+          <Animated.View style={[styles.logoHalf, rightHalf]}>
+            <Image
+              source={LOADING_LOGO}
+              style={[styles.logoImg, { left: -LOGO_W / 2 }]}
+              resizeMode="contain"
+            />
+          </Animated.View>
+        </View>
+        <Animated.View style={[styles.ring, ringSpin]}>
+          <Svg width={76} height={76} viewBox="0 0 76 76">
+            <Circle
+              cx={38}
+              cy={38}
+              r={30}
+              stroke="rgba(255, 255, 255, 0.12)"
+              strokeWidth={5}
+              fill="none"
+            />
+            <Circle
+              cx={38}
+              cy={38}
+              r={30}
+              stroke="#4FD1C5"
+              strokeWidth={5}
+              strokeLinecap="round"
+              fill="none"
+              strokeDasharray={`${2 * Math.PI * 30 * 0.28} ${2 * Math.PI * 30}`}
+            />
+          </Svg>
+        </Animated.View>
+        <Text style={styles.loadingText}>Loading HealthGraph</Text>
+      </View>
+      <View style={styles.loadingBottom}>
+        <HealthFact style={styles.factText} />
+      </View>
+    </View>
+  );
+}
+
+/* ============================================================================
  * Authentication-aware root navigator
  * ========================================================================== */
 
@@ -432,32 +564,7 @@ function AppNavigator() {
    * ------------------------------------------------------------------------ */
 
   if (loading || (user && (!pricingChecked || (!pricingNeeded && !setupChecked)))) {
-    return (
-      <View
-        style={
-          styles.loadingContainer
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color={COLORS.primary}
-        />
-
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          Loading healthgraph...
-        </Text>
-
-        <HealthFact
-          style={
-            styles.factText
-          }
-        />
-      </View>
-    );
+    return <LoadingScreen />;
   }
 
   return (
@@ -580,10 +687,14 @@ function AppNavigator() {
               name="DocumentUpload"
               component={DocumentUploadScreen}
               options={{
-                headerShown: true,
-                headerTitle: 'Upload Document',
-                headerTintColor: COLORS.primary,
-                headerStyle: { backgroundColor: COLORS.background },
+                headerShown: false,
+              }}
+            />
+            <RootStack.Screen
+              name="Documents"
+              component={DocumentsScreen}
+              options={{
+                headerShown: false,
               }}
             />
             <RootStack.Screen
@@ -787,36 +898,53 @@ export default function App() {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-
+    backgroundColor: '#080A11',
+    paddingHorizontal: 24,
+    paddingTop: 48,
+    paddingBottom: 48,
+  },
+  loadingTop: {
+    flex: 1,
+  },
+  loadingMiddle: {
     alignItems: 'center',
-
+    gap: 20,
+  },
+  logoRow: {
+    flexDirection: 'row',
+    height: LOGO_H,
+  },
+  logoHalf: {
+    width: LOGO_W / 2,
+    height: LOGO_H,
+    overflow: 'hidden',
+  },
+  logoImg: {
+    position: 'absolute',
+    top: 0,
+    width: LOGO_W,
+    height: LOGO_H,
+  },
+  ring: {
+    width: 76,
+    height: 76,
+    alignItems: 'center',
     justifyContent: 'center',
-
-    backgroundColor:
-      COLORS.background,
-
-    paddingHorizontal: 24,
   },
-
   loadingText: {
-    marginTop: 16,
-
-    fontSize: 16,
-
-    color:
-      COLORS.textSecondary,
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#A7B8B2',
   },
-
   factText: {
-    marginTop: 12,
-
-    fontSize: 14,
-
-    color:
-      COLORS.textSecondary,
-
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#A7B8B2',
     textAlign: 'center',
-
     paddingHorizontal: 24,
+  },
+  loadingBottom: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
 });

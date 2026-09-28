@@ -1,13 +1,10 @@
 /**
- * Instrument — scoped skeuomorphic kit for the pulse measurement experience.
+ * Instrument — scoped kit for the pulse measurement experience.
  *
- * A premium physical-device aesthetic (bezel, recessed wells, engraved
- * labels, tick scales, tactile controls) used ONLY inside the pulse
- * instrument screen. The app-wide guava flat system is intentionally not
- * modified: this is a separate visual world for a measurement chamber.
- *
- * Every dynamic element here is driven by real pipeline outputs (BPM,
- * quality, stability, state). Nothing synthesizes data.
+ * healthgraph skill: dark cards, sentence-case type, pill buttons.
+ * Used ONLY inside the pulse instrument screen. Every dynamic element
+ * here is driven by real pipeline outputs (BPM, quality, stability,
+ * state). Nothing synthesizes data.
  */
 
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -33,12 +30,12 @@ export const INST = {
 export function EngravedLabel({ children, style }: { children: string; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[styles.engravedWrap, style]}>
-      <Text style={styles.engraved}>{children.toUpperCase()}</Text>
+      <Text style={styles.engraved}>{children}</Text>
     </View>
   );
 }
 
-/** Beveled device panel. */
+/** Dark skill card. */
 export function Panel({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[styles.panelOuter, style]}>
@@ -60,7 +57,7 @@ interface TactileButtonProps {
   accessibilityLabel?: string;
 }
 
-/** Physical push-button with bevel + pressed travel. 56px thumb-zone target. */
+/** Pill button, one line, sentence case. 56px thumb-zone target. */
 export function TactileButton({ title, onPress, disabled, variant = 'primary', accessibilityLabel }: TactileButtonProps) {
   return (
     <Pressable
@@ -85,7 +82,7 @@ export function TactileButton({ title, onPress, disabled, variant = 'primary', a
             disabled && styles.btnTitleDisabled,
           ]}
         >
-          {title.toUpperCase()}
+          {title}
         </Text>
       </View>
     </Pressable>
@@ -149,33 +146,22 @@ const styles = StyleSheet.create({
   engravedWrap: { alignItems: 'center', paddingVertical: 4 },
   engraved: {
     fontFamily: FONT.semi,
-    fontSize: 11,
-    letterSpacing: 3,
-    color: INST.engraved,
-    textShadowColor: '#000000',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 0,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#A7B8B2',
+    textAlign: 'center',
   },
   panelOuter: {
-    backgroundColor: INST.bezelLo,
-    borderRadius: 24,
-    padding: 3,
-    borderTopWidth: 1,
-    borderTopColor: INST.bezelHi,
-    borderLeftWidth: 1,
-    borderLeftColor: '#1b252b',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 8,
+    backgroundColor: '#2A3049',
+    borderRadius: 8,
+    padding: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   panelInner: {
-    backgroundColor: INST.bezel,
-    borderRadius: 21,
+    backgroundColor: 'transparent',
+    borderRadius: 8,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#000000',
     gap: 12,
   },
   well: {
@@ -193,17 +179,12 @@ const styles = StyleSheet.create({
   },
   btnOuter: {
     backgroundColor: '#0a3d2c',
-    borderRadius: 16,
+    borderRadius: 9999,
     padding: 3,
     borderTopWidth: 1,
     borderTopColor: '#2fae7d',
     minHeight: 56,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 6,
-    elevation: 5,
   },
   btnOuterSecondary: { backgroundColor: '#1c262b', borderTopColor: '#3a4b53' },
   btnOuterDanger: { backgroundColor: '#3d1414', borderTopColor: '#a33b3b' },
@@ -211,18 +192,20 @@ const styles = StyleSheet.create({
   btnOuterPressed: { transform: [{ translateY: 2 }], shadowOpacity: 0.15 },
   btnFace: {
     backgroundColor: '#0e5c40',
-    borderRadius: 13,
+    borderRadius: 9999,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
+    paddingHorizontal: 16,
     borderBottomWidth: 2,
     borderBottomColor: '#00000088',
   },
   btnTitle: {
     fontFamily: FONT.semi,
-    fontSize: 15,
-    letterSpacing: 1.5,
+    fontSize: 16,
+    lineHeight: 22,
     color: '#eafff3',
+    textAlign: 'center',
   },
   btnTitleSecondary: { color: INST.steel },
   btnTitleDisabled: { color: INST.engraved },
