@@ -66,6 +66,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # android/ is gitignored (Expo continuous native generation):
+      # regenerate it from app.json + config plugins on the runner.
+      - name: Prebuild Android project
+        run: npx expo prebuild --platform android --no-install
+
       - name: Assemble debug APK
         run: ./android/gradlew assembleDebug --no-daemon
 
