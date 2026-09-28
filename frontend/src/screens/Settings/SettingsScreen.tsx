@@ -21,11 +21,9 @@ import { HabitGrid } from '@/screens/Settings/HabitGrid';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Input, NumberInput } from '@/components';
-import { MarkerHighlight } from '@/components/MarkerHighlight';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { TILE_TONES } from '@/theme/tones';
 import { CategoryTile } from '@/components/CategoryTile';
-import { StageGradient } from '@/components/StageGradient';
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { getOnboardingState, saveOnboardingSelections } from '@/db/queries/onboarding';
@@ -46,8 +44,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 // screen so that screen stays focused on the model).
 // ---------------------------------------------------------------------------
 
-function AnatomyStorageSection() {
-  const { maleStatus, femaleStatus, deleteGender } = useAnatomy();
+function AnatomyStorageSection() {  const { maleStatus, femaleStatus, deleteGender } = useAnatomy();
   const [confirmDelete, setConfirmDelete] = useState<Gender | null>(null);
 
   const handleDelete = async (g: Gender) => {
@@ -57,25 +54,23 @@ function AnatomyStorageSection() {
 
   return (
     <>
-      <MarkerHighlight textStyle={styles.sectionTitle}>Storage</MarkerHighlight>
-      <Card padding="lg" level={1} style={styles.card}>
+      <Text style={styles.sectionTitle}>Storage</Text>
+      <View style={styles.storageBoxes}>
         {(['male', 'female'] as Gender[]).map((g) => {
           const status = g === 'male' ? maleStatus : femaleStatus;
           const label = g === 'male' ? 'Male' : 'Female';
           const installed = status.state === 'INSTALLED';
           return (
-            <View key={g} style={styles.storageRow}>
-              <View style={styles.storageInfo}>
-                <Text style={styles.fieldValue}>{label} anatomy</Text>
-                <Text style={styles.menuRowSubtitle}>
-                  {installed ? 'Downloaded' : 'Not downloaded'}
-                </Text>
-              </View>
+            <View key={g} style={styles.storageBox}>
+              <Text style={styles.storageBoxLabel}>{label}</Text>
+              <Text style={styles.menuRowSubtitle}>
+                {installed ? 'Downloaded' : 'Not downloaded'}
+              </Text>
               {installed ? (
                 confirmDelete === g ? (
-                  <View style={styles.storageConfirmRow}>
+                  <View style={styles.storageBoxActions}>
                     <Pressable
-                      style={styles.storageBtn}
+                      style={styles.storageBoxBtn}
                       onPress={() => void handleDelete(g)}
                       accessibilityRole="button"
                       accessibilityLabel={`Delete ${label} anatomy download`}
@@ -83,7 +78,7 @@ function AnatomyStorageSection() {
                       <Text style={styles.storageDeleteText}>Delete</Text>
                     </Pressable>
                     <Pressable
-                      style={styles.storageBtn}
+                      style={styles.storageBoxBtn}
                       onPress={() => setConfirmDelete(null)}
                       accessibilityRole="button"
                       accessibilityLabel="Cancel deletion"
@@ -93,7 +88,7 @@ function AnatomyStorageSection() {
                   </View>
                 ) : (
                   <Pressable
-                    style={styles.storageBtn}
+                    style={styles.storageBoxBtn}
                     onPress={() => setConfirmDelete(g)}
                     accessibilityRole="button"
                     accessibilityLabel={`Delete ${label} anatomy download`}
@@ -105,7 +100,7 @@ function AnatomyStorageSection() {
             </View>
           );
         })}
-      </Card>
+      </View>
     </>
   );
 }
@@ -119,6 +114,7 @@ export default function SettingsScreen() {
   const { user, userProfile, logout, refreshDisplayName } = useAuth();
   const queryClient = useQueryClient();
   const [signingOut, setSigningOut] = useState(false);
+  const [dangerOpen, setDangerOpen] = useState(false);
 
   // --- Profile query (backend is source of truth) ---
   const profileQuery = useQuery<PatientProfile>({
@@ -287,6 +283,20 @@ export default function SettingsScreen() {
     }
   }, [pickingPhoto, savePhoto]);
 
+  // The photo is the whole control: tap to change, or remove when set.
+  const onPhotoTap = useCallback(() => {
+    if (pickingPhoto) return;
+    if (!photoUri) {
+      void pickPhoto();
+      return;
+    }
+    Alert.alert('Profile photo', 'Change or remove your photo.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => void savePhoto(null) },
+      { text: 'Change photo', onPress: () => void pickPhoto() },
+    ]);
+  }, [pickingPhoto, photoUri, pickPhoto, savePhoto]);
+
   // --- Danger zone: real deletion flows (server first, then local wipe).
   // Double-submit is prevented twice: a synchronous ref (same-tick double
   // taps, which state cannot catch) plus the `deleting` state (re-renders).
@@ -421,19 +431,19 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StageGradient />
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Identity (local photo + account name) ── */}
+        {/* ── Identity (photo + name only; tap photo to change) ── */}
         <Card padding="sm" level={1} style={styles.identityCard}>
           <View style={styles.identityRow}>
             <Pressable
               style={styles.identityAvatar}
-              onPress={() => void pickPhoto()}
+              onPress={onPhotoTap}
+              disabled={pickingPhoto}
               accessibilityRole="button"
-              accessibilityLabel="Change profile photo"
+              accessibilityLabel={photoUri ? 'Change or remove photo' : 'Add photo'}
             >
               {photoUri ? (
                 <Image source={{ uri: photoUri }} style={styles.photoImage} />
@@ -447,41 +457,13 @@ export default function SettingsScreen() {
               <Text style={styles.identityName} numberOfLines={1}>
                 {displayName || userProfile?.displayName || 'Your profile'}
               </Text>
-              {email ? <Text style={styles.identityEmail} numberOfLines={1}>{email}</Text> : null}
             </View>
-          </View>
-          <View style={styles.identityDivider} />
-          <View style={styles.identityActions}>
-            <Pressable
-              style={styles.identityBtn}
-              onPress={() => void pickPhoto()}
-              disabled={pickingPhoto}
-              accessibilityRole="button"
-              accessibilityLabel={photoUri ? 'Change photo' : 'Add photo'}
-            >
-              <Text style={styles.identityBtnPrimary}>
-                {pickingPhoto ? 'Opening…' : photoUri ? 'Change photo' : 'Add photo'}
-              </Text>
-            </Pressable>
-            {photoUri ? (
-              <Pressable
-                style={styles.identityBtn}
-                onPress={() => void savePhoto(null)}
-                accessibilityRole="button"
-                accessibilityLabel="Remove photo"
-              >
-                <Text style={styles.identityBtnQuiet}>Remove</Text>
-              </Pressable>
-            ) : null}
           </View>
         </Card>
 
         {/* ── Activity (habit tracker from real tracked rows) ── */}
         <View style={styles.sectionHead}>
-          <MarkerHighlight textStyle={styles.sectionTitle}>Activity</MarkerHighlight>
-          <Text style={styles.sectionSubtitle}>
-            Every square is a real tracked day.
-          </Text>
+          <Text style={styles.sectionTitle}>Activity</Text>
         </View>
         <HabitGrid
           weeks={habit.weeks}
@@ -491,8 +473,8 @@ export default function SettingsScreen() {
           isLoading={habit.isLoading}
         />
 
-        {/* ── Profile Section ── */}
-        <MarkerHighlight textStyle={styles.sectionTitle}>Profile</MarkerHighlight>
+        {/* ── About You ── */}
+        <Text style={styles.sectionTitle}>About You</Text>
         <Card padding="lg" level={1} style={styles.card}>
           <Input
             label="Name"
@@ -502,6 +484,7 @@ export default function SettingsScreen() {
             autoCapitalize="words"
             autoComplete="name"
             textContentType="name"
+            style={styles.inputWell}
           />
 
           <View style={styles.field}>
@@ -517,17 +500,9 @@ export default function SettingsScreen() {
             keyboardType="phone-pad"
             autoComplete="tel"
             textContentType="telephoneNumber"
+            style={styles.inputWell}
           />
-        </Card>
 
-        {/* ── Health Profile Section ── */}
-        <View style={styles.sectionHead}>
-          <MarkerHighlight textStyle={styles.sectionTitle}>Health Profile</MarkerHighlight>
-          <Text style={styles.sectionSubtitle}>
-            Optional. These help personalize your experience.
-          </Text>
-        </View>
-        <Card padding="lg" level={1} style={styles.card}>
           <View style={styles.fieldRow}>
             <View style={styles.fieldHalf}>
               <NumberInput
@@ -536,6 +511,7 @@ export default function SettingsScreen() {
                 value={heightCm}
                 onChangeText={setHeightCm}
                 placeholder="e.g. 175"
+                style={styles.inputWell}
               />
             </View>
             <View style={styles.fieldHalf}>
@@ -545,27 +521,15 @@ export default function SettingsScreen() {
                 value={weightKg}
                 onChangeText={setWeightKg}
                 placeholder="e.g. 70"
+                style={styles.inputWell}
               />
             </View>
           </View>
         </Card>
 
-        {/* ── Save Button ── */}
-        <Button
-          title={saveMutation.isSuccess ? 'Saved' : saveMutation.isPending ? 'Saving' : 'Save Profile'}
-          onPress={() => saveMutation.mutate()}
-          fullWidth
-          loading={saveMutation.isPending}
-          disabled={saveMutation.isPending}
-          style={styles.saveButton}
-        />
-
         {/* ── Preferences (deliberate-change shortcuts; home is the drawer) ── */}
         <View style={styles.sectionHead}>
-          <MarkerHighlight textStyle={styles.sectionTitle}>Preferences</MarkerHighlight>
-          <Text style={styles.sectionSubtitle}>
-            Profile syncs to your account on save; health logs sync automatically.
-          </Text>
+          <Text style={styles.sectionTitle}>Preferences</Text>
         </View>
         <View style={styles.miniTiles}>
           <CategoryTile
@@ -590,18 +554,28 @@ export default function SettingsScreen() {
         <AnatomyStorageSection />
 
         {/* ── Account Section ── */}
-        <MarkerHighlight textStyle={styles.sectionTitle}>Account</MarkerHighlight>
         <Button
           title="Sign Out"
-          variant="outline"
           fullWidth
           loading={signingOut}
           disabled={signingOut}
           onPress={confirmSignOut}
+          style={styles.signOutBtn}
+          textStyle={styles.signOutBtnText}
         />
 
-        {/* ── Danger Zone (real deletion: server erasure, then local wipe) ── */}
-        <MarkerHighlight textStyle={[styles.sectionTitle, styles.dangerTitle]}>Danger zone</MarkerHighlight>
+        {/* ── Danger Zone (tap to open; real deletion flows) ── */}
+        <Pressable
+          onPress={() => setDangerOpen((v) => !v)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: dangerOpen }}
+          accessibilityLabel={dangerOpen ? 'Close danger zone' : 'Open danger zone'}
+          style={styles.dangerHead}
+        >
+          <Text style={[styles.sectionTitle, styles.dangerTitle]}>Danger zone</Text>
+          <Text style={styles.dangerChev}>{dangerOpen ? '▴' : '▾'}</Text>
+        </Pressable>
+        {dangerOpen ? (
         <View style={styles.dangerCard}>
           <Pressable
             style={styles.dangerRow}
@@ -633,7 +607,17 @@ export default function SettingsScreen() {
             <Text style={styles.menuRowChevron}>›</Text>
           </Pressable>
         </View>
+        ) : null}
       </ScrollView>
+      <View style={styles.saveBar}>
+        <Button
+          title={saveMutation.isSuccess ? 'Saved' : saveMutation.isPending ? 'Saving' : 'Save Profile'}
+          onPress={() => saveMutation.mutate()}
+          fullWidth
+          loading={saveMutation.isPending}
+          disabled={saveMutation.isPending}
+        />
+      </View>
       <DeleteConfirmSheet
         visible={sheetMode !== null}
         mode={sheetMode ?? 'data'}
@@ -658,13 +642,17 @@ export default function SettingsScreen() {
 // Styles
 // ---------------------------------------------------------------------------
 
+const NAVY = '#080A11';
+const TILE_BG = '#2A3049';
+const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: NAVY,
   },
   content: {
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: 32,
     gap: 24,
@@ -677,8 +665,9 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...TYPE.title,
+    fontSize: 18,
     color: '#FFFFFF',
-    letterSpacing: 0.2,
+    letterSpacing: -0.2,
   },
   sectionSubtitle: {
     ...TYPE.caption,
@@ -686,25 +675,42 @@ const styles = StyleSheet.create({
   },
   card: {
     gap: 16,
+    backgroundColor: TILE_BG,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderWidth: 1,
+    borderRadius: 8,
   },
-  storageRow: {
+  inputWell: {
+    borderRadius: 8,
+  },
+  storageBoxes: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 56,
+    gap: 12,
   },
-  storageInfo: {
+  storageBox: {
     flex: 1,
-    gap: 2,
+    backgroundColor: TILE_BG,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    gap: 4,
+    alignItems: 'center',
   },
-  storageConfirmRow: {
+  storageBoxLabel: {
+    ...TYPE.button,
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+  storageBoxActions: {
     flexDirection: 'row',
     gap: 4,
+    marginTop: 4,
   },
-  storageBtn: {
+  storageBoxBtn: {
     minHeight: 44,
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
   },
   storageDeleteText: {
     ...TYPE.body,
@@ -714,7 +720,7 @@ const styles = StyleSheet.create({
   storageCancelText: {
     ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.muted,
+    color: GV.fog,
   },
   field: {
     gap: 8,
@@ -728,16 +734,43 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
   },
   fieldValue: {
     ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    color: '#FFFFFF',
     paddingVertical: 8,
   },
   saveButton: {
     marginTop: 0,
+  },
+  saveBar: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  signOutBtn: {
+    backgroundColor: '#FFFFFF',
+  },
+  signOutBtnText: {
+    color: NAVY,
+  },
+  outlineBtn: {
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  outlineBtnText: {
+    color: '#FFFFFF',
+  },
+  dangerHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+  },
+  dangerChev: {
+    ...TYPE.title,
+    color: GV.danger,
   },
   // Compact deliberate-change rows (small, quiet — the drawer's Health
   // section is their primary home).
@@ -771,16 +804,20 @@ const styles = StyleSheet.create({
   },
   menuRowSubtitle: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
   },
   menuRowChevron: {
     ...TYPE.title,
-    color: GV.muted,
+    color: GV.fog,
     opacity: 0.7,
     marginLeft: 8,
   },
   identityCard: {
     gap: 0,
+    backgroundColor: TILE_BG,
+    borderColor: HAIRLINE_ON_NAVY,
+    borderWidth: 1,
+    borderRadius: 8,
   },
   identityRow: {
     flexDirection: 'row',
@@ -791,7 +828,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -802,35 +839,7 @@ const styles = StyleSheet.create({
   },
   identityName: {
     ...TYPE.title,
-    color: GV.ink,
-  },
-  identityEmail: {
-    ...TYPE.caption,
-    color: GV.muted,
-  },
-  identityDivider: {
-    height: 1,
-    backgroundColor: GV.line,
-    marginVertical: 12,
-  },
-  identityActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  identityBtn: {
-    paddingRight: 16,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  identityBtnPrimary: {
-    ...TYPE.button,
-    fontSize: 15,
-    color: GV.cta,
-  },
-  identityBtnQuiet: {
-    ...TYPE.button,
-    fontSize: 15,
-    color: GV.muted,
+    color: '#FFFFFF',
   },
   photoImage: {
     width: '100%',
@@ -838,14 +847,14 @@ const styles = StyleSheet.create({
   },
   photoInitial: {
     ...TYPE.display,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   dangerTitle: {
     color: GV.danger,
   },
   dangerCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
+    backgroundColor: TILE_BG,
+    borderRadius: 8,
     paddingHorizontal: 24,
     paddingVertical: 8,
     borderWidth: 1,
@@ -864,6 +873,6 @@ const styles = StyleSheet.create({
   },
   dangerDivider: {
     height: 1,
-    backgroundColor: GV.line,
+    backgroundColor: HAIRLINE_ON_NAVY,
   },
 });

@@ -276,9 +276,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: GV.card,
+    backgroundColor: '#2A3049',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     maxHeight: '88%',
   },
   content: {
@@ -289,7 +293,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...TYPE.title,
-    color: GV.ink,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   sub: {
@@ -299,30 +303,30 @@ const styles = StyleSheet.create({
     fontFamily: FONT.semi,
   },
   scopeBox: {
-    backgroundColor: GV.wash,
-    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 8,
     padding: 14,
     gap: 6,
   },
   scopeLine: {
     ...TYPE.body,
     fontSize: 14,
-    color: GV.body,
+    color: '#FFFFFF',
   },
   instructions: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     textAlign: 'center',
   },
   input: {
-    backgroundColor: GV.card,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: GV.line,
-    borderRadius: 14,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 8,
     minHeight: 52,
     paddingHorizontal: 16,
     fontSize: 16,
-    color: GV.ink,
+    color: '#14151D',
     textAlign: 'center',
     letterSpacing: 2,
   },
@@ -334,7 +338,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   confirmBtnDisabled: {
-    backgroundColor: GV.line,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
   confirmBtnPressed: {
     opacity: 0.85,
@@ -346,7 +350,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   confirmTextDisabled: {
-    color: GV.muted,
+    color: GV.fog,
   },
   cancelHit: {
     minHeight: 44,
@@ -372,12 +376,12 @@ const styles = StyleSheet.create({
   },
   doneText: {
     ...TYPE.body,
-    color: GV.ink,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   retryNote: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     textAlign: 'center',
   },
   doneBtn: {

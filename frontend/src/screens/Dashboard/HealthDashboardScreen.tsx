@@ -45,7 +45,6 @@ import Svg, { Path, Rect, Circle, G, Line } from 'react-native-svg';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { toneForCategory } from '@/theme/tones';
-import { StageGradient } from '@/components/StageGradient';
 import { domainHueForStream } from '@/theme/dashboardApple';
 
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
@@ -351,99 +350,57 @@ function ActionRowBlock({
 
   return (
     <View style={[styles.section, styles.sectionHero]}>
-      {/* ── Daily check-in hero ── */}
-      <Card
-        style={styles.todayCard}
-        accessibilityLabel={loggedToday ? "View or edit today's daily log" : "Enter today's daily log"}
-        onPress={onDailyLog}
-      >
-        <View style={styles.todayRow}>
-          <View style={styles.todayText}>
-            <View style={styles.statusRow}>
-              <View style={[styles.statusDot, { backgroundColor: fullyDone ? GV.cta : GV.muted }]} />
-              <Text style={styles.statusText}>
-                {loggedToday ? 'Today' : "Today's check-in"}
-              </Text>
-              <Text style={styles.statusCount}>{`${doneCount}/${signals.length}`}</Text>
-            </View>
-            <View style={styles.titleRow}>
-              <Text style={styles.todayTitle}>
-                {fullyDone
-                  ? 'Complete'
-                  : doneCount > 0
-                    ? 'Partial'
-                    : 'Check in needed'}
-              </Text>
-              <DupDup done={fullyDone} />
-            </View>
-            {!fullyDone ? (
-              <View style={styles.todayCta}>
-                <Text style={styles.todayCtaText}>Check in</Text>
-              </View>
-            ) : null}
-          </View>
-          <ProgressRing pct={completion} />
-        </View>
-      </Card>
-
-      {/* ── Medication up next: a quiet white-card row. The whole row opens
-           medications; the toggle records today's dose inline. */}
-      <Card
-        style={styles.medCard}
-        accessibilityLabel={medActive ? `Medications, ${medTaken} of ${medExpected} doses taken` : 'No medications scheduled. Add one.'}
-        onPress={onMedications}
-      >
-        <View style={styles.medIconTile}>
-          <PillGlyph size={20} color={GV.fx.blue} />
-        </View>
-        <View style={styles.medRowText}>
-          <Text style={styles.medRowEyebrow}>
-            {medActive ? 'Medication, up next' : 'Medication'}
-          </Text>
-          <Text style={styles.medRowName} numberOfLines={1}>
-            {medActive ? medNames[0] : 'Nothing scheduled'}
-          </Text>
-          {medActive ? (
-            <Text style={styles.medRowSub} numberOfLines={1}>
-              {medExpected > 0
-                ? `${medTaken} of ${medExpected} doses${medCount > 1 ? ` · +${medCount - 1} more` : ''}`
-                : `${medCount} active`}
+      {/* ── Check-in + medication: two square boxes, one line ── */}
+      <View style={styles.duoRow}>
+        <Card
+          style={styles.checkBox}
+          accessibilityLabel={loggedToday ? "View or edit today's daily log" : "Enter today's daily log"}
+          onPress={onDailyLog}
+        >
+          <View style={styles.statusRow}>
+            <Text style={styles.statusText}>
+              {loggedToday ? 'Today' : "Today's check-in"}
             </Text>
+          </View>
+          <Text style={styles.todayTitle}>
+            {fullyDone
+              ? 'Done'
+              : doneCount > 0
+                ? 'Partial'
+                : 'Check in needed'}
+          </Text>
+          <Text style={styles.todayPct}>{`${Math.round(completion * 100)}%`}</Text>
+          {!fullyDone ? (
+            <View style={styles.todayCta}>
+              <Text style={styles.todayCtaText}>Check in</Text>
+            </View>
+          ) : null}
+        </Card>
+
+        <Card
+          style={styles.medBox}
+          accessibilityLabel={medActive ? `Medications, ${medTaken} of ${medExpected} doses taken` : 'No medications scheduled. Add one.'}
+          onPress={onMedications}
+        >
+          <Text style={styles.medBoxLabel}>Medication</Text>
+          {medActive ? (
+            <ScrollView
+              style={styles.medList}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+            >
+              {medNames.map((name) => (
+                <Text key={name} style={styles.medListItem} numberOfLines={1}>
+                  {name}
+                </Text>
+              ))}
+            </ScrollView>
           ) : (
             <Text style={styles.medRowSub} numberOfLines={1}>Add one to start tracking</Text>
           )}
-          {medActive && medExpected > 0 ? <DoseBar pct={dosePct} /> : null}
-        </View>
-        {medActive && upNextMedId ? (
-          <Pressable
-            onPress={onToggleUpNextTaken}
-            style={({ pressed }) => [
-              styles.medTakenToggle,
-              upNextTaken ? styles.medTakenToggleOn : styles.medTakenToggleOff,
-              pressed && { opacity: 0.7 },
-            ]}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: upNextTaken }}
-            accessibilityLabel={
-              upNextTaken
-                ? `${medNames[0]} taken, already recorded`
-                : `Mark ${medNames[0]} taken`
-            }
-            hitSlop={8}
-          >
-            <Text
-              style={[
-                styles.medTakenToggleGlyph,
-                upNextTaken ? styles.medTakenToggleGlyphOn : styles.medTakenToggleGlyphOff,
-              ]}
-            >
-              {upNextTaken ? '✓' : '✕'}
-            </Text>
-          </Pressable>
-        ) : (
           <Text style={styles.medChevron}>›</Text>
-        )}
-      </Card>
+        </Card>
+      </View>
     </View>
   );
 }
@@ -496,21 +453,11 @@ function InsightPanelBlock({
 }) {
   const [mapOpen, setMapOpen] = useState(false);
   const [mapWidth, setMapWidth] = useState(0);
-  // Honest verdict counts straight from the dial values — no scoring.
-  const steadyCount = hMetrics.filter((m) => m.good).length;
-  const nudgeCount = hMetrics.length - steadyCount;
-
   return (
     <View style={styles.section}>
       <View style={styles.insightHead}>
-        <Text style={styles.insightEyebrow}>Insight</Text>
+        <Text style={styles.insightEyebrow}>Overview</Text>
       </View>
-
-      {hMetrics.length > 0 ? (
-        <Text style={styles.verdictLine}>
-          {`${steadyCount} steady${nudgeCount > 0 ? ` · ${nudgeCount} to nudge` : ''}`}
-        </Text>
-      ) : null}
 
       <Card style={styles.panel}>
         <Pressable
@@ -521,7 +468,7 @@ function InsightPanelBlock({
           accessibilityLabel="Expand health overview map"
         >
           {mapWidth > 0 ? (
-            <HGraphMap metrics={hMetrics} width={mapWidth} />
+            <HGraphMap metrics={hMetrics} width={Math.round(mapWidth * 0.8)} />
           ) : null}
           {/* Day scrubber: pick 7 / 14 / 30 days back, slide through them,
               the dial follows. The static average-chips line it replaces
@@ -558,18 +505,6 @@ function InsightPanelBlock({
           ) : null}
         </Pressable>
 
-        {/* Improve / Keep duo lives inside the card, below the dial. */}
-        <ImproveKeepDuo onImprove={onImprove} />
-
-        <Pressable
-          style={({ pressed }) => [styles.graphLink, pressed && { opacity: 0.6 }]}
-          onPress={onOpenFullGraph}
-          accessibilityRole="button"
-          accessibilityLabel="Explore your health in 3D"
-        >
-          <Text style={styles.graphLinkText}>Explore in 3D</Text>
-          <Text style={styles.graphLinkArrow}>›</Text>
-        </Pressable>
       </Card>
 
       <MapFullscreen visible={mapOpen} hMetrics={hMetrics} onClose={() => setMapOpen(false)} onImprove={(focus) => { setMapOpen(false); onImprove(focus); }} />
@@ -1210,23 +1145,9 @@ export default function HealthDashboardScreen() {
     runOnJS(reportTabScroll)(e.contentOffset.y);
   });
 
-  // ── Centered Guava screen title on the stage — static, no parallax.
-  const todayLine = useMemo(
-    () =>
-      new Date().toLocaleDateString(undefined, {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-      }),
-    [],
-  );
-
   const listHeader = useMemo(() => (
     <View>
-      <View style={styles.titleBlock}>
-        <Text style={styles.titleEyebrow}>{todayLine}</Text>
-        <Text style={styles.titleDisplay}>Health</Text>
-      </View>
+      <InsightPanelBlock hMetrics={hMetrics} day={{ off: dialDay.off, max: dialDay.max, label: dialDay.label, range: dialDay.range, onChange: setDayOffset, onRange: setDayRange }} onOpenFullGraph={goToFullGraph} onImprove={(focus) => navigation.navigate('Improve', { focus, metrics: hMetrics })} />
       <ActionRowBlock
         loggedToday={loggedToday}
         moodLogged={metrics.data?.today_wellbeing != null}
@@ -1242,15 +1163,13 @@ export default function HealthDashboardScreen() {
         onMedications={goToMedications}
         onToggleUpNextTaken={() => void toggleUpNextTaken()}
       />
-      {/* Priority lives behind the header P button — no feed card. */}
-      <InsightPanelBlock hMetrics={hMetrics} day={{ off: dialDay.off, max: dialDay.max, label: dialDay.label, range: dialDay.range, onChange: setDayOffset, onRange: setDayRange }} onOpenFullGraph={goToFullGraph} onImprove={(focus) => navigation.navigate('Improve', { focus, metrics: hMetrics })} />
       <CorrelationHeading count={feed.length} />
     </View>
   ), [
     loggedToday, metrics.data?.today_wellbeing, waterMl, medNames, activeMeds.length, medTaken, medExpected, medActive,
     upNextMed, upNextTaken, toggleUpNextTaken,
     hMetrics, dialDay, feed.length, goToDailyLog, goToMedications, goToFullGraph, goToSettings,
-    todayLine, navigation,
+    navigation,
   ]);
 
   const renderItem = useCallback(({ item }: { item: CorrelationFeedItem }) => (
@@ -1322,7 +1241,6 @@ export default function HealthDashboardScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <StageGradient variant="dawn" />
       <HeaderBlock
         photoUri={photoUri}
         hasActivity={story.story.length > 0}
@@ -1387,7 +1305,7 @@ export default function HealthDashboardScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: '#080A11',
   },
 
   // Header — transparent on the stage, white circular buttons, dark glyphs.
@@ -1506,6 +1424,40 @@ const styles = StyleSheet.create({
   // between data sections below.
   sectionHero: { marginBottom: 16, gap: SPACE.cardGap },
 
+  // ── Check-in + medication square duo ──
+  duoRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  checkBox: {
+    flex: 1,
+    aspectRatio: 1.1,
+    justifyContent: 'flex-start',
+    gap: 6,
+    backgroundColor: '#DDF2E7',
+  },
+  medBox: {
+    flex: 1,
+    aspectRatio: 1.1,
+    justifyContent: 'flex-start',
+    gap: 6,
+    backgroundColor: '#E0EBFA',
+  },
+  medBoxLabel: {
+    ...TYPE.caption,
+    fontFamily: FONT.semi,
+    color: GV.ink,
+  },
+  medList: {
+    flex: 1,
+  },
+  medListItem: {
+    ...TYPE.button,
+    fontSize: 15,
+    color: GV.ink,
+    paddingVertical: 2,
+  },
+
   // ── Shared correlation range (Week / Month / Year, global state) ──
   rangeRow: {
     flexDirection: 'row',
@@ -1540,23 +1492,29 @@ const styles = StyleSheet.create({
   dupCross: { fontFamily: FONT.semi, color: GV.muted, lineHeight: undefined },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { ...TYPE.caption, color: GV.body },
+  statusText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ctaPressed },
   statusCount: { ...TYPE.caption, color: GV.muted, marginLeft: 2, fontVariant: ['tabular-nums'] },
   // Hug-the-text: grow 0 + shrink 1 (NOT flex:1) so the status badge sits
   // immediately after the words instead of docking at the row's far edge.
   // Long titles still wrap instead of overflowing.
-  todayTitle: { ...TYPE.display, color: GV.ink, flexGrow: 0, flexShrink: 1 },
+  todayTitle: { fontFamily: FONT.semi, fontSize: 20, lineHeight: 26, letterSpacing: -0.2, color: GV.ink, flexGrow: 0, flexShrink: 1 },
+  todayPct: {
+    ...TYPE.title,
+    color: GV.ink,
+    fontVariant: ['tabular-nums'],
+  },
   ringCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   ringText: { ...TYPE.display, color: GV.ink, fontVariant: ['tabular-nums'] },
   todayCta: {
     alignSelf: 'flex-start',
     borderRadius: SPACE.rPill,
     backgroundColor: GV.cta,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 36,
+    justifyContent: 'center',
   },
-  todayCtaText: { ...TYPE.button, color: '#FFFFFF' },
+  todayCtaText: { ...TYPE.chip, color: '#FFFFFF' },
 
   // ── Medication row: a flat white card. ──
   medCard: {
@@ -1582,7 +1540,7 @@ const styles = StyleSheet.create({
   },
   medTakenToggleOn: { backgroundColor: GV.cta, borderColor: GV.cta },
   medTakenToggleOff: { backgroundColor: 'transparent', borderColor: GV.cta },
-  medTakenToggleGlyph: { fontSize: 17, fontFamily: FONT.semi, lineHeight: 22 },
+  medTakenToggleGlyph: { fontSize: 14, fontFamily: FONT.semi, lineHeight: 18 },
   medTakenToggleGlyphOn: { color: '#FFFFFF' },
   medTakenToggleGlyphOff: { color: GV.cta },
   medChevron: { fontSize: 22, fontFamily: FONT.semi, color: GV.muted, paddingRight: 2 },
@@ -1602,7 +1560,7 @@ const styles = StyleSheet.create({
 
   // Insights panel — flat white card: map, verdicts, actions, 3D link.
   panel: {
-    padding: SPACE.cardPad,
+    padding: 12,
     gap: 12,
   },
   // Insights section header — single quiet eyebrow on the stage (the dial

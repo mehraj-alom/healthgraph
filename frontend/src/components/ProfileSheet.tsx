@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, type ComponentRef } from 'react';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   AccessibilityInfo,
   Alert,
@@ -17,15 +17,7 @@ import {
 } from 'react-native';
 import Constants from 'expo-constants';
 import { BlurView } from 'expo-blur';
-import ReAnimated, {
-  Easing as ReEasing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-  runOnJS,
-} from 'react-native-reanimated';
 import { useReducedMotion } from '@/theme';
-import { usePriority } from '@/hooks/usePriority';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { useDocuments } from '@/context/DocumentsContext';
 import { useAuth } from '@/context/AuthContext';
@@ -39,61 +31,23 @@ import { useToast } from '@/components/Toast';
 
 interface FeatureDef {
   title: string;
-  sub: string;
   route: string;
   params?: Record<string, unknown>;
 }
 
-const TRACK_FEATURES: FeatureDef[] = [
-  { title: 'Daily Log', sub: 'Log today', route: 'DailyLog' },
-  { title: 'Measure Pulse', sub: 'Check heart rate', route: 'PpgMeasure' },
-  { title: 'Scan Food', sub: 'Estimate meal calories', route: 'FoodScan' },
-  { title: 'Upload Record', sub: 'Add a document', route: 'DocumentUpload' },
-  { title: 'Symptom Map', sub: 'Mark where it hurts', route: 'SymptomMap' },
-];
-
 const EXPLORE_FEATURES: FeatureDef[] = [
-  { title: 'Chat', sub: 'Ask about your health', route: 'Chat' },
-  { title: 'Timeline', sub: 'Your history', route: 'Timeline' },
-  { title: '3D Body', sub: 'Explore your body', route: 'Body' },
-  { title: 'Health Graph', sub: 'Full overview', route: 'HealthGraph', params: { source: 'graph' } },
+  { title: 'Medications', route: 'Medications' },
+  { title: 'My Priorities', route: 'Priority' },
+  { title: 'Daily Log', route: 'DailyLog' },
+  { title: 'Measure Pulse', route: 'PpgMeasure' },
+  { title: 'Scan Food', route: 'FoodScan' },
+  { title: 'Upload Record', route: 'DocumentUpload' },
+  { title: 'Symptom Map', route: 'SymptomMap' },
+  { title: 'Chat', route: 'Chat' },
+  { title: 'Timeline', route: 'Timeline' },
+  { title: '3D Body', route: 'Body' },
+  { title: 'Health Graph', route: 'HealthGraph', params: { source: 'graph' } },
 ];
-
-/**
- * Sidebar icon tiles (Apple HIG sidebar pattern, translated): one familiar
- * monochrome glyph per destination in the app accent. Color serves a single
- * purpose — navigation identity — and never carries status.
- */
-const ROW_GLYPHS: Record<string, string> = {
-  Medications: '◐',
-  Priority: '★',
-  DailyLog: '◔',
-  PpgMeasure: '♥',
-  FoodScan: '◉',
-  DocumentUpload: '▲',
-  SymptomMap: '✚',
-  Chat: '✎',
-  Timeline: '◷',
-  Body: '⛉',
-  HealthGraph: '⬡',
-  DocumentDetail: '▤',
-  Account: '◍',
-  Terms: '§',
-  Privacy: '⬔',
-};
-
-function RowIcon({ glyph, label }: { glyph: string; label: string }) {
-  return (
-    <View
-      style={styles.rowIcon}
-      accessible
-      accessibilityRole="image"
-      accessibilityLabel={label}
-    >
-      <Text style={styles.rowGlyph}>{glyph}</Text>
-    </View>
-  );
-}
 
 const TERMS_COPY =  'Your health data belongs to you. Records you upload are processed to build your timeline and insights, and stay on this device and your private account. HealthGraph is a wellness companion, not a medical device — nothing here is medical advice, diagnosis, or treatment. If something feels urgent, contact a clinician. You can request deletion of your data at any time from Account settings.';
 
@@ -107,85 +61,36 @@ function fmtDocDate(iso: string): string {
 }
 
 /**
- * WaveRow — a drawer row that opens with an expanding wave: on tap a
- * circle blooms from the row center and fades (opening wave), then the
- * destination opens as the wave dissolves (closing wave). Reduced motion
- * skips the wave and navigates immediately. Double-taps are guarded so
- * one press opens exactly one screen.
+ * NavRow — one destination: white title, chevron right.
  */
-function WaveRow({
+function NavRow({
   title,
-  sub,
   label,
   last,
-  glyph,
   onPress,
 }: {
   title: string;
-  sub: string;
   label: string;
   last: boolean;
-  glyph?: string;
   onPress: () => void;
 }) {
-  const reduced = useReducedMotion();
-  const wave = useSharedValue(0);
-  const busy = useRef(false);
-
-  const waveStyle = useAnimatedStyle(() => ({
-    opacity: 0.35 * (1 - wave.value),
-    transform: [{ scale: 0.1 + wave.value * 3 }],
-  }));
-
-  // Stable JS-thread callback: runOnJS must receive a plain function
-  // reference — an inline arrow here becomes a nested worklet (the Babel
-  // plugin processes nested worklets) and touching the host-side ref from
-  // the UI thread throws "Exception in host function" (red screen).
-  const firePress = useCallback(() => {
-    busy.current = false;
-    onPress();
-  }, [onPress]);
-
-  const handlePress = () => {
-    if (busy.current) return;
-    if (reduced) {
-      onPress();
-      return;
-    }
-    busy.current = true;
-    wave.value = 0;
-    wave.value = withTiming(
-      1,
-      { duration: 340, easing: ReEasing.out(ReEasing.cubic) },
-      (done) => {
-        if (done) runOnJS(firePress)();
-      },
-    );
-  };
-
   return (
     <Pressable
-      onPress={handlePress}
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
       style={({ pressed }) => [
         styles.row,
         !last && styles.rowDivider,
-        pressed && { opacity: 0.85 },
+        pressed && { opacity: 0.7 },
       ]}
     >
-      <View style={styles.rowClip}>
-        {glyph ? <RowIcon glyph={glyph} label={`${title} icon`} /> : null}
-        <View style={styles.rowText}>
-          <Text style={styles.rowTitle}>{title}</Text>
-          <Text style={styles.rowSub} numberOfLines={2}>{sub}</Text>
-        </View>
-        <Text style={styles.chev}>›</Text>
-        <ReAnimated.View
-          pointerEvents="none"
-          style={[styles.wave, waveStyle]}
-        />
+      <View style={styles.rowText}>
+        <Text style={styles.rowTitle}>
+          {title}
+        </Text>
       </View>
+      <Text style={styles.chev}>›</Text>
     </Pressable>
   );
 }
@@ -204,11 +109,18 @@ export function ProfileSheet({
 }) {
   const { width: W } = useWindowDimensions();
   const { documents } = useDocuments();
-  const { user, logout } = useAuth();
+  const { user, userProfile } = useAuth() as unknown as {
+    user: { email?: string | null } | null;
+    userProfile?: { displayName?: string | null; email?: string | null } | null;
+  };
+  const displayName =
+    userProfile?.displayName?.trim() ||
+    userProfile?.email?.split('@')[0] ||
+    user?.email?.split('@')[0] ||
+    '';
   const toast = useToast();
   const [legalOpen, setLegalOpen] = useState<'terms' | 'privacy' | null>(null);
   const [premiumOpen, setPremiumOpen] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   const drawerW = Math.round(W * (2 / 3));
   // Frosted glass costs a blur pass: collapse to the solid stage when
   // reduced motion is requested (the transparency-reduction equivalent).
@@ -292,35 +204,8 @@ export function ProfileSheet({
     onOpen(route, params);
   };
 
-  const confirmSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: () => void (async () => {
-          if (signingOut) return;
-          setSigningOut(true);
-          try {
-            await logout();
-            onClose();
-          } catch {
-            toast.info('Could not sign you out. Please try again.');
-          } finally {
-            setSigningOut(false);
-          }
-        })(),
-      },
-    ]);
-  };
-
   const recentDocs = documents.slice(0, 5);
   const version = Constants.expoConfig?.version ?? '1.0.0';
-  const { entries: priorityEntries } = usePriority();
-  const prioritySub =
-    priorityEntries.length > 0
-      ? priorityEntries.map((e) => e.title).join(' · ')
-      : 'Select what matters to you';
 
   return (
     <RNModal
@@ -345,7 +230,7 @@ export function ProfileSheet({
           {glassOff ? (
             <View style={styles.glassSolid} />
           ) : (
-            <BlurView tint="dark" intensity={84} style={[styles.glass, styles.glassTint]} />
+            <BlurView tint="dark" intensity={100} style={[styles.glass, styles.glassTint]} />
           )}
           {!glassOff ? <View style={styles.edgeLight} pointerEvents="none" /> : null}
           <ScrollView
@@ -363,9 +248,8 @@ export function ProfileSheet({
                 </View>
               )}
               <View style={styles.headMeta}>
-                <Text style={styles.title} accessibilityRole="header">Profile</Text>
-                <Text style={styles.headMail} numberOfLines={1}>
-                  {user?.email ?? 'Private account'}
+                <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
+                  {displayName || 'Profile'}
                 </Text>
               </View>
               <Pressable
@@ -380,71 +264,16 @@ export function ProfileSheet({
               </Pressable>
             </View>
 
-            <Text style={styles.sectionLabel}>Health</Text>
-            <View style={styles.card}>
-              <WaveRow
-                title="Medications"
-                sub="Schedule & doses"
-                label="Open medications"
-                last={false}
-                glyph={ROW_GLYPHS.Medications}
-                onPress={() => go('Medications')}
-              />
-              <WaveRow
-                title="My Priorities"
-                sub={prioritySub}
-                label="Open my priorities world"
-                last
-                glyph={ROW_GLYPHS.Priority}
-                onPress={() => go('Priority')}
-              />
-            </View>
-
-            <Text style={styles.sectionLabel}>Tracking</Text>
-            <View style={styles.card}>
-              {TRACK_FEATURES.map((f, i) => (
-                <Pressable
-                  key={f.route + f.title}
-                  onPress={() => go(f.route, f.params)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${f.title}`}
-                  style={({ pressed }) => [
-                    styles.row,
-                    i < TRACK_FEATURES.length - 1 && styles.rowDivider,
-                    pressed && { opacity: 0.6 },
-                  ]}
-                >
-                  <RowIcon glyph={ROW_GLYPHS[f.route] ?? '·'} label={`${f.title} icon`} />
-                  <View style={styles.rowText}>
-                    <Text style={styles.rowTitle}>{f.title}</Text>
-                    <Text style={styles.rowSub}>{f.sub}</Text>
-                  </View>
-                  <Text style={styles.chev}>›</Text>
-                </Pressable>
-              ))}
-            </View>
-
             <Text style={styles.sectionLabel}>Explore</Text>
             <View style={styles.card}>
               {EXPLORE_FEATURES.map((f, i) => (
-                <Pressable
+                <NavRow
                   key={f.route + f.title}
+                  title={f.title}
+                  label={`Open ${f.title}`}
+                  last={i === EXPLORE_FEATURES.length - 1}
                   onPress={() => go(f.route, f.params)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${f.title}`}
-                  style={({ pressed }) => [
-                    styles.row,
-                    i < EXPLORE_FEATURES.length - 1 && styles.rowDivider,
-                    pressed && { opacity: 0.6 },
-                  ]}
-                >
-                  <RowIcon glyph={ROW_GLYPHS[f.route] ?? '·'} label={`${f.title} icon`} />
-                  <View style={styles.rowText}>
-                    <Text style={styles.rowTitle}>{f.title}</Text>
-                    <Text style={styles.rowSub}>{f.sub}</Text>
-                  </View>
-                  <Text style={styles.chev}>›</Text>
-                </Pressable>
+                />
               ))}
             </View>
 
@@ -465,25 +294,16 @@ export function ProfileSheet({
                     pressed && { opacity: 0.6 },
                   ]}
                 >
-                  <RowIcon glyph={ROW_GLYPHS.DocumentDetail} label="Medical report icon" />
                   <View style={styles.rowText}>
-                      <Text style={styles.rowTitle}>Medical report</Text>
-                      <Text style={styles.rowSub}>
-                        {fmtDocDate(d.created_at)} · {d.status.toLowerCase().replace('_', ' ')}
-                      </Text>
-                    </View>
-                    <Text style={styles.chev}>›</Text>
+                    <Text style={styles.rowTitle}>Documents</Text>
+                    <Text style={styles.rowSub}>
+                      {fmtDocDate(d.created_at)} · {d.status.toLowerCase().replace('_', ' ')}
+                    </Text>
+                  </View>
+                  <Text style={styles.chev}>›</Text>
                   </Pressable>
                 ))
               )}
-              <Pressable
-                onPress={() => go('DocumentUpload')}
-                accessibilityRole="button"
-                accessibilityLabel="Upload a new record"
-                style={({ pressed }) => [styles.uploadBtn, pressed && { opacity: 0.75 }]}
-              >
-                <Text style={styles.uploadBtnText}>+ Upload record</Text>
-              </Pressable>
             </View>
 
             <Text style={styles.sectionLabel}>Premium</Text>
@@ -577,17 +397,15 @@ export function ProfileSheet({
               <Pressable
                 onPress={() => go('Settings')}
                 accessibilityRole="button"
-                accessibilityLabel="Open account settings"
+                accessibilityLabel="Open settings"
                 style={({ pressed }) => [
                   styles.row,
                   styles.rowDivider,
                   pressed && { opacity: 0.6 },
                 ]}
               >
-                <RowIcon glyph={ROW_GLYPHS.Account} label="Account icon" />
                 <View style={styles.rowText}>
-                  <Text style={styles.rowTitle}>Account</Text>
-                  <Text style={styles.rowSub}>Settings and sign out</Text>
+                  <Text style={styles.rowTitle}>Settings</Text>
                 </View>
                 <Text style={styles.chev}>›</Text>
               </Pressable>
@@ -611,10 +429,6 @@ export function ProfileSheet({
                         pressed && { opacity: 0.6 },
                       ]}
                     >
-                      <RowIcon
-                        glyph={item.key === 'terms' ? ROW_GLYPHS.Terms : ROW_GLYPHS.Privacy}
-                        label={`${item.title} icon`}
-                      />
                       <View style={styles.rowText}>
                         <Text style={styles.rowTitle}>{item.title}</Text>
                       </View>
@@ -632,14 +446,6 @@ export function ProfileSheet({
               </View>
             </View>
 
-            <Pressable
-              onPress={confirmSignOut}
-              accessibilityRole="button"
-              accessibilityLabel="Sign out"
-              style={({ pressed }) => [styles.card, styles.signOut, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={styles.signOutText}>{signingOut ? 'Signing out…' : 'Sign Out'}</Text>
-            </Pressable>
             <View style={{ height: 24 }} />
           </ScrollView>
           </Animated.View>
@@ -672,7 +478,7 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   glassTint: {
-    backgroundColor: 'rgba(11, 74, 63, 0.62)',
+    backgroundColor: 'rgba(8, 10, 17, 0.72)',
   },
   glassSolid: {
     position: 'absolute',
@@ -680,7 +486,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: GV.stage,
+    backgroundColor: '#080A11',
   },
   // Bright leading edge: 1px of caught light down the rounded side.
   edgeLight: {
@@ -735,31 +541,12 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     color: '#FFFFFF',
   },
-  // Sidebar icon tile: one monochrome accent glyph per destination.
-  rowIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: 'rgba(79, 209, 197, 0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowGlyph: {
-    fontSize: 16,
-    lineHeight: 20,
-    color: GV.teal,
-  },
   title: {
     ...TYPE.display,
     fontSize: 22,
     lineHeight: 28,
     letterSpacing: -0.4,
     color: '#FFFFFF',
-    textAlign: 'left',
-  },
-  headMail: {
-    ...TYPE.caption,
-    color: GV.fog,
     textAlign: 'left',
   },
   sectionLabel: {
@@ -788,31 +575,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: 56,
   },
-  // Clips the press wave inside the row bounds.
-  rowClip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    overflow: 'hidden',
-    borderRadius: 12,
-    position: 'relative',
-  },
-  // The expanding press wave: neutral light bloom on glass.
-  wave: {
-    position: 'absolute',
-    left: '35%',
-    top: -32,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
-  },
+  rowText: { flex: 1, gap: 1 },
   rowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255, 255, 255, 0.12)',
   },
-  rowText: { flex: 1, gap: 1 },
   rowTitle: {
     fontFamily: FONT.medium,
     fontSize: 17,
@@ -832,18 +599,6 @@ const styles = StyleSheet.create({
     ...TYPE.body,
     color: GV.fog,
     paddingVertical: 12,
-  },
-  uploadBtn: {
-    backgroundColor: GV.cta,
-    borderRadius: 9999,
-    alignItems: 'center',
-    paddingVertical: 12,
-    marginVertical: 12,
-  },
-  uploadBtnText: {
-    ...TYPE.button,
-    fontSize: 15,
-    color: '#FFFFFF',
   },
   premiumCardWrap: {
     paddingVertical: 8,

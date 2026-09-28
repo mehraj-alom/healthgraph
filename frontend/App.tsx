@@ -678,7 +678,7 @@ function AppNavigator() {
               component={SettingsScreen}
               options={{
                 headerShown: true,
-                headerTitle: 'Account',
+                headerTitle: 'Settings',
                 headerTintColor: COLORS.primary,
                 headerStyle: { backgroundColor: COLORS.background },
               }}
