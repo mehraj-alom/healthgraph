@@ -104,3 +104,43 @@ export function withAlpha(hex: string, alpha: number): string {
     .padStart(2, '0');
   return `${hex}${a}`;
 }
+
+/**
+ * Muted graph tone per correlation stream id (tile family, soft stop) —
+ * the dark-glass series color. Same hue per feature as Explore tiles.
+ */
+export function graphToneForStream(id: string): string {
+  const base = id
+    .replace(/^series-/, '')
+    .split(':')[0]
+    .toLowerCase();
+  switch (base) {
+    case 'sleepdur':
+    case 'sleepqual':
+    case 'awakenings':
+    case 'sleep':
+      return TILE_TONES.sleep[1];
+    case 'energy':
+    case 'wellbeing':
+      return TILE_TONES.wellbeing[1];
+    case 'activity':
+    case 'doses':
+      return TILE_TONES.fitness[1];
+    case 'water':
+    case 'meals':
+    case 'appetite':
+      return TILE_TONES.nutrition[1];
+    case 'hr':
+    case 'heart':
+    case 'vital':
+      return TILE_TONES.heart[1];
+    case 'stress':
+    case 'pain':
+    case 'symptom':
+      return TILE_TONES.discipline[1];
+    case 'weight':
+      return TILE_TONES.weight[1];
+    default:
+      return TILE_TONES.wellbeing[1];
+  }
+}

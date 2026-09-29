@@ -16,7 +16,6 @@
 
 import { useCallback, useState } from 'react';
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,14 +24,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, Card, Chip, EmptyState, SectionHeader } from '@/components';
+import { Button, Card, EmptyState, SectionHeader } from '@/components';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { toneForCategory } from '@/theme/tones';
+import { toneForCategory, graphToneForStream } from '@/theme/tones';
 import { CategoryTile } from '@/components/CategoryTile';
-import { StageGradient } from '@/components/StageGradient';
+import { GlassCuboid } from '@/components/GlassCuboid';
 import HGraphMap from '@/components/home/HGraphMap';
 import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
-import { domainHueForStream } from '@/theme/dashboardApple';
 import { useTrendRange } from '@/context/TrendRangeContext';
 import { useTrends } from '@/hooks/useTrends';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
@@ -60,7 +58,6 @@ export default function PriorityWorldScreen() {
   const {
     dialDay,
     hMetrics,
-    setDayRange,
   } = useDialMetrics({
     trendsData: trends.data,
     metricsData: metrics.data,
@@ -92,19 +89,8 @@ export default function PriorityWorldScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StageGradient />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable
-          onPress={() => navigation.canGoBack() && navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-          style={styles.backHit}
-        >
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.overline}>My priorities</Text>
-        <Text style={styles.title}>Priority</Text>
+        <Text style={styles.title}>Priority.</Text>
         {isEmpty ? (
           <Text style={styles.sub}>Selected engines appear here.</Text>
         ) : (
@@ -113,44 +99,38 @@ export default function PriorityWorldScreen() {
 
         {isEmpty ? (
           <EmptyState
-            icon="🧭"
             title="No priorities selected"
-            message="Choose the health areas you'd like to focus on. This world shows your dial, actions, correlations, and engines."
+            message="Choose the health areas to focus on."
           />
         ) : (
           <>
-            <SectionHeader title="Priority dial" />
-            <Card>
-              <View onLayout={(e) => setMapWidth(e.nativeEvent.layout.width)}>
-                {mapWidth > 0 ? <HGraphMap metrics={hMetrics} width={mapWidth} /> : null}
+            <SectionHeader dark title="Priority dial" titleStyle={styles.histTitle} />
+            <View style={styles.panel}>
+              <View
+                style={styles.panelMap}
+                onLayout={(e) => setMapWidth(e.nativeEvent.layout.width)}
+              >
+                {mapWidth > 0 ? (
+                  <View style={styles.dialCol}>
+                    <HGraphMap metrics={hMetrics} width={mapWidth} />
+                    <Text style={styles.dialLabel}>{dialDay.label}</Text>
+                  </View>
+                ) : null}
               </View>
-              <View style={styles.dialFoot}>
-                <Text style={styles.dialLabel}>{dialDay.label}</Text>
-                <View style={styles.rangeChips}>
-                  {[7, 14, 30].map((n) => (
-                    <Chip
-                      key={n}
-                      label={`${n}D`}
-                      selected={dialDay.range === n}
-                      onPress={() => setDayRange(n)}
-                      accessibilityLabel={`Show past ${n} days`}
-                    />
-                  ))}
-                </View>
-              </View>
-            </Card>
+              <GlassCuboid overlay auraColor={GV.teal} auraOpacity={0.1} radius={24} />
+            </View>
 
-            <SectionHeader title="Actions" />
+            <SectionHeader dark title="Actions" titleStyle={styles.histTitle} />
             <View style={styles.duo}>
               <View style={styles.duoHalf}>
                 <Button title="Improve" onPress={() => goImprove('improve')} fullWidth />
               </View>
               <View style={styles.duoHalf}>
-                <Button title="Keep" variant="ghost" onPress={() => goImprove('keep')} fullWidth />
+                <Button title="Keep" variant="ghost" onPress={() => goImprove('keep')} fullWidth textStyle={styles.ghostText} />
               </View>
             </View>
 
-            <SectionHeader title="Your engines" />
+            <SectionHeader dark title="Your engines" titleStyle={styles.histTitle} />
             <View style={styles.list}>
               {entries.map((entry) => {
                 const def = ENGINES[entry.id as keyof typeof ENGINES];
@@ -172,7 +152,7 @@ export default function PriorityWorldScreen() {
 
             {preview.length > 0 ? (
               <>
-                <SectionHeader title="Time vs correlations" />
+                <SectionHeader dark title="Your patterns" titleStyle={styles.histTitle} />
                 <View style={styles.list}>
                   {preview.map((item) => (
                     <CorrelationGraphCard
@@ -182,13 +162,13 @@ export default function PriorityWorldScreen() {
                       data={item.data}
                       lineColor={
                         item.data.kind === 'timeSeries'
-                          ? domainHueForStream(item.id.replace(/^series-/, ''))
+                          ? graphToneForStream(item.id)
                           : undefined
                       }
                     />
                   ))}
                 </View>
-                <Button title="Open full graph" variant="ghost" onPress={goFullGraph} fullWidth />
+                <Button title="Open full graph" variant="ghost" onPress={goFullGraph} fullWidth textStyle={styles.ghostText} />
               </>
             ) : null}
           </>
@@ -199,6 +179,7 @@ export default function PriorityWorldScreen() {
           variant={isEmpty ? undefined : 'ghost'}
           onPress={goEdit}
           fullWidth
+          textStyle={isEmpty ? undefined : styles.ghostText}
         />
         <Text style={styles.disclaimer}>
           Your engines, dial, and graphs in one place. Tracking only.
@@ -209,24 +190,25 @@ export default function PriorityWorldScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: GV.stage },
+  safe: { flex: 1, backgroundColor: '#080A11' },
   content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  backHit: { minHeight: 44, justifyContent: 'center' },
-  backText: { ...TYPE.button, fontSize: 16, color: GV.fog },
-  overline: { fontFamily: FONT.semi, fontSize: 12, lineHeight: 16, letterSpacing: 3, color: GV.teal, textAlign: 'center' },
-  title: { ...TYPE.display, color: GV.card, textAlign: 'center' },
+  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
   sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  dialFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
-  dialLabel: { ...TYPE.caption, color: GV.muted },
-  rangeChips: { flexDirection: 'row', gap: 8 },
+  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
+  panel: { position: 'relative' },
+  panelMap: { alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
+  dialCol: { alignItems: 'center', justifyContent: 'center' },
+  dialLabel: {
+    ...TYPE.chip,
+    color: '#2E8B7E',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   duo: { flexDirection: 'row', gap: 12 },
   duoHalf: { flex: 1 },
+  ghostText: { color: '#A7B8B2' },
   list: { gap: SPACE.cardGap },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  glyph: { fontSize: 22 },
-  rowMain: { flex: 1, gap: 2 },
-  rowTitle: { ...TYPE.button, fontSize: 15, color: GV.ink },
-  rowSub: { ...TYPE.caption, color: GV.body },
-  chev: { fontSize: 20, color: GV.muted },
   disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
 });

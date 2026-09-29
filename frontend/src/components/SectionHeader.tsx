@@ -1,7 +1,8 @@
-import { StyleSheet, View, Text, type ViewStyle } from 'react-native';
+import { StyleSheet, View, Text, type ViewStyle, type StyleProp, type TextStyle } from 'react-native';
 import { spacing } from '@/theme/tokens';
 import { GV, TYPE } from '@/theme/guava';
 import { MarkerHighlight } from '@/components/MarkerHighlight';
+import { MARK_DARK } from '@/components/markerScribble';
 
 interface SectionHeaderProps {
   title: string;
@@ -14,6 +15,10 @@ interface SectionHeaderProps {
   style?: ViewStyle;
   /** Sketchpen shade behind the title (default on — the kid-highlight). */
   marked?: boolean;
+  /** Dark glass variant: white title, fog subtitle, slate shade. */
+  dark?: boolean;
+  /** Instance-level title override (size/tracking) — hierarchy fixes only. */
+  titleStyle?: StyleProp<TextStyle>;
 }
 
 /** Section heading — Poppins SemiBold with a sketchpen-shaded tagline. */
@@ -25,8 +30,11 @@ export const SectionHeader = ({
   align = 'left',
   style,
   marked = true,
+  dark = false,
+  titleStyle: titleOverride,
 }: SectionHeaderProps) => {
   const centered = align === 'center';
+  const titleStyle = [styles.title, centered && styles.titleCentered, dark && styles.titleDark, titleOverride];
   return (
     <View style={[styles.row, centered && styles.centered, style]}>
       {accent ? (
@@ -35,19 +43,20 @@ export const SectionHeader = ({
       <View style={styles.text}>
         {marked ? (
           <MarkerHighlight
-            color={accent ?? undefined}
-            textStyle={[styles.title, centered && styles.titleCentered]}
+            color={accent ?? (dark ? MARK_DARK : undefined)}
+            opacity={dark ? 0.9 : 0.5}
+            textStyle={titleStyle}
             center={centered}
           >
             {title}
           </MarkerHighlight>
         ) : (
-          <Text style={[styles.title, centered && styles.titleCentered]}>
+          <Text style={titleStyle}>
             {title}
           </Text>
         )}
         {subtitle ? (
-          <Text style={[styles.subtitle, centered && styles.titleCentered]}>
+          <Text style={[styles.subtitle, centered && styles.titleCentered, dark && styles.subtitleDark]}>
             {subtitle}
           </Text>
         ) : null}
@@ -83,9 +92,15 @@ const styles = StyleSheet.create({
     ...TYPE.caption,
     color: GV.muted,
   },
+  subtitleDark: {
+    color: '#A7B8B2',
+  },
   title: {
     ...TYPE.title,
     fontSize: 17,
     color: GV.ink,
+  },
+  titleDark: {
+    color: '#FFFFFF',
   },
 });

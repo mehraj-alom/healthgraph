@@ -143,7 +143,8 @@ describe('batch 2 wiring', () => {
     }
     assert.ok(meds.includes('ROUTE_LABELS'), 'route selector rendered');
     assert.ok(!meds.includes('void route'), 'route state no longer discarded');
-    assert.ok(meds.toLowerCase().includes('review each field before saving'), 'confirmation copy');
+    assert.ok(meds.toLowerCase().includes('wrong or missed entries are your responsibility'), 'responsibility copy');
+    assert.ok(meds.includes('I checked all details against my prescription'), 'blocking confirmation before save');
     assert.ok(meds.includes('Medication name is required'), 'name gate before create');
     // No silent creation: the only medication POST lives in the Save handler.
     const posts = meds.match(/api\.post(?:<[^>]+>)?\(['"]\/api\/v1\/medications['"]/g) ?? [];

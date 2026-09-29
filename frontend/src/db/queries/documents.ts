@@ -330,3 +330,68 @@ export async function setDocumentLocalUri(
     [localUri, patientId, documentId],
   );
 }
+
+// ============================================================================
+// VERIFICATION — user confirms the reading before it counts as reviewed
+// ============================================================================
+
+export interface DocumentVerification {
+  verified: boolean;
+  note: string | null;
+}
+
+/** Local verify state for one document (defaults to unverified). */
+export async function getDocumentVerification(
+  patientId: string,
+  documentId: string,
+): Promise<DocumentVerification> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{
+    user_verified: number | null;
+    verify_note: string | null;
+  }>(
+    `SELECT user_verified, verify_note FROM documents
+     WHERE patient_id = ? AND document_id = ?`,
+    [patientId, documentId],
+  );
+  return {
+    verified: (row?.user_verified ?? 0) === 1,
+    note: row?.verify_note ?? null,
+  };
+}
+
+/** Mark a reading verified (or reopen it), optionally with a correction note. */
+export async function setDocumentVerification(
+  patientId: string,
+  documentId: string,
+  verified: boolean,
+  note?: string | null,
+): Promise<void> {
+  const db = await getDatabase();
+  if (note === undefined) {
+    await db.runAsync(
+      `UPDATE documents SET user_verified = ? WHERE patient_id = ? AND document_id = ?`,
+      [verified ? 1 : 0, patientId, documentId],
+    );
+  } else {
+    await db.runAsync(
+      `UPDATE documents SET user_verified = ?, verify_note = ? WHERE patient_id = ? AND document_id = ?`,
+      [verified ? 1 : 0, note, patientId, documentId],
+    );
+  }
+}
+
+/** Ids of read-but-unverified documents (the app-open review nudge). */
+export async function listUnverifiedExtractedDocIds(
+  patientId: string,
+): Promise<string[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ document_id: string }>(
+    `SELECT document_id FROM documents
+     WHERE patient_id = ? AND status = 'EXTRACTED'
+       AND COALESCE(user_verified, 0) = 0
+     ORDER BY created_at DESC`,
+    [patientId],
+  );
+  return rows.map((r) => r.document_id);
+}

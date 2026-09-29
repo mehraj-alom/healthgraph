@@ -18,12 +18,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Button, Card, Chip, EmptyState, Input, Modal, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { EXTRA_TONES } from '@/theme/tones';
-import { StageGradient } from '@/components/StageGradient';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import {
   SUBSTANCE_CATEGORIES,
@@ -46,9 +45,9 @@ const CATEGORY_COPY: Record<SubstanceCategory, { label: string; hint: string }> 
 
 /** Category tones: warm sand, cool slate, pine teal. */
 const SUBSTANCE_TONES: Record<SubstanceCategory, string> = {
-  alcohol: EXTRA_TONES.sand[0],
-  tobacco: EXTRA_TONES.slate[0],
-  other: EXTRA_TONES.pine[0],
+  alcohol: EXTRA_TONES.sand[1],
+  tobacco: EXTRA_TONES.slate[1],
+  other: EXTRA_TONES.pine[1],
 };
 
 function formatWhen(iso: string): string {
@@ -63,7 +62,6 @@ function formatAmount(entry: SubstanceEntry): string | null {
 }
 
 export default function SubstanceScreen() {
-  const navigation = useNavigation();
   const [entries, setEntries] = useState<SubstanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -193,25 +191,12 @@ export default function SubstanceScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StageGradient />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable
-          onPress={() => navigation.canGoBack() && navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-          style={styles.backHit}
-        >
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.overline}>TRACKING · ON THIS DEVICE</Text>
-        <Text style={styles.title}>Substance use</Text>
-        <Text style={styles.sub}>
-          A private log of what happened. Not advice, not a diagnosis.
-        </Text>
+        <Text style={styles.title}>Substance use.</Text>
+        <Text style={styles.sub}>A private log. Not advice, not a diagnosis.</Text>
 
-        <SectionHeader title="This week" />
-        <Card>
+        <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
+        <Card style={styles.darkCard}>
           <View style={styles.strip}>
             {week.map((d) => (
               <View key={d.date} style={styles.cell}>
@@ -227,7 +212,7 @@ export default function SubstanceScreen() {
           </Text>
         </Card>
 
-        <SectionHeader title="History" />
+        <SectionHeader dark title="History" titleStyle={styles.histTitle} />
         {loading ? (
           <>
             <Text style={styles.loading}>Loading…</Text>
@@ -235,20 +220,22 @@ export default function SubstanceScreen() {
           </>
         ) : entries.length === 0 ? (
           <EmptyState
-            icon="📝"
             title="No entries yet"
-            message="Record alcohol, tobacco, or anything else you track. History and weekly counts appear here. Only from real entries."
+            message="Record alcohol, tobacco, or anything else you track."
           />
         ) : (
           <View style={styles.list}>
             {entries.map((entry) => (
-              <Card key={entry.entry_id}>
+              <Card key={entry.entry_id} style={styles.darkCard}>
                 <View style={styles.rowTop}>
                   <View style={styles.rowMain}>
-                    <Text style={styles.rowTitle}>
-                      {CATEGORY_COPY[entry.category].label}
-                      {entry.label ? ` · ${entry.label}` : ''}
-                    </Text>
+                    <View style={styles.kindRow}>
+                      <View style={[styles.kindDot, { backgroundColor: SUBSTANCE_TONES[entry.category] }]} />
+                      <Text style={styles.rowTitle}>
+                        {CATEGORY_COPY[entry.category].label}
+                        {entry.label ? ` · ${entry.label}` : ''}
+                      </Text>
+                    </View>
                     <Text style={styles.rowSub}>
                       {formatWhen(entry.occurred_at)}
                       {formatAmount(entry) ? ` · ${formatAmount(entry)}` : ''}
@@ -281,7 +268,14 @@ export default function SubstanceScreen() {
           </View>
         )}
 
-        <Button title="+ Log entry" onPress={openAdd} fullWidth />
+        <Button
+          title="Log entry"
+          onPress={openAdd}
+          fullWidth
+          size="large"
+          style={styles.logBtn}
+          textStyle={styles.logBtnText}
+        />
         <Text style={styles.disclaimer}>
           Tracking only. Not medical advice, diagnosis, or treatment.
         </Text>
@@ -341,33 +335,44 @@ export default function SubstanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: GV.stage },
+  safe: { flex: 1, backgroundColor: '#080A11' },
   content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  backHit: { minHeight: 44, justifyContent: 'center' },
-  backText: { ...TYPE.button, fontSize: 16, color: GV.fog },
-  overline: { fontFamily: FONT.semi, fontSize: 12, lineHeight: 16, letterSpacing: 3, color: GV.teal, textAlign: 'center' },
-  title: { ...TYPE.display, color: GV.card, textAlign: 'center' },
+  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
   sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
   loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
   fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
+  darkCard: {
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 6,
+  },
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   dot: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   dotOn: { backgroundColor: '#7CF5D3' },
   dotOff: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
-  dotCount: { fontSize: 10, fontWeight: '700', color: GV.ink },
+  dotCount: { fontSize: 10, fontWeight: '700', color: '#062A26' },
   cellDay: { ...TYPE.caption, fontSize: 12, color: GV.fog, fontVariant: ['tabular-nums'] },
-  weekTotal: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 8 },
+  weekTotal: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
   list: { gap: SPACE.cardGap },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   rowMain: { flex: 1, gap: 4 },
-  rowTitle: { ...TYPE.button, fontSize: 15, color: GV.ink },
-  rowSub: { ...TYPE.caption, color: GV.body, fontVariant: ['tabular-nums'] },
-  rowNotes: { ...TYPE.caption, color: GV.muted },
+  kindRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  kindDot: { width: 8, height: 8, borderRadius: 4 },
+  rowTitle: { ...TYPE.button, fontSize: 15, color: '#FFFFFF' },
+  rowSub: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
+  rowNotes: { ...TYPE.caption, color: '#8B95A7' },
   rowActions: { flexDirection: 'row', gap: 4 },
   rowBtn: { minWidth: 44, minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  rowBtnText: { ...TYPE.chip, color: GV.cta },
+  rowBtnText: { ...TYPE.chip, color: '#3DDC84' },
   deleteText: { color: GV.danger },
+  logBtn: { backgroundColor: '#4FD1C5' },
+  logBtnText: { color: '#062A26' },
   disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
   form: { gap: 12 },
   fieldLabel: { ...TYPE.caption, color: GV.muted },

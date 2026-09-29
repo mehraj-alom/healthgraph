@@ -13,6 +13,12 @@
 /** Highlighter yellow — the sketchpen, never a data encoding. */
 export const MARKER_COLOR = '#FFD84D';
 
+/**
+ * Dark-slate wash — the same sketchpen for dark glass. Yellow muddies
+ * white type on black, so dark surfaces back taglines with this instead.
+ */
+export const MARK_DARK = '#26314A';
+
 function wobble(i: number, amp: number): number {
   // Fixed pseudo-wobble per segment: uneven like a hand, stable like code.
   const pattern = [0, 1, -1, 0.5, -0.5, 1, 0, -1];

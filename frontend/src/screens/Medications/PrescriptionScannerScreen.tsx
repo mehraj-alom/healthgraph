@@ -35,7 +35,6 @@ import {
 } from 'expo-camera';
 import { Button, Card } from '@/components';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { StageGradient } from '@/components/StageGradient';
 import { useSteadyShutter } from '@/hooks/useSteadyShutter';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { uploadDocument } from '@/services/documents';
@@ -72,9 +71,9 @@ export default function PrescriptionScannerScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [tipIndex, setTipIndex] = useState(0);
-  // Boundary-style auto-capture: fires the shutter once the phone is held
-  // steady in the frame (no heavy vision module — see useSteadyShutter).
-  const [autoCapture, setAutoCapture] = useState(true);
+  // Boundary-style auto-capture: off by default — the user fires the
+  // shutter. Can be enabled per session (see useSteadyShutter).
+  const [autoCapture, setAutoCapture] = useState(false);
   const [uploadState, setUploadState] = useState<{
     phase: 'idle' | 'uploading' | 'done' | 'error';
     done: number;
@@ -194,14 +193,13 @@ export default function PrescriptionScannerScreen() {
   if (!permission?.granted) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StageGradient />
         <View style={styles.center}>
           <Text style={styles.title}>Scan prescription</Text>
           <Text style={styles.body}>
             Camera access is needed to photograph prescription pages.
           </Text>
           <Button title="Allow camera" onPress={() => void requestPermission()} />
-          <Button title="Go back" variant="ghost" onPress={goBack} />
+          <Button title="Go back" variant="ghost" onPress={goBack} textStyle={styles.ghostText} />
         </View>
       </SafeAreaView>
     );
@@ -214,7 +212,7 @@ export default function PrescriptionScannerScreen() {
         <View style={styles.center}>
           {uploadState.phase === 'uploading' && (
             <>
-              <ActivityIndicator size="large" color={GV.cta} />
+              <ActivityIndicator size="large" color="#4FD1C5" />
               <Text style={styles.title}>
                 Uploading page {Math.min(uploadState.done + 1, uploadState.total)} of {uploadState.total}…
               </Text>
@@ -230,8 +228,7 @@ export default function PrescriptionScannerScreen() {
                   : `${uploadState.total} pages uploaded`}
               </Text>
               <Text style={styles.body}>
-                Review it under Medications, in Scanned. When reading finishes,
-                confirm each medicine to add it. Nothing is added automatically.
+                Review under Medications · Scanned. Confirm each medicine to add it.
               </Text>
               <Button title="Done" onPress={goBack} fullWidth />
             </>
@@ -245,7 +242,7 @@ export default function PrescriptionScannerScreen() {
                 onPress={() => setUploadState({ phase: 'idle', done: 0, total: 0 })}
                 fullWidth
               />
-              <Button title="Go back" variant="ghost" onPress={goBack} fullWidth />
+              <Button title="Go back" variant="ghost" onPress={goBack} fullWidth textStyle={styles.ghostText} />
             </>
           )}
         </View>
@@ -308,8 +305,8 @@ export default function PrescriptionScannerScreen() {
         </Pressable>
         <Text style={styles.pageCount}>
           {pages.length === 0
-            ? 'Page 1 of prescription'
-              : `${pages.length} page${pages.length > 1 ? 's' : ''} captured. Add the next page`}
+            ? 'Page 1'
+            : `${pages.length} page${pages.length > 1 ? 's' : ''}`}
         </Text>
 
         {pages.length > 0 && (
@@ -390,7 +387,7 @@ const bracketStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: '#080A11',
   },
   center: {
     flex: 1,
@@ -434,7 +431,10 @@ const styles = StyleSheet.create({
     color: GV.fog,
   },
   torchOn: {
-    color: GV.cta,
+    color: '#3DDC84',
+  },
+  ghostText: {
+    color: '#A7B8B2',
   },
   finder: {
     flex: 1,
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   },
   pageCount: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     textAlign: 'center',
   },
   autoRow: {
@@ -474,13 +474,13 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: GV.line,
+    borderColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   autoCheckOn: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#3DDC84',
+    borderColor: '#3DDC84',
   },
   autoGlyph: {
     color: '#FFFFFF',
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     height: 96,
     borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: GV.wash,
+    backgroundColor: '#10141F',
   },
   thumb: {
     width: 72,
@@ -549,9 +549,11 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: GV.cta,
+    backgroundColor: '#4FD1C5',
   },
   doneCard: {
     gap: 0,
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
   },
 });

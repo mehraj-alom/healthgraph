@@ -16,9 +16,11 @@
  * Each spoke plots the metric's multi-day AVERAGE (not a single day).
  * Missing = no spoke (never a zero dot).
  *
- * Guava-flat: the dial lives on a white card — ink dots and hairlines on a
- * soft wash well, green reserved for healthy-zone bands, danger reserved
- * strictly for off-track flags. Geometry and data encoding are unchanged.
+ * Dark-glass instrument: the dial is a glass stage on the near-black
+ * backdrop — gradient glass, recessed well, top gloss, glass hub, white
+ * type with fog secondary labels. Green stays reserved for healthy-zone
+ * bands, danger strictly for off-track flags. Geometry and data encoding
+ * are unchanged.
  *
  * Motion (functional only, reduced-motion gated): data changes morph
  * dots/bands from their on-screen presentation values via a
@@ -27,13 +29,17 @@
  * from the dot. No entrance cascades, no ambient loops — the dial rests.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 import Svg, {
   Rect,
   Line,
   Circle,
+  Ellipse,
   Path,
+  Defs,
+  LinearGradient,
+  Stop,
   Text as SvgText,
   G,
 } from 'react-native-svg';
@@ -49,7 +55,7 @@ import Animated, {
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { spring } from '@/theme/motion';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { MARKER_COLOR, scribblePaths } from '@/components/markerScribble';
+import { scribblePaths, MARK_DARK } from '@/components/markerScribble';
 import { BottomSheet } from '@/components/BottomSheet';
 import type { MetricTrend } from '@/screens/Dashboard/correlations';
 
@@ -80,13 +86,36 @@ const C = VB / 2;
 const R = 124; // plot radius
 const LABEL_R = R + 26;
 const SECTOR_R = R + 46;
-// Guava-flat dial tokens: monochrome ink on white, green bands, red flags.
-const WELL = GV.wash;
-const GRID = GV.line;
+// Rim-label margins: value + name lines extend past the plot sideways, so
+// the viewBox carries side padding. Top/bottom stay tight (labels clamp
+// inside the stage) so the readout below hugs the dial ~1px close.
+const ML = 44;
+const MR = 44;
+const MT = 10;
+const MB = 10;
+const VW = VB + ML + MR;
+const VH = VB + MT + MB;
+/** Rendered height / width of the map SVG (wheel beside it matches this). */
+export const HMAP_ASPECT = VH / VW;
+// Healthy-zone bands + off-track flags read the same on glass.
 const BAND = GV.fx.green;
 const BAD = GV.danger;
-const SUB = GV.muted;
 const DOT_R = 7;
+
+// Dark-glass stage tokens: the same dial re-skinned as an instrument on the
+// near-black backdrop (#080A11). Geometry and data encoding are unchanged —
+// only surfaces, rims, and text flip from paper to glass.
+const STAGE_TOP = '#1B2334';
+const STAGE_BOT = '#070A12';
+const STAGE_RIM = 'rgba(255,255,255,0.10)';
+const WELL_D = '#04060B';
+const WELL_RIM = 'rgba(255,255,255,0.06)';
+const GRID_D = '#2C3547';
+const RING_D = '#39445A';
+const INK_D = '#FFFFFF';
+const SUB_D = '#A7B8B2';
+const SECTOR_D = '#8B95A7';
+const DOT_RING = '#1E9E6A';
 
 /** Fixed sector order — spokes group by family so the dial reads in zones. */
 const SECTOR_ORDER = ['rest', 'vitality', 'body', 'fuel', 'mind', 'care', 'more'] as const;
@@ -269,8 +298,8 @@ function HDot({
     <AnimatedCircle
       cx={spoke.dotX}
       cy={spoke.dotY}
-      fill={spoke.good ? GV.ink : GV.danger}
-      stroke="#FFFFFF"
+      fill={spoke.good ? '#FFFFFF' : GV.danger}
+      stroke={spoke.good ? DOT_RING : '#FFFFFF'}
       strokeWidth={2}
       animatedProps={props}
     />
@@ -317,7 +346,7 @@ function HBand({
       x2={spoke.bandX2}
       y2={spoke.bandY2}
       stroke={color}
-      strokeOpacity={0.4}
+      strokeOpacity={0.55}
       strokeWidth={14}
       strokeLinecap="round"
       animatedProps={props}
@@ -327,6 +356,10 @@ function HBand({
 
 export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; width: number }) {
   const reduced = useReducedMotion();
+  // Unique gradient ids per mount — inline + fullscreen maps coexist.
+  const stageUid = useId().replace(/:/g, '');
+  const stageId = `hg${stageUid}s`;
+  const sheenId = `hg${stageUid}g`;
 
   // Spokes group by family sector (fixed order) so the dial reads in zones
   // instead of an arbitrary ring — axis order stops being a shape artifact.
@@ -344,9 +377,18 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
       const rv = rr(Math.max(m.min, Math.min(m.max, m.value)));
       const rawLabelX = C + LABEL_R * cos;
       const rawLabelY = C + LABEL_R * sin;
-      const labelX = Math.max(30, Math.min(VB - 30, rawLabelX));
       const anchor: 'start' | 'middle' | 'end' =
         Math.abs(cos) < 0.35 ? 'middle' : cos > 0 ? 'start' : 'end';
+      // Anchor-aware clamp: the value + name lines must fit inside the
+      // stage margins or side words clip at the rim.
+      const rimName = m.label.toUpperCase().slice(0, 14);
+      const estW = Math.max(m.valueText.length + 2, rimName.length) * 6.8 + 10;
+      const labelX =
+        anchor === 'start'
+          ? Math.max(24, Math.min(VB - 10 - estW, rawLabelX))
+          : anchor === 'end'
+            ? Math.max(10 + estW, Math.min(VB - 24, rawLabelX))
+            : Math.max(estW / 2 + 8, Math.min(VB - estW / 2 - 8, rawLabelX));
       return {
         m, angle, cos, sin,
         dotX: C + rv * cos,
@@ -504,13 +546,20 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
   if (spokes.length === 0) {
     return (
       <Svg width={width} height={width * 0.6}>
-        <Rect x={0.5} y={0.5} width={width - 1} height={width * 0.6 - 1} rx={20} fill={GV.card} strokeWidth={0} />
+        <Defs>
+          <LinearGradient id={stageId} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={STAGE_TOP} stopOpacity={1} />
+            <Stop offset="1" stopColor={STAGE_BOT} stopOpacity={1} />
+          </LinearGradient>
+        </Defs>
+        <Rect x={0.5} y={0.5} width={width - 1} height={width * 0.6 - 1} rx={20} fill={`url(#${stageId})`} strokeWidth={0} />
+        <Rect x={0.5} y={0.5} width={width - 1} height={width * 0.6 - 1} rx={20} fill="none" stroke={STAGE_RIM} strokeWidth={1} />
         <SvgText
           x={width / 2}
           y={width * 0.3}
           fontSize={13}
           fontFamily={FONT.regular}
-          fill={SUB}
+          fill={SUB_D}
           textAnchor="middle"
         >
           Log your first day to fill this in
@@ -522,17 +571,36 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
   return (
     <>
       <View>
-        <Svg width={width} height={width} viewBox={`0 0 ${VB} ${VB}`}>
-          {/* flat stage: white disc, soft wash well, hairline rim */}
-          <Rect x={0} y={0} width={VB} height={VB} rx={20} fill={GV.card} />
-          <Circle cx={C} cy={C} r={R + 22} fill={WELL} />
-          <Circle cx={C} cy={C} r={R + 22} fill="none" stroke={GV.line} strokeWidth={1} />
+        <Svg width={width} height={width * (VH / VW)} viewBox={`${-ML} ${-MT} ${VW} ${VH}`}>
+          <Defs>
+            <LinearGradient id={stageId} x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={STAGE_TOP} stopOpacity={1} />
+              <Stop offset="1" stopColor={STAGE_BOT} stopOpacity={1} />
+            </LinearGradient>
+            <LinearGradient id={sheenId} x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.09} />
+              <Stop offset="0.45" stopColor="#FFFFFF" stopOpacity={0.02} />
+              <Stop offset="0.7" stopColor="#FFFFFF" stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          {/* dark-glass stage + chamfer rim */}
+          <Rect x={0} y={0} width={VB} height={VB} rx={20} fill={`url(#${stageId})`} />
+          <Rect x={0.5} y={0.5} width={VB - 1} height={VB - 1} rx={19} fill="none" stroke={STAGE_RIM} strokeWidth={1} />
+          {/* face gloss: soft top flood + diagonal sheen */}
+          <Ellipse cx={C} cy={44} rx={120} ry={44} fill="#FFFFFF" opacity={0.06} />
+          <Path
+            d={`M 0 118 L 150 0 L 236 0 L 0 236 Z`}
+            fill={`url(#${sheenId})`}
+          />
+          {/* recessed well */}
+          <Circle cx={C} cy={C} r={R + 22} fill={WELL_D} opacity={0.72} />
+          <Circle cx={C} cy={C} r={R + 22} fill="none" stroke={WELL_RIM} strokeWidth={1} />
 
           {/* concentric reference rings + thin rim */}
           {[0.25, 0.5, 0.75].map((f) => (
-            <Circle key={f} cx={C} cy={C} r={R * f} fill="none" stroke={GRID} strokeWidth={1} />
+            <Circle key={f} cx={C} cy={C} r={R * f} fill="none" stroke={GRID_D} strokeWidth={1} />
           ))}
-          <Circle cx={C} cy={C} r={R} fill="none" stroke={GV.line} strokeWidth={1.5} />
+          <Circle cx={C} cy={C} r={R} fill="none" stroke={RING_D} strokeWidth={1.5} />
 
           {/* spokes */}
           {spokes.map((s) => (
@@ -542,7 +610,7 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
               y1={C}
               x2={C + R * s.cos}
               y2={C + R * s.sin}
-              stroke={GRID}
+              stroke={GRID_D}
               strokeWidth={1}
             />
           ))}
@@ -599,7 +667,7 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
               `M ${(bx + t * s.cos).toFixed(1)} ${(by + t * s.sin).toFixed(1)} ` +
               `L ${(bx + b * s.cos + 4 * px).toFixed(1)} ${(by + b * s.sin + 4 * py).toFixed(1)} ` +
               `L ${(bx + b * s.cos - 4 * px).toFixed(1)} ${(by + b * s.sin - 4 * py).toFixed(1)} Z`;
-            return <Path key={`ch-${s.m.id}`} d={d} fill={GV.muted} opacity={0.9} stroke="none" />;
+            return <Path key={`ch-${s.m.id}`} d={d} fill={SECTOR_D} opacity={0.9} stroke="none" />;
           })}
 
           {/* off-track verdict: persistent red halo (dots turn red too) */}
@@ -649,7 +717,7 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
                 cy={selected.dotY}
                 r={15}
                 fill="none"
-                stroke={selected.good ? GV.ink : BAD}
+                stroke={selected.good ? '#FFFFFF' : BAD}
                 strokeWidth={3}
                 opacity={selected.good ? 0.5 : 0.9}
                 animatedProps={haloProps}
@@ -657,12 +725,13 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
             </G>
           ) : null}
 
-          {/* flat hub: averaging window + signal count */}
-          <Circle cx={C} cy={C} r={32} fill={GV.card} stroke={GV.line} strokeWidth={1.5} />
-          <SvgText x={C} y={C + 1} textAnchor="middle" fontSize={13} fontFamily={FONT.semi} fill={GV.ink}>
+          {/* glass hub: averaging window + signal count */}
+          <Circle cx={C} cy={C} r={32} fill="#0D1420" stroke={STAGE_RIM} strokeWidth={1.5} />
+          <Ellipse cx={C} cy={C - 14} rx={18} ry={7} fill="#FFFFFF" opacity={0.07} />
+          <SvgText x={C} y={C + 1} textAnchor="middle" fontSize={13} fontFamily={FONT.semi} fill={INK_D}>
             {`${windowDays}d avg`}
           </SvgText>
-          <SvgText x={C} y={C + 17} textAnchor="middle" fontSize={10} fontFamily={FONT.semi} fill={SUB} letterSpacing={1}>
+          <SvgText x={C} y={C + 17} textAnchor="middle" fontSize={10} fontFamily={FONT.semi} fill={SUB_D} letterSpacing={1}>
             {`${spokes.length} SIGNAL${spokes.length === 1 ? '' : 'S'}`}
           </SvgText>
 
@@ -684,17 +753,17 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
             <G key={`lb-${s.m.id}`}>
               <Path
                 d={mark.main}
-                stroke={MARKER_COLOR}
+                stroke={MARK_DARK}
                 strokeWidth={mark.mainWidth}
-                opacity={0.5}
+                opacity={0.9}
                 fill="none"
                 strokeLinecap="round"
               />
               <Path
                 d={mark.over}
-                stroke={MARKER_COLOR}
+                stroke={MARK_DARK}
                 strokeWidth={mark.overWidth}
-                opacity={0.45}
+                opacity={0.85}
                 fill="none"
                 strokeLinecap="round"
               />
@@ -704,7 +773,7 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
                 textAnchor={s.anchor}
                 fontSize={12.5}
                 fontFamily={FONT.semi}
-                fill={s.good ? GV.ink : BAD}
+                fill={s.good ? INK_D : BAD}
               >
                 {`${s.m.valueText} ${trendArrow(s.m.trend)}`}
               </SvgText>
@@ -714,7 +783,7 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
                 textAnchor={s.anchor}
                 fontSize={10}
                 fontFamily={FONT.semi}
-                fill={SUB}
+                fill={SUB_D}
                 letterSpacing={0.5}
               >
                 {name}
@@ -732,7 +801,7 @@ export default function HGraphMap({ metrics, width }: { metrics: HMetric[]; widt
               textAnchor="middle"
               fontSize={10}
               fontFamily={FONT.semi}
-              fill={GV.muted}
+              fill={SECTOR_D}
               letterSpacing={1.5}
             >
               {SECTOR_LABEL[g.sector] ?? g.sector.toUpperCase()}

@@ -44,19 +44,18 @@ import Animated, {
 import Svg, { Path, Rect, Circle, G, Line } from 'react-native-svg';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { toneForCategory } from '@/theme/tones';
-import { domainHueForStream } from '@/theme/dashboardApple';
+import { toneForCategory, TILE_TONES, graphToneForStream } from '@/theme/tones';
 
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
 import { timingConfig, springSnappy } from '@/theme/motion';
 import { useReducedMotion } from '@/theme';
 import { IconButton } from '@/components/movements/IconButton';
-import { Slider } from '@/components/Slider';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { Chip } from '@/components/Chip';
+import { GlassCuboid } from '@/components/GlassCuboid';
 import { SectionHeader } from '@/components/SectionHeader';
-import HGraphMap, { type HMetric } from '@/components/home/HGraphMap';
+import HGraphMap, { type HMetric, HMAP_ASPECT } from '@/components/home/HGraphMap';
+import { WheelSlider } from '@/components/WheelSlider';
 import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
 
 import { BrandLogo } from '@/components/BrandLogo';
@@ -71,6 +70,7 @@ import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { useProfilePhoto } from '@/hooks/useProfilePhoto';
 import { recordMedicationTaken, useMedications } from '@/hooks/useMedications';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import { listUnverifiedExtractedDocIds } from '@/db/queries/documents';
 import { useTrends } from '@/hooks/useTrends';
 import { localDateString } from '@/screens/Dashboard/homeData';
 import { useHomeStory } from '@/screens/Dashboard/useHomeStory';
@@ -389,16 +389,15 @@ function ActionRowBlock({
               nestedScrollEnabled
               showsVerticalScrollIndicator={false}
             >
-              {medNames.map((name) => (
+              {medNames.map((name, i) => (
                 <Text key={name} style={styles.medListItem} numberOfLines={1}>
-                  {name}
+                  {`${i + 1}. ${name}`}
                 </Text>
               ))}
             </ScrollView>
           ) : (
             <Text style={styles.medRowSub} numberOfLines={1}>Add one to start tracking</Text>
           )}
-          <Text style={styles.medChevron}>›</Text>
         </Card>
       </View>
     </View>
@@ -406,6 +405,13 @@ function ActionRowBlock({
 }
 
 // ─── Insights panel (health overview map + actions) ─────────────────────────
+// Wheel lane beside the dial: 44px wheel + 4px breathing room.
+const WHEEL_LANE = 48;
+// Left rail for the vertical day readout.
+const RAIL_W = 24;
+// Submerged resin tone: deeper than the bright stage teal so the wheel +
+// day readout read cast inside the cuboid rather than floating on it.
+const SUNKEN_TEAL = '#2E8B7E';
 
 function ImproveKeepDuo({
   onImprove,
@@ -453,59 +459,55 @@ function InsightPanelBlock({
 }) {
   const [mapOpen, setMapOpen] = useState(false);
   const [mapWidth, setMapWidth] = useState(0);
+  // Dial keeps full size: only the wheel lane + day rail are reserved.
+  const dialW = Math.round(mapWidth - RAIL_W - (day.max > 0 ? WHEEL_LANE : 0));
   return (
     <View style={styles.section}>
       <View style={styles.insightHead}>
         <Text style={styles.insightEyebrow}>Overview</Text>
       </View>
 
-      <Card style={styles.panel}>
-        <Pressable
+      {/* Resin stack: dial + slider + yesterday laid down first, with the
+          glass cuboid poured above them as a clear cover sheet. */}
+      <View style={styles.panel}>
+        <View
           style={styles.panelMap}
           onLayout={(e) => setMapWidth(e.nativeEvent.layout.width)}
-          onPress={() => setMapOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Expand health overview map"
         >
           {mapWidth > 0 ? (
-            <HGraphMap metrics={hMetrics} width={Math.round(mapWidth * 0.8)} />
-          ) : null}
-          {/* Day scrubber: pick 7 / 14 / 30 days back, slide through them,
-              the dial follows. The static average-chips line it replaces
-              is gone for good. */}
-          {mapWidth > 0 ? (
-            <View style={styles.dayScrub}>
-              <View style={styles.dayTopRow}>
-                <Text style={styles.dayLabel}>{day.label}</Text>
-                <View style={styles.rangeChips}>
-                  {[7, 14, 30].map((n) => (
-                    <Chip
-                      key={n}
-                      label={`${n}D`}
-                      selected={day.range === n}
-                      onPress={() => day.onRange(n)}
-                      accessibilityLabel={`Show past ${n} days`}
-                    />
-                  ))}
-                </View>
+            <View style={styles.dialRow}>
+              <View style={styles.dayWell}>
+                <Text style={styles.dayLabel} numberOfLines={1}>
+                  {day.label}
+                </Text>
               </View>
+              <Pressable
+                style={[styles.dialCol, { width: dialW }]}
+                onPress={() => setMapOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Expand health overview map"
+              >
+                <HGraphMap metrics={hMetrics} width={dialW} />
+              </Pressable>
               {day.max > 0 ? (
-                <Slider
+                <WheelSlider
                   value={day.off}
                   onValueChange={(v) => day.onChange(v)}
                   onLiveChange={(v) => day.onChange(v)}
                   min={0}
                   max={day.max}
                   step={0.1}
-                  color={GV.cta}
-                  showValue={false}
+                  color={SUNKEN_TEAL}
+                  sunken
+                  height={Math.round(dialW * HMAP_ASPECT)}
+                  accessibilityLabel="Scrub days"
                 />
               ) : null}
             </View>
           ) : null}
-        </Pressable>
-
-      </Card>
+        </View>
+        <GlassCuboid overlay auraColor={GV.teal} auraOpacity={0.1} radius={24} />
+      </View>
 
       <MapFullscreen visible={mapOpen} hMetrics={hMetrics} onClose={() => setMapOpen(false)} onImprove={(focus) => { setMapOpen(false); onImprove(focus); }} />
     </View>
@@ -573,7 +575,9 @@ function MapFullscreen({
             contentContainerStyle={styles.modalChartWrap}
             showsVerticalScrollIndicator={false}
           >
-            <HGraphMap metrics={hMetrics} width={mapSizeW} />
+            <GlassCuboid pad={12} radius={24} auraColor={GV.teal} auraOpacity={0.08}>
+              <HGraphMap metrics={hMetrics} width={mapSizeW} />
+            </GlassCuboid>
             <ImproveKeepDuo onImprove={onImprove} />
           </ScrollView>
         </Animated.View>
@@ -588,23 +592,84 @@ function CorrelationHeading({ count }: { count: number }) {
   const { range, setRange } = useTrendRange();
   return (
     <View style={[styles.section, styles.corrHeadingWrap]}>
-      <SectionHeader title="Health connections" subtitle={`${count} graphs`} />
-      <View style={styles.rangeRow}>
-        {TREND_RANGE_ORDER.map((key) => (
-          <Chip
-            key={key}
-            label={TREND_RANGES[key].label}
-            selected={range === key}
-            onPress={() => setRange(key)}
-            accessibilityLabel={`Show ${TREND_RANGES[key].label} range`}
-            style={styles.rangeChipFlex}
-          />
-        ))}
+      <SectionHeader
+        dark
+        title="Your patterns"
+        titleStyle={styles.patternsTitle}
+      />
+      <View style={styles.rangeTrack}>
+        {TREND_RANGE_ORDER.map((key) => {
+          const selected = range === key;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => setRange(key)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`Show ${TREND_RANGES[key].label} range`}
+              style={[styles.rangeSeg, selected && styles.rangeSegOn]}
+            >
+              <Text style={[styles.rangeSegText, selected && styles.rangeSegTextOn]}>
+                {TREND_RANGES[key].label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
 }
 
+// ─── Explore: every feature in the app, one tile grid ─────────────────────────
+
+function ExploreSection() {
+  const navigation = useNavigation<Nav>();
+  const items: { label: string; bg: string; go: () => void }[] = [
+    { label: 'Log day', bg: '#5A6078', go: () => navigation.navigate('DailyLog') },
+    { label: 'Timeline', bg: '#66666F', go: () => navigation.navigate('Timeline') },
+    { label: 'Medications', bg: '#8A4A55', go: () => navigation.navigate('Medications') },
+    { label: 'Food scan', bg: '#6E7F4E', go: () => navigation.navigate('FoodScan') },
+    { label: 'Priority', bg: '#57507A', go: () => navigation.navigate('Priority') },
+    { label: 'Body map', bg: '#8A7A5C', go: () => navigation.navigate('Body') },
+    { label: 'Symptom map', bg: '#7C6272', go: () => navigation.navigate('SymptomMap') },
+    { label: 'Pulse check', bg: '#56837B', go: () => navigation.navigate('Main', { screen: 'PpgMeasure' }) },
+    { label: 'Sleep', bg: '#57507A', go: () => navigation.navigate('SleepEngine') },
+    { label: 'Activity', bg: '#96684A', go: () => navigation.navigate('FitnessEngine') },
+    { label: 'Nutrition', bg: '#6E7F4E', go: () => navigation.navigate('NutritionEngine') },
+    { label: 'Heart', bg: '#56837B', go: () => navigation.navigate('HeartEngine') },
+    { label: 'Wellbeing', bg: '#66666F', go: () => navigation.navigate('WellbeingEngine') },
+    { label: 'Weight', bg: '#5C6E7C', go: () => navigation.navigate('WeightEngine') },
+    { label: 'Discipline', bg: '#7C6272', go: () => navigation.navigate('DisciplineEngine') },
+    { label: 'Documents', bg: '#5A6078', go: () => navigation.navigate('Documents') },
+    { label: 'Scan prescription', bg: '#527A6E', go: () => navigation.navigate('PrescriptionScanner') },
+    { label: 'Cycle', bg: '#8A4A55', go: () => navigation.navigate('Cycle') },
+    { label: 'Substance', bg: '#8A7A5C', go: () => navigation.navigate('Substance') },
+  ];
+  return (
+    <View style={styles.section}>
+      <View style={styles.exploreRule} />
+      <SectionHeader dark title="Explore" titleStyle={styles.patternsTitle} />
+      <View style={styles.exploreGrid}>
+        {items.map((item, i) => (
+          <Pressable
+            key={item.label}
+            onPress={item.go}
+            accessibilityRole="button"
+            accessibilityLabel={item.label}
+            style={({ pressed }) => [
+              styles.exploreTile,
+              { backgroundColor: item.bg },
+              i === items.length - 1 && items.length % 2 === 1 && styles.exploreTileFull,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={styles.exploreLabel}>{item.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
 // ─── Correlations curation ───────────────────────────────────────────────────
 // Unusual/system streams never reach the feed: records processed, logging
 // rhythm, calories (a pure derivative of active minutes), and unlabeled
@@ -924,30 +989,30 @@ function FeedCustomSheet({
 }
 
 const feedSheet = StyleSheet.create({
-  // Flat white block inside the sheet.
-  body: { gap: 12, paddingBottom: 16, backgroundColor: GV.card, borderRadius: SPACE.rCard, padding: SPACE.cardPad },
-  sectionTitle: { ...TYPE.title, color: GV.ink, marginTop: 8 },
-  sectionSub: { ...TYPE.caption, color: GV.muted, marginTop: 4 },
+  // Dark block inside the sheet (sheet chrome already follows the theme).
+  body: { gap: 12, paddingBottom: 16, backgroundColor: '#10141F', borderRadius: SPACE.rCard, padding: SPACE.cardPad },
+  sectionTitle: { ...TYPE.title, color: '#FFFFFF', marginTop: 8 },
+  sectionSub: { ...TYPE.caption, color: '#A7B8B2', marginTop: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: SPACE.rPill,
     borderWidth: 1,
-    borderColor: GV.line,
-    backgroundColor: GV.card,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   chipOn: { backgroundColor: GV.cta, borderColor: GV.cta },
-  chipText: { ...TYPE.chip, color: GV.body },
+  chipText: { ...TYPE.chip, color: '#FFFFFF' },
   chipTextOn: { color: '#FFFFFF' },
   preview: {
-    backgroundColor: GV.wash,
+    backgroundColor: '#04060B',
     borderRadius: 16,
     padding: 16,
     gap: 4,
   },
-  previewTitle: { ...TYPE.title, color: GV.ink },
-  previewSub: { ...TYPE.body, color: GV.body, fontVariant: ['tabular-nums'] },
+  previewTitle: { ...TYPE.title, color: '#FFFFFF' },
+  previewSub: { ...TYPE.body, color: '#A7B8B2', fontVariant: ['tabular-nums'] },
   previewBtn: {
     marginTop: 8,
     paddingVertical: 12,
@@ -955,21 +1020,21 @@ const feedSheet = StyleSheet.create({
     backgroundColor: GV.cta,
     alignItems: 'center',
   },
-  previewBtnAdded: { backgroundColor: GV.card, borderWidth: 1, borderColor: GV.line },
+  previewBtnAdded: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
   previewBtnText: { ...TYPE.button, color: '#FFFFFF' },
-  previewBtnTextAdded: { color: GV.ink },
-  hint: { ...TYPE.body, color: GV.body, backgroundColor: GV.wash, borderRadius: 12, padding: 12, overflow: 'hidden' },
+  previewBtnTextAdded: { color: '#FFFFFF' },
+  hint: { ...TYPE.body, color: '#A7B8B2', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 12, overflow: 'hidden' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: GV.line,
+    borderTopColor: 'rgba(255,255,255,0.08)',
   },
   rowText: { flex: 1, gap: 4 },
-  rowTitle: { ...TYPE.button, color: GV.ink },
-  rowSub: { ...TYPE.caption, color: GV.muted },
+  rowTitle: { ...TYPE.button, color: '#FFFFFF' },
+  rowSub: { ...TYPE.caption, color: '#A7B8B2' },
   rowBtn: {
     minWidth: 88,
     paddingHorizontal: 16,
@@ -978,9 +1043,9 @@ const feedSheet = StyleSheet.create({
     backgroundColor: GV.cta,
     alignItems: 'center',
   },
-  rowBtnAdded: { backgroundColor: GV.card, borderWidth: 1, borderColor: GV.line },
+  rowBtnAdded: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
   rowBtnText: { ...TYPE.chip, color: '#FFFFFF' },
-  rowBtnTextAdded: { color: GV.ink },
+  rowBtnTextAdded: { color: '#FFFFFF' },
 });
 
 // ─── Screen ──────────────────────────────────────────────────────────────────────
@@ -1000,6 +1065,29 @@ export default function HealthDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [feedSheetOpen, setFeedSheetOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  // Unverified readings nudge — persistent on every open until reviewed.
+  const [unverifiedCount, setUnverifiedCount] = useState(0);
+
+  const loadUnverified = useCallback(async () => {
+    const patientId = getCachedPatientId();
+    if (!patientId) {
+      setUnverifiedCount(0);
+      return;
+    }
+    try {
+      setUnverifiedCount((await listUnverifiedExtractedDocIds(patientId)).length);
+    } catch {
+      // Nudge is convenience only — the feed still renders.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadUnverified();
+    const unsubscribe = navigation.addListener('focus', () => {
+      void loadUnverified();
+    });
+    return unsubscribe;
+  }, [navigation, loadUnverified]);
 
   const feedQuery = useCorrelationFeed(trends.data, metrics.data, Math.min(trendDays, 60));
 
@@ -1147,6 +1235,21 @@ export default function HealthDashboardScreen() {
 
   const listHeader = useMemo(() => (
     <View>
+      {unverifiedCount > 0 ? (
+        <Pressable
+          onPress={() => navigation.navigate('Documents')}
+          accessibilityRole="button"
+          accessibilityLabel={`${unverifiedCount} readings need review`}
+          style={({ pressed }) => [styles.reviewBanner, pressed && { opacity: 0.8 }]}
+        >
+          <Text style={styles.reviewBannerText}>
+            {unverifiedCount === 1
+              ? '1 reading needs review'
+              : `${unverifiedCount} readings need review`}
+          </Text>
+          <Text style={styles.reviewBannerChev}>›</Text>
+        </Pressable>
+      ) : null}
       <InsightPanelBlock hMetrics={hMetrics} day={{ off: dialDay.off, max: dialDay.max, label: dialDay.label, range: dialDay.range, onChange: setDayOffset, onRange: setDayRange }} onOpenFullGraph={goToFullGraph} onImprove={(focus) => navigation.navigate('Improve', { focus, metrics: hMetrics })} />
       <ActionRowBlock
         loggedToday={loggedToday}
@@ -1169,7 +1272,7 @@ export default function HealthDashboardScreen() {
     loggedToday, metrics.data?.today_wellbeing, waterMl, medNames, activeMeds.length, medTaken, medExpected, medActive,
     upNextMed, upNextTaken, toggleUpNextTaken,
     hMetrics, dialDay, feed.length, goToDailyLog, goToMedications, goToFullGraph, goToSettings,
-    navigation,
+    navigation, unverifiedCount,
   ]);
 
   const renderItem = useCallback(({ item }: { item: CorrelationFeedItem }) => (
@@ -1180,7 +1283,7 @@ export default function HealthDashboardScreen() {
         data={item.data}
         lineColor={
           item.data.kind === 'timeSeries'
-            ? domainHueForStream(item.id.replace(/^series-/, ''))
+            ? graphToneForStream(item.id)
             : undefined
         }
       />
@@ -1208,6 +1311,7 @@ export default function HealthDashboardScreen() {
         </View>
         <Text style={styles.addArrow}>›</Text>
       </Card>
+      <ExploreSection />
       <FeedCustomSheet
         visible={feedSheetOpen}
         onClose={() => setFeedSheetOpen(false)}
@@ -1309,10 +1413,11 @@ const styles = StyleSheet.create({
   },
 
   // Header — transparent on the stage, white circular buttons, dark glyphs.
+  // Follows the home margin law (26px).
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 26,
     paddingTop: 8,
     paddingBottom: 8,
     zIndex: 5,
@@ -1409,12 +1514,14 @@ const styles = StyleSheet.create({
   },
   titleDisplay: {
     ...TYPE.display,
-    color: GV.ink,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
 
   listContent: {
-    paddingHorizontal: SPACE.screenH,
+    // The home margin law: content sits 26px in — the same line the glass
+    // cuboid edges follow (16px screen + 10px glass inset).
+    paddingHorizontal: 26,
     paddingBottom: 112,
     paddingTop: 24,
     zIndex: 1,
@@ -1424,48 +1531,94 @@ const styles = StyleSheet.create({
   // between data sections below.
   sectionHero: { marginBottom: 16, gap: SPACE.cardGap },
 
-  // ── Check-in + medication square duo ──
+  // ── Check-in + medication: compact dark rectangles for the black stage.
   duoRow: {
     flexDirection: 'row',
     gap: 12,
   },
   checkBox: {
     flex: 1,
-    aspectRatio: 1.1,
+    minHeight: 104,
     justifyContent: 'flex-start',
-    gap: 6,
-    backgroundColor: '#DDF2E7',
+    gap: 5,
+    backgroundColor: '#0D1B16',
+    borderColor: 'rgba(61,220,132,0.22)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
   medBox: {
     flex: 1,
-    aspectRatio: 1.1,
+    minHeight: 104,
     justifyContent: 'flex-start',
-    gap: 6,
-    backgroundColor: '#E0EBFA',
+    gap: 5,
+    backgroundColor: '#0E1626',
+    borderColor: 'rgba(89,214,230,0.20)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
   medBoxLabel: {
     ...TYPE.caption,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    color: '#7FD8E8',
+    alignSelf: 'stretch',
+    textAlign: 'center',
+    backgroundColor: 'rgba(89,214,230,0.14)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    overflow: 'hidden',
   },
   medList: {
     flex: 1,
   },
   medListItem: {
     ...TYPE.button,
-    fontSize: 15,
-    color: GV.ink,
+    fontSize: 14,
+    color: '#FFFFFF',
     paddingVertical: 2,
+    fontVariant: ['tabular-nums'],
   },
 
   // ── Shared correlation range (Week / Month / Year, global state) ──
-  rangeRow: {
+  // Section heading outranks the 17px card titles below it: larger,
+  // tighter, slight negative tracking (display-role treatment).
+  patternsTitle: {
+    fontSize: 20,
+    lineHeight: 24,
+    letterSpacing: -0.3,
+  },
+  // Segmented range control: one glass track, solid-white segment on.
+  rangeTrack: {
     flexDirection: 'row',
-    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 9999,
+    padding: 3,
     marginTop: 12,
   },
-  rangeChipFlex: {
+  rangeSeg: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 9999,
+  },
+  rangeSegOn: {
+    backgroundColor: '#FFFFFF',
+  },
+  rangeSegText: {
+    ...TYPE.chip,
+    color: 'rgba(255,255,255,0.75)',
+  },
+  rangeSegTextOn: {
+    color: '#080A11',
+    fontFamily: FONT.bold,
   },
 
   // ── Improve / Keep duo (CTA green + white secondary) ──
@@ -1490,17 +1643,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dupCross: { fontFamily: FONT.semi, color: GV.muted, lineHeight: undefined },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(61,220,132,0.16)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ctaPressed },
+  statusText: { ...TYPE.caption, fontFamily: FONT.semi, color: '#3DDC84', textAlign: 'center' },
   statusCount: { ...TYPE.caption, color: GV.muted, marginLeft: 2, fontVariant: ['tabular-nums'] },
   // Hug-the-text: grow 0 + shrink 1 (NOT flex:1) so the status badge sits
   // immediately after the words instead of docking at the row's far edge.
   // Long titles still wrap instead of overflowing.
-  todayTitle: { fontFamily: FONT.semi, fontSize: 20, lineHeight: 26, letterSpacing: -0.2, color: GV.ink, flexGrow: 0, flexShrink: 1 },
+  todayTitle: { fontFamily: FONT.semi, fontSize: 17, lineHeight: 22, letterSpacing: -0.2, color: '#FFFFFF', flexGrow: 0, flexShrink: 1 },
   todayPct: {
     ...TYPE.title,
-    color: GV.ink,
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
   ringCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
@@ -1508,13 +1673,15 @@ const styles = StyleSheet.create({
   todayCta: {
     alignSelf: 'flex-start',
     borderRadius: SPACE.rPill,
-    backgroundColor: GV.cta,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#3DDC84',
     paddingHorizontal: 12,
     paddingVertical: 8,
     minHeight: 36,
     justifyContent: 'center',
   },
-  todayCtaText: { ...TYPE.chip, color: '#FFFFFF' },
+  todayCtaText: { ...TYPE.chip, color: '#3DDC84' },
 
   // ── Medication row: a flat white card. ──
   medCard: {
@@ -1527,7 +1694,7 @@ const styles = StyleSheet.create({
   medRowText: { flex: 1, gap: 4 },
   medRowEyebrow: { ...TYPE.caption, color: GV.muted },
   medRowName: { ...TYPE.title, color: GV.ink },
-  medRowSub: { ...TYPE.body, color: GV.body, fontVariant: ['tabular-nums'] },
+  medRowSub: { ...TYPE.body, color: '#A7B8B2', fontVariant: ['tabular-nums'] },
   // Up-next taken toggle: CTA-green filled tick (taken, status only) vs
   // CTA-green outline cross (tap to record the dose now).
   medTakenToggle: {
@@ -1543,7 +1710,6 @@ const styles = StyleSheet.create({
   medTakenToggleGlyph: { fontSize: 14, fontFamily: FONT.semi, lineHeight: 18 },
   medTakenToggleGlyphOn: { color: '#FFFFFF' },
   medTakenToggleGlyphOff: { color: GV.cta },
-  medChevron: { fontSize: 22, fontFamily: FONT.semi, color: GV.muted, paddingRight: 2 },
 
   doseTrack: {
     height: 8,
@@ -1558,20 +1724,47 @@ const styles = StyleSheet.create({
     backgroundColor: GV.cta,
   },
 
-  // Insights panel — flat white card: map, verdicts, actions, 3D link.
+  // Insights panel — breaks back out to the 16px screen line so the glass
+  // cuboid (10px inset) lands exactly on the 26px home margin.
   panel: {
-    padding: 12,
-    gap: 12,
+    position: 'relative',
+    marginHorizontal: -10,
+  },
+  // Unverified-readings nudge: persistent until every reading is reviewed.
+  reviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(214,69,69,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(214,69,69,0.4)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  reviewBannerText: {
+    ...TYPE.chip,
+    color: '#F09696',
+  },
+  reviewBannerChev: {
+    fontSize: 18,
+    color: '#F09696',
   },
   // Insights section header — single quiet eyebrow on the stage (the dial
   // below opens fullscreen on tap, so no expand affordance needed here).
   insightHead: {
     marginBottom: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: 0,
   },
   insightEyebrow: {
-    ...TYPE.caption,
-    color: GV.violet,
+    // Apple typography: system font (SF on iOS), semibold, white —
+    // no custom family here on purpose.
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    color: '#FFFFFF',
   },
   // One quiet status line straight from the dial values — nothing invented.
   verdictLine: {
@@ -1579,30 +1772,46 @@ const styles = StyleSheet.create({
     color: GV.body,
     fontVariant: ['tabular-nums'],
     marginBottom: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: 0,
   },
-  panelMap: { alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', gap: 8 },
+  panelMap: { alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', gap: 0 },
   // Day scrubber: label + range chips + week slider, full card width.
-  dayScrub: {
-    alignSelf: 'stretch',
-    gap: 4,
-    paddingHorizontal: 4,
-    marginTop: 4,
-  },
-  dayTopRow: {
+  dialRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+    gap: 2,
   },
-  rangeChips: {
-    flexDirection: 'row',
-    gap: 6,
+  dialCol: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Recessed well: the day readout sits engraved inside the glass bar,
+  // tight under the dial — one instrument, not two stacked cards.
+  // No separate background here: the day readout floats bare inside the
+  // glass cuboid, like lettering cast in resin — one continuous piece.
+  // Vertical side rail: the day readout runs down the left cheek of the
+  // dial like an etched marking. The text lays out wide then rotates, so
+  // it never truncates inside the narrow rail.
+  dayWell: {
+    width: RAIL_W,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+    // Nudged a lil inside, toward the dial.
+    marginLeft: 4,
   },
   dayLabel: {
     ...TYPE.chip,
-    color: GV.cta,
+    color: SUNKEN_TEAL,
     textAlign: 'center',
+    width: 120,
+    transform: [{ rotate: '-90deg' }],
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   // Quiet footer link to the full 3D graph.
   graphLink: {
@@ -1625,25 +1834,29 @@ const styles = StyleSheet.create({
   feedSkeleton: {
     padding: SPACE.cardPad,
     gap: 12,
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
   },
   feedSkeletonBar: {
     width: '55%',
     height: 16,
     borderRadius: 8,
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   feedSkeletonPlot: {
     height: 168,
     borderRadius: 16,
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   feedEmpty: {
     padding: SPACE.cardPad,
     gap: 8,
     alignItems: 'center',
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
   },
-  feedEmptyTitle: { ...TYPE.title, color: GV.ink, textAlign: 'center' },
-  feedEmptyText: { ...TYPE.body, color: GV.body, textAlign: 'center' },
+  feedEmptyTitle: { ...TYPE.title, color: '#FFFFFF', textAlign: 'center' },
+  feedEmptyText: { ...TYPE.body, color: '#A7B8B2', textAlign: 'center' },
 
   // Build-your-own entry card at the end of the feed.
   addCard: {
@@ -1652,14 +1865,51 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: SPACE.cardPad,
     minHeight: 56,
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
   },
-  addGlyph: { fontSize: 20, fontFamily: FONT.semi, color: GV.cta, width: 28, textAlign: 'center' },
+  addGlyph: { fontSize: 20, fontFamily: FONT.semi, color: '#4FD1C5', width: 28, textAlign: 'center' },
   addText: { flex: 1, gap: 4 },
-  addTitle: { ...TYPE.title, color: GV.ink },
-  addSub: { ...TYPE.body, color: GV.body },
-  addArrow: { fontSize: 16, fontFamily: FONT.semi, color: GV.muted },
+  addTitle: { ...TYPE.title, color: '#FFFFFF' },
+  addSub: { ...TYPE.body, color: '#A7B8B2' },
+  addArrow: { fontSize: 16, fontFamily: FONT.semi, color: '#A7B8B2' },
 
-  // Insights fullscreen modal (flat white sheet card on a stage scrim)
+  // Explore grid: hairline rule, then solid-tone tiles (2 cols, odd last
+  // full-width). Tile hues are stable per feature, never by position.
+  exploreRule: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginTop: 8,
+  },
+  exploreGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  exploreTile: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    minHeight: 84,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+  exploreTileFull: {
+    flexBasis: '100%',
+  },
+  exploreLabel: {
+    fontFamily: FONT.medium,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  // Insights fullscreen modal (dark sheet card on a stage scrim)
   modalScrim: {
     flex: 1,
     backgroundColor: 'rgba(10, 15, 14, 0.6)',
@@ -1667,10 +1917,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   modalCard: {
-    backgroundColor: GV.card,
+    backgroundColor: '#10141F',
     borderRadius: SPACE.rCard,
     padding: SPACE.cardPad,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1679,7 +1931,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   modalTitleBlock: { flex: 1, gap: 4 },
-  modalTitle: { ...TYPE.title, color: GV.ink },
+  modalTitle: { ...TYPE.title, color: '#FFFFFF' },
   modalChartWrap: { alignItems: 'center', marginTop: 16 },
   modalScroll: { maxHeight: 520 },
 });

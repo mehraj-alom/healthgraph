@@ -15,6 +15,8 @@ import { useAuth } from '@/context/AuthContext';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { waitForIdentityReady } from '@/services/backendIdentity';
 import { getProfileCache } from '@/db/queries/homeCache';
+import { getWeightHistory, type WeightHistoryPoint } from '@/db/queries/dailyLogs';
+import { shiftDayKey, todayKeyLocal } from '@/utils/dayKey';
 import { subscribeDataRefresh } from '@/services/dataRefresh';
 import {
   buildWeightEngineModel,
@@ -23,6 +25,8 @@ import {
 
 export function useWeightEngine(): {
   model: WeightEngineModel;
+  /** Real logged weights (daily check-in vitals), oldest first. */
+  history: WeightHistoryPoint[];
   isLoading: boolean;
   refetch: () => Promise<void>;
 } {
@@ -31,6 +35,7 @@ export function useWeightEngine(): {
   const [model, setModel] = useState<WeightEngineModel>(() =>
     buildWeightEngineModel(null),
   );
+  const [history, setHistory] = useState<WeightHistoryPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const mounted = useRef(true);
 
@@ -39,6 +44,7 @@ export function useWeightEngine(): {
       if (!uid) {
         if (mounted.current) {
           setModel(buildWeightEngineModel(null));
+          setHistory([]);
           setIsLoading(false);
         }
         return;
@@ -49,11 +55,16 @@ export function useWeightEngine(): {
         if (mounted.current) setIsLoading(false);
         return;
       }
-      const { data } = await getProfileCache(patientId).catch(() => ({
-        data: null,
-      }));
+      const today = todayKeyLocal();
+      const [cache, series] = await Promise.all([
+        getProfileCache(patientId).catch(() => ({ data: null })),
+        getWeightHistory(patientId, shiftDayKey(today, -89), today).catch(
+          () => [] as WeightHistoryPoint[],
+        ),
+      ]);
       if (!mounted.current) return;
-      setModel(buildWeightEngineModel(data?.weight_kg ?? null));
+      setModel(buildWeightEngineModel(cache.data?.weight_kg ?? null));
+      setHistory(series);
       setIsLoading(false);
     } catch {
       if (mounted.current) setIsLoading(false);
@@ -84,5 +95,5 @@ export function useWeightEngine(): {
     }, [load]),
   );
 
-  return { model, isLoading, refetch: load };
+  return { model, history, isLoading, refetch: load };
 }

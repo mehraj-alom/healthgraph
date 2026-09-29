@@ -582,7 +582,7 @@ export default function PulseInstrumentScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: INST.face },
-  content: { paddingHorizontal: 24, paddingBottom: 32, paddingTop: 8, gap: 12 },
+  content: { paddingHorizontal: 26, paddingBottom: 32, paddingTop: 8, gap: 12 },
   title: {
     fontFamily: FONT.semi,
     fontSize: 32,
@@ -650,7 +650,7 @@ const styles = StyleSheet.create({
     color: INST.steel,
     fontVariant: ['tabular-nums'],
   },
-  readoutUnit: { fontFamily: FONT.semi, fontSize: 12, letterSpacing: 3, color: INST.engraved },
+  readoutUnit: { fontFamily: FONT.semi, fontSize: 12, letterSpacing: 1.5, color: INST.engraved },
   dialRow: { alignItems: 'center' },
   resultBlock: { gap: 12 },
 });

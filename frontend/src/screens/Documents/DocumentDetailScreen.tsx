@@ -13,6 +13,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,7 +31,7 @@ import {
   cachedFileExists,
   downloadDocumentFile,
 } from '@/services/documents';
-import { setDocumentLocalUri } from '@/db/queries/documents';
+import { setDocumentLocalUri, getDocumentVerification, setDocumentVerification } from '@/db/queries/documents';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { StageGradient } from '@/components/StageGradient';
@@ -98,6 +99,13 @@ export default function DocumentDetailScreen() {
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
+  // ---- Reading verification (user confirms before it counts as reviewed)
+  const [verified, setVerified] = useState(false);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
+  const [checked, setChecked] = useState(false);
+  const [note, setNote] = useState('');
+  const [verifying, setVerifying] = useState(false);
+
   const openOriginal = useCallback(async () => {
     if (!document) return;
     setFileError(null);
@@ -159,6 +167,18 @@ export default function DocumentDetailScreen() {
       // Fetch extraction data
       const ext = await fetchExtraction(documentId);
       setExtraction(ext);
+
+      // Fetch local verify state
+      const patientId = getCachedPatientId();
+      if (patientId) {
+        const v = await getDocumentVerification(patientId, documentId).catch(() => null);
+        if (v) {
+          setVerified(v.verified);
+          setSavedNote(v.note);
+          setNote(v.note ?? '');
+          setChecked(v.verified);
+        }
+      }
     } catch (err) {
       console.error('[DocumentDetail] Load error:', err);
       setError('Failed to load document details.');
@@ -180,6 +200,39 @@ export default function DocumentDetailScreen() {
     });
     return unsubscribe;
   }, [navigation, documentId, loadData]);
+
+  const markVerified = useCallback(async () => {
+    if (!documentId || !checked) return;
+    const patientId = getCachedPatientId();
+    if (!patientId) return;
+    setVerifying(true);
+    try {
+      const clean = note.trim() ? note.trim() : null;
+      await setDocumentVerification(patientId, documentId, true, clean);
+      setVerified(true);
+      setSavedNote(clean);
+    } catch {
+      // Local-only write; a failure leaves the unverified state in place.
+    } finally {
+      setVerifying(false);
+    }
+  }, [documentId, checked, note]);
+
+  const reopenReview = useCallback(async () => {
+    if (!documentId) return;
+    const patientId = getCachedPatientId();
+    if (!patientId) return;
+    setVerifying(true);
+    try {
+      await setDocumentVerification(patientId, documentId, false);
+      setVerified(false);
+      setChecked(false);
+    } catch {
+      // Best-effort; the verified state stays.
+    } finally {
+      setVerifying(false);
+    }
+  }, [documentId]);
 
   // -----------------------------------------------------------------------
   // Render — Loading
@@ -283,6 +336,69 @@ export default function DocumentDetailScreen() {
           </View>
           {fileError ? <Text style={styles.fileError}>{fileError}</Text> : null}
         </View>
+
+        {/* Reading verification — confirms before the reading counts */}
+        {extraction && !isProcessing ? (
+          <Card padding="md" style={styles.verifyCard}>
+            {verified ? (
+              <View style={styles.verifyDoneRow}>
+                <Text style={styles.verifyDone}>Verified ✓</Text>
+                <Pressable
+                  onPress={() => void reopenReview()}
+                  disabled={verifying}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reopen review"
+                  hitSlop={8}
+                  style={styles.reopenBtn}
+                >
+                  <Text style={styles.reopenText}>Reopen</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.verifyBanner}>
+                  Check every detail against the original. Wrong readings are your responsibility.
+                </Text>
+                <Pressable
+                  onPress={() => setChecked((v) => !v)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked }}
+                  accessibilityLabel="I checked this reading against the original"
+                  style={styles.verifyCheck}
+                >
+                  <View style={[styles.verifyBox, checked && styles.verifyBoxOn]}>
+                    {checked ? <Text style={styles.verifyGlyph}>✓</Text> : null}
+                  </View>
+                  <Text style={styles.verifyLabel}>
+                    I checked this reading against the original.
+                  </Text>
+                </Pressable>
+              </>
+            )}
+            {verified && savedNote ? (
+              <Text style={styles.verifyNote}>{savedNote}</Text>
+            ) : null}
+            {!verified ? (
+              <>
+                <TextInput
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder="Correction note (optional)"
+                  placeholderTextColor={GV.muted}
+                  multiline
+                  numberOfLines={2}
+                  style={styles.verifyInput}
+                />
+                <Button
+                  title={verifying ? 'Saving…' : 'Mark verified'}
+                  onPress={() => void markVerified()}
+                  disabled={!checked || verifying}
+                  fullWidth
+                />
+              </>
+            ) : null}
+          </Card>
+        ) : null}
 
         {/* Processing spinner */}
         {isProcessing && (
@@ -599,6 +715,84 @@ const styles = StyleSheet.create({
     ...TYPE.caption,
     color: GV.danger,
     marginTop: 8,
+  },
+  verifyCard: {
+    gap: 10,
+  },
+  verifyBanner: {
+    ...TYPE.body,
+    fontSize: 14,
+    fontFamily: FONT.semi,
+    color: GV.danger,
+    backgroundColor: 'rgba(214,69,69,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(214,69,69,0.35)',
+    borderRadius: 12,
+    padding: 12,
+    overflow: 'hidden',
+  },
+  verifyCheck: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+  },
+  verifyBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: GV.cta,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyBoxOn: {
+    backgroundColor: GV.cta,
+  },
+  verifyGlyph: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  verifyLabel: {
+    ...TYPE.body,
+    fontSize: 14,
+    color: GV.ink,
+    flex: 1,
+  },
+  verifyInput: {
+    ...TYPE.body,
+    color: GV.ink,
+    borderWidth: 1,
+    borderColor: GV.line,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 64,
+    textAlignVertical: 'top',
+  },
+  verifyDoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  verifyDone: {
+    ...TYPE.title,
+    fontSize: 16,
+    color: GV.cta,
+  },
+  reopenBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  reopenText: {
+    ...TYPE.chip,
+    color: GV.cta,
+  },
+  verifyNote: {
+    ...TYPE.body,
+    color: GV.body,
   },
   viewerContainer: {
     flex: 1,

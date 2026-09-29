@@ -30,6 +30,11 @@ interface SliderProps {
   color?: string;
   /** Show the numeric value above the thumb. */
   showValue?: boolean;
+  /**
+   * Glass instrument variant: recessed groove, glowing fill, orb thumb —
+   * the same language as the cuboid glass dials. Slimmer (20px thumb).
+   */
+  glass?: boolean;
   style?: ViewStyle;
 }
 
@@ -57,6 +62,7 @@ export const Slider = ({
   unit,
   color = '#4D8DFF',
   showValue = false,
+  glass = false,
   style,
 }: SliderProps) => {
   const { colors } = useTheme();
@@ -66,14 +72,16 @@ export const Slider = ({
   const [live, setLive] = useState<number | null>(null);
   const touchingRef = useRef(false);
   const pendingRef = useRef<number | null>(null);
-  const stateRef = useRef({ min, max, step, disabled, onValueChange, onLiveChange, trackWidth, value });
-  stateRef.current = { min, max, step, disabled, onValueChange, onLiveChange, trackWidth, value };
+  // Glass thumbs run slimmer (20px) than the standard 24px thumb.
+  const thumbSize = glass ? 20 : THUMB_SIZE;
+  const stateRef = useRef({ min, max, step, disabled, onValueChange, onLiveChange, trackWidth, value, thumbSize });
+  stateRef.current = { min, max, step, disabled, onValueChange, onLiveChange, trackWidth, value, thumbSize };
 
   const computeFromX = (x: number) => {
-    const { min: lo, max: hi, step: st, trackWidth: w } = stateRef.current;
+    const { min: lo, max: hi, step: st, trackWidth: w, thumbSize: ts } = stateRef.current;
     if (w <= 0) return stateRef.current.value;
-    const inner = Math.max(1, w - THUMB_SIZE);
-    const frac = Math.min(1, Math.max(0, (x - THUMB_SIZE / 2) / inner));
+    const inner = Math.max(1, w - ts);
+    const frac = Math.min(1, Math.max(0, (x - ts / 2) / inner));
     const raw = lo + frac * (hi - lo);
     const stepped = lo + Math.round((raw - lo) / st) * st;
     return Math.min(hi, Math.max(lo, stepped));
@@ -128,7 +136,7 @@ export const Slider = ({
   const shownValue = live ?? value;
   const frac = Math.min(1, Math.max(0, (shownValue - min) / span));
   const fillWidth = trackWidth > 0 ? Math.max(0, frac * trackWidth) : 0;
-  const thumbLeft = trackWidth > 0 ? Math.max(0, frac * (trackWidth - THUMB_SIZE)) : 0;
+  const thumbLeft = trackWidth > 0 ? Math.max(0, frac * (trackWidth - thumbSize)) : 0;
 
   const readout =
     displayValue != null
@@ -155,6 +163,7 @@ export const Slider = ({
       <View
         style={[
           styles.touchArea,
+          { marginHorizontal: thumbSize / 2 - 2 },
           disabled && styles.touchAreaDisabled,
         ]}
         onLayout={onTrackLayout}
@@ -176,33 +185,78 @@ export const Slider = ({
           }
         }}
       >
-        {/* Track */}
-        <View style={styles.trackOuter}>
-          <View style={[styles.track, { backgroundColor: colors.surfaceSunken, borderColor: colors.border }]} />
+        {/* Track: glass renders a recessed groove on the dark instrument. */}
+        <View style={[styles.trackOuter, glass && styles.trackOuterGlass, { height: glass ? 10 : 6 }]}>
+          <View
+            style={[
+              styles.track,
+              glass
+                ? {
+                    backgroundColor: '#0B1220',
+                    borderColor: 'rgba(255,255,255,0.08)',
+                    top: 2,
+                    left: 2,
+                    right: 2,
+                    bottom: 2,
+                  }
+                : { backgroundColor: colors.surfaceSunken, borderColor: colors.border },
+            ]}
+          />
           <View
             style={[
               styles.trackFill,
               {
-                width: fillWidth,
+                width: glass ? Math.max(0, fillWidth - 2) : fillWidth,
                 backgroundColor: disabled ? colors.textDisabled : color,
               },
+              glass && {
+                top: 2,
+                bottom: 2,
+                left: 2,
+                opacity: 1,
+                shadowColor: color,
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.55,
+                shadowRadius: 8,
+                elevation: 4,
+              },
             ]}
-          />
+          >
+            {glass && !disabled ? <View pointerEvents="none" style={styles.fillSheen} /> : null}
+          </View>
         </View>
 
-        {/* Thumb */}
+        {/* Thumb: glass renders a dark orb with a specular dot. */}
         <View
           pointerEvents="none"
           style={[
             styles.thumb,
             {
               left: thumbLeft,
+              top: (40 - thumbSize) / 2,
+              width: thumbSize,
+              height: thumbSize,
+              borderRadius: thumbSize / 2,
               borderColor: disabled ? colors.textDisabled : color,
-              backgroundColor: disabled ? colors.surfaceDisabled : '#FFFFFF',
+              backgroundColor: disabled
+                ? colors.surfaceDisabled
+                : glass
+                  ? '#0B0F18'
+                  : '#FFFFFF',
+              ...(glass && !disabled
+                ? {
+                    shadowColor: color,
+                    shadowOpacity: 0.6,
+                    shadowRadius: 8,
+                    elevation: 5,
+                  }
+                : null),
             },
             disabled && styles.thumbDisabled,
           ]}
-        />
+        >
+          {glass && !disabled ? <View pointerEvents="none" style={styles.thumbSpec} /> : null}
+        </View>
       </View>
     </View>
   );
@@ -228,7 +282,6 @@ const styles = StyleSheet.create({
   touchArea: {
     height: 40,
     justifyContent: 'center',
-    marginHorizontal: THUMB_SIZE / 2 - 2,
   },
   touchAreaDisabled: {
     opacity: 0.5,
@@ -238,6 +291,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: 'transparent',
     overflow: 'hidden',
+  },
+  trackOuterGlass: {
+    backgroundColor: '#02040A',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
   },
   track: {
     position: 'absolute',
@@ -255,6 +313,24 @@ const styles = StyleSheet.create({
     bottom: 0,
     borderRadius: radius.pill,
     opacity: 0.9,
+  },
+  fillSheen: {
+    position: 'absolute',
+    top: 1,
+    left: 6,
+    right: 6,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  thumbSpec: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.9)',
   },
   thumb: {
     position: 'absolute',

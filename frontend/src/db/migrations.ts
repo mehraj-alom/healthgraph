@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 16;
+export const CURRENT_SCHEMA_VERSION = 17;
 
 /**
  * Migration function type.
@@ -30,6 +30,38 @@ type MigrationFn = (db: SQLiteDatabase) => Promise<void>;
  * Value is the migration function that upgrades from (version - 1) to version.
  */
 const migrations: Record<number, MigrationFn> = {
+  // ========================================================================
+  // Migration 17: document verification (additive, device-only)
+  // ========================================================================
+  // Readings must be user-verified before they count as reviewed: the flag
+  // plus an optional correction note live on the local documents row.
+  // Server hydration never touches these columns. Guarded ALTERs keep
+  // re-runs safe on repaired databases.
+  17: async (db: SQLiteDatabase) => {
+    const cols = await db.getAllAsync<{ name: string }>(
+      `SELECT name FROM pragma_table_info('documents')`,
+    );
+    const names = new Set(cols.map((c) => c.name));
+    if (!names.has('user_verified')) {
+      await db.execAsync(
+        `ALTER TABLE documents ADD COLUMN user_verified INTEGER NOT NULL DEFAULT 0`,
+      );
+    }
+    if (!names.has('verify_note')) {
+      await db.execAsync(
+        `ALTER TABLE documents ADD COLUMN verify_note TEXT`,
+      );
+    }
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      17,
+      'Document verification columns on documents (device-only)',
+      17,
+    );
+  },
   /**
    * Migration 1: Create infrastructure tables.
    *

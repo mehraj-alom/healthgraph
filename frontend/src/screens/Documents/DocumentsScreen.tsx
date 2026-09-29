@@ -6,7 +6,7 @@
  * rows ever render; empty shows the honest empty state.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -20,6 +20,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { GV, TYPE, FONT } from '@/theme/guava';
 import { useDocuments } from '@/context/DocumentsContext';
+import { listUnverifiedExtractedDocIds } from '@/db/queries/documents';
+import { getCachedPatientId } from '@/services/patientIdentity';
 import type { DocumentStatus, RootStackParamList } from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -64,6 +66,28 @@ export default function DocumentsScreen() {
   const navigation = useNavigation<Nav>();
   const { documents, refetchDocuments } = useDocuments();
   const [refreshing, setRefreshing] = useState(false);
+  const [unverified, setUnverified] = useState<Set<string>>(new Set());
+
+  const loadUnverified = useCallback(async () => {
+    const patientId = getCachedPatientId();
+    if (!patientId) {
+      setUnverified(new Set());
+      return;
+    }
+    try {
+      setUnverified(new Set(await listUnverifiedExtractedDocIds(patientId)));
+    } catch {
+      // Badge is convenience only — the list still renders.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadUnverified();
+    const unsubscribe = navigation.addListener('focus', () => {
+      void loadUnverified();
+    });
+    return unsubscribe;
+  }, [navigation, loadUnverified]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -113,6 +137,9 @@ export default function DocumentsScreen() {
                 <View style={styles.rowInfo}>
                   <Text style={styles.rowName} numberOfLines={1}>Medical record</Text>
                   <Text style={styles.rowDate}>{formatDate(doc.created_at)}</Text>
+                  {doc.status === 'EXTRACTED' && unverified.has(doc.document_id) ? (
+                    <Text style={styles.reviewPill}>Needs review</Text>
+                  ) : null}
                 </View>
                 <View style={styles.rowStatus}>
                   <View style={[styles.statusDot, { backgroundColor: STATUS_DOT[doc.status] }]} />
@@ -135,7 +162,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 26,
     paddingTop: 8,
     paddingBottom: 40,
     gap: 12,
@@ -206,6 +233,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: GV.fog,
     fontVariant: ['tabular-nums'],
+  },
+  reviewPill: {
+    fontFamily: FONT.semi,
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#F09696',
+    marginTop: 2,
   },
   rowStatus: {
     flexDirection: 'row',

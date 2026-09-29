@@ -68,17 +68,28 @@ export function TactileButton({ title, onPress, disabled, variant = 'primary', a
       accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         styles.btnOuter,
+        variant === 'primary' && styles.btnOuterPrimary,
         variant === 'secondary' && styles.btnOuterSecondary,
         variant === 'danger' && styles.btnOuterDanger,
         disabled && styles.btnOuterDisabled,
         pressed && !disabled && styles.btnOuterPressed,
       ]}
     >
-      <View style={styles.btnFace}>
+      <View
+        style={[
+          styles.btnFace,
+          variant === 'primary' && styles.btnFacePrimary,
+          variant === 'secondary' && styles.btnFaceSecondary,
+          variant === 'danger' && styles.btnFaceDanger,
+          disabled && styles.btnFaceDisabled,
+        ]}
+      >
         <Text
           style={[
             styles.btnTitle,
-            variant !== 'primary' && styles.btnTitleSecondary,
+            variant === 'primary' && styles.btnTitlePrimary,
+            variant === 'secondary' && styles.btnTitleSecondary,
+            variant === 'danger' && styles.btnTitleDanger,
             disabled && styles.btnTitleDisabled,
           ]}
         >
@@ -178,36 +189,39 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   btnOuter: {
-    backgroundColor: '#0a3d2c',
+    backgroundColor: 'transparent',
     borderRadius: 9999,
     padding: 3,
-    borderTopWidth: 1,
-    borderTopColor: '#2fae7d',
+    borderWidth: 1,
+    borderColor: 'transparent',
     minHeight: 56,
     justifyContent: 'center',
   },
-  btnOuterSecondary: { backgroundColor: '#1c262b', borderTopColor: '#3a4b53' },
-  btnOuterDanger: { backgroundColor: '#3d1414', borderTopColor: '#a33b3b' },
-  btnOuterDisabled: { backgroundColor: '#141a1d', borderTopColor: '#232d33', shadowOpacity: 0 },
-  btnOuterPressed: { transform: [{ translateY: 2 }], shadowOpacity: 0.15 },
+  btnOuterPrimary: { backgroundColor: '#2E7A70', borderColor: '#2E7A70' },
+  btnOuterSecondary: { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.22)' },
+  btnOuterDanger: { backgroundColor: 'transparent', borderColor: 'rgba(255,93,93,0.45)' },
+  btnOuterDisabled: { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.10)', shadowOpacity: 0 },
+  btnOuterPressed: { transform: [{ translateY: 2 }], shadowOpacity: 0.15, opacity: 0.88 },
   btnFace: {
-    backgroundColor: '#0e5c40',
     borderRadius: 9999,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: '#00000088',
   },
+  btnFacePrimary: { backgroundColor: '#4FD1C5' },
+  btnFaceSecondary: { backgroundColor: 'rgba(255,255,255,0.05)' },
+  btnFaceDanger: { backgroundColor: 'rgba(255,93,93,0.10)' },
+  btnFaceDisabled: { backgroundColor: 'transparent' },
   btnTitle: {
     fontFamily: FONT.semi,
     fontSize: 16,
     lineHeight: 22,
-    color: '#eafff3',
     textAlign: 'center',
   },
+  btnTitlePrimary: { color: '#062A26' },
   btnTitleSecondary: { color: INST.steel },
+  btnTitleDanger: { color: '#FF7A7A' },
   btnTitleDisabled: { color: INST.engraved },
   dialValue: {
     fontFamily: FONT.semi,

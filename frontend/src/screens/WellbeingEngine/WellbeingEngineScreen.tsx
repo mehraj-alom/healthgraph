@@ -12,7 +12,6 @@
 
 import { useCallback } from 'react';
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,10 +20,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
+import { EngineGraph } from '@/components/EngineGraph';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { TILE_TONES } from '@/theme/tones';
-import { StageGradient } from '@/components/StageGradient';
 import { useWellbeingEngine } from '@/hooks/useWellbeingEngine';
 import {
   formatRating,
@@ -70,24 +69,27 @@ export default function WellbeingEngineScreen() {
     { title: 'Average stress', value: summary.avgStress, line: stressLine },
   ];
 
+  // One plotted line: mood first, then energy, then stress. Fixed 1–5 scale.
+  const byDate = (pick: (d: (typeof days)[number]) => number | null) =>
+    [...days]
+      .filter((d) => pick(d) != null)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+      .map((d) => ({ date: d.date, value: pick(d) as number }));
+  const moodPts = byDate((d) => d.mood);
+  const energyPts = byDate((d) => d.energy);
+  const stressPts = byDate((d) => d.stress);
+  const graph =
+    moodPts.length > 0
+      ? { title: 'Mood', points: moodPts }
+      : energyPts.length > 0
+        ? { title: 'Energy', points: energyPts }
+        : { title: 'Stress', points: stressPts };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StageGradient />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable
-          onPress={() => navigation.canGoBack() && navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-          style={styles.backHit}
-        >
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.overline}>Wellbeing engine · From your ratings</Text>
-        <Text style={styles.title}>Wellbeing</Text>
-        <Text style={styles.sub}>
-          See your recorded mood, energy, and stress.
-        </Text>
+        <Text style={styles.title}>Wellbeing.</Text>
+        <Text style={styles.sub}>Recorded ratings only.</Text>
 
         {isLoading ? (
           <>
@@ -96,13 +98,12 @@ export default function WellbeingEngineScreen() {
           </>
         ) : summary.ratedDays === 0 ? (
           <EmptyState
-            icon="🌿"
             title="No ratings logged yet"
-            message="Wellbeing tracking starts with your daily check-in. Rate your mood, energy, and stress and averages and changes appear here. Only from real entries."
+            message="Rate your mood, energy, and stress to begin."
           />
         ) : (
           <>
-            <SectionHeader title="This week" />
+            <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
             <Card style={styles.toneCard}>
               <Text style={styles.bigValue}>
                 {`${summary.ratedDays} ${summary.ratedDays === 1 ? 'rated day' : 'rated days'}`}
@@ -113,23 +114,41 @@ export default function WellbeingEngineScreen() {
             {averages.map(({ title, value, line }) =>
               value == null ? null : (
                 <View key={title}>
-                  <SectionHeader title={title} />
+                  <SectionHeader dark title={title} titleStyle={styles.histTitle} />
                   <Card style={styles.toneCard}>
                     <Text style={styles.bigValue}>{formatRating(value)}</Text>
                     {line ? <Text style={styles.change}>{line}</Text> : null}
-                    <Text style={styles.provenance}>User-entered 1–5 ratings.</Text>
+                    <Text style={styles.provenance}>Your 1–5 ratings.</Text>
                   </Card>
                 </View>
               ),
             )}
 
-            <SectionHeader title="Recent days" />
+            {graph.points.length > 0 ? (
+              <>
+                <SectionHeader dark title={graph.title} titleStyle={styles.histTitle} />
+                <Card style={styles.toneCard}>
+                  <EngineGraph
+                    points={graph.points}
+                    tone={TILE_TONES.wellbeing[1]}
+                    decimals={0}
+                    domain={[1, 5]}
+                    ticks={[1, 2, 3, 4, 5]}
+                  />
+                  <Text style={styles.avgSub}>
+                    {`${graph.points.length} ${graph.points.length === 1 ? 'day' : 'days'}`}
+                  </Text>
+                </Card>
+              </>
+            ) : null}
+
+            <SectionHeader dark title="Recent days" titleStyle={styles.histTitle} />
             <View style={styles.list}>
               {[...days]
                 .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
                 .slice(0, 14)
                 .map((day) => (
-                  <Card key={day.date}>
+                  <Card key={day.date} style={styles.darkCard}>
                     <View style={styles.rowTop}>
                       <View style={styles.rowMain}>
                         <Text style={styles.rowTitle}>{daySub(day)}</Text>
@@ -141,7 +160,14 @@ export default function WellbeingEngineScreen() {
           </>
         )}
 
-        <Button title="Log a check-in" onPress={goLog} fullWidth />
+        <Button
+          title="Log a check-in"
+          onPress={goLog}
+          fullWidth
+          size="large"
+          style={styles.logBtn}
+          textStyle={styles.logBtnText}
+        />
         <Text style={styles.disclaimer}>
           From your check-ins on this device. Tracking only — not medical advice, diagnosis, or treatment.
         </Text>
@@ -151,23 +177,42 @@ export default function WellbeingEngineScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: GV.stage },
+  safe: { flex: 1, backgroundColor: '#080A11' },
   content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  backHit: { minHeight: 44, justifyContent: 'center' },
-  backText: { ...TYPE.button, fontSize: 16, color: GV.fog },
-  overline: { fontFamily: FONT.semi, fontSize: 12, lineHeight: 16, letterSpacing: 3, color: GV.teal, textAlign: 'center' },
-  title: { ...TYPE.display, color: GV.card, textAlign: 'center' },
+  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
   sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
   loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
   fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  bigValue: { ...TYPE.display, fontSize: 40, color: GV.ink, textAlign: 'center', fontVariant: ['tabular-nums'] },
-  toneCard: { borderLeftWidth: 4, borderLeftColor: TILE_TONES.wellbeing[1] },
-  change: { ...TYPE.body, color: GV.body, textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
-  provenance: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 8 },
-  avgSub: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 4 },
+  bigValue: { ...TYPE.display, fontSize: 40, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  darkCard: {
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  toneCard: {
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderLeftWidth: 4,
+    borderLeftColor: TILE_TONES.wellbeing[1],
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  change: { ...TYPE.body, color: '#E8ECF1', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
+  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
+  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
   list: { gap: SPACE.cardGap },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   rowMain: { flex: 1, gap: 4 },
-  rowTitle: { ...TYPE.button, fontSize: 15, color: GV.ink, fontVariant: ['tabular-nums'] },
+  rowTitle: { ...TYPE.button, fontSize: 15, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  logBtn: { backgroundColor: '#4FD1C5' },
+  logBtnText: { color: '#062A26' },
   disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
 });

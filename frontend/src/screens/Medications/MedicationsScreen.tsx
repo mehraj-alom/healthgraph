@@ -40,7 +40,10 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMedications, useMedicationSchedule, useMedicationTakenEvents, recordMedicationTaken } from '@/hooks/useMedications';
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/theme';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import { getDocumentExtraction } from '@/services/documents';
+import type { DocumentExtraction } from '@/types';
 import { usePremiumEntitled } from '@/services/premium';
 import { todayKey } from '@/screens/Onboarding/momentum';
 import {
@@ -158,7 +161,7 @@ function scanStatusCopy(status: ScanSession['status']): string {
     case 'uploading':
       return 'Uploading pages…';
     case 'awaiting_extraction':
-      return 'Saved. Reading finishes automatically. Confirm each medicine with Add med. Nothing is added automatically.';
+      return 'Reading pages. Verify & add appears when reading finishes. Nothing is added automatically.';
     case 'reviewed':
       return 'Done. Medicines confirmed from this scan.';
   }
@@ -343,11 +346,15 @@ export default function MedicationsScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
   // Prefilled link when adding a medication from a scanned prescription.
-  const [scanSourceDocId, setScanSourceDocId] = useState<string | null>(null);
+  const [scanSourceDocIds, setScanSourceDocIds] = useState<string[]>([]);
   const premiumEntitled = usePremiumEntitled();
 
   // ---- Scanned prescription sessions (local record of scanner runs) ----
   const [scanSessions, setScanSessions] = useState<ScanSession[]>([]);
+  // Per-document extraction readiness (fresh from the backend). The row
+  // offers Verify & add only once every page reads EXTRACTED.
+  const [extractedDocs, setExtractedDocs] = useState<Record<string, boolean>>({});
+  const [extractFailed, setExtractFailed] = useState(false);
   const loadScanSessions = useCallback(async () => {
     const patientId = getCachedPatientId();
     if (!patientId) {
@@ -360,6 +367,28 @@ export default function MedicationsScreen() {
       // Sessions are convenience only — the documents list is unaffected.
     }
   }, []);
+
+  const loadReadiness = useCallback(async (sessions: ScanSession[]) => {
+    const ids = [...new Set(sessions.flatMap((s) => s.document_ids))];
+    if (ids.length === 0) {
+      setExtractedDocs({});
+      setExtractFailed(false);
+      return;
+    }
+    const settled = await Promise.allSettled(ids.map((id) => getDocumentExtraction(id)));
+    const ready: Record<string, boolean> = {};
+    let failed = false;
+    settled.forEach((r, i) => {
+      if (r.status === 'fulfilled' && r.value?.status === 'EXTRACTED') ready[ids[i]] = true;
+      else if (r.status === 'rejected') failed = true;
+    });
+    setExtractedDocs(ready);
+    setExtractFailed(failed);
+  }, []);
+
+  useEffect(() => {
+    void loadReadiness(scanSessions);
+  }, [scanSessions, loadReadiness]);
 
   useEffect(() => {
     void loadScanSessions();
@@ -387,9 +416,13 @@ export default function MedicationsScreen() {
 
   const addMedicationFromScan = useCallback((session: ScanSession) => {
     setEditingMedication(null);
-    setScanSourceDocId(session.document_ids[0] ?? null);
+    setScanSourceDocIds(session.document_ids);
     setShowAddModal(true);
   }, []);
+
+  const markSessionReviewed = useCallback((session: ScanSession) => {
+    void setScanStatus(session.session_id, 'reviewed').then(() => loadScanSessions());
+  }, [loadScanSessions]);
 
   const dismissScanSession = useCallback((session: ScanSession) => {
     void deleteScanSession(session.session_id).then(() => loadScanSessions());
@@ -397,7 +430,7 @@ export default function MedicationsScreen() {
 
   const openAdd = useCallback(() => {
     setEditingMedication(null);
-    setScanSourceDocId(null);
+    setScanSourceDocIds([]);
     setShowAddModal(true);
   }, []);
 
@@ -666,39 +699,60 @@ export default function MedicationsScreen() {
         {scanSessions.length > 0 && (
           <View style={styles.scanCard}>
             <Text style={styles.scanTitle}>Scanned prescriptions</Text>
-            {scanSessions.map((session) => (
-              <View key={session.session_id} style={styles.scanRow}>
-                <View style={styles.scanInfo}>
-                  <Text style={styles.scanName}>
-                    {session.document_ids.length === 1
-                      ? '1 page'
-                      : `${session.document_ids.length} pages`}
-                    {session.status === 'reviewed' ? ' · reviewed ✓' : ''}
-                  </Text>
-                  <Text style={styles.scanSub}>{scanStatusCopy(session.status)}</Text>
-                </View>
-                {session.status !== 'reviewed' && session.document_ids.length > 0 && (
+            {scanSessions.map((session) => {
+              const ready =
+                session.document_ids.length > 0 &&
+                session.document_ids.every((id) => extractedDocs[id] === true);
+              const open = session.status !== 'reviewed';
+              return (
+                <View key={session.session_id} style={styles.scanRow}>
+                  <View style={styles.scanInfo}>
+                    <Text style={styles.scanName}>
+                      {session.document_ids.length === 1
+                        ? '1 page'
+                        : `${session.document_ids.length} pages`}
+                      {session.status === 'reviewed' ? ' · reviewed ✓' : ''}
+                    </Text>
+                    <Text style={styles.scanSub}>
+                      {open && !ready && extractFailed
+                        ? 'Needs connection to read pages.'
+                        : scanStatusCopy(session.status)}
+                    </Text>
+                  </View>
+                  {open && ready ? (
+                    <Pressable
+                      onPress={() => addMedicationFromScan(session)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Verify scan and add medication"
+                      hitSlop={8}
+                      style={({ pressed }) => [styles.scanAddBtn, pressed && { opacity: 0.7 }]}
+                    >
+                      <Text style={styles.scanAddText}>Verify & add</Text>
+                    </Pressable>
+                  ) : null}
+                  {open ? (
+                    <Pressable
+                      onPress={() => markSessionReviewed(session)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Mark scan done, no more medicines to add"
+                      hitSlop={8}
+                      style={({ pressed }) => [styles.scanDoneBtn, pressed && { opacity: 0.7 }]}
+                    >
+                      <Text style={styles.scanDoneText}>Done</Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
-                    onPress={() => addMedicationFromScan(session)}
+                    onPress={() => dismissScanSession(session)}
                     accessibilityRole="button"
-                    accessibilityLabel="Add medication from this scan"
+                    accessibilityLabel="Dismiss scanned prescription"
                     hitSlop={8}
-                    style={({ pressed }) => [styles.scanAddBtn, pressed && { opacity: 0.7 }]}
+                    style={styles.scanDismissBtn}
                   >
-                    <Text style={styles.scanAddText}>Add med</Text>
+                    <Text style={styles.scanDismissText}>✕</Text>
                   </Pressable>
-                )}
-                <Pressable
-                  onPress={() => dismissScanSession(session)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Dismiss scanned prescription"
-                  hitSlop={8}
-                  style={styles.scanDismissBtn}
-                >
-                  <Text style={styles.scanDismissText}>✕</Text>
-                </Pressable>
-              </View>
-            ))}
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -732,28 +786,21 @@ export default function MedicationsScreen() {
 
       {/* Add/Edit Modal */}
       <AddMedicationModal
-        key={editingMedication?.medication_id ?? scanSourceDocId ?? 'new'}
+        key={editingMedication?.medication_id ?? scanSourceDocIds.join(',') ?? 'new'}
         visible={showAddModal}
         medication={editingMedication}
-        sourceDocumentId={scanSourceDocId}
+        sourceDocumentIds={scanSourceDocIds}
         onClose={() => {
           setShowAddModal(false);
           setEditingMedication(null);
-          setScanSourceDocId(null);
+          setScanSourceDocIds([]);
         }}
         onSave={() => {
-          // Saving from a scan confirms review of every session holding it.
-          if (scanSourceDocId) {
-            const matched = scanSessions.filter((s) =>
-              s.document_ids.includes(scanSourceDocId),
-            );
-            void Promise.all(
-              matched.map((s) => setScanStatus(s.session_id, 'reviewed')),
-            ).then(() => loadScanSessions());
-          }
+          // One-by-one flow: the session stays open until the user marks
+          // it Done. Saving only adds this medication.
           setShowAddModal(false);
           setEditingMedication(null);
-          setScanSourceDocId(null);
+          setScanSourceDocIds([]);
           refetchMedications();
           refetchSchedule();
           // Save/edit/scan-accept share this path: rebuild reminders from
@@ -1085,17 +1132,28 @@ function HistoryItem({
 function AddMedicationModal({
   visible,
   medication,
-  sourceDocumentId,
+  sourceDocumentIds,
   onClose,
   onSave,
 }: {
   visible: boolean;
   medication: Medication | null;
   /** Set when adding from a scanned prescription — linked, never auto-filled. */
-  sourceDocumentId?: string | null;
+  sourceDocumentIds?: string[];
   onClose: () => void;
   onSave: () => void;
 }) {
+  const { colors } = useTheme();
+  const docIds = sourceDocumentIds ?? [];
+  // Verify mode: adding from a scan. The user types every field against
+  // the scan text, confirms responsibility, and only then can save.
+  const verifyMode = medication == null && docIds.length > 0;
+  const [extracts, setExtracts] = useState<
+    { id: string; text: string | null; ready: boolean }[] | null
+  >(null);
+  const [extractFailed, setExtractFailed] = useState(false);
+  const [openPage, setOpenPage] = useState<string | null>(null);
+  const [verified, setVerified] = useState(false);
   const [name, setName] = useState(medication?.name || '');
   const [genericName, setGenericName] = useState(medication?.generic_name || '');
   const [brandName, setBrandName] = useState(medication?.brand_name || '');
@@ -1116,9 +1174,48 @@ function AddMedicationModal({
   const [notes, setNotes] = useState(medication?.notes || '');
   const [saving, setSaving] = useState(false);
 
+  // Verify mode loads what the scan actually read (fresh per open — the
+  // modal remounts per scan via its key).
+  useEffect(() => {
+    if (!verifyMode) return;
+    setOpenPage(docIds[0] ?? null);
+    let live = true;
+    void Promise.allSettled(docIds.map((id) => getDocumentExtraction(id))).then(
+      (settled) => {
+        if (!live) return;
+        setExtracts(
+          docIds.map((id, i) => {
+            const r = settled[i];
+            const ext =
+              r.status === 'fulfilled'
+                ? (r.value as DocumentExtraction | null)
+                : null;
+            return {
+              id,
+              text: ext?.markdown_text ?? null,
+              ready: ext?.status === 'EXTRACTED',
+            };
+          }),
+        );
+        setExtractFailed(settled.some((r) => r.status === 'rejected'));
+      },
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifyMode]);
+
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
       Alert.alert('Error', 'Medication name is required');
+      return;
+    }
+    if (verifyMode && !verified) {
+      Alert.alert(
+        'Check first',
+        'Confirm you checked every detail against your prescription.',
+      );
       return;
     }
 
@@ -1143,7 +1240,7 @@ function AddMedicationModal({
         prn,
         reminder_enabled: reminderEnabled,
         notes: notes.trim() || null,
-        source_document_id: sourceDocumentId ?? medication?.source_document_id ?? null,
+        source_document_id: docIds[0] ?? medication?.source_document_id ?? null,
       };
 
       let saved: Medication | null = null;
@@ -1183,7 +1280,7 @@ function AddMedicationModal({
     } finally {
       setSaving(false);
     }
-  }, [name, genericName, brandName, strength, strengthUnit, doseAmount, doseUnit, route, frequency, scheduledTimes, startDate, endDate, purpose, instructions, prescriber, prn, reminderEnabled, notes, medication, sourceDocumentId, onSave]);
+  }, [name, genericName, brandName, strength, strengthUnit, doseAmount, doseUnit, route, frequency, scheduledTimes, startDate, endDate, purpose, instructions, prescriber, prn, reminderEnabled, notes, medication, docIds, verifyMode, verified, onSave]);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -1195,20 +1292,69 @@ function AddMedicationModal({
           <Pressable onPress={onClose} style={styles.modalCancelBtn} accessibilityRole="button" accessibilityLabel="Cancel">
             <Text style={styles.modalCancel}>Cancel</Text>
           </Pressable>
-          <Text style={styles.modalTitle}>{medication ? 'Edit Medication' : 'Add Medication'}</Text>
+          <Text style={styles.modalTitle}>{medication ? 'Edit Medication' : verifyMode ? 'Verify prescription' : 'Add Medication'}</Text>
           <Button
             title={saving ? 'Saving...' : 'Save'}
             onPress={() => void handleSave()}
             size="small"
-            disabled={saving}
+            disabled={saving || (verifyMode && !verified)}
             accessibilityLabel="Save medication"
           />
         </View>
-        {sourceDocumentId && !medication ? (
-          <Text style={styles.scanLinkHint}>Linked to your scanned prescription. Review each field before saving.</Text>
+        {verifyMode ? (
+          <View style={styles.verifyBanner}>
+            <Text style={styles.verifyBannerText}>
+              Check every detail against your prescription. Wrong or missed entries are your responsibility.
+            </Text>
+            <Pressable
+              onPress={() => setVerified((v) => !v)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: verified }}
+              accessibilityLabel="I checked all details against my prescription"
+              style={styles.verifyCheck}
+            >
+              <View style={[styles.verifyBox, verified && styles.verifyBoxOn]}>
+                {verified ? <Text style={styles.verifyGlyph}>✓</Text> : null}
+              </View>
+              <Text style={[styles.verifyLabel, { color: colors.textPrimary }]}>
+                I checked all details against my prescription.
+              </Text>
+            </Pressable>
+          </View>
         ) : null}
 
         <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentContainer}>
+          {verifyMode ? (
+            <Card style={styles.fieldCard}>
+              <Text style={styles.pageTitle}>What the scan read</Text>
+              {extracts == null && !extractFailed ? (
+                <Text style={styles.pageSub}>Reading pages…</Text>
+              ) : null}
+              {extracts == null && extractFailed ? (
+                <Text style={styles.pageSub}>Could not read pages. Type every field carefully.</Text>
+              ) : null}
+              {(extracts ?? []).map((p, i) => (
+                <View key={p.id}>
+                  <Pressable
+                    onPress={() => setOpenPage((cur) => (cur === p.id ? null : p.id))}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${openPage === p.id ? 'Hide' : 'Show'} page ${i + 1} scan text`}
+                    style={styles.pageHead}
+                  >
+                    <Text style={[styles.pageHeadText, { color: colors.textPrimary }]}>
+                      {`Page ${i + 1} · ${p.ready ? 'read' : 'reading…'}`}
+                    </Text>
+                    <Text style={styles.pageHeadChevron}>{openPage === p.id ? '▴' : '▾'}</Text>
+                  </Pressable>
+                  {openPage === p.id ? (
+                    <Text style={[styles.pageText, { color: colors.textSecondary }]}>
+                      {p.text ?? 'No readable text on this page.'}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+            </Card>
+          ) : null}
           <Card style={styles.fieldCard}>
             <Input
               label="Medication Name *"
@@ -1602,6 +1748,20 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: GV.teal,
   },
+  scanDoneBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  scanDoneText: {
+    fontFamily: FONT.semi,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#FFFFFF',
+  },
   scanDismissBtn: {
     minWidth: 44,
     minHeight: 44,
@@ -1618,6 +1778,79 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 8,
     textAlign: 'center',
+  },
+  verifyBanner: {
+    marginHorizontal: 24,
+    marginTop: 8,
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+    backgroundColor: 'rgba(214,69,69,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(214,69,69,0.4)',
+  },
+  verifyBannerText: {
+    ...TYPE.body,
+    fontFamily: FONT.semi,
+    fontSize: 14,
+    color: '#F09696',
+  },
+  verifyCheck: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+  },
+  verifyBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: GV.teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyBoxOn: {
+    backgroundColor: GV.teal,
+  },
+  verifyGlyph: {
+    color: '#062A26',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  verifyLabel: {
+    ...TYPE.body,
+    fontSize: 14,
+    flex: 1,
+  },
+  pageTitle: {
+    ...TYPE.title,
+    fontSize: 16,
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  pageSub: {
+    ...TYPE.caption,
+    color: GV.fog,
+  },
+  pageHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    minHeight: 44,
+  },
+  pageHeadText: {
+    ...TYPE.chip,
+  },
+  pageHeadChevron: {
+    fontSize: 14,
+    color: GV.fog,
+  },
+  pageText: {
+    ...TYPE.caption,
+    lineHeight: 18,
+    paddingBottom: 8,
   },
   loadingContainer: {
     alignItems: 'center',

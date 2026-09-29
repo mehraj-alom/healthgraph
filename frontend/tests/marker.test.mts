@@ -51,16 +51,16 @@ describe('marker wiring', () => {
     const header = src('src/components/SectionHeader.tsx');
     assert.ok(header.includes('MarkerHighlight'), 'title wrapped');
     assert.ok(header.includes('marked = true'), 'on by default');
-    assert.ok(header.includes('accent ?? undefined'), 'accent hue or highlighter');
-  });  test('graph card titles carry the shade (metric hue or highlighter)', () => {
+    assert.ok(header.includes('accent ?? (dark ? MARK_DARK : undefined)'), 'accent hue, slate on dark glass, highlighter otherwise');
+  });  test('graph card titles carry the shade (slate on dark glass)', () => {
     const card = src('src/components/home/CorrelationGraphCard.tsx');
     assert.ok(card.includes('MarkerHighlight'), 'title wrapped');
-    assert.ok(card.includes('lineColor === GV.ink ? undefined : lineColor'), 'ink never muddies text');
+    assert.ok(card.includes('color={MARK_DARK}'), 'slate shade keeps white titles readable');
   });
 
   test('dial rim labels carry the shade behind the tagline', () => {
     const map = src('src/components/home/HGraphMap.tsx');
     assert.ok(map.includes('scribblePaths'), 'scribble computed per spoke');
-    assert.ok(map.includes('MARKER_COLOR'), 'highlighter color');
+    assert.ok(map.includes('MARK_DARK'), 'slate shade on dark glass');
   });
 });

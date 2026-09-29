@@ -17,13 +17,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Button, Card, Chip, EmptyState, Input, Modal, SectionHeader } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { todayKeyLocal } from '@/utils/dayKey';
 import { EXTRA_TONES, TILE_TONES } from '@/theme/tones';
-import { StageGradient } from '@/components/StageGradient';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import {
   CYCLE_KINDS,
@@ -45,29 +44,142 @@ const KIND_COPY: Record<CycleKind, { label: string; hint: string }> = {
 
 /** Kind tones: start berry, end pine (complete), note slate. */
 const CYCLE_TONES: Record<CycleKind, string> = {
-  'period-start': EXTRA_TONES.berry[0],
-  'period-end': TILE_TONES.heart[0],
-  note: EXTRA_TONES.slate[0],
+  'period-start': EXTRA_TONES.berry[1],
+  'period-end': TILE_TONES.heart[1],
+  note: EXTRA_TONES.slate[1],
 };
+
+const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+function dayKey(y: number, m: number, d: number): string {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/** Month grid, Monday-first. Cells hold an ISO date or null (padding). */
+function monthMatrix(year: number, month: number): (string | null)[][] {
+  const first = new Date(year, month, 1);
+  const lead = (first.getDay() + 6) % 7;
+  const days = new Date(year, month + 1, 0).getDate();
+  const cells: (string | null)[] = [
+    ...Array<null>(lead).fill(null),
+    ...Array.from({ length: days }, (_, i) => dayKey(year, month, i + 1)),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks: (string | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+
+/** Month calendar: recorded days carry kind dots. Tap a day to log it. */
+function CycleCalendar({
+  entries,
+  monthOffset,
+  onOffset,
+  onPickDay,
+}: {
+  entries: CycleEntry[];
+  monthOffset: number;
+  onOffset: (delta: number) => void;
+  onPickDay: (dateKey: string) => void;
+}) {
+  const now = new Date();
+  const view = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+  const year = view.getFullYear();
+  const month = view.getMonth();
+  const today = dayKey(now.getFullYear(), now.getMonth(), now.getDate());
+  const byDate = new Map<string, CycleKind[]>();
+  for (const e of entries) {
+    const list = byDate.get(e.date) ?? [];
+    if (list.length < 3) list.push(e.kind);
+    byDate.set(e.date, list);
+  }
+  return (
+    <View style={styles.calCard}>
+      <View style={styles.calHead}>
+        <Pressable
+          onPress={() => onOffset(-1)}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Previous month"
+          style={styles.calNav}
+        >
+          <Text style={styles.calNavText}>‹</Text>
+        </Pressable>
+        <Text style={styles.calTitle}>
+          {view.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+        </Text>
+        <Pressable
+          onPress={() => onOffset(1)}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Next month"
+          style={styles.calNav}
+        >
+          <Text style={styles.calNavText}>›</Text>
+        </Pressable>
+      </View>
+      <View style={styles.calWeekRow}>
+        {WEEKDAYS.map((w, i) => (
+          <Text key={i} style={styles.calWeekday}>
+            {w}
+          </Text>
+        ))}
+      </View>
+      {monthMatrix(year, month).map((week, wi) => (
+        <View key={wi} style={styles.calWeekRow}>
+          {week.map((key, di) => {
+            if (key == null) return <View key={di} style={styles.calCell} />;
+            const kinds = byDate.get(key) ?? [];
+            const isToday = key === today;
+            return (
+              <Pressable
+                key={di}
+                onPress={() => onPickDay(key)}
+                accessibilityRole="button"
+                accessibilityLabel={`${key}${kinds.length > 0 ? `, ${kinds.length} entries` : ''}`}
+                style={styles.calCell}
+              >
+                <View style={[styles.calDay, isToday && styles.calDayToday]}>
+                  <Text style={[styles.calNum, isToday && styles.calNumToday]}>{Number(key.slice(8))}</Text>
+                </View>
+                <View style={styles.calDots}>
+                  {kinds.map((k, ki) => (
+                    <View key={ki} style={[styles.calDot, { backgroundColor: CYCLE_TONES[k] }]} />
+                  ))}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function shortDay(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 function spanTitle(start: string | null, endExclusive: string | null): string {
   if (!start) return 'Notes';
-  if (!endExclusive) return `Started ${start} · ongoing record`;
+  if (!endExclusive) return `Started ${shortDay(start)} · ongoing`;
   const days = Math.round(
     (new Date(`${endExclusive}T12:00:00`).getTime() - new Date(`${start}T12:00:00`).getTime()) /
       86400000,
   );
-  return `Started ${start} · ${days}-day recorded span`;
+  return `Started ${shortDay(start)} · ${days} day${days === 1 ? '' : 's'}`;
 }
 
 export default function CycleScreen() {
-  const navigation = useNavigation();
   const [entries, setEntries] = useState<CycleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<CycleEntry | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [monthOffset, setMonthOffset] = useState(0);
 
   const [kind, setKind] = useState<CycleKind>('period-start');
   const [date, setDate] = useState('');
@@ -97,10 +209,10 @@ export default function CycleScreen() {
 
   const todayKey = () => todayKeyLocal();
 
-  const openAdd = useCallback(() => {
+  const openAdd = useCallback((presetDate?: string) => {
     setEditing(null);
     setKind('period-start');
-    setDate(todayKey());
+    setDate(presetDate ?? todayKey());
     setNotes('');
     setFormError(null);
     setShowForm(true);
@@ -167,24 +279,19 @@ export default function CycleScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StageGradient />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable
-          onPress={() => navigation.canGoBack() && navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-          style={styles.backHit}
-        >
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.overline}>TRACKING · ON THIS DEVICE</Text>
-        <Text style={styles.title}>Cycle</Text>
-        <Text style={styles.sub}>
-          Your recorded days, grouped for review. Estimates are never shown as facts.
-        </Text>
+        <Text style={styles.title}>Cycle.</Text>
+        <Text style={styles.sub}>Recorded days only.</Text>
 
-        <SectionHeader title="History" />
+        <SectionHeader dark title="History" titleStyle={styles.histTitle} />
+        {!loading && (
+          <CycleCalendar
+            entries={entries}
+            monthOffset={monthOffset}
+            onOffset={(d) => setMonthOffset((m) => m + d)}
+            onPickDay={(key) => openAdd(key)}
+          />
+        )}
         {loading ? (
           <>
             <Text style={styles.loading}>Loading…</Text>
@@ -192,20 +299,25 @@ export default function CycleScreen() {
           </>
         ) : spans.length === 0 ? (
           <EmptyState
-            icon="📅"
             title="No cycle entries yet"
-            message="Record a period start to begin your history. Ends and notes are optional. Predictions are never made."
+            message="Record a period start to begin."
           />
         ) : (
           <View style={styles.list}>
             {spans.map((span, i) => (
-              <Card key={`${span.start ?? 'notes'}-${i}`}>
+              <Card key={`${span.start ?? 'notes'}-${i}`} style={styles.spanCard}>
                 <Text style={styles.spanTitle}>{spanTitle(span.start, span.endExclusive)}</Text>
-                {span.entries.map((entry) => (
-                  <View key={entry.entry_id} style={styles.entryRow}>
+                {span.entries.map((entry, j) => (
+                  <View
+                    key={entry.entry_id}
+                    style={[styles.entryRow, j > 0 && styles.entryRowDivided]}
+                  >
                     <View style={styles.entryMain}>
-                      <Text style={styles.entryKind}>{KIND_COPY[entry.kind].label}</Text>
-                      <Text style={styles.entryDate}>{entry.date}</Text>
+                      <View style={styles.kindRow}>
+                        <View style={[styles.kindDot, { backgroundColor: CYCLE_TONES[entry.kind] }]} />
+                        <Text style={styles.entryKind}>{KIND_COPY[entry.kind].label}</Text>
+                      </View>
+                      <Text style={styles.entryDate}>{shortDay(entry.date)}</Text>
                       {entry.notes ? <Text style={styles.entryNotes}>{entry.notes}</Text> : null}
                     </View>
                     <View style={styles.entryActions}>
@@ -235,10 +347,17 @@ export default function CycleScreen() {
           </View>
         )}
 
-        <Button title="+ Add entry" onPress={openAdd} fullWidth />
         <Text style={styles.disclaimer}>
           Recorded history only. No fertility, ovulation, or pregnancy predictions.
         </Text>
+        <Button
+          title="Add entry"
+          onPress={() => openAdd()}
+          fullWidth
+          size="large"
+          style={styles.addBtn}
+          textStyle={styles.addBtnText}
+        />
       </ScrollView>
 
       <Modal
@@ -287,25 +406,78 @@ export default function CycleScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: GV.stage },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
+  safe: { flex: 1, backgroundColor: '#080A11' },
+  content: { paddingHorizontal: 26, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
   backHit: { minHeight: 44, justifyContent: 'center' },
   backText: { ...TYPE.button, fontSize: 16, color: GV.fog },
-  overline: { fontFamily: FONT.semi, fontSize: 12, lineHeight: 16, letterSpacing: 3, color: GV.teal, textAlign: 'center' },
-  title: { ...TYPE.display, color: GV.card, textAlign: 'center' },
+  addBtn: { backgroundColor: '#4FD1C5' },
+  addBtnText: { color: '#062A26' },
+  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
   sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
   loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
   fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
   list: { gap: SPACE.cardGap },
-  spanTitle: { ...TYPE.title, color: GV.ink, marginBottom: 8, fontVariant: ['tabular-nums'] },
-  entryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 6 },
+  calCard: {
+    backgroundColor: '#10141F',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  calHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  calNav: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  calNavText: { fontSize: 22, fontFamily: FONT.semi, color: '#FFFFFF' },
+  calTitle: { fontFamily: FONT.semi, fontSize: 17, lineHeight: 22, color: '#FFFFFF' },
+  calWeekRow: { flexDirection: 'row' },
+  calWeekday: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: FONT.semi,
+    fontSize: 11,
+    lineHeight: 16,
+    color: GV.fog,
+    paddingVertical: 4,
+  },
+  calCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
+  calDay: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calDayToday: { borderWidth: 1.5, borderColor: '#4FD1C5' },
+  calNum: { fontSize: 14, lineHeight: 18, fontFamily: FONT.regular, color: 'rgba(255,255,255,0.85)', fontVariant: ['tabular-nums'] },
+  calNumToday: { fontFamily: FONT.semi, color: '#FFFFFF' },
+  calDots: { flexDirection: 'row', gap: 3, height: 8, alignItems: 'center', justifyContent: 'center' },
+  calDot: { width: 6, height: 6, borderRadius: 3 },
+  spanCard: {
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  spanTitle: { fontFamily: FONT.semi, fontSize: 17, lineHeight: 22, color: '#FFFFFF', marginBottom: 8, fontVariant: ['tabular-nums'] },
+  entryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 8 },
+  entryRowDivided: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
   entryMain: { flex: 1, gap: 2 },
-  entryKind: { ...TYPE.button, fontSize: 15, color: GV.ink },
-  entryDate: { ...TYPE.caption, color: GV.body, fontVariant: ['tabular-nums'] },
-  entryNotes: { ...TYPE.caption, color: GV.muted },
+  kindRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  kindDot: { width: 8, height: 8, borderRadius: 4 },
+  entryKind: { ...TYPE.button, fontSize: 15, color: '#FFFFFF' },
+  entryDate: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
+  entryNotes: { ...TYPE.caption, color: '#8B95A7' },
   entryActions: { flexDirection: 'row', gap: 4 },
   rowBtn: { minWidth: 44, minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  rowBtnText: { ...TYPE.chip, color: GV.cta },
+  rowBtnText: { ...TYPE.chip, color: '#3DDC84' },
   deleteText: { color: GV.danger },
   disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
   form: { gap: 12 },

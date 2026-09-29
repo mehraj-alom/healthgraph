@@ -15,6 +15,8 @@ export { BottomSheet } from './BottomSheet';
 export { Select } from './Select';
 export { Slider } from './Slider';
 export { DialInput, feverTint, severityTint } from './DialInput';
+export { WheelSlider } from './WheelSlider';
+export { GlassCuboid } from './GlassCuboid';
 export { AmbientBackground } from './AmbientBackground';
 export { UmbrellaTabBar } from './UmbrellaTabBar';
 export { LogCelebration } from './LogCelebration';

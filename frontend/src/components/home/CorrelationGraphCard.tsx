@@ -30,6 +30,7 @@ import Svg, {
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { MarkerHighlight } from '@/components/MarkerHighlight';
+import { MARK_DARK } from '@/components/markerScribble';
 
 export interface TimeSeriesPoint {
   date: string;
@@ -55,6 +56,14 @@ export type CorrelationGraphData =
 
 /** Health verdict for a correlation curve (computed in correlations.ts). */
 export type HealthVerdict = 'good' | 'bad' | 'neutral';
+
+// Dark-glass tokens for the card chrome. Curve / fit / dot hues stay
+// untouched — they are data encoding, not decoration.
+const D_GRID = '#2C3547';
+const D_FOG = '#A7B8B2';
+const D_PANEL = '#10141F';
+const D_RIM = 'rgba(255,255,255,0.10)';
+const D_WELL = '#04060B';
 
 /** Curve color per verdict — data encoding, GV tokens only. */
 export const VERDICT_CURVE: Record<HealthVerdict, string> = {
@@ -149,6 +158,18 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+/** Lift a tone toward white so the line glows over its own wash. */
+function lighten(hex: string, amt: number): string {
+  const m = hex.replace('#', '');
+  const full = m.length === 3 ? m.split('').map((c) => c + c).join('') : m;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return hex;
+  const mix = (c: number) => Math.round(c + (255 - c) * amt);
+  const r = mix(parseInt(full.slice(0, 2), 16));
+  const g = mix(parseInt(full.slice(2, 4), 16));
+  const b = mix(parseInt(full.slice(4, 6), 16));
+  return `rgb(${r},${g},${b})`;
+}
+
 // ─── Geometry constants ─────────────────────────────────────────────────────
 
 const H_PAD = 34; // left room for y-tick labels
@@ -205,15 +226,19 @@ function TimeSeriesPlot({
     const ys = points.map((v) => top + innerH - ((v.value - min) / span) * innerH);
     const yFor = (v: number) => top + innerH - ((v - min) / span) * innerH;
     const path = points.length === 1 ? '' : smoothPath(xs.map((x, i) => ({ x, y: ys[i] })));
+    const area = path ? `${path} L ${right.toFixed(2)} ${bottom.toFixed(2)} L ${left.toFixed(2)} ${bottom.toFixed(2)} Z` : '';
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
     const ticks = niceTicks(min + pad * 0.4, max - pad * 0.4, GRID_ROWS);
-    return { path, xs, ys, yFor, min, max, avg, ticks, top, bottom, left, right };
+    return { path, area, xs, ys, yFor, min, max, avg, ticks, top, bottom, left, right };
   }, [points, width, height]);
 
   if (!g) return null;
   const sel = selected != null && points[selected] ? selected : null;
   const lastX = g.xs[g.xs.length - 1];
   const lastY = g.ys[g.ys.length - 1];
+  // Two-tone: the wash carries the feature tone, the line its lifted glow.
+  const lineGlow = lighten(color, 0.45);
+  const wash = withAlpha(color, 0.16);
 
   return (
     <Svg
@@ -236,8 +261,8 @@ function TimeSeriesPlot({
         const y = g.yFor(t);
         return (
           <G key={i}>
-            <Line x1={g.left} y1={y} x2={g.right} y2={y} stroke={GV.line} strokeWidth={1} />
-            <SvgText x={g.left - 6} y={y + 3.5} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="end">
+            <Line x1={g.left} y1={y} x2={g.right} y2={y} stroke={D_GRID} strokeWidth={1} />
+            <SvgText x={g.left - 6} y={y + 3.5} fontSize={10} fontFamily={FONT.regular} fill={D_FOG} textAnchor="end">
               {compactNum(t)}
             </SvgText>
           </G>
@@ -258,45 +283,48 @@ function TimeSeriesPlot({
         {`avg ${compactNum(g.avg)}${unit ?? ''}`}
       </SvgText>
 
-      {/* flat line (no area fill — Guava-flat, no gradients) */}
+      {/* tone wash under the curve */}
+      {g.area ? <Path d={g.area} fill={wash} stroke="none" /> : null}
+
+      {/* luminous line (no area stroke — the wash carries the tone) */}
       {g.path ? (
-        <Path d={g.path} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+        <Path d={g.path} fill="none" stroke={lineGlow} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
       ) : (
-        <Circle cx={g.xs[0]} cy={g.ys[0]} r={4} fill={color} />
+        <Circle cx={g.xs[0]} cy={g.ys[0]} r={4} fill={lineGlow} />
       )}
 
       {/* last-value dot */}
       {g.path ? (
-        <Circle cx={lastX} cy={lastY} r={4} fill={color} stroke="#FFFFFF" strokeWidth={2} />
+        <Circle cx={lastX} cy={lastY} r={4} fill={lineGlow} stroke="#FFFFFF" strokeWidth={2} />
       ) : null}
 
       {/* data points on the curve */}
       {g.path && points.length > 1
         ? g.xs.map((x, i) => (
-            <Circle key={i} cx={x} cy={g.ys[i]} r={3} fill={color} stroke="#FFFFFF" strokeWidth={1.5} />
+            <Circle key={i} cx={x} cy={g.ys[i]} r={3} fill={lineGlow} stroke="#FFFFFF" strokeWidth={1.5} />
           ))
         : null}
 
       {/* tap-to-inspect crosshair */}
       {sel != null && (
         <G>
-          <Line x1={g.xs[sel]} y1={g.top} x2={g.xs[sel]} y2={g.bottom} stroke={color} strokeWidth={1.25} strokeDasharray="3 4" opacity={0.8} />
-          <Circle cx={g.xs[sel]} cy={g.ys[sel]} r={4.5} fill={color} stroke="#FFFFFF" strokeWidth={2} />
+          <Line x1={g.xs[sel]} y1={g.top} x2={g.xs[sel]} y2={g.bottom} stroke={lineGlow} strokeWidth={1.25} strokeDasharray="3 4" opacity={0.8} />
+          <Circle cx={g.xs[sel]} cy={g.ys[sel]} r={4.5} fill={lineGlow} stroke="#FFFFFF" strokeWidth={2} />
         </G>
       )}
 
       {/* x labels: first / mid / last */}
       {points.length > 1 && (
         <G>
-          <SvgText x={g.left} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="start">
+          <SvgText x={g.left} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={D_FOG} textAnchor="start">
             {shortDate(points[0].date)}
           </SvgText>
           {points.length > 4 && (
-            <SvgText x={(g.left + g.right) / 2} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="middle">
+            <SvgText x={(g.left + g.right) / 2} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={D_FOG} textAnchor="middle">
               {shortDate(points[Math.floor(points.length / 2)].date)}
             </SvgText>
           )}
-          <SvgText x={g.right} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="end">
+          <SvgText x={g.right} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={D_FOG} textAnchor="end">
             {shortDate(points[points.length - 1].date)}
           </SvgText>
         </G>
@@ -358,16 +386,16 @@ function CorrelationPlot({ points, width, height, verdict }: {
       {/* grid */}
       {g.yTicks.map((t, i) => (
         <G key={`y${i}`}>
-          <Line x1={g.left} y1={g.yFor(t)} x2={g.right} y2={g.yFor(t)} stroke={GV.line} strokeWidth={1} />
-          <SvgText x={g.left - 6} y={g.yFor(t) + 3.5} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="end">
+          <Line x1={g.left} y1={g.yFor(t)} x2={g.right} y2={g.yFor(t)} stroke={D_GRID} strokeWidth={1} />
+          <SvgText x={g.left - 6} y={g.yFor(t) + 3.5} fontSize={10} fontFamily={FONT.regular} fill={D_FOG} textAnchor="end">
             {compactNum(t)}
           </SvgText>
         </G>
       ))}
       {g.xTicks.map((t, i) => (
         <G key={`x${i}`}>
-          <Line x1={g.xFor(t)} y1={g.top} x2={g.xFor(t)} y2={g.bottom} stroke={GV.line} strokeWidth={1} />
-          <SvgText x={g.xFor(t)} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={GV.muted} textAnchor="middle">
+          <Line x1={g.xFor(t)} y1={g.top} x2={g.xFor(t)} y2={g.bottom} stroke={D_GRID} strokeWidth={1} />
+          <SvgText x={g.xFor(t)} y={height - 6} fontSize={10} fontFamily={FONT.regular} fill={D_FOG} textAnchor="middle">
             {compactNum(t)}
           </SvgText>
         </G>
@@ -410,7 +438,7 @@ function CorrelationPlot({ points, width, height, verdict }: {
 function verdictStyle(v: HealthVerdict): { bg: string; fg: string } {
   if (v === 'good') return { bg: GV.fx.green, fg: '#FFFFFF' };
   if (v === 'bad') return { bg: GV.danger, fg: '#FFFFFF' };
-  return { bg: GV.wash, fg: GV.body };
+  return { bg: 'rgba(255,255,255,0.10)', fg: D_FOG };
 }
 
 // ─── Card ───────────────────────────────────────────────────────────────────
@@ -420,7 +448,7 @@ export default function CorrelationGraphCard({
   subtitle,
   data,
   chartHeight = 168,
-  lineColor = GV.ink,
+  lineColor = '#E8ECF1',
   style,
 }: CorrelationGraphCardProps) {
   const [plotWidth, setPlotWidth] = useState(0);
@@ -464,16 +492,15 @@ export default function CorrelationGraphCard({
       <View style={styles.header}>
         <View style={styles.headerText}>
           <View style={styles.eyebrowRow}>
-            <View style={styles.liveDot} />
             <Text style={styles.eyebrow} numberOfLines={1}>
               {subtitle ? subtitle.toUpperCase() : 'LIVE'}
             </Text>
           </View>
-          {/* Sketchpen shade behind the tagline: the metric hue when the
-              graph has one, highlighter yellow otherwise (never ink — a
-              dark shade would muddy the text instead of lifting it). */}
+          {/* Sketchpen shade behind the tagline: dark slate on glass —
+              yellow would muddy the white title instead of lifting it. */}
           <MarkerHighlight
-            color={lineColor === GV.ink ? undefined : lineColor}
+            color={MARK_DARK}
+            opacity={0.9}
             textStyle={styles.title}
             numberOfLines={2}
           >
@@ -529,7 +556,7 @@ export default function CorrelationGraphCard({
         {data.points.length === 0 ? (
           <View style={styles.empty}>
             <Svg width={28} height={28} viewBox="0 0 24 24">
-              <Path d="M2 12.4h4l2.5-6 4 11 2.5-5.2H22" fill="none" stroke={GV.muted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              <Path d="M2 12.4h4l2.5-6 4 11 2.5-5.2H22" fill="none" stroke={D_FOG} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
             <Text style={styles.emptyTitle}>No data yet</Text>
             <Text style={styles.emptyText}>Log a few more days to unlock this graph</Text>
@@ -590,11 +617,19 @@ export default function CorrelationGraphCard({
 }
 
 const styles = StyleSheet.create({
-  // Guava-flat: white card, radius 20, padding 20, no border, no shadow.
+  // Dark glass card on the black stage: flat dark panel, hairline rim,
+  // soft black depth. Curve / fit / dot hues stay data-encoded.
   card: {
-    backgroundColor: GV.paper,
+    backgroundColor: D_PANEL,
     borderRadius: SPACE.rCard,
     padding: SPACE.cardPad,
+    borderWidth: 1,
+    borderColor: D_RIM,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 6,
   },
   header: {
     flexDirection: 'row',
@@ -604,17 +639,15 @@ const styles = StyleSheet.create({
   },
   headerText: { flex: 1, gap: 4 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  // Small flat icon dot — the only hue outside data encoding.
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: GV.fx.green },
   eyebrow: {
     ...TYPE.chip,
-    color: GV.muted,
+    color: D_FOG,
     letterSpacing: 1.2,
   },
-  title: { ...TYPE.title, color: GV.ink },
+  title: { ...TYPE.title, fontSize: 17, lineHeight: 22, color: '#FFFFFF' },
   pillCol: { gap: 6, alignItems: 'flex-end', marginTop: 2 },
   badge: {
-    backgroundColor: GV.ink,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: SPACE.rPill,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -638,26 +671,28 @@ const styles = StyleSheet.create({
   },
   heroValue: {
     ...TYPE.display,
-    color: GV.ink,
+    color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
-  heroUnit: { ...TYPE.body, color: GV.muted },
+  heroUnit: { ...TYPE.body, color: D_FOG },
   deltaChip: {
     borderRadius: SPACE.rPill,
     paddingHorizontal: 10,
     paddingVertical: 5,
     marginBottom: 4,
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   deltaText: { ...TYPE.chip, fontVariant: ['tabular-nums'] },
   deltaTextUp: { color: GV.fx.green },
   deltaTextDown: { color: GV.danger },
-  deltaTextFlat: { color: GV.muted },
+  deltaTextFlat: { color: D_FOG },
   plot: {
     marginTop: 8,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: GV.wash,
+    backgroundColor: D_WELL,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   legend: {
     flexDirection: 'row',
@@ -670,16 +705,18 @@ const styles = StyleSheet.create({
   legendDash: {
     width: 16,
     borderTopWidth: 2,
-    borderTopColor: GV.muted,
+    borderTopColor: '#3A4358',
     borderStyle: 'dashed',
   },
-  legendText: { ...TYPE.caption, color: GV.muted },
+  legendText: { ...TYPE.caption, color: D_FOG },
   inspector: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 8,
-    backgroundColor: GV.ink,
+    backgroundColor: '#0B0F18',
+    borderWidth: 1,
+    borderColor: D_RIM,
     borderRadius: SPACE.rPill,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -687,16 +724,16 @@ const styles = StyleSheet.create({
   inspectorDate: { ...TYPE.chip, color: 'rgba(255,255,255,0.75)' },
   inspectorValue: { ...TYPE.chip, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
   footer: { marginTop: 8 },
-  footerText: { ...TYPE.caption, color: GV.muted },
+  footerText: { ...TYPE.caption, color: D_FOG },
   empty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: GV.wash,
+    backgroundColor: D_WELL,
     borderRadius: 16,
     gap: 4,
     paddingVertical: 20,
   },
-  emptyTitle: { ...TYPE.title, fontSize: 14, lineHeight: 20, color: GV.ink, marginTop: 8 },
-  emptyText: { ...TYPE.caption, color: GV.muted },
+  emptyTitle: { ...TYPE.title, fontSize: 14, lineHeight: 20, color: '#FFFFFF', marginTop: 8 },
+  emptyText: { ...TYPE.caption, color: D_FOG },
 });

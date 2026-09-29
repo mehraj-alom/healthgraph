@@ -14,7 +14,6 @@
 
 import { useCallback } from 'react';
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,10 +22,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
+import { EngineGraph } from '@/components/EngineGraph';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { TILE_TONES } from '@/theme/tones';
-import { StageGradient } from '@/components/StageGradient';
 import { useSleepEngine } from '@/hooks/useSleepEngine';
 import {
   formatSleepDuration,
@@ -75,25 +74,15 @@ export default function SleepEngineScreen() {
   }, [navigation]);
 
   const loggedWeek = week.filter((d) => d.logged).length;
+  const graphPoints = [...nights]
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .map((n) => ({ date: n.date, value: Math.round((n.durationMinutes / 60) * 10) / 10 }));
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StageGradient />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable
-          onPress={() => navigation.canGoBack() && navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-          style={styles.backHit}
-        >
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.overline}>SLEEP ENGINE · ON THIS DEVICE</Text>
-        <Text style={styles.title}>Sleep</Text>
-        <Text style={styles.sub}>
-          Track your sleep patterns. See how your sleep changes over time.
-        </Text>
+        <Text style={styles.title}>Sleep.</Text>
+        <Text style={styles.sub}>Logged nights only.</Text>
 
         {isLoading ? (
           <>
@@ -102,25 +91,24 @@ export default function SleepEngineScreen() {
           </>
         ) : summary.loggedNights === 0 ? (
           <EmptyState
-            icon="🌙"
             title="No sleep logged yet"
-            message="Sleep tracking starts with your daily check-in. Log last night's sleep and patterns, averages and changes appear here. Only from real entries."
+            message="Log last night's sleep to begin."
           />
         ) : (
           <>
-            <SectionHeader title="Average" />
-            <Card>
+            <SectionHeader dark title="Average" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
               <Text style={styles.avgValue}>
                 {summary.avgMinutes != null ? formatSleepDuration(summary.avgMinutes) : '—'}
               </Text>
               <Text style={styles.avgSub}>
-                {`Across ${summary.loggedNights} ${summary.loggedNights === 1 ? 'logged night' : 'logged nights'} (last 28 days)`}
+                {`Across ${summary.loggedNights} ${summary.loggedNights === 1 ? 'night' : 'nights'} (last 28 days)`}
               </Text>
               {changeLine ? <Text style={styles.change}>{changeLine}</Text> : null}
             </Card>
 
-            <SectionHeader title="This week" />
-            <Card>
+            <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
               <View style={styles.strip}>
                 {week.map((d) => (
                   <View key={d.date} style={styles.cell}>
@@ -139,13 +127,21 @@ export default function SleepEngineScreen() {
               </Text>
             </Card>
 
-            <SectionHeader title="Recent nights" />
+            <SectionHeader dark title="Sleep graph" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              <EngineGraph points={graphPoints} tone={TILE_TONES.sleep[1]} decimals={1} />
+              <Text style={styles.avgSub}>
+                {`${graphPoints.length} ${graphPoints.length === 1 ? 'night' : 'nights'}`}
+              </Text>
+            </Card>
+
+            <SectionHeader dark title="Recent nights" titleStyle={styles.histTitle} />
             <View style={styles.list}>
               {[...nights]
                 .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
                 .slice(0, 14)
                 .map((night) => (
-                  <Card key={night.date}>
+                  <Card key={night.date} style={styles.darkCard}>
                     <View style={styles.rowTop}>
                       <View style={styles.rowMain}>
                         <Text style={styles.rowTitle}>
@@ -160,7 +156,14 @@ export default function SleepEngineScreen() {
           </>
         )}
 
-        <Button title="+ Log sleep" onPress={goLog} fullWidth />
+        <Button
+          title="Log sleep"
+          onPress={goLog}
+          fullWidth
+          size="large"
+          style={styles.logBtn}
+          textStyle={styles.logBtnText}
+        />
         <Text style={styles.disclaimer}>
           From your check-ins on this device. Tracking only — not medical advice, diagnosis, or treatment.
         </Text>
@@ -170,29 +173,38 @@ export default function SleepEngineScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: GV.stage },
+  safe: { flex: 1, backgroundColor: '#080A11' },
   content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  backHit: { minHeight: 44, justifyContent: 'center' },
-  backText: { ...TYPE.button, fontSize: 16, color: GV.fog },
-  overline: { fontFamily: FONT.semi, fontSize: 12, lineHeight: 16, letterSpacing: 3, color: GV.teal, textAlign: 'center' },
-  title: { ...TYPE.display, color: GV.card, textAlign: 'center' },
+  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
   sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
   loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
   fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  avgValue: { ...TYPE.display, fontSize: 40, color: GV.ink, textAlign: 'center', fontVariant: ['tabular-nums'] },
-  avgSub: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 4 },
-  change: { ...TYPE.body, color: GV.body, textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
+  darkCard: {
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  avgValue: { ...TYPE.display, fontSize: 40, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
+  change: { ...TYPE.body, color: '#E8ECF1', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   bar: { width: 16, height: 44, borderRadius: 8, justifyContent: 'flex-end' },
   barOn: { backgroundColor: TILE_TONES.sleep[1] },
   barOff: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
   cellDay: { ...TYPE.caption, fontSize: 12, color: GV.fog, fontVariant: ['tabular-nums'] },
-  weekTotal: { ...TYPE.caption, color: GV.muted, textAlign: 'center', marginTop: 8 },
+  weekTotal: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
   list: { gap: SPACE.cardGap },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   rowMain: { flex: 1, gap: 4 },
-  rowTitle: { ...TYPE.button, fontSize: 17, color: GV.ink, fontVariant: ['tabular-nums'] },
-  rowSub: { ...TYPE.caption, color: GV.body, fontVariant: ['tabular-nums'] },
+  rowTitle: { ...TYPE.button, fontSize: 17, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  rowSub: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
+  logBtn: { backgroundColor: '#4FD1C5' },
+  logBtnText: { color: '#062A26' },
   disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
 });

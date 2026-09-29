@@ -90,8 +90,9 @@ export const TYPE = {
 
 // ─── Spacing (8pt) ───────────────────────────────────────────────────────────
 
+// Home margin law: every page follows the glass edge — 26px sides.
 export const SPACE = {
-  screenH: 16,
+  screenH: 26,
   cardPad: 20,
   cardGap: 12,
   sectionGap: 24,

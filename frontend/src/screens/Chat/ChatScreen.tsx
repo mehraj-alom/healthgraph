@@ -10,7 +10,7 @@ import {
   Pressable,
   useWindowDimensions,
 } from 'react-native';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
@@ -278,6 +278,161 @@ function StreamText({
     </Text>
   );
 }
+
+const StreamTextMemo = memo(StreamText);
+
+interface MessageRowProps {
+  item: ChatMessage;
+  live: boolean;
+  showTime: boolean;
+  /** Action chips block (hidden while sending). */
+  actionsVisible: boolean;
+  /** Regenerate button (only the settled last row). */
+  showRegen: boolean;
+  onTick: () => void;
+  onRevealDone: (id: string) => void;
+  onRegenerate: () => void;
+}
+
+/**
+ * MessageRow — one memoized chat bubble. The list re-renders on every
+ * keystroke of state (send/reveal/suggestions); without memo every one of
+ * those passes re-laid-out the whole history. Props are all primitives or
+ * stable callbacks, so settled rows skip re-render entirely.
+ */
+const MessageRow = memo(function MessageRow({
+  item,
+  live,
+  showTime,
+  actionsVisible,
+  showRegen,
+  onTick,
+  onRevealDone,
+  onRegenerate,
+}: MessageRowProps) {
+  const navigation = useNavigation<any>();
+  const handleDone = useCallback(() => onRevealDone(item.id), [onRevealDone, item.id]);
+  const actions = useMemo(() => {
+    if (item.role !== 'assistant' || !actionsVisible) return null;
+    const list = item.ui_actions ?? [];
+    const structures = list.filter((a) => a.structure_id);
+    // Journal navigation: the backend emits open_timeline_day when the user
+    // asks about a dated record. The Timeline screen scrolls to that page,
+    // opens its 2/3 report, and highlights the evidence row.
+    const journalDays = list.filter((a) => a.action_type === 'open_timeline_day' && a.date_key);
+    // P7: validated citations from the backend (filtered server-side to
+    // tool-output references). Document rows deep-link to the record.
+    const citations = (item.citations ?? []).filter((c) => c.node_id || c.document_id);
+    return (
+      <View style={styles.msgActions}>
+        {structures.slice(0, 2).map((a, i) => (
+          <Pressable
+            key={`${a.structure_id}-${i}`}
+            onPress={() => navigation.navigate('Body', { focusStructureId: a.structure_id ?? undefined })}
+            style={({ pressed }) => [styles.actionChip, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${a.mesh_node_name ?? 'area'} in 3D body`}
+          >
+            <Text style={styles.actionChipText}>
+              View {prettyStructure(a.structure_id)} in 3D body
+            </Text>
+          </Pressable>
+        ))}
+        {journalDays.slice(0, 2).map((a, i) => (
+          <Pressable
+            key={`${a.date_key}-${i}`}
+            onPress={() =>
+              navigation.navigate('Timeline', {
+                dateKey: a.date_key ?? undefined,
+                highlightEventId: a.highlight_event_id ?? undefined,
+              })
+            }
+            style={({ pressed }) => [styles.actionChip, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${a.date_key} in the health journal`}
+          >
+            <Text style={styles.actionChipText}>Open {a.date_key} in journal</Text>
+          </Pressable>
+        ))}
+        {showRegen ? (
+          <Pressable
+            style={({ pressed }) => [styles.regenBtn, pressed && { opacity: 0.7 }]}
+            onPress={onRegenerate}
+            accessibilityRole="button"
+            accessibilityLabel="Regenerate response"
+          >
+            <Text style={styles.regenText}>Regenerate</Text>
+          </Pressable>
+        ) : null}
+        {citations.length > 0 ? (
+          <View style={styles.citeBlock}>
+            <Text style={styles.citeTitle}>Sources ({citations.length})</Text>
+            {citations.slice(0, 3).map((c, i) => {
+              const label = c.document_id ? 'Open source document' : (c.node_id ?? 'Evidence');
+              const key = `${c.document_id ?? c.node_id ?? i}`;
+              const sub = typeof c.quote === 'string' && c.quote.length > 0
+                ? (c.quote.length > 90 ? `${c.quote.slice(0, 90)}…` : c.quote)
+                : null;
+              const row = (
+                <View style={styles.citeRowInner}>
+                  <Text style={styles.citeLabel} numberOfLines={1}>{label}</Text>
+                  {sub ? <Text style={styles.citeQuote} numberOfLines={2}>{sub}</Text> : null}
+                </View>
+              );
+              return c.document_id ? (
+                <Pressable
+                  key={key}
+                  style={styles.citeRow}
+                  onPress={() => navigation.navigate('DocumentDetail', { documentId: c.document_id })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open source document"
+                >
+                  {row}
+                  <Text style={styles.citeGo}>›</Text>
+                </Pressable>
+              ) : (
+                <View key={key} style={styles.citeRow}>{row}</View>
+              );
+            })}
+          </View>
+        ) : null}
+      </View>
+    );
+  }, [item, actionsVisible, showRegen, navigation, onRegenerate]);
+
+  const isUser = item.role === 'user';
+  return (
+    <View style={isUser ? styles.userRow : styles.aiRow}>
+      {isUser ? (
+        <View style={[styles.messageBubble, styles.userBubble]}>
+          <Text style={[styles.messageText, styles.userText]} selectable>
+            {item.content}
+          </Text>
+          {showTime ? (
+            <Text style={[styles.messageTime, styles.userTime]}>
+              {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.assistantBlock}>
+          <StreamTextMemo
+            text={item.content}
+            live={live}
+            onTick={onTick}
+            onDone={handleDone}
+          />
+          {showTime ? (
+            <Text style={[styles.messageTime, styles.assistantTime]}>
+              {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          ) : null}
+        </View>
+      )}
+      {actions}
+    </View>
+  );
+});
 
 function SuggestionRow({
   suggestion,
@@ -718,93 +873,38 @@ export default function ChatScreen() {
       ? messages[messages.length - 1].id
       : null;
 
-  const renderMessageActions = (item: ChatMessage, isLast: boolean) => {
-    if (item.role !== 'assistant' || sending) return null;
-    const actions = item.ui_actions ?? [];
-    const structures = actions.filter((a) => a.structure_id);
-    // Journal navigation: the backend emits open_timeline_day when the user
-    // asks about a dated record. The Timeline screen scrolls to that page,
-    // opens its 2/3 report, and highlights the evidence row.
-    const journalDays = actions.filter((a) => a.action_type === 'open_timeline_day' && a.date_key);
-    // P7: validated citations from the backend (filtered server-side to
-    // tool-output references). Document rows deep-link to the record.
-    const citations = (item.citations ?? []).filter((c) => c.node_id || c.document_id);
-    return (
-      <View style={styles.msgActions}>
-        {structures.slice(0, 2).map((a, i) => (
-          <Pressable
-            key={`${a.structure_id}-${i}`}
-            onPress={() => navigation.navigate('Body', { focusStructureId: a.structure_id ?? undefined })}
-            style={({ pressed }) => [styles.actionChip, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel={`View ${a.mesh_node_name ?? 'area'} in 3D body`}
-          >
-            <Text style={styles.actionChipText}>
-              View {prettyStructure(a.structure_id)} in 3D body
-            </Text>
-          </Pressable>
-        ))}
-        {journalDays.slice(0, 2).map((a, i) => (
-          <Pressable
-            key={`${a.date_key}-${i}`}
-            onPress={() =>
-              navigation.navigate('Timeline', {
-                dateKey: a.date_key ?? undefined,
-                highlightEventId: a.highlight_event_id ?? undefined,
-              })
-            }
-            style={({ pressed }) => [styles.actionChip, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${a.date_key} in the health journal`}
-          >
-            <Text style={styles.actionChipText}>Open {a.date_key} in journal</Text>
-          </Pressable>
-        ))}
-        {isLast ? (
-          <Pressable
-            style={({ pressed }) => [styles.regenBtn, pressed && { opacity: 0.7 }]}
-            onPress={regenerate}
-            accessibilityRole="button"
-            accessibilityLabel="Regenerate response"
-          >
-            <Text style={styles.regenText}>Regenerate</Text>
-          </Pressable>
-        ) : null}
-        {citations.length > 0 ? (
-          <View style={styles.citeBlock}>
-            <Text style={styles.citeTitle}>Sources ({citations.length})</Text>
-            {citations.slice(0, 3).map((c, i) => {
-              const label = c.document_id ? 'Open source document' : (c.node_id ?? 'Evidence');
-              const key = `${c.document_id ?? c.node_id ?? i}`;
-              const sub = typeof c.quote === 'string' && c.quote.length > 0
-                ? (c.quote.length > 90 ? `${c.quote.slice(0, 90)}…` : c.quote)
-                : null;
-              const row = (
-                <View style={styles.citeRowInner}>
-                  <Text style={styles.citeLabel} numberOfLines={1}>{label}</Text>
-                  {sub ? <Text style={styles.citeQuote} numberOfLines={2}>{sub}</Text> : null}
-                </View>
-              );
-              return c.document_id ? (
-                <Pressable
-                  key={key}
-                  style={styles.citeRow}
-                  onPress={() => navigation.navigate('DocumentDetail', { documentId: c.document_id })}
-                  accessibilityRole="button"
-                  accessibilityLabel="Open source document"
-                >
-                  {row}
-                  <Text style={styles.citeGo}>›</Text>
-                </Pressable>
-              ) : (
-                <View key={key} style={styles.citeRow}>{row}</View>
-              );
-            })}
-          </View>
-        ) : null}
-      </View>
-    );
-  };
+  // Stable row callbacks: settled rows keep identical props, so memo rows
+  // skip re-render on every unrelated state change.
+  const handleRevealDone = useCallback((id: string) => {
+    setRevealingId((cur) => (cur === id ? null : cur));
+  }, []);
+
+  const regenerateRef = useRef(regenerate);
+  regenerateRef.current = regenerate;
+  const handleRegenerate = useCallback(() => {
+    regenerateRef.current();
+  }, []);
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: ChatMessage; index: number }) => {
+      const isLast = index === messages.length - 1;
+      const live = revealingId === item.id;
+      const next = messages[index + 1];
+      return (
+        <MessageRow
+          item={item}
+          live={live}
+          showTime={isLast || next == null || next.role !== item.role}
+          actionsVisible={!sending}
+          showRegen={isLast && !live && !sending}
+          onTick={scrollToBottom}
+          onRevealDone={handleRevealDone}
+          onRegenerate={handleRegenerate}
+        />
+      );
+    },
+    [messages, revealingId, sending, scrollToBottom, handleRevealDone, handleRegenerate],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -871,52 +971,17 @@ export default function ChatScreen() {
                   ref={flatListRef}
                   data={messages}
                   keyExtractor={(item) => item.id}
+                  renderItem={renderItem}
                   contentContainerStyle={styles.messagesContent}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                   onScroll={onTabScroll}
                   scrollEventThrottle={16}
                   ListFooterComponent={<DisclaimerNote style={styles.dnFoot} />}
-                  renderItem={({ item, index }) => {
-                    const isLast = index === messages.length - 1;
-                    const live = revealingId === item.id;
-                    // Timestamps only close out a same-role run — a back-and-
-                    // forth of 6 bubbles shows 2 times, not 6.
-                    const next = messages[index + 1];
-                    const showTime = isLast || next == null || next.role !== item.role;
-                    const isUser = item.role === 'user';
-                    return (
-                      <View style={isUser ? styles.userRow : styles.aiRow}>
-                        {isUser ? (
-                          <View style={[styles.messageBubble, styles.userBubble]}>
-                            <Text style={[styles.messageText, styles.userText]} selectable>
-                              {item.content}
-                            </Text>
-                            {showTime ? (
-                              <Text style={[styles.messageTime, styles.userTime]}>
-                                {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </Text>
-                            ) : null}
-                          </View>
-                        ) : (
-                          <View style={styles.assistantBlock}>
-                            <StreamText
-                              text={item.content}
-                              live={live}
-                              onTick={scrollToBottom}
-                              onDone={() => setRevealingId((cur) => (cur === item.id ? null : cur))}
-                            />
-                            {showTime ? (
-                              <Text style={[styles.messageTime, styles.assistantTime]}>
-                                {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </Text>
-                            ) : null}
-                          </View>
-                        )}
-                        {renderMessageActions(item, isLast && !live)}
-                      </View>
-                    );
-                  }}
+                  windowSize={11}
+                  maxToRenderPerBatch={8}
+                  initialNumToRender={15}
+                  removeClippedSubviews
                 />
                 {/* Follow-ups ride under the finished reply — two taps, no typing. */}
                 {!busy && lastAssistantId && suggestions.length > 0 ? (

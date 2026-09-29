@@ -169,6 +169,75 @@ export async function getSleepNights(
 }
 
 /**
+ * Bounded weight history for the Weight Engine: VITAL_SIGN events inside
+ * [startDate, endDate] (inclusive, YYYY-MM-DD on the group's log_date —
+ * the local calendar day the check-in belongs to), oldest first.
+ * Patient-scoped through the group's patient_id.
+ *
+ * A weight vital is recognized by concept (LOINC 29463-7 or a weight
+ * concept id) or by unit (kg/lb). Pounds convert to kilograms. One point
+ * per day (latest entry wins); non-numeric and out-of-range values
+ * (<=0 or >=500 kg) are dropped, never plotted as zero.
+ */
+export interface WeightHistoryPoint {
+  log_date: string;
+  weight_kg: number;
+}
+
+const LB_TO_KG = 0.45359237;
+
+export async function getWeightHistory(
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<WeightHistoryPoint[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{
+    log_date: string;
+    concept_id: string | null;
+    payload_json: string;
+    created_at: string;
+  }>(
+    `SELECT g.log_date AS log_date, e.concept_id AS concept_id,
+            e.payload_json AS payload_json, e.created_at AS created_at
+     FROM daily_log_events e
+     INNER JOIN daily_logs g ON e.group_id = g.group_id
+     WHERE g.patient_id = ?
+       AND e.event_type = 'VITAL_SIGN'
+       AND g.log_date >= ? AND g.log_date <= ?
+     ORDER BY g.log_date ASC, e.created_at ASC`,
+    [patientId, startDate, endDate],
+  );
+  const latestByDay = new Map<string, number>();
+  for (const r of rows) {
+    const payload = parseJsonPayload(r.payload_json);
+    const rawValue = payload.value;
+    const value = typeof rawValue === 'string' ? Number(rawValue) : rawValue;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) continue;
+    const unit = typeof payload.unit === 'string' ? payload.unit.trim().toLowerCase() : '';
+    const concept = (r.concept_id ?? '').toLowerCase();
+    const isWeight =
+      concept === '29463-7' ||
+      concept.includes('weight') ||
+      unit === 'kg' ||
+      unit === 'kgs' ||
+      unit === 'kilogram' ||
+      unit === 'kilograms' ||
+      unit === 'lb' ||
+      unit === 'lbs' ||
+      unit === 'pound' ||
+      unit === 'pounds';
+    if (!isWeight) continue;
+    const kg = unit.startsWith('lb') || unit.startsWith('pound') ? value * LB_TO_KG : value;
+    if (kg <= 0 || kg >= 500) continue;
+    latestByDay.set(r.log_date.slice(0, 10), Math.round(kg * 10) / 10);
+  }
+  return [...latestByDay.entries()]
+    .map(([log_date, weight_kg]) => ({ log_date, weight_kg }))
+    .sort((a, b) => (a.log_date < b.log_date ? -1 : a.log_date > b.log_date ? 1 : 0));
+}
+
+/**
  * Bounded activity history for the Fitness Engine: ACTIVITY_LOG events
  * inside [startDate, endDate] (inclusive, YYYY-MM-DD on the group's
  * log_date — the local calendar day the check-in belongs to), oldest

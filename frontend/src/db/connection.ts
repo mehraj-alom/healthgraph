@@ -45,9 +45,12 @@ async function verifyDatabaseKey(db: SQLiteDatabase): Promise<void> {
     );
   `);
 
-  // Write a test value
+  // Write a test value. OR REPLACE keeps retries working: if a previous
+  // init attempt inserted the row and then failed later (migrations, WAL),
+  // the next attempt must not die on a UNIQUE constraint — that failure
+  // mode loops forever because every retry hits the same leftover row.
   await db.runAsync(
-    'INSERT INTO __encryption_verify (id, value) VALUES (?, ?)',
+    'INSERT OR REPLACE INTO __encryption_verify (id, value) VALUES (?, ?)',
     1,
     'test'
   );

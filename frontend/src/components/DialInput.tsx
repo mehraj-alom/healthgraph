@@ -8,7 +8,18 @@ import {
   type LayoutChangeEvent,
   type ViewStyle,
 } from 'react-native';
-import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Stop } from 'react-native-svg';
+import { GlassCuboid } from './GlassCuboid';
+import Svg, {
+  Circle,
+  Defs,
+  Ellipse,
+  G,
+  Line,
+  LinearGradient,
+  Path,
+  RadialGradient,
+  Stop,
+} from 'react-native-svg';
 import { useTheme } from '@/theme';
 
 interface DialInputProps {
@@ -84,15 +95,18 @@ export function severityTint(frac: number): string {
 }
 
 /**
- * DialInput — a circular "medical device" slider.
+ * DialInput — a circular "medical device" slider in a 3D cuboid glass housing.
  *
  * Drag around the ring (or tap) to set a value; the thumb snaps to `step`
  * with a light vibration tick on each detent. Touch visuals render from
  * local state on the same frame as the finger (the parent's re-render only
  * reconciles), so dragging feels 1:1 even on heavy screens. The progress
- * arc is a gradient with a soft glow; `tint` shifts its color clinically
- * across the sweep. The center readout uses tabular numerals so digits
- * don't jitter.
+ * arc is a gradient tube with a cylindrical glass highlight and soft glow;
+ * `tint` shifts its color clinically across the sweep. The dial face is a
+ * dark glass disc (radial shading + top gloss + recessed hub) seated in a
+ * blurred glass cuboid with chamfer light, bottom weight, and a value-tinted
+ * aura — built for the near-black backdrop. The center readout uses tabular
+ * numerals so digits don't jitter.
  */
 export function DialInput({
   value,
@@ -205,9 +219,12 @@ export function DialInput({
 
   const c = size / 2;
   const trackR = c - 28;
+  const faceR = c - 6;
+  const hubR = Math.max(34, trackR * 0.6);
   const endDeg = START_DEG + SWEEP_DEG;
   const thumbDeg = START_DEG + frac * SWEEP_DEG;
   const thumb = polar(c, c, trackR, thumbDeg);
+  const thumbSpec = { x: thumb.x - 4, y: thumb.y - 5 };
   const decimals = decimalsFor(step);
   const displayValue = live ?? value;
   const readout =
@@ -231,120 +248,274 @@ export function DialInput({
 
   const hasValue = displayValue != null;
 
+  // 3D cuboid glass housing around the dial. The dial face itself stays a
+  // dark instrument disc so it reads as hardware on the near-black backdrop
+  // (#080A11); the cuboid adds the premium depth: blurred glass slab, top
+  // chamfer light, bottom weight, and an aura tinted by the live value.
+  const CUBOID_PAD = 18;
+  const cuboidSize = size + CUBOID_PAD * 2;
+  const faceId = `${gradientId}f`;
+  const bevelId = `${gradientId}b`;
+  const thumbSheenId = `${gradientId}t`;
+  const hubId = `${gradientId}h`;
+  const progressD =
+    hasValue && frac > 0.001
+      ? arcPath(c, c, trackR, START_DEG, Math.max(START_DEG + 1, thumbDeg))
+      : null;
+  const trackD = arcPath(c, c, trackR, START_DEG, endDeg - 0.5);
+  const lipD = arcPath(c, c, trackR + 8.5, START_DEG, endDeg - 0.5);
+
   return (
     <View style={[styles.container, style]}>
       {label ? (
         <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
       ) : null}
-      <View
-        onLayout={onLayout}
-        style={[styles.dial, { width: size, height: size }, disabled && styles.dialDisabled]}
-        {...(disabled ? {} : panResponder.panHandlers)}
-        accessible
-        accessibilityRole="adjustable"
-        accessibilityLabel={accessibilityLabel ?? label ?? 'Dial'}
-        accessibilityValue={{
-          min,
-          max,
-          now: displayValue ?? min,
-          text: displayValue == null ? 'Not set' : `${readout}${unit ? ` ${unit}` : ''}`,
-        }}
-        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-        onAccessibilityAction={(event) => {
-          if (disabled) return;
-          const cur = displayValue ?? min;
-          if (event.nativeEvent.actionName === 'increment') {
-            onChange(Math.min(max, cur + step));
-          } else if (event.nativeEvent.actionName === 'decrement') {
-            onChange(Math.max(min, cur - step));
-          }
-        }}
+      <GlassCuboid
+        style={[{ width: cuboidSize }, disabled && styles.dialDisabled]}
+        auraColor={glowColor}
+        auraOpacity={hasValue ? 0.16 : 0.07}
+        pad={CUBOID_PAD}
+        radius={28}
+        intensity={36}
       >
-        <Svg width={size} height={size}>
-          <Defs>
-            <LinearGradient id={gradientId} x1="0" y1="1" x2="1" y2="0">
-              <Stop offset="0" stopColor={shade(glowColor, -0.15)} stopOpacity={1} />
-              <Stop offset="0.55" stopColor={glowColor} stopOpacity={1} />
-              <Stop offset="1" stopColor={shade(glowColor, 0.35)} stopOpacity={1} />
-            </LinearGradient>
-          </Defs>
-          {/* Tick ring */}
-          <G>
-            {ticks.map((t) => {
-              const f = (t - min) / span;
-              const a = START_DEG + f * SWEEP_DEG;
-              const p1 = polar(c, c, trackR - 16, a);
-              const p2 = polar(c, c, trackR - 24, a);
-              const active = hasValue && t <= shown + 1e-9;
-              return (
-                <Line
-                  key={t}
-                  x1={p1.x}
-                  y1={p1.y}
-                  x2={p2.x}
-                  y2={p2.y}
-                  stroke={active ? activeColor : colors.border}
-                  strokeWidth={active ? 2.5 : 2}
-                  strokeLinecap="round"
-                  opacity={active ? 1 : 0.55}
-                />
-              );
-            })}
-          </G>
-          {/* Track */}
-          <Path
-            d={arcPath(c, c, trackR, START_DEG, endDeg - 0.5)}
-            fill="none"
-            stroke={colors.surfaceSunken}
-            strokeWidth={15}
-            strokeLinecap="round"
-          />
-          {/* Glow underlay */}
-          {hasValue && frac > 0.001 ? (
-            <Path
-              d={arcPath(c, c, trackR, START_DEG, Math.max(START_DEG + 1, thumbDeg))}
-              fill="none"
-              stroke={activeColor}
-              strokeWidth={24}
-              strokeLinecap="round"
-              opacity={0.22}
-            />
-          ) : null}
-          {/* Gradient progress */}
-          {hasValue && frac > 0.001 ? (
-            <Path
-              d={arcPath(c, c, trackR, START_DEG, Math.max(START_DEG + 1, thumbDeg))}
-              fill="none"
-              stroke={`url(#${gradientId})`}
-              strokeWidth={15}
-              strokeLinecap="round"
-            />
-          ) : null}
-          {/* Thumb halo + thumb */}
-          {hasValue ? (
-            <G>
-              <Circle cx={thumb.x} cy={thumb.y} r={19} fill={activeColor} opacity={0.22} />
+          <View
+            onLayout={onLayout}
+            style={[styles.dial, { width: size, height: size }]}
+            {...(disabled ? {} : panResponder.panHandlers)}
+            accessible
+            accessibilityRole="adjustable"
+            accessibilityLabel={accessibilityLabel ?? label ?? 'Dial'}
+            accessibilityValue={{
+              min,
+              max,
+              now: displayValue ?? min,
+              text: displayValue == null ? 'Not set' : `${readout}${unit ? ` ${unit}` : ''}`,
+            }}
+            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+            onAccessibilityAction={(event) => {
+              if (disabled) return;
+              const cur = displayValue ?? min;
+              if (event.nativeEvent.actionName === 'increment') {
+                onChange(Math.min(max, cur + step));
+              } else if (event.nativeEvent.actionName === 'decrement') {
+                onChange(Math.max(min, cur - step));
+              }
+            }}
+          >
+            <Svg width={size} height={size}>
+              <Defs>
+                <LinearGradient id={gradientId} x1="0" y1="1" x2="1" y2="0">
+                  <Stop offset="0" stopColor={shade(glowColor, -0.15)} stopOpacity={1} />
+                  <Stop offset="0.55" stopColor={glowColor} stopOpacity={1} />
+                  <Stop offset="1" stopColor={shade(glowColor, 0.35)} stopOpacity={1} />
+                </LinearGradient>
+                <RadialGradient id={faceId} cx="0.5" cy="0.32" r="0.9">
+                  <Stop offset="0" stopColor="#2B3650" stopOpacity={1} />
+                  <Stop offset="0.5" stopColor="#141B2B" stopOpacity={1} />
+                  <Stop offset="1" stopColor="#06090F" stopOpacity={1} />
+                </RadialGradient>
+                <LinearGradient id={bevelId} x1="0" y1="0" x2="1" y2="1">
+                  <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.38} />
+                  <Stop offset="0.3" stopColor="#FFFFFF" stopOpacity={0.1} />
+                  <Stop offset="0.6" stopColor="#FFFFFF" stopOpacity={0} />
+                  <Stop offset="1" stopColor="#000000" stopOpacity={0.6} />
+                </LinearGradient>
+                <RadialGradient id={thumbSheenId} cx="0.3" cy="0.25" r="0.95">
+                  <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.9} />
+                  <Stop offset="0.35" stopColor="#FFFFFF" stopOpacity={0.26} />
+                  <Stop offset="0.65" stopColor="#FFFFFF" stopOpacity={0.02} />
+                  <Stop offset="1" stopColor="#000000" stopOpacity={0.42} />
+                </RadialGradient>
+                <RadialGradient id={hubId} cx="0.5" cy="0.3" r="0.95">
+                  <Stop offset="0" stopColor="#1D2537" stopOpacity={1} />
+                  <Stop offset="1" stopColor="#04060B" stopOpacity={1} />
+                </RadialGradient>
+              </Defs>
+              {/* Drop shadow + chassis */}
+              <Circle cx={c} cy={c + 5} r={faceR} fill="#000000" opacity={0.55} />
+              <Circle cx={c} cy={c} r={faceR + 5} fill="#020409" />
               <Circle
-                cx={thumb.x}
-                cy={thumb.y}
-                r={13}
-                fill="#FFFFFF"
-                stroke={activeColor}
-                strokeWidth={4}
+                cx={c}
+                cy={c}
+                r={faceR + 5}
+                fill="none"
+                stroke={`url(#${bevelId})`}
+                strokeWidth={2.5}
+                opacity={0.9}
               />
-              <Circle cx={thumb.x} cy={thumb.y} r={4.5} fill={activeColor} />
-            </G>
-          ) : null}
-        </Svg>
-        {/* Center readout (overlay so text stays crisp) */}
-        <View style={styles.readout} pointerEvents="none">
-          <Text style={[styles.readoutValue, { color: colors.textPrimary }]}>{readout}</Text>
-          {unit ? <Text style={[styles.readoutUnit, { color: activeColor }]}>{unit}</Text> : null}
-          {!hasValue ? (
-            <Text style={[styles.readoutHint, { color: colors.textMuted }]}>drag to set</Text>
-          ) : null}
-        </View>
-      </View>
+              {/* Glass face */}
+              <Circle cx={c} cy={c} r={faceR} fill={`url(#${faceId})`} />
+              <Circle
+                cx={c}
+                cy={c}
+                r={faceR}
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth={1}
+                opacity={0.1}
+              />
+              {/* Face gloss: soft flood + sharp top highlight */}
+              <Ellipse
+                cx={c}
+                cy={c - faceR * 0.52}
+                rx={faceR * 0.6}
+                ry={faceR * 0.24}
+                fill="#FFFFFF"
+                opacity={0.07}
+              />
+              <Ellipse
+                cx={c}
+                cy={c - faceR * 0.62}
+                rx={faceR * 0.32}
+                ry={faceR * 0.09}
+                fill="#FFFFFF"
+                opacity={0.13}
+              />
+              {/* Recessed seat the track sits in */}
+              <Circle cx={c} cy={c} r={trackR + 20} fill="#04060B" opacity={0.72} />
+              <Circle
+                cx={c}
+                cy={c}
+                r={trackR + 21}
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth={1}
+                opacity={0.05}
+              />
+              {/* Tick ring */}
+              <G>
+                {ticks.map((t) => {
+                  const f = (t - min) / span;
+                  const a = START_DEG + f * SWEEP_DEG;
+                  const p1 = polar(c, c, trackR - 16, a);
+                  const p2 = polar(c, c, trackR - 24, a);
+                  const active = hasValue && t <= shown + 1e-9;
+                  return (
+                    <Line
+                      key={t}
+                      x1={p1.x}
+                      y1={p1.y}
+                      x2={p2.x}
+                      y2={p2.y}
+                      stroke={active ? activeColor : '#3A4358'}
+                      strokeWidth={active ? 2.5 : 2}
+                      strokeLinecap="round"
+                      opacity={active ? 1 : 0.75}
+                    />
+                  );
+                })}
+              </G>
+              {/* Track: shadow groove + glass groove + top chamfer lip */}
+              <Path
+                d={trackD}
+                fill="none"
+                stroke="#000000"
+                strokeWidth={17}
+                strokeLinecap="round"
+                opacity={0.85}
+              />
+              <Path
+                d={trackD}
+                fill="none"
+                stroke="#0B1220"
+                strokeWidth={15}
+                strokeLinecap="round"
+              />
+              <Path
+                d={lipD}
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                opacity={0.07}
+              />
+              {/* Recessed center hub */}
+              <Circle cx={c} cy={c} r={hubR} fill={`url(#${hubId})`} opacity={0.92} />
+              <Circle
+                cx={c}
+                cy={c}
+                r={hubR}
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth={1}
+                opacity={0.07}
+              />
+              <Ellipse
+                cx={c}
+                cy={c - hubR * 0.45}
+                rx={hubR * 0.5}
+                ry={hubR * 0.2}
+                fill="#FFFFFF"
+                opacity={0.07}
+              />
+              {/* Glow underlay */}
+              {progressD ? (
+                <Path
+                  d={progressD}
+                  fill="none"
+                  stroke={activeColor}
+                  strokeWidth={26}
+                  strokeLinecap="round"
+                  opacity={0.22}
+                />
+              ) : null}
+              {/* Gradient progress tube */}
+              {progressD ? (
+                <Path
+                  d={progressD}
+                  fill="none"
+                  stroke={`url(#${gradientId})`}
+                  strokeWidth={15}
+                  strokeLinecap="round"
+                />
+              ) : null}
+              {/* Cylindrical glass highlight running down the tube */}
+              {progressD ? (
+                <Path
+                  d={progressD}
+                  fill="none"
+                  stroke="#FFFFFF"
+                  strokeWidth={4.5}
+                  strokeLinecap="round"
+                  opacity={0.28}
+                />
+              ) : null}
+              {/* Thumb: 3D glass orb */}
+              {hasValue ? (
+                <G>
+                  <Circle cx={thumb.x} cy={thumb.y + 3.5} r={14} fill="#000000" opacity={0.55} />
+                  <Circle cx={thumb.x} cy={thumb.y} r={19} fill={activeColor} opacity={0.24} />
+                  <Circle
+                    cx={thumb.x}
+                    cy={thumb.y}
+                    r={13}
+                    fill="#0B0F18"
+                    stroke={activeColor}
+                    strokeWidth={3.5}
+                  />
+                  <Circle
+                    cx={thumb.x}
+                    cy={thumb.y}
+                    r={13}
+                    fill={`url(#${thumbSheenId})`}
+                    opacity={0.9}
+                  />
+                  <Circle cx={thumb.x} cy={thumb.y} r={3.5} fill={activeColor} />
+                  <Circle cx={thumbSpec.x} cy={thumbSpec.y} r={3.2} fill="#FFFFFF" opacity={0.95} />
+                  <Circle cx={thumbSpec.x + 1} cy={thumbSpec.y + 1} r={1.1} fill="#FFFFFF" opacity={0.9} />
+                </G>
+              ) : null}
+            </Svg>
+            {/* Center readout (overlay so text stays crisp) */}
+            <View style={styles.readout} pointerEvents="none">
+              <Text style={styles.readoutValue}>{readout}</Text>
+              {unit ? <Text style={[styles.readoutUnit, { color: activeColor }]}>{unit}</Text> : null}
+              {!hasValue ? (
+                <Text style={styles.readoutHint}>drag to set</Text>
+              ) : null}
+            </View>
+          </View>
+      </GlassCuboid>
     </View>
   );
 }
@@ -352,7 +523,7 @@ export function DialInput({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   label: {
     fontSize: 13,
@@ -376,17 +547,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
     textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.45)',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
+    textShadowRadius: 8,
   },
   readoutUnit: {
     fontSize: 15,
     fontWeight: '800',
     marginTop: 2,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   readoutHint: {
     fontSize: 11,
     marginTop: 2,
+    color: 'rgba(255,255,255,0.55)',
   },
 });
