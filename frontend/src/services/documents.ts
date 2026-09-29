@@ -2,6 +2,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { api, getApiBaseUrl } from '@/services/api';
 import { auth } from '@/context/AuthContext';
+import { getCachedPatientId } from '@/services/patientIdentity';
+import { sealCachedFile } from '@/services/fileVault';
 import { UPLOAD_TIMEOUT_MS } from './uploadPolicy';
 import type {
   DocumentListItem,
@@ -210,7 +212,8 @@ export async function cachedFileExists(localUri: string | null | undefined): Pro
 
 /**
  * Download the original file for a document into the on-device cache.
- * Returns the local URI. Throws on auth/network errors (caller shows UI).
+ * Returns the local URI (sealed `.enc` when a patient session exists).
+ * Throws on auth/network errors (caller shows UI).
  */
 export async function downloadDocumentFile(
   documentId: string,
@@ -230,12 +233,16 @@ export async function downloadDocumentFile(
   if (result.status !== 200) {
     throw new Error('The file could not be downloaded. Please try again.');
   }
-  return result.uri;
+  // Seal at rest: plaintext must never linger beside the encrypted DB.
+  const patientId = getCachedPatientId();
+  if (!patientId) return result.uri;
+  return sealCachedFile(patientId, result.uri);
 }
 
 /**
  * Copy an already-on-device file (e.g. freshly picked for upload) into the
- * persistent cache dir. Cheaper than re-downloading after upload.
+ * persistent cache dir. Cheaper than re-downloading after upload. Sealed
+ * like downloads (plaintext fallback only with no patient session).
  */
 export async function cacheLocalCopy(
   documentId: string,
@@ -245,7 +252,9 @@ export async function cacheLocalCopy(
   const dir = await ensureDocCacheDir();
   const target = `${dir}${safeCacheName(documentId, filenameHint)}`;
   await FileSystem.copyAsync({ from: sourceUri, to: target });
-  return target;
+  const patientId = getCachedPatientId();
+  if (!patientId) return target;
+  return sealCachedFile(patientId, target);
 }
 
 /**

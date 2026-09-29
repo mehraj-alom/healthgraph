@@ -55,6 +55,10 @@ async function wipeLocal(patientId: string): Promise<LocalEraseCounts> {
   // survive the wipe (the instances table itself is wiped below).
   const { cancelAllPatientReminders } = await import('@/services/medicationReminders');
   await cancelAllPatientReminders(patientId).catch(() => {});
+  // Cached patient files (documents, photos, decrypted temps) go with
+  // the rows — files must never outlive the wipe.
+  const { wipePatientFiles } = await import('@/services/fileVault');
+  await wipePatientFiles().catch(() => {});
   const local = await deletePatientLocalData(patientId);
   const { refreshSyncState } = await import('@/services/syncState');
   await refreshSyncState().catch(() => {});

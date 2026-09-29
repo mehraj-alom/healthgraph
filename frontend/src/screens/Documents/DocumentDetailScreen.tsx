@@ -5,7 +5,7 @@
  * and source evidence. This is the "review" screen after processing completes.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -106,9 +106,28 @@ export default function DocumentDetailScreen() {
   const [note, setNote] = useState('');
   const [verifying, setVerifying] = useState(false);
 
+  // Decrypted temp files (sealed cache opened for viewing/sharing).
+  // Wiped on close — decrypted bytes must never linger on disk.
+  const tempUris = useRef<Set<string>>(new Set());
+  const wipeTemps = useCallback(async () => {
+    const { wipeFile } = await import('@/services/fileVault');
+    await Promise.all([...tempUris.current].map((u) => wipeFile(u)));
+    tempUris.current.clear();
+  }, []);
+  useEffect(() => () => {
+    void wipeTemps();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const closeViewer = useCallback(() => {
+    setViewerUri(null);
+    void wipeTemps();
+  }, [wipeTemps]);
+
   const openOriginal = useCallback(async () => {
     if (!document) return;
     setFileError(null);
+    let sharedTemp: string | null = null;
     try {
       // 1. Use the on-device copy when it exists (works offline).
       let uri: string | null = null;
@@ -125,7 +144,15 @@ export default function DocumentDetailScreen() {
         }
         uri = downloaded;
       }
-      // 3. PDFs (and unknown types) go to the OS viewer — Android WebView
+      // 3. Sealed cache opens to a short-lived temp file (wiped on close).
+      const { isSealedUri, openSealedFile } = await import('@/services/fileVault');
+      const patientId = getCachedPatientId();
+      if (uri && isSealedUri(uri) && patientId) {
+        uri = await openSealedFile(patientId, uri);
+        tempUris.current.add(uri);
+        sharedTemp = uri;
+      }
+      // 4. PDFs (and unknown types) go to the OS viewer — Android WebView
       // renders a blank page for PDFs with no error. Images stay inline.
       // The file is on-device and private in both paths.
       if (viewerForUri(uri) === 'share') {
@@ -134,12 +161,26 @@ export default function DocumentDetailScreen() {
           setFileError('No app on this device can open this file type.');
           return;
         }
-        await Sharing.shareAsync(uri, { dialogTitle: 'Open original document' });
+        try {
+          await Sharing.shareAsync(uri, { dialogTitle: 'Open original document' });
+        } finally {
+          // The decrypted temp must not survive the share sheet.
+          if (sharedTemp) {
+            const { wipeFile } = await import('@/services/fileVault');
+            await wipeFile(sharedTemp);
+            tempUris.current.delete(sharedTemp);
+          }
+        }
         return;
       }
       setViewerUri(uri);
     } catch {
       setFileError('Could not load the file. Connect to the internet and try again.');
+      if (sharedTemp) {
+        const { wipeFile } = await import('@/services/fileVault');
+        await wipeFile(sharedTemp);
+        tempUris.current.delete(sharedTemp);
+      }
     } finally {
       setFileLoading(false);
     }
@@ -564,11 +605,11 @@ export default function DocumentDetailScreen() {
       <Modal
         visible={viewerUri !== null}
         animationType="slide"
-        onRequestClose={() => setViewerUri(null)}
+        onRequestClose={closeViewer}
       >
         <SafeAreaView style={styles.viewerContainer} edges={['top', 'bottom']}>
           <View style={styles.viewerHeader}>
-            <Pressable onPress={() => setViewerUri(null)} hitSlop={12}>
+            <Pressable onPress={closeViewer} hitSlop={12}>
               <Text style={styles.viewerClose}>‹ Back</Text>
             </Pressable>
             <Text style={styles.viewerTitle} numberOfLines={1}>

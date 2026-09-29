@@ -168,7 +168,15 @@ def analyze_photo(photo: PhotoDep, patient_id: PatientIdDep) -> AnalyzeResponse:
         )
         raise HTTPException(status_code=400, detail="Photo exceeds the 10 MB size limit.")
 
-    raw = photo.file.read()
+    raw_parts: list[bytes] = []
+    remaining = _MAX_PHOTO_BYTES + 1
+    while remaining > 0:
+        chunk = photo.file.read(min(65536, remaining))
+        if not chunk:
+            break
+        raw_parts.append(chunk)
+        remaining -= len(chunk)
+    raw = b"".join(raw_parts)
     if len(raw) > _MAX_PHOTO_BYTES:
         log_security_event(
             "upload_rejected",

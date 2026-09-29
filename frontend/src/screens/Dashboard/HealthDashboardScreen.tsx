@@ -87,23 +87,46 @@ type Nav = CompositeNavigationProp<
 
 // ─── Line-glyph icons (inline svg, Guava colors — no icon lib) ────────────────}
 
-function BellGlyph({ size = 18, color = GV.ink }) {
+function PriorityGlyph({ size = 18, color = GV.ink }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path
-        d="M12 3a4 4 0 0 1 4 4v3.3l1.6 2.4a1 1 0 0 1-.8 1.6H7.2a1 1 0 0 1-.8-1.6L8 10.3V7a4 4 0 0 1 4-4Z"
+      <Circle
+        cx={12}
+        cy={12}
+        r={7.5}
         fill="none"
         stroke={color}
         strokeWidth={1.8}
-        strokeLinejoin="round"
       />
-      <Path
-        d="M10.3 18.4a2 2 0 0 0 3.4 0"
+      <Circle
+        cx={12}
+        cy={12}
+        r={3.8}
         fill="none"
         stroke={color}
         strokeWidth={1.8}
-        strokeLinecap="round"
       />
+      <Circle cx={12} cy={12} r={1.3} fill={color} />
+    </Svg>
+  );
+}
+
+function JournalGlyph({ size = 18, color = GV.ink }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Rect
+        x={6}
+        y={3.5}
+        width={12}
+        height={17}
+        rx={2.5}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.8}
+      />
+      <Line x1={9} y1={8.5} x2={15} y2={8.5} stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Line x1={9} y1={12} x2={15} y2={12} stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Line x1={9} y1={15.5} x2={12.5} y2={15.5} stroke={color} strokeWidth={1.8} strokeLinecap="round" />
     </Svg>
   );
 }
@@ -190,7 +213,7 @@ function HeaderBlock({
           )}
         </Pressable>
         <View style={styles.headerWordmark}>
-          <BrandLogo height={23} tint={GV.ink} />
+          <BrandLogo height={23} tint="#FFFFFF" />
         </View>
       </View>
 
@@ -201,7 +224,7 @@ function HeaderBlock({
           accessibilityRole="button"
           accessibilityLabel="Open my priorities"
         >
-          <Text style={styles.headerPriorityText}>P</Text>
+          <PriorityGlyph />
         </Pressable>
         <Pressable
           style={({ pressed }) => [styles.headerBell, pressed && { opacity: 0.7 }]}
@@ -217,7 +240,7 @@ function HeaderBlock({
           accessibilityRole="button"
           accessibilityLabel="Open timeline"
         >
-          <BellGlyph />
+          <JournalGlyph />
           {hasActivity ? <View style={styles.bellDot} /> : null}
         </Pressable>
       </View>
@@ -1480,12 +1503,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerPriorityText: {
-    fontFamily: FONT.semi,
-    fontSize: 20,
-    lineHeight: 24,
-    color: '#FFFFFF',
-  },  headerRight: {
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
