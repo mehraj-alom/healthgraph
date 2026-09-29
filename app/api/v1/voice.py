@@ -47,7 +47,15 @@ async def transcribe_turn(
             detail="Unsupported audio type. Send wav, m4a, aac, mp4, webm, 3gp, or ogg.",
         )
     try:
-        raw = await file.read()
+        raw_parts: list[bytes] = []
+        remaining = _MAX_TURN_BYTES + 1
+        while remaining > 0:
+            chunk = await file.read(min(65536, remaining))
+            if not chunk:
+                break
+            raw_parts.append(chunk)
+            remaining -= len(chunk)
+        raw = b"".join(raw_parts)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not read audio.")
     if not raw or len(raw) > _MAX_TURN_BYTES:

@@ -335,6 +335,23 @@ export async function setDocumentLocalUri(
 // VERIFICATION — user confirms the reading before it counts as reviewed
 // ============================================================================
 
+/** Idempotent guard: verification columns exist even if migration 17 has
+ *  not yet applied on a given device (repaired DBs, sideloaded updates). */
+async function ensureVerificationColumns(db: SQLiteDatabase): Promise<void> {
+  const cols = await db.getAllAsync<{ name: string }>(
+    `SELECT name FROM pragma_table_info('documents')`,
+  );
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has('user_verified')) {
+    await db.execAsync(
+      `ALTER TABLE documents ADD COLUMN user_verified INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+  if (!names.has('verify_note')) {
+    await db.execAsync(`ALTER TABLE documents ADD COLUMN verify_note TEXT`);
+  }
+}
+
 export interface DocumentVerification {
   verified: boolean;
   note: string | null;
@@ -346,6 +363,7 @@ export async function getDocumentVerification(
   documentId: string,
 ): Promise<DocumentVerification> {
   const db = await getDatabase();
+  await ensureVerificationColumns(db);
   const row = await db.getFirstAsync<{
     user_verified: number | null;
     verify_note: string | null;
@@ -368,6 +386,7 @@ export async function setDocumentVerification(
   note?: string | null,
 ): Promise<void> {
   const db = await getDatabase();
+  await ensureVerificationColumns(db);
   if (note === undefined) {
     await db.runAsync(
       `UPDATE documents SET user_verified = ? WHERE patient_id = ? AND document_id = ?`,
@@ -386,6 +405,7 @@ export async function listUnverifiedExtractedDocIds(
   patientId: string,
 ): Promise<string[]> {
   const db = await getDatabase();
+  await ensureVerificationColumns(db);
   const rows = await db.getAllAsync<{ document_id: string }>(
     `SELECT document_id FROM documents
      WHERE patient_id = ? AND status = 'EXTRACTED'

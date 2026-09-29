@@ -245,6 +245,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         '@/services/medicationReminders'
       );
       await cancelAllPatientReminders(patientId).catch(() => {});
+      // Cached patient files (documents, photos, decrypted temps) must
+      // never outlive the session the way the SQLite wipe guarantees.
+      const { wipePatientFiles } = await import('@/services/fileVault');
+      await wipePatientFiles().catch(() => {});
     }
     await clearPatientId();
     await firebaseSignOut(auth);

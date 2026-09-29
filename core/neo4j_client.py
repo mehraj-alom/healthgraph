@@ -18,6 +18,12 @@ class Neo4jDriverProxy:
 
     def _ensure_driver(self):
         if self._driver is None:
+            if NEO4J_PASSWORD == "password" and os.getenv("APP_ENV") == "production":
+                raise RuntimeError(
+                    "Production startup refused: NEO4J_PASSWORD is the "
+                    "well-known development default. Set a strong, unique "
+                    "NEO4J_PASSWORD in the production environment."
+                )
             try:
                 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
                 driver.verify_connectivity()
