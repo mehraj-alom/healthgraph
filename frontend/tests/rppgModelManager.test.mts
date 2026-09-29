@@ -27,9 +27,12 @@ import {
 } from '../src/services/assetHost.ts';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 function repoSrc(rel: string): string {
-  return fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
+  return fs.readFileSync(path.join(HERE, '..', rel), 'utf8');
 }
 
 // ============================================================================

@@ -32,18 +32,18 @@ jobs:
         working-directory: frontend
     env:
       # Production backend + runtime-asset hosts (public values, no secrets).
-      EXPO_PUBLIC_API_URL: https://api.healthgraph.shop
-      EXPO_PUBLIC_ASSET_CDN_URL: https://api.healthgraph.shop/assets
-      EXPO_PUBLIC_ANATOMY_CDN_URL: https://api.healthgraph.shop/assets
-      # Firebase *public client* identifiers for medg-50cbe (safe to embed in
-      # any client build; the service-account key is never used here). These
-      # may be moved to GitHub Actions Variables without changing the build.
-      EXPO_PUBLIC_FIREBASE_API_KEY: AIzaSyBX2nwNuCSqB3nxuhyDT-bqZExe7B2XNfg
-      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: medg-50cbe.firebaseapp.com
-      EXPO_PUBLIC_FIREBASE_PROJECT_ID: medg-50cbe
-      EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: medg-50cbe.appspot.com
-      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '891954375001'
-      EXPO_PUBLIC_FIREBASE_APP_ID: 1:891954375001:web:853d999bad1faa426f4448
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+      EXPO_PUBLIC_ASSET_CDN_URL: ${{ vars.EXPO_PUBLIC_ASSET_CDN_URL }}
+      EXPO_PUBLIC_ANATOMY_CDN_URL: ${{ vars.EXPO_PUBLIC_ANATOMY_CDN_URL }}
+      # Firebase *public client* identifiers (safe to embed in any client
+      # build; the service-account key is never used here). Values live in
+      # GitHub Actions Variables so no key-shaped string sits in tracking.
+      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+      EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
       GRADLE_OPTS: -Dorg.gradle.daemon=false
 
     steps:

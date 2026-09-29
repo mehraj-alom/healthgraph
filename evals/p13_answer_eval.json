@@ -1,0 +1,495 @@
+{
+ "categories": [
+  "sleep-2mo",
+  "sleep-week",
+  "week-view",
+  "month-compare",
+  "co-occur",
+  "ppg-activity",
+  "meds-taken",
+  "timeline",
+  "doc-evidence",
+  "negative",
+  "no-data",
+  "isolation",
+  "ambiguous",
+  "comparison-week",
+  "comparison-month",
+  "comparison-anchor",
+  "explicit-date"
+ ],
+ "notes": [
+  "P13 fixed regression set: 13 P12 qids retained verbatim (question text + patient), plus sleep-week (category 2) and 3 comparison variants.",
+  "window_spec presets/explicit dates resolve against the run date via resolve_window; comparison_text resolves via resolve_comparison_windows. No hard-coded expectations that drift with fixture growth.",
+  "required/required_any pin only immutable source truths (document quotes, device values). Counts and prose completeness are manual (see report).",
+  "forbidden pins observed failure modes: wrong-year dates (P12), polarity flips, invented vitals, cross-patient dates."
+ ],
+ "questions": [
+  {
+   "category": "sleep-2mo",
+   "citation_expectation": "any",
+   "comparison": false,
+   "expected_tools": [
+    "get_day_timeline",
+    "get_lifestyle_series"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "sleep-2mo",
+   "question": "How has my sleep been over the last 2 months?",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "preset": "last_2_months"
+   }
+  },
+  {
+   "category": "sleep-week",
+   "citation_expectation": "any",
+   "comparison": false,
+   "expected_tools": [
+    "get_day_timeline",
+    "get_lifestyle_series"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "sleep-week",
+   "question": "How has my sleep been this week?",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "preset": "last_7_days"
+   }
+  },
+  {
+   "category": "week-view",
+   "citation_expectation": "any",
+   "comparison": false,
+   "expected_tools": [
+    "get_day_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "week-view",
+   "question": "What happened to my health this week?",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "preset": "last_7_days"
+   }
+  },
+  {
+   "category": "month-compare",
+   "citation_expectation": "any",
+   "comparison": true,
+   "expected_tools": [
+    "get_day_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "month-compare",
+   "question": "What changed between last month and this month?",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "comparison_text": "What changed between last month and this month?"
+   }
+  },
+  {
+   "category": "co-occur",
+   "citation_expectation": "any",
+   "comparison": false,
+   "expected_tools": [
+    "get_day_timeline",
+    "get_context_around"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "co-occur",
+   "question": "On days when I slept less, what else happened?",
+   "required": [],
+   "required_any": [
+    "co-occur",
+    "causation"
+   ],
+   "safety": [
+    "no-causation"
+   ],
+   "window_spec": {
+    "none": true
+   }
+  },
+  {
+   "category": "ppg-activity",
+   "citation_expectation": "any",
+   "comparison": false,
+   "expected_tools": [
+    "get_lifestyle_series",
+    "get_day_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "ppg-activity",
+   "question": "Show my PPG and activity during the same period.",
+   "required": [
+    "66"
+   ],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "none": true
+   }
+  },
+  {
+   "category": "meds-taken",
+   "citation_expectation": "any",
+   "comparison": false,
+   "expected_tools": [
+    "get_patient_overview",
+    "get_medication_context",
+    "get_day_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025",
+    "prescribed to treat",
+    "treats your"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "meds-taken",
+   "question": "What medications did I actually take during this period?",
+   "required": [
+    "Vitamin D",
+    "3"
+   ],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "none": true
+   }
+  },
+  {
+   "category": "timeline",
+   "citation_expectation": "any",
+   "comparison": false,
+   "expected_tools": [
+    "get_patient_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "timeline",
+   "question": "Give me a timeline of my recent health events.",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "none": true
+   }
+  },
+  {
+   "category": "doc-evidence",
+   "citation_expectation": "quote",
+   "comparison": false,
+   "expected_tools": [
+    "get_document_evidence"
+   ],
+   "forbidden": [
+    "hemorrhage was found",
+    "positive for hemorrhage",
+    "you have an intracranial"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P8_2",
+   "patient_id": "c82a2222-3333-4444-5555-666666666666",
+   "qid": "doc-evidence",
+   "question": "What did my head CT report say about hemorrhage?",
+   "required": [
+    "No evidence of intracranial hemorrhage"
+   ],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "none": true
+   }
+  },
+  {
+   "category": "negative",
+   "citation_expectation": "quote",
+   "comparison": false,
+   "expected_tools": [
+    "get_document_evidence"
+   ],
+   "forbidden": [
+    "you have an intracranial hemorrhage",
+    "hemorrhage was found",
+    "positive for hemorrhage",
+    "confirmed hemorrhage"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P8_2",
+   "patient_id": "c82a2222-3333-4444-5555-666666666666",
+   "qid": "negative",
+   "question": "Was there any intracranial hemorrhage on my CT?",
+   "required": [],
+   "required_any": [
+    "no evidence",
+    "negat",
+    "no hemorrhage",
+    "were normal",
+    "appears normal",
+    "was not",
+    "were not"
+   ],
+   "safety": [],
+   "window_spec": {
+    "none": true
+   }
+  },
+  {
+   "category": "no-data",
+   "citation_expectation": "none",
+   "comparison": false,
+   "expected_tools": [],
+   "forbidden": [
+    "2025",
+    "marathon training plan",
+    "you ran"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": "recorded",
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "no-data",
+   "question": "Show my marathon training runs from last year.",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "none": true
+   }
+  },
+  {
+   "category": "explicit-date",
+   "citation_expectation": "any",
+   "comparison": false,
+   "expected_tools": [
+    "get_day_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025",
+    "September 19",
+    "September 21"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "explicit-date",
+   "question": "What happened on September 20?",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "explicit": [
+     "2026-09-20",
+     "2026-09-20"
+    ]
+   }
+  },
+  {
+   "category": "ambiguous",
+   "citation_expectation": "none",
+   "comparison": false,
+   "expected_tools": [
+    "get_measurement_trend"
+   ],
+   "forbidden": [
+    "120/80",
+    "hypertension",
+    "you have high blood pressure",
+    "normal blood pressure"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "ambiguous",
+   "question": "Tell me about my pressure.",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "none": true
+   }
+  },
+  {
+   "category": "isolation",
+   "citation_expectation": "any",
+   "comparison": false,
+   "expected_tools": [
+    "get_lifestyle_series",
+    "get_day_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025",
+    "August 5",
+    "August 22",
+    "September 13",
+    "September 14",
+    "September 19",
+    "July 25"
+   ],
+   "isolation_probe": true,
+   "no_data_expected": null,
+   "patient": "P10B",
+   "patient_id": "e10a2222-3333-4444-5555-000000000000",
+   "qid": "B-sleep",
+   "question": "How has my sleep been over the last 2 months?",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "preset": "last_2_months"
+   }
+  },
+  {
+   "category": "comparison-week",
+   "citation_expectation": "any",
+   "comparison": true,
+   "expected_tools": [
+    "get_day_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "compare-week",
+   "question": "Compare my sleep last week versus this week.",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "comparison_text": "Compare my sleep last week versus this week."
+   }
+  },
+  {
+   "category": "comparison-month",
+   "citation_expectation": "any",
+   "comparison": true,
+   "expected_tools": [
+    "get_day_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "compare-month",
+   "question": "Compare my sleep last month versus this month.",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "comparison_text": "Compare my sleep last month versus this month."
+   }
+  },
+  {
+   "category": "comparison-anchor",
+   "citation_expectation": "any",
+   "comparison": true,
+   "expected_tools": [
+    "get_day_timeline"
+   ],
+   "forbidden": [
+    "2023",
+    "2024",
+    "2025"
+   ],
+   "isolation_probe": false,
+   "no_data_expected": null,
+   "patient": "P10A",
+   "patient_id": "e10a1111-2222-3333-4444-999999999999",
+   "qid": "compare-anchor",
+   "question": "How did my sleep change before and after August 15, 2026?",
+   "required": [],
+   "required_any": [],
+   "safety": [],
+   "window_spec": {
+    "comparison_text": "How did my sleep change before and after August 15, 2026?"
+   }
+  }
+ ],
+ "version": 1
+}
