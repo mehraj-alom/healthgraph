@@ -62,6 +62,7 @@ import HealthGraphScreen from '@/screens/Body/HealthGraphScreen';
 import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
 import MedicationReminderScreen from '@/screens/Medications/MedicationReminderScreen';
 import MedicationCallScreen from '@/screens/Medications/MedicationCallScreen';
+import VoiceCheckinScreen from '@/screens/VoiceCheckin/VoiceCheckinScreen';
 import SattsTestScreen from '@/screens/Voice/SattsTestScreen';
 import VoiceTurnScreen from '@/screens/Voice/VoiceTurnScreen';
 import SymptomMapScreen from '@/screens/Body/SymptomMapScreen';
@@ -108,6 +109,7 @@ import {
   setReminderNotificationHandler,
 } from '@/services/reminderNotifications';
 import { reconcileMedicationReminders } from '@/services/medicationReminders';
+import { isVoiceCheckinTap } from '@/services/voiceCheckin/schedule';
 
 
 /* ============================================================================
@@ -162,6 +164,11 @@ function ReminderBridge() {
       setReminderNotificationHandler();
       onReceived = notificationListeners.addReceivedListener((event) => {
         if (AppState.currentState !== 'active') return;
+        const data = event.request.content.data;
+        if (isVoiceCheckinTap(data)) {
+          navigation.navigate('VoiceCheckin', { mode: 'ringing' });
+          return;
+        }
         const parsed = parseReminderTap(
           event.request.content.data,
           DEFAULT_ACTION_IDENTIFIER,
@@ -174,6 +181,10 @@ function ReminderBridge() {
         navigation.navigate('MedicationCall', { occurrenceId: parsed.occurrenceId });
       });
       onResponse = notificationListeners.addResponseListener((response) => {
+        if (isVoiceCheckinTap(response.notification.request.content.data)) {
+          navigation.navigate('VoiceCheckin', { mode: 'ringing' });
+          return;
+        }
         const parsed = parseReminderTap(
           response.notification.request.content.data,
           response.actionIdentifier,
@@ -199,6 +210,10 @@ function ReminderBridge() {
         const { getLastNotificationResponseAsync } = await import('expo-notifications');
         const last = await getLastNotificationResponseAsync().catch(() => null);
         if (!cancelled && last) {
+          if (isVoiceCheckinTap(last.notification.request.content.data)) {
+            navigation.navigate('VoiceCheckin', { mode: 'ringing' });
+            return;
+          }
           const parsed = parseReminderTap(
             last.notification.request.content.data,
             last.actionIdentifier,
@@ -618,6 +633,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="MedicationCall"
               component={MedicationCallScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Scheduled voice check-in call (setup, ringing, interview). */}
+            <RootStack.Screen
+              name="VoiceCheckin"
+              component={VoiceCheckinScreen}
               options={{
                 headerShown: false,
               }}

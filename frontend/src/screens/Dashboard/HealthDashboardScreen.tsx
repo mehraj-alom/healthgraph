@@ -667,6 +667,7 @@ function ExploreSection() {
     { label: 'Scan prescription', bg: '#527A6E', go: () => navigation.navigate('PrescriptionScanner') },
     { label: 'Cycle', bg: '#8A4A55', go: () => navigation.navigate('Cycle') },
     { label: 'Substance', bg: '#8A7A5C', go: () => navigation.navigate('Substance') },
+    { label: 'Voice check-in', bg: '#2E7A70', go: () => navigation.navigate('VoiceCheckin', { mode: 'setup' }) },
   ];
   return (
     <View style={styles.section}>
