@@ -17,7 +17,7 @@ class LLMUIAction(BaseModel):
 
 class AgentStructuredOutput(BaseModel):
     """The final structured output produced by the LangGraph synthesis node."""
-    response_text: str = Field(description="Clinical synthesis and conversational answer.")
+    response_text: str = Field(description="Plain conversational prose, no markdown (**/#/ - /1./code/tables). 2-4 sentences synthesized from evidence.")
     ui_actions: List[LLMUIAction] = Field(default_factory=list)
     citations: List[Citation] = Field(
         default_factory=list,

@@ -9,6 +9,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import {
   ensureReminderChannel,
@@ -75,7 +76,8 @@ export async function setVoiceCheckin(next: VoiceCheckinTime): Promise<boolean> 
         title: 'Health check-in',
         body: 'Your voice check-in call is here. Tap to answer.',
         data: { kind: VOICE_CHECKIN_KIND, patientId: patientId ?? null },
-        sound: 'default',
+        // iOS-only: Android sound is channel-owned (see reminderNotifications).
+        ...(Platform.OS === 'ios' ? { sound: 'default' } : {}),
         priority: N.AndroidNotificationPriority.MAX,
         vibrate: [0, 500, 250, 500],
         interruptionLevel: 'timeSensitive',

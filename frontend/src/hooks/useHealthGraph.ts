@@ -114,12 +114,17 @@ export function useHealthGraph(options?: {
   limit?: number;
   category?: string;
 }) {
+  // Defaults capped: backend caps each list at `limit` and the query at 25s.
+  // depth=1 keeps the first paint fast; retry=1 avoids tripling a heavy
+  // query (previously retry:2 + limit:100 + 120s = ERR_NETWORK NO_RESPONSE).
+  const depth = options?.depth ?? 1;
+  const limit = options?.limit ?? 60;
   return useQuery<HealthGraphData>({
-    queryKey: ['health-graph', options?.depth ?? 2, options?.limit ?? 100, options?.category ?? null],
+    queryKey: ['health-graph', depth, limit, options?.category ?? null],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (options?.depth) params.append('depth', String(options.depth));
-      if (options?.limit) params.append('limit', String(options.limit));
+      params.append('depth', String(depth));
+      params.append('limit', String(limit));
       if (options?.category) params.append('category', options.category);
 
       const queryString = params.toString();
@@ -144,8 +149,9 @@ export function useHealthGraph(options?: {
 
       return data;
     },
-    staleTime: 30 * 1000, // 30 seconds
-    retry: 2,
+    staleTime: 60 * 1000, // 60 seconds — graph is expensive, avoid refetch storms
+    gcTime: 5 * 60 * 1000,
+    retry: 1,
   });
 }
 

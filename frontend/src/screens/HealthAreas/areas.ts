@@ -66,6 +66,7 @@ export type AreaRouteName =
   | 'DailyLog'
   | 'Medications'
   | 'Timeline'
+  | 'Documents'
   | 'Substance'
   | 'Cycle'
   | 'SleepEngine'
@@ -96,7 +97,7 @@ export function areaRouteName(id: HealthAreaId): AreaRouteName | null {
     case 'medications':
       return 'Medications';
     case 'records':
-      return 'Timeline';
+      return 'Documents';
     case 'substance':
       return 'Substance';
     case 'cycle':

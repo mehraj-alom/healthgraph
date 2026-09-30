@@ -8,6 +8,7 @@
  */
 
 import { api } from '@/services/api';
+import { File } from 'expo-file-system';
 import type { SttTransport } from './stt';
 import { VoiceError } from './errors';
 
@@ -16,6 +17,22 @@ export const VOICE_TURN_MAX_BYTES = 5 * 1024 * 1024;
 
 export function createPakeetTransport(options?: { timeoutMs?: number }): SttTransport {
   return async (req) => {
+    // Pre-flight: a turn read while still recording (or after release) is a
+    // 0-byte/stale handle — the POST then fails in ~100ms as ERR_NETWORK
+    // NO_RESPONSE. Fail honestly here instead.
+    try {
+      const info = await new File(req.audioUri).info();
+      if (!info.exists || (info.size !== undefined && info.size === 0)) {
+        throw new VoiceError('INVALID_AUDIO', 'No recording was captured.');
+      }
+      if (info.size !== undefined && info.size > VOICE_TURN_MAX_BYTES) {
+        throw new VoiceError('INVALID_AUDIO', 'Voice turn too large (5 MB max). Record a shorter turn.');
+      }
+    } catch (e) {
+      if (e instanceof VoiceError) throw e;
+      // info() itself failed (released handle, missing file) — same cause.
+      throw new VoiceError('INVALID_AUDIO', 'No recording was captured.');
+    }
     const formData = new FormData();
     formData.append('file', {
       uri: req.audioUri,
@@ -32,9 +49,16 @@ export function createPakeetTransport(options?: { timeoutMs?: number }): SttTran
         { timeout: options?.timeoutMs ?? req.timeoutMs ?? 90_000 },
       );
     } catch (e: unknown) {
+      if (e instanceof VoiceError) throw e;
       const status = (e as { response?: { status?: number } })?.response?.status;
+      if (status === 400) {
+        throw new VoiceError('INVALID_AUDIO', 'That recording could not be read. Try again.');
+      }
       if (status === 413) {
         throw new VoiceError('INVALID_AUDIO', 'Voice turn too large (5 MB max). Record a shorter turn.');
+      }
+      if (status === 502) {
+        throw new VoiceError('TRANSCRIPTION_FAILED', 'Voice transcription failed for this turn. Try again.');
       }
       if (status === 503) {
         throw new VoiceError('MODEL_UNAVAILABLE', 'Voice transcription is unavailable right now. Try again later.');

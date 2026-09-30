@@ -186,6 +186,33 @@ export const FACE_UNAVAILABLE_BODY =
   'face inside the guide, and hold still. You can retry the face scan or ' +
   'switch to a fingertip measurement.';
 
+/** Build-capability failure: native face code/model missing (Expo Go or
+ *  stale preview). Retrying face can never succeed — go straight to
+ *  fingertip and reinstall the preview build. */
+export const FACE_BUILD_TITLE = 'Face scan needs the app build';
+export const FACE_BUILD_BODY =
+  'Face measurement is not available in this runtime. ' +
+  'Install the newest HealthGraph preview build (not Expo Go), grant camera, ' +
+  'and try again — or continue with a fingertip measurement now.';
+
+const BUILD_FAILURE_MARKERS = [
+  'expo go',
+  'app build',
+  'missing from this build',
+  'did not load in this build',
+  'native module',
+  'isavailable',
+  'not available in this',
+  'preview build',
+];
+
+/** True when the face failure is a build/capability miss, not a lock miss. */
+export function isFaceBuildFailure(reason: string | null): boolean {
+  if (!reason) return false;
+  const lower = reason.toLowerCase();
+  return BUILD_FAILURE_MARKERS.some((m) => lower.includes(m));
+}
+
 export const FINGERTIP_INSTRUCTIONS: readonly string[] = [
   'Place your fingertip completely over the camera and flash — cover them fully, no gaps.',
   'The flash must fire: the sensor cannot read your pulse in the dark.',

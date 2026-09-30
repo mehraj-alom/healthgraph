@@ -164,10 +164,34 @@ async function fileExists(dir: Directory, filename: string): Promise<boolean> {
   }
 }
 
+/**
+ * Delete stale `.download` temp files left by an interrupted/cancelled run.
+ * A killed app between downloadFileAsync and move() leaves
+ * `<name>.glb.download` on disk while the viewer only reads `<name>.glb`,
+ * so the package stays NOT_INSTALLED forever. Sweep before each run and
+ * surface leftovers in status logs.
+ */
+export async function sweepStaleAnatomyTemps(gender: Gender): Promise<number> {
+  const manifest = getManifest(gender);
+  const dir = genderDir(gender);
+  let swept = 0;
+  for (const model of manifest.models) {
+    try {
+      const temp = new File(dir, `${model.filename}.download`);
+      const info = await temp.info();
+      if (info.exists) {
+        await temp.delete();
+        swept += 1;
+      }
+    } catch {
+      // Best-effort — a missing dir just means nothing to sweep.
+    }
+  }
+  if (swept > 0) console.log(`[AnatomyDownload] Swept ${swept} stale .download temps (${gender})`);
+  return swept;
+}
+
 async function ensureDir(dir: Directory): Promise<void> {
-  // Create the full directory path including all intermediates.
-  // idempotent: true — safe to call even if already exists.
-  // intermediates: true — creates medgraph/ and anatomy/ if missing.
   try {
     await dir.create({ intermediates: true, idempotent: true });
   } catch (err) {
@@ -221,14 +245,22 @@ export async function getInstallationStatus(gender: Gender): Promise<{
     if (raw) installRecord = JSON.parse(raw) as InstallRecord;
   } catch { /* ignore */ }
 
-  // Verify ALL files actually exist on disk
+  // Verify ALL files actually exist on disk. Log stale `.download`
+  // leftovers so "downloaded but not showing" is diagnosable.
   let allExist = true;
+  let staleTemps = 0;
   for (const model of manifest.models) {
     const exists = await fileExists(dir, model.filename);
     if (!exists) {
       allExist = false;
-      break;
+      try {
+        const tempInfo = await new File(dir, `${model.filename}.download`).info();
+        if (tempInfo.exists) staleTemps += 1;
+      } catch { /* ignore */ }
     }
+  }
+  if (!allExist && staleTemps > 0 && __DEV__) {
+    console.log(`[AnatomyDownload] ${gender}: ${staleTemps} stale .download temps — resume to complete`);
   }
 
   if (!allExist || !installRecord) {
@@ -268,6 +300,9 @@ export async function downloadAnatomy(
   const manifest = getManifest(gender);
   const dir = genderDir(gender);
   await ensureDir(dir);
+  // Clear interrupted-run leftovers up front so a resume never reads them
+  // as installed and a stale temp never blocks the atomic move.
+  await sweepStaleAnatomyTemps(gender).catch(() => 0);
 
   const totalSize = manifest.models.reduce((sum, m) => sum + m.size, 0);
   let receivedBytes = 0;
@@ -390,7 +425,17 @@ export async function downloadAnatomy(
         await finalFile.delete();
       }
     } catch { /* file doesn't exist — proceed */ }
-    await tempFile.move(finalFile);
+    try {
+      await tempFile.move(finalFile);
+    } catch (err: any) {
+      // Surface move failures (locked file, no space) instead of leaving a
+      // .download that the viewer never reads.
+      throw new Error(`Failed to install ${model.filename}: ${String(err?.message ?? err)}`);
+    }
+    // Verify the final file landed — guards against silent move no-ops.
+    if (!(await fileExists(dir, model.filename))) {
+      throw new Error(`Failed to install ${model.filename}: final file missing after move`);
+    }
 
     receivedBytes += model.size;
     onProgress?.({

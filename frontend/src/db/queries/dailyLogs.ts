@@ -170,9 +170,9 @@ export async function getSleepNights(
 
 /**
  * Bounded weight history for the Weight Engine: VITAL_SIGN events inside
- * [startDate, endDate] (inclusive, YYYY-MM-DD on the group's log_date —
- * the local calendar day the check-in belongs to), oldest first.
- * Patient-scoped through the group's patient_id.
+ * [startDate, endDate] (inclusive, YYYY-MM-DD on the group's
+ * log_date — the local calendar day the check-in belongs to), oldest
+ * first. Patient-scoped through the group's patient_id.
  *
  * A weight vital is recognized by concept (LOINC 29463-7 or a weight
  * concept id) or by unit (kg/lb). Pounds convert to kilograms. One point
@@ -551,6 +551,120 @@ export async function upsertDailyLog(
   for (let i = 0; i < queued; i++) announceQueueWrite();
 
   return groupId;
+}
+
+/**
+ * Partial overlay for merging into a day without wiping it.
+ * upsertDailyLog has REPLACE semantics (absent scalars become null, all
+ * events are rebuilt), so pulse readings and voice answers must never
+ * write partial payloads directly — they merge through here instead.
+ */
+export interface DailyLogOverlay {
+  overall_wellbeing?: number;
+  energy_level?: number;
+  stress_level?: number;
+  sleep_minutes?: number;
+  water_ml?: number;
+  vitals?: { concept_id: string; value: number; unit: string }[];
+  pain?: { severity: number }[];
+}
+
+/**
+ * Build a complete check-in request from an existing detail (local or
+ * server — same shape) plus an overlay. Every existing scalar and event
+ * survives; overlay scalars win; overlay vitals replace same-concept
+ * entries (one reading per concept per day); overlay pain appends.
+ * Null detail (no log yet) yields an overlay-only request.
+ */
+export function buildCheckinRequestFromDetail(
+  logDate: string,
+  detail: DailyCheckInDetail | null,
+  overlay: DailyLogOverlay,
+): DailyCheckInRequest {
+  const replacedConcepts = new Set((overlay.vitals ?? []).map((v) => v.concept_id));
+  const vitals: DailyCheckInRequest['vitals'] = [
+    ...(detail?.vitals ?? [])
+      .filter((v) => v.concept_id != null && !replacedConcepts.has(v.concept_id))
+      .map((v) => ({
+        concept_id: v.concept_id as string,
+        value: v.value,
+        unit: v.unit,
+      })),
+    ...(overlay.vitals ?? []),
+  ];
+  const wellbeing = overlay.overall_wellbeing ?? detail?.overall_wellbeing ?? null;
+  const energy = overlay.energy_level ?? detail?.energy_level ?? null;
+  const stress = overlay.stress_level ?? detail?.stress_level ?? null;
+  // Sleep merges overlay-first like the other scalars: an overlay value wins,
+  // otherwise the day's existing duration survives (never wiped by a partial write).
+  const sleepMinutes = overlay.sleep_minutes ?? detail?.sleep_duration_minutes ?? null;
+  // Nutrition merges field-by-field: a water top-up must never wipe meals.
+  const nutrition: NonNullable<DailyCheckInRequest['nutrition']> = {
+    ...(detail?.water_ml != null ? { water_ml: detail.water_ml } : {}),
+    ...(detail?.meals_count != null ? { meals_count: detail.meals_count } : {}),
+    ...(detail?.appetite_level != null ? { appetite_level: detail.appetite_level } : {}),
+    ...(detail?.calories_kcal != null ? { calories_kcal: detail.calories_kcal } : {}),
+    ...(detail?.food_label ? { food_label: detail.food_label } : {}),
+    ...(overlay.water_ml != null ? { water_ml: overlay.water_ml } : {}),
+  };
+  const hasNutrition = Object.keys(nutrition).length > 0;
+  return {
+    log_date: logDate,
+    ...(wellbeing != null ? { overall_wellbeing: wellbeing } : {}),
+    ...(energy != null ? { energy_level: energy } : {}),
+    ...(stress != null ? { stress_level: stress } : {}),
+    ...(sleepMinutes != null
+      ? {
+          sleep: {
+            duration_minutes: sleepMinutes,
+            ...(detail?.sleep_quality != null ? { sleep_quality: detail.sleep_quality } : {}),
+            ...(detail?.sleep_awakenings != null ? { awakenings: detail.sleep_awakenings } : {}),
+          },
+        }
+      : {}),
+    ...(hasNutrition ? { nutrition } : {}),
+    ...(detail?.notes ? { notes: detail.notes } : {}),
+    symptoms: (detail?.symptoms ?? []).map((s) => ({
+      concept_id: s.concept_id ?? '',
+      severity: s.severity,
+      ...(s.duration_minutes != null ? { duration_minutes: s.duration_minutes } : {}),
+      ...(s.notes ? { notes: s.notes } : {}),
+    })),
+    vitals,
+    pain: [
+      ...(detail?.pain ?? []).map((p) => ({
+        severity: p.severity,
+        ...(p.body_location_id ? { body_location_id: p.body_location_id } : {}),
+        ...(p.pain_type ? { pain_type: p.pain_type } : {}),
+      })),
+      ...(overlay.pain ?? []),
+    ],
+    activities: (detail?.activities ?? []).map((a) => ({
+      activity_type: a.activity_type,
+      ...(a.duration_minutes != null ? { duration_minutes: a.duration_minutes } : {}),
+      ...(a.calories_burned != null ? { calories_burned: a.calories_burned } : {}),
+    })),
+    medications: (detail?.medications ?? []).map((m) => ({
+      medication_name: m.medication_name,
+      ...(m.dosage_value != null ? { dosage_value: m.dosage_value } : {}),
+      ...(m.dosage_unit ? { dosage_unit: m.dosage_unit } : {}),
+    })),
+  };
+}
+
+/**
+ * Merge an overlay into a day's local log, losslessly. Returns the group id.
+ * Pain lands in pain, vitals in vitals, water in nutrition — every other
+ * slot keeps exactly what the day already had.
+ */
+export async function mergeIntoDailyLog(
+  patientId: string,
+  logDate: string,
+  overlay: DailyLogOverlay,
+): Promise<string> {
+  const existing = await getDailyLogDetail(patientId, logDate).catch(() => null);
+  const request = buildCheckinRequestFromDetail(logDate, existing, overlay);
+  return upsertDailyLog(patientId, request);
 }
 
 /**

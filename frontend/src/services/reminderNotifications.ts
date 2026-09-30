@@ -93,7 +93,9 @@ export async function ensureReminderChannel(): Promise<void> {
       await N.setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
         name: 'Medication reminders',
         importance: N.AndroidImportance.MAX,
-        sound: 'default',
+        // Omit sound: Android 8+ channels default to the system notification
+        // sound. Passing 'default' logs "Custom sound 'default' not found"
+        // because no res/raw/default.* is bundled (see app.json plugin).
         enableVibrate: true,
         vibrationPattern: [0, 500, 250, 500],
         enableLights: true,
@@ -189,7 +191,9 @@ export async function scheduleReminderNotification(input: {
         title: input.title,
         body: input.body,
         data,
-        sound: 'default',
+        // iOS-only: Android 8+ sound is channel-owned; omitting avoids
+        // the "Custom sound 'default' not found" spam on every schedule.
+        ...(Platform.OS === 'ios' ? { sound: 'default' } : {}),
         priority: N.AndroidNotificationPriority.MAX,
         vibrate: [0, 500, 250, 500],
         categoryIdentifier: REMINDER_CATEGORY_ID,

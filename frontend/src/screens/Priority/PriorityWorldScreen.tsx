@@ -67,6 +67,7 @@ export default function PriorityWorldScreen() {
     hrPoints: localHr.points,
   });
   const [mapWidth, setMapWidth] = useState(0);
+  const [showAllPatterns, setShowAllPatterns] = useState(false);
 
   const goEngine = useCallback(
     (routeName: string, params?: Record<string, unknown>) => {
@@ -85,7 +86,8 @@ export default function PriorityWorldScreen() {
     [navigation],
   );
 
-  const preview = feedQuery.items.slice(0, 3);
+  const preview = showAllPatterns ? feedQuery.items : feedQuery.items.slice(0, 3);
+  const hasMorePatterns = feedQuery.items.length > 3;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -168,8 +170,19 @@ export default function PriorityWorldScreen() {
                     />
                   ))}
                 </View>
+                {hasMorePatterns ? (
+                  <Button
+                    title={showAllPatterns ? `Show less (${feedQuery.items.length})` : `Show all ${feedQuery.items.length} patterns`}
+                    variant="ghost"
+                    onPress={() => setShowAllPatterns((v) => !v)}
+                    fullWidth
+                    textStyle={styles.ghostText}
+                  />
+                ) : null}
                 <Button title="Open full graph" variant="ghost" onPress={goFullGraph} fullWidth textStyle={styles.ghostText} />
               </>
+            ) : feedQuery.isLocalLoading ? (
+              <Text style={styles.disclaimer}>Loading patterns…</Text>
             ) : null}
           </>
         )}

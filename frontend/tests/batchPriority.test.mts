@@ -306,7 +306,7 @@ describe('priority wiring', () => {
     assert.ok(dash.includes('headerPriority'), 'orange P chrome present');
   });
 
-  test('drawer Health category hosts its destinations with wave animation', () => {
+  test('drawer Explore list hosts its destinations (single home, no timers)', () => {
     const drawer = src('src/components/ProfileSheet.tsx');
     // Single home each: Medications + My Priorities live here; the two
     // compact Settings shortcuts are NOT duplicated in the drawer.
@@ -324,13 +324,16 @@ describe('priority wiring', () => {
     }
     assert.ok(settings.includes('Goals & focus areas'), 'compact goals shortcut remains');
     assert.ok(settings.includes('Health areas'), 'compact areas shortcut remains');
-    assert.ok(drawer.includes('WaveRow'), 'wave rows render the category');
+    // Post-redesign drawer (frosted-glass skill pass): destinations are
+    // declared once in EXPLORE_FEATURES and rendered as data-driven NavRow
+    // rows through a single go() dispatch — no per-destination handlers.
+    assert.ok(drawer.includes('EXPLORE_FEATURES'), 'destinations declared once');
+    assert.ok(drawer.includes("{ title: 'Medications', route: 'Medications' }"), 'medications destination');
+    assert.ok(drawer.includes("{ title: 'My Priorities', route: 'Priority' }"), 'my priorities opens its world');
+    assert.ok(drawer.includes('NavRow'), 'rows render the destinations');
+    assert.ok(drawer.includes('go(f.route'), 'single dispatch for all rows');
     assert.ok(drawer.includes('useReducedMotion'), 'reduced-motion path');
     assert.ok(!drawer.includes('setInterval') && !drawer.includes('setTimeout'), 'no timers');
-    assert.ok(drawer.includes('usePriority'), 'live priority names');
-    assert.ok(drawer.includes("go('Priority')"), 'my priorities opens its world');
-    // Health Areas lives behind the compact Settings shortcut (habits test pins it).
-    assert.ok(drawer.includes("go('Medications')"), 'medications destination');
   });
 
   test('Priority world is typed, registered, and composes existing contracts', () => {

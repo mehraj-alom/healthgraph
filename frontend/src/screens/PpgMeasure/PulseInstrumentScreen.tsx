@@ -27,12 +27,15 @@ import { getCachedPatientId } from '@/services/patientIdentity';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getRecentRppgMeasurements } from '@/db/queries/rppg';
 import {
+  FACE_BUILD_BODY,
+  FACE_BUILD_TITLE,
   FACE_PROBE_DEADLINE_MS,
   FACE_UNAVAILABLE_BODY,
   FACE_UNAVAILABLE_TITLE,
   FINGERTIP_INSTRUCTIONS,
   INITIAL_PULSE_STATE,
   decideFaceViability,
+  isFaceBuildFailure,
   pulseMachineReducer,
   type FaceProbeSample,
 } from '@/services/pulse/pulseMachine';
@@ -444,15 +447,25 @@ export default function PulseInstrumentScreen() {
         {machine.phase === 'FACE_UNAVAILABLE' && (
           <Panel>
             <EngravedLabel>Face path · standby</EngravedLabel>
-            <Text style={styles.titleSm}>{FACE_UNAVAILABLE_TITLE}</Text>
-            <Text style={styles.body}>{machine.reason ?? FACE_UNAVAILABLE_BODY}</Text>
-            <View style={styles.tips}>
-              <Text style={styles.tip}>· Face a lamp or window — the sensor needs light.</Text>
-              <Text style={styles.tip}>· Keep your face inside the guide oval.</Text>
-              <Text style={styles.tip}>· Hold still for a few seconds.</Text>
-            </View>
+            <Text style={styles.titleSm}>
+              {isFaceBuildFailure(machine.reason) ? FACE_BUILD_TITLE : FACE_UNAVAILABLE_TITLE}
+            </Text>
+            <Text style={styles.body}>
+              {isFaceBuildFailure(machine.reason)
+                ? `${FACE_BUILD_BODY}${machine.reason ? `\n\nDetail: ${machine.reason}` : ''}`
+                : (machine.reason ?? FACE_UNAVAILABLE_BODY)}
+            </Text>
+            {isFaceBuildFailure(machine.reason) ? null : (
+              <View style={styles.tips}>
+                <Text style={styles.tip}>· Face a lamp or window — the sensor needs light.</Text>
+                <Text style={styles.tip}>· Keep your face inside the guide oval.</Text>
+                <Text style={styles.tip}>· Hold still for a few seconds.</Text>
+              </View>
+            )}
             <TactileButton title="Use fingertip" onPress={chooseFingertip} accessibilityLabel="Switch to fingertip measurement" />
-            <TactileButton title="Retry face scan" onPress={retryFace} variant="secondary" />
+            {isFaceBuildFailure(machine.reason) ? null : (
+              <TactileButton title="Retry face scan" onPress={retryFace} variant="secondary" />
+            )}
           </Panel>
         )}
 

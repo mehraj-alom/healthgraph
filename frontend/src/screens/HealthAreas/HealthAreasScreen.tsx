@@ -79,6 +79,9 @@ export default function HealthAreasScreen() {
       case 'Timeline':
         navigation.navigate('Timeline');
         break;
+      case 'Documents':
+        navigation.navigate('Documents');
+        break;
       case 'Substance':
         navigation.navigate('Substance');
         break;

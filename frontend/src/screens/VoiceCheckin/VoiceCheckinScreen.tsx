@@ -185,13 +185,12 @@ export default function VoiceCheckinScreen() {
       clearTimers();
       stopSpeaking();
       try {
-        void recorder.stop();
+        if (recorder.isRecording) void recorder.stop();
       } catch {
         // Never recording — nothing to stop.
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [recorder, clearTimers],
   );
 
   // ---- setup: load current time ----
@@ -218,17 +217,23 @@ export default function VoiceCheckinScreen() {
   }, [time]);
 
   // ---- interview engine ----
+  // Single stop-then-read helper: every turn MUST stop before reading uri.
+  // Reading recorder.uri while still recording yields null/stale headers,
+  // which breaks Q2+ (prepare-while-recording throws, upload is 0 bytes).
   const stopRecording = useCallback(async (): Promise<string | null> => {
     try {
-      await recorder.stop();
+      if (recorder.isRecording) await recorder.stop();
     } catch {
       // Auto-stop races harmlessly.
     }
+    // Android needs a tick to flush the m4a header before upload.
+    await new Promise<void>((r) => setTimeout(r, 150));
     return recorder.uri ?? null;
   }, [recorder]);
 
   const finishAnswer = useCallback(
     async (uri: string | null) => {
+      clearTimers();
       const { qIndex: qi } = stateRef.current;
       const q = INTERVIEW_SCRIPT[qi];
       if (!q || !uri) {
@@ -268,10 +273,11 @@ export default function VoiceCheckinScreen() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [recorder],
+    [clearTimers],
   );
 
   const startListening = useCallback(async () => {
+    clearTimers();
     setTranscript(null);
     setParsed(null);
     setError(null);
@@ -282,6 +288,14 @@ export default function VoiceCheckinScreen() {
         setError('Microphone denied. Enable it in Settings to answer by voice.');
         setPhase('heard');
         return;
+      }
+      // Q2+ guard: a previous turn may still hold the recorder (auto-stop
+      // race). Stop before prepare, otherwise prepare-while-recording throws
+      // and the mic never starts.
+      try {
+        if (recorder.isRecording) await recorder.stop();
+      } catch {
+        // Stale handle — prepare below will re-arm.
       }
       await recorder.prepareToRecordAsync();
       recorder.record();
@@ -295,14 +309,23 @@ export default function VoiceCheckinScreen() {
             clearInterval(timer.current);
             timer.current = null;
           }
-          void finishAnswer(recorder.uri);
+          // MUST stop before reading uri — never finishAnswer(recorder.uri).
+          void (async () => {
+            try {
+              if (recorder.isRecording) await recorder.stop();
+            } catch {
+              // ignore — uri read below still valid
+            }
+            await new Promise<void>((r) => setTimeout(r, 150));
+            await finishAnswer(recorder.uri);
+          })();
         }
       }, 250);
     } catch {
       setError('Microphone could not start.');
       setPhase('heard');
     }
-  }, [recorder, finishAnswer]);
+  }, [recorder, finishAnswer, clearTimers]);
 
   const askCurrent = useCallback(async () => {
     const { qIndex: qi } = stateRef.current;
@@ -342,8 +365,10 @@ export default function VoiceCheckinScreen() {
       clearInterval(timer.current);
       timer.current = null;
     }
-    await finishAnswer(recorder.uri);
-  }, [recorder, finishAnswer]);
+    // MUST stop before reading uri — same Q2+ bug as the auto-timeout.
+    const uri = await stopRecording();
+    await finishAnswer(uri);
+  }, [finishAnswer, stopRecording]);
 
   const answerCall = useCallback(() => {
     tapTick();

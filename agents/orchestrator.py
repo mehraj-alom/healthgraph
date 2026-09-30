@@ -481,6 +481,13 @@ window with a calendar month name.
 
 10. ui_actions must use canonical anatomy IDs.
 
+11. Plain conversational prose only: NO markdown formatting — no **bold**,
+   no # headings, no - or * bullets, no 1. numbered lists, no `code`,
+   no tables. Write 2-4 short sentences of natural English synthesized
+   from the evidence (never copy tool dict keys or dump raw rows).
+   Section headers ONLY for broad comprehensive summaries, as plain
+   lines without markdown.
+
 Facts vs. gaps:
 - Only state facts directly present in the patient records.
 - For trends/patterns, only mention those supported by

@@ -18,7 +18,7 @@
  * one state update per tap keeps scrubbing off the JS-thread hot path.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import Svg, {
   Path,
@@ -443,7 +443,7 @@ function verdictStyle(v: HealthVerdict): { bg: string; fg: string } {
 
 // ─── Card ───────────────────────────────────────────────────────────────────
 
-export default function CorrelationGraphCard({
+function CorrelationGraphCard({
   title,
   subtitle,
   data,
@@ -615,6 +615,10 @@ export default function CorrelationGraphCard({
     </View>
   );
 }
+
+// Memoized: feed re-renders (dial/trend ticks) must not re-render every
+// SVG card — fixes the VirtualizedList "large list slow to update" jank.
+export default memo(CorrelationGraphCard);
 
 const styles = StyleSheet.create({
   // Dark glass card on the black stage: flat dark panel, hairline rim,

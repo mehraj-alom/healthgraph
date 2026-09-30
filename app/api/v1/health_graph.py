@@ -287,6 +287,14 @@ def get_health_graph(
     patient's data through shared anatomy nodes.
     """
     patient_id_str = str(patient_id)
+    # Visible request log — previously the endpoint logged only on success,
+    # so "no graph related log" meant the 120s query died silently client-side.
+    print(f"[HealthGraph] request patient={patient_id_str[:8]}.. depth={depth} limit={limit} category={category}")
+    # Per-list Cypher cap: the Python selector below trims to `limit` total,
+    # but without a DB-side cap every OPTIONAL MATCH collect() fans out over
+    # the full patient graph (the 120s ERR_NETWORK). $node_cap bounds each
+    # RETURN list; depth is reserved (query is depth-2 shaped, depth>=2 full).
+    node_cap = max(10, min(int(limit), 500))
 
     # Ownership-aware traversal: only follow outgoing relationships from patient
     # through specific relationship types. AnatomicalStructure is a terminal node.
@@ -633,36 +641,45 @@ def get_health_graph(
          collect(DISTINCT {{source: p.id, target: pp2.id, type: type(r32)}}) AS rels_patient_ppg
 
     RETURN p,
-           [x IN observations WHERE x IS NOT NULL] AS obs_list,
-           [x IN structures WHERE x IS NOT NULL] AS struct_list,
-           [x IN all_docs2 WHERE x IS NOT NULL] AS doc_list,
-           [x IN all_te WHERE x IS NOT NULL] AS te_list,
-           [x IN all_meds WHERE x IS NOT NULL] AS med_list,
-           [x IN medication_events WHERE x IS NOT NULL] AS med_taken_list,
-           [x IN all_concepts WHERE x IS NOT NULL] AS concept_list,
-           [x IN all_canon_meds WHERE x IS NOT NULL] AS canon_med_list,
-           [x IN med_requests WHERE x IS NOT NULL] AS req_list,
-           [x IN conditions WHERE x IS NOT NULL] AS cond_list,
-           [x IN visits WHERE x IS NOT NULL] AS visit_list,
-           [x IN statements WHERE x IS NOT NULL] AS stmt_list,
-           [x IN measurements WHERE x IS NOT NULL] AS mm_list,
-           [x IN med_versions WHERE x IS NOT NULL] AS ver_list,
-           [x IN sleep_eps WHERE x IS NOT NULL] AS sleep_list,
-           [x IN activities WHERE x IS NOT NULL] AS act_list,
-           [x IN nutrition WHERE x IS NOT NULL] AS ni_list,
-           [x IN food_scans WHERE x IS NOT NULL] AS fs_list,
-           [x IN food_entries WHERE x IS NOT NULL] AS fe_list,
-           [x IN ppg WHERE x IS NOT NULL] AS ppg_list,
+           [x IN observations WHERE x IS NOT NULL][..$node_cap] AS obs_list,
+           [x IN structures WHERE x IS NOT NULL][..$node_cap] AS struct_list,
+           [x IN all_docs2 WHERE x IS NOT NULL][..$node_cap] AS doc_list,
+           [x IN all_te WHERE x IS NOT NULL][..$node_cap] AS te_list,
+           [x IN all_meds WHERE x IS NOT NULL][..$node_cap] AS med_list,
+           [x IN medication_events WHERE x IS NOT NULL][..$node_cap] AS med_taken_list,
+           [x IN all_concepts WHERE x IS NOT NULL][..$node_cap] AS concept_list,
+           [x IN all_canon_meds WHERE x IS NOT NULL][..$node_cap] AS canon_med_list,
+           [x IN med_requests WHERE x IS NOT NULL][..$node_cap] AS req_list,
+           [x IN conditions WHERE x IS NOT NULL][..$node_cap] AS cond_list,
+           [x IN visits WHERE x IS NOT NULL][..$node_cap] AS visit_list,
+           [x IN statements WHERE x IS NOT NULL][..$node_cap] AS stmt_list,
+           [x IN measurements WHERE x IS NOT NULL][..$node_cap] AS mm_list,
+           [x IN med_versions WHERE x IS NOT NULL][..$node_cap] AS ver_list,
+           [x IN sleep_eps WHERE x IS NOT NULL][..$node_cap] AS sleep_list,
+           [x IN activities WHERE x IS NOT NULL][..$node_cap] AS act_list,
+           [x IN nutrition WHERE x IS NOT NULL][..$node_cap] AS ni_list,
+           [x IN food_scans WHERE x IS NOT NULL][..$node_cap] AS fs_list,
+           [x IN food_entries WHERE x IS NOT NULL][..$node_cap] AS fe_list,
+           [x IN ppg WHERE x IS NOT NULL][..$node_cap] AS ppg_list,
            rels_patient_obs + rels_obs_struct + rels_patient_te + rels_obs_doc + rels_obs_doc2 + rels_obs_te + rels_patient_med + rels_patient_med_taken + rels_med_taken_from + rels_te_concept + rels_patient_req + rels_patient_cond + rels_patient_visit + rels_patient_stmt + rels_req_med + rels_req_cond + rels_req_stmt + rels_stmt_cond + rels_taken_req + rels_occurred + rels_cond_doc + rels_req_doc + rels_patient_mm + rels_mm_doc + rels_mm_concept + rels_req_ver + rels_ver_sup + rels_patient_sleep + rels_patient_act + rels_patient_ni + rels_patient_fs + rels_fs_entry + rels_patient_ppg AS all_rels
     LIMIT 1
     """
 
     try:
         with neo4j_driver.session() as session:
-            result = session.run(cypher, patient_id=patient_id_str)
+            # 25s server-side cap: previously unbounded, the client 120s
+            # axios timeout fired first and surfaced as ERR_NETWORK NO_RESPONSE.
+            result = session.run(
+                cypher, patient_id=patient_id_str, node_cap=node_cap, timeout=25.0
+            )
             record = result.single()
     except (ServiceUnavailable, SessionExpired):
         raise _neo4j_unavailable()
+    except Exception as exc:
+        # Timeout / transient Cypher failure: 503 (retryable) with a log line,
+        # never a silent hang.
+        print(f"[HealthGraph] query failed depth={depth} limit={limit}: {type(exc).__name__}: {exc}")
+        raise HTTPException(status_code=503, detail="Health graph temporarily unavailable, try again.")
 
     if not record:
         return HealthGraphResponse(nodes=[], edges=[], total_nodes=0, total_edges=0)

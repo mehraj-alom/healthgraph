@@ -1,5 +1,6 @@
 import uuid
 import asyncio
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,6 +26,24 @@ router = APIRouter(prefix="/api/v1/chat", tags=["Agent Chat"])
 # fail_open in local so development works without Redis; fail_closed in
 # preview/production so "Redis down = unlimited AI" is impossible.
 _chat_limiter = RateLimiter()
+
+
+def _strip_markdown(text: str) -> str:
+    """Fallback sanitizer: the frontend renders raw <Text>, so literal **
+    stays visible. Prompt rule 11 bans markdown; this strips stragglers
+    (bold/italic/code/headers/bullets) into plain conversational prose."""
+    if not text:
+        return text
+    out = text
+    out = re.sub(r'\*\*(.+?)\*\*', r'\1', out)
+    out = re.sub(r'__(.+?)__', r'\1', out)
+    out = re.sub(r'(?m)^\s*#{1,6}\s*', '', out)
+    out = re.sub(r'(?m)^\s*[-*]\s+', '', out)
+    out = re.sub(r'(?m)^\s*\d+\.\s+', '', out)
+    out = re.sub(r'`(.+?)`', r'\1', out)
+    out = re.sub(r'[ \t]{2,}', ' ', out)
+    out = re.sub(r'\n{3,}', '\n\n', out)
+    return out.strip()
 
 def _get_agent(request: Request):
     agent = request.app.state.medical_agent
@@ -147,7 +166,7 @@ async def process_chat(
 
     return ChatResponse(
         conversation_id=conversation_id,
-        response_text=final_output.response_text if final_output else "Processing incomplete.",
+        response_text=_strip_markdown(final_output.response_text) if final_output else "Processing incomplete.",
         ui_actions=hydrated_actions,
         citations=list(final_output.citations) if final_output and final_output.citations else [],
     )
