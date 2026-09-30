@@ -53,6 +53,40 @@ class Neo4jDriverProxy:
 neo4j_driver = Neo4jDriverProxy()
 
 
+def bump_patient_graph_rev(tx, patient_id) -> None:
+    """Mint a fresh opaque revision key on the Patient node.
+
+    Every mutation of patient graph data must call this in the SAME
+    transaction as the write, so the key changes atomically with the data.
+    randomUUID (not a counter) is deliberate: concurrent writers can never
+    lose an update — each write yields a distinct key.
+    Readers (GET /health-graph/revision) compare keys instead of
+    re-running the full graph query on every screen open.
+    """
+    pid = str(patient_id or "").strip()
+    if not pid:
+        return
+    tx.run(
+        "MATCH (p:Patient {id: $pid}) SET p.graph_rev = randomUUID()",
+        pid=pid,
+    )
+
+
+def read_patient_graph_rev(session, patient_id):
+    """Return the patient's current graph revision key, or None.
+
+    None means "unknown" (no Patient node yet, or pre-revision data):
+    callers must treat it as a cache miss and fetch full.
+    """
+    record = session.run(
+        "MATCH (p:Patient {id: $pid}) RETURN p.graph_rev AS rev",
+        pid=str(patient_id),
+    ).single()
+    if not record:
+        return None
+    return record.get("rev") or None
+
+
 def init_neo4j_driver():
     """Initializes and verifies the Neo4j connection."""
     return neo4j_driver._ensure_driver()

@@ -635,6 +635,12 @@ def erase_patient_graph(driver, patient_id: uuid.UUID, *, delete_patient_node: b
             for stmt in stmts:
                 record = session.run(stmt["cypher"], **stmt["params"]).single()
                 deleted[stmt["description"]] = int((record or {}).get("deleted", 0) or 0)
+            if not delete_patient_node:
+                # Delete-data mode keeps the Patient node: mint a fresh
+                # revision so cached graph payloads invalidate. (Account
+                # mode deletes the node itself, so the key is gone too.)
+                from core.neo4j_client import bump_patient_graph_rev
+                session.execute_write(bump_patient_graph_rev, str(patient_id))
             verify = build_patient_graph_verify()
             residual = session.run(
                 verify["cypher"], pid=str(patient_id), prefix=f"{patient_id}:"

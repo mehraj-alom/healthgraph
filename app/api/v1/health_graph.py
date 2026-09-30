@@ -59,6 +59,14 @@ class HealthGraphResponse(BaseModel):
     total_nodes: int
     total_edges: int
     has_more: bool = False
+    # Opaque revision key for client-side caching (see GET /revision).
+    # Changes on every graph mutation; clients store payloads against it
+    # and skip the full query while their key matches.
+    rev: Optional[str] = None
+
+
+class GraphRevisionResponse(BaseModel):
+    rev: Optional[str] = None
 
 
 class GraphNodeDetailResponse(BaseModel):
@@ -728,6 +736,15 @@ def get_health_graph(
     if not record:
         return HealthGraphResponse(nodes=[], edges=[], total_nodes=0, total_edges=0)
 
+    # Revision key travels with the payload so the client can cache it.
+    try:
+        rev = record["p"].get("graph_rev") or None
+    except Exception:
+        try:
+            rev = dict(record["p"]).get("graph_rev") or None
+        except Exception:
+            rev = None
+
     nodes = []
     seen_node_ids = set()
 
@@ -1080,6 +1097,7 @@ def get_health_graph(
         total_nodes=len(nodes),
         total_edges=len(edges),
         has_more=has_more,
+        rev=rev,
     )
 
 
@@ -1909,6 +1927,27 @@ def _build_node_detail(
 
         traceback.print_exc()
     return None
+
+
+@router.get("/revision", response_model=GraphRevisionResponse)
+def get_graph_revision(
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+):
+    """Cheap cache key for the patient's graph: single-node lookup, ~ms.
+
+    Clients store full graph payloads against this key and skip the heavy
+    query while their key matches. null = unknown (no data yet): fetch full.
+    Registered before /{node_id} so "revision" never parses as a node id.
+    """
+    from core.neo4j_client import read_patient_graph_rev
+    try:
+        with neo4j_driver.session() as session:
+            return GraphRevisionResponse(rev=read_patient_graph_rev(session, str(patient_id)))
+    except (ServiceUnavailable, SessionExpired):
+        raise _neo4j_unavailable()
+    except Exception:
+        # A revision miss must never break the client: null forces full fetch.
+        return GraphRevisionResponse(rev=None)
 
 
 @router.get("/{node_id:path}", response_model=GraphNodeDetailResponse)

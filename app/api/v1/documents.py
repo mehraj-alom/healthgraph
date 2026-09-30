@@ -422,6 +422,10 @@ def delete_document(
                 document_id=str(document_id),
                 patient_id=str(patient_id),
             )
+            # A document left the graph: invalidate cached graph payloads.
+            from core.neo4j_client import bump_patient_graph_rev
+            with neo4j_driver.session() as rev_session:
+                rev_session.execute_write(bump_patient_graph_rev, str(patient_id))
     except Exception as e:
         logger.warning("Neo4j cascade delete skipped for document=%s: %s", document_id, type(e).__name__)
 

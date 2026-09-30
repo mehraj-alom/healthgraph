@@ -248,39 +248,13 @@ def _process_outbox_events(db: Session, driver, batch_size: int = 50):
     with driver.session() as neo4j_session:
         for event in events:
             try:
-                # Explicitly route event types (or fail permanently)
-                if event.event_type == OutboxEventType.OBSERVATION_RECORDED:
-                    neo4j_session.execute_write(_project_observation_tx, event.payload)
-                elif event.event_type == OutboxEventType.CLINICAL_EVENT_RECORDED:
-                    neo4j_session.execute_write(_project_clinical_event_tx, event.payload)
-                elif event.event_type == OutboxEventType.MEDICATION_RECORDED:
-                    neo4j_session.execute_write(_project_medication_tx, event.payload)
-                elif event.event_type == OutboxEventType.MEDICATION_TAKEN_RECORDED:
-                    neo4j_session.execute_write(_project_medication_taken_tx, event.payload)
-                elif event.event_type == OutboxEventType.CONDITION_RECORDED:
-                    neo4j_session.execute_write(_project_condition_tx, event.payload)
-                elif event.event_type == OutboxEventType.VISIT_RECORDED:
-                    neo4j_session.execute_write(_project_visit_tx, event.payload)
-                elif event.event_type == OutboxEventType.STATEMENT_RECORDED:
-                    neo4j_session.execute_write(_project_statement_tx, event.payload)
-                elif event.event_type == OutboxEventType.MEASUREMENT_RECORDED:
-                    neo4j_session.execute_write(_project_measurement_tx, event.payload)
-                elif event.event_type == OutboxEventType.MEDICATION_VERSION_RECORDED:
-                    neo4j_session.execute_write(_project_medication_version_tx, event.payload)
-                elif event.event_type == OutboxEventType.SLEEP_RECORDED:
-                    neo4j_session.execute_write(_project_sleep_tx, event.payload)
-                elif event.event_type == OutboxEventType.ACTIVITY_RECORDED:
-                    neo4j_session.execute_write(_project_activity_tx, event.payload)
-                elif event.event_type == OutboxEventType.NUTRITION_RECORDED:
-                    neo4j_session.execute_write(_project_nutrition_tx, event.payload)
-                elif event.event_type == OutboxEventType.FOOD_SCAN_RECORDED:
-                    neo4j_session.execute_write(_project_food_scan_tx, event.payload)
-                elif event.event_type == OutboxEventType.PPG_RECORDED:
-                    neo4j_session.execute_write(_project_ppg_tx, event.payload)
-                elif event.event_type == OutboxEventType.GRAPH_NODE_RETIRED:
-                    neo4j_session.execute_write(_project_node_retired_tx, event.payload)
-                else:
+                # Explicit routing table (unknown types fail permanently).
+                # The revision bump runs in the SAME transaction as the
+                # projection so the cache key and the data can never diverge.
+                handler = _PROJECTORS.get(event.event_type)
+                if handler is None:
                     raise PermanentProjectionError(f"Unsupported outbox event type: {event.event_type}")
+                neo4j_session.execute_write(_project_and_bump, handler, event.payload)
 
                 # Success
                 event.status = OutboxStatus.PROCESSED
@@ -1214,3 +1188,32 @@ def _project_node_retired_tx(tx, payload: dict):
     """
     result = tx.run(cypher, patient_id=payload["patient_id"], node_id=payload["node_id"])
     result.consume()
+
+# Explicit event-type routing for the outbox drain. Defined at module end
+# because the projector functions live above. The revision bump is applied
+# by _project_and_bump in the same transaction as the projection, so the
+# cache key and the projected data can never diverge.
+_PROJECTORS = {
+    OutboxEventType.OBSERVATION_RECORDED: _project_observation_tx,
+    OutboxEventType.CLINICAL_EVENT_RECORDED: _project_clinical_event_tx,
+    OutboxEventType.MEDICATION_RECORDED: _project_medication_tx,
+    OutboxEventType.MEDICATION_TAKEN_RECORDED: _project_medication_taken_tx,
+    OutboxEventType.CONDITION_RECORDED: _project_condition_tx,
+    OutboxEventType.VISIT_RECORDED: _project_visit_tx,
+    OutboxEventType.STATEMENT_RECORDED: _project_statement_tx,
+    OutboxEventType.MEASUREMENT_RECORDED: _project_measurement_tx,
+    OutboxEventType.MEDICATION_VERSION_RECORDED: _project_medication_version_tx,
+    OutboxEventType.SLEEP_RECORDED: _project_sleep_tx,
+    OutboxEventType.ACTIVITY_RECORDED: _project_activity_tx,
+    OutboxEventType.NUTRITION_RECORDED: _project_nutrition_tx,
+    OutboxEventType.FOOD_SCAN_RECORDED: _project_food_scan_tx,
+    OutboxEventType.PPG_RECORDED: _project_ppg_tx,
+    OutboxEventType.GRAPH_NODE_RETIRED: _project_node_retired_tx,
+}
+
+
+def _project_and_bump(tx, project_fn, payload: dict) -> None:
+    """Run a projector then mint a fresh graph revision key, atomically."""
+    project_fn(tx, payload)
+    from core.neo4j_client import bump_patient_graph_rev
+    bump_patient_graph_rev(tx, (payload or {}).get("patient_id"))

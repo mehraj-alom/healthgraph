@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
+import { getCachedPatientId } from '@/services/patientIdentity';
+import {
+  graphCacheKey,
+  loadGraphCache,
+  saveGraphCache,
+} from '@/utils/healthGraphCache';
 
 export type GraphNodeType =
   | 'patient'
@@ -51,6 +57,8 @@ export interface HealthGraphData {
   total_nodes: number;
   total_edges: number;
   has_more: boolean;
+  /** Opaque server revision key (see GET /health-graph/revision). */
+  rev?: string | null;
 }
 
 /** Provenance object attached to clinical answers (mirrors backend Citation). */
@@ -119,16 +127,40 @@ export function useHealthGraph(options?: {
   // query (previously retry:2 + limit:100 + 120s = ERR_NETWORK NO_RESPONSE).
   const depth = options?.depth ?? 1;
   const limit = options?.limit ?? 60;
+  const category = options?.category ?? null;
   return useQuery<HealthGraphData>({
-    queryKey: ['health-graph', depth, limit, options?.category ?? null],
+    queryKey: ['health-graph', depth, limit, category],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.append('depth', String(depth));
       params.append('limit', String(limit));
-      if (options?.category) params.append('category', options.category);
+      if (category) params.append('category', category);
 
       const queryString = params.toString();
       const url = `/api/v1/health-graph${queryString ? `?${queryString}` : ''}`;
+
+      // Stale-while-revalidate against the persistent cache: the revision
+      // endpoint is a single-node lookup (~ms). A matching key resolves
+      // from disk with no heavy query; anything else falls through to a
+      // full fetch that refreshes the cache entry.
+      const patientId = getCachedPatientId();
+      const cacheKey = patientId ? graphCacheKey(patientId, depth, limit, category) : null;
+      const cached = cacheKey ? await loadGraphCache(cacheKey) : null;
+      if (cached) {
+        try {
+          const revBody = await api.get<{ rev?: string | null }>('/api/v1/health-graph/revision');
+          const serverRev = revBody?.rev ?? null;
+          if (serverRev && cached.rev === serverRev) {
+            if (__DEV__) console.log('[HealthGraph] cache hit rev=', serverRev);
+            return cached.data;
+          }
+        } catch {
+          // Revision check failed (offline?): serve the cached payload
+          // rather than failing the screen — refetch will retry later.
+          if (__DEV__) console.log('[HealthGraph] revision check failed, serving cache');
+          return cached.data;
+        }
+      }
 
       const response = await api.get<HealthGraphData>(url);
       const data = response as unknown as HealthGraphData;
@@ -146,6 +178,15 @@ export function useHealthGraph(options?: {
         'observation=', nodesByType['observation'] ?? 0,
         'document=', nodesByType['document'] ?? 0,
         'timeline_event=', nodesByType['timeline_event'] ?? 0);
+
+      // Full fetch: persist against the server revision for next open.
+      if (cacheKey) {
+        await saveGraphCache(cacheKey, {
+          rev: data?.rev ?? null,
+          data,
+          savedAt: Date.now(),
+        });
+      }
 
       return data;
     },
