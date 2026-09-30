@@ -4,9 +4,10 @@
  * Pure engine math runs directly (nutritionEngine.ts is zero-import).
  * Meal/kcal change rules are parity-checked against the shared changes.ts
  * contract. The meal-type list is drift-pinned against FoodScan/mealTypes.
- * RN-bound layers are pinned by source-text contract. Absences (no macros,
- * no deficit, no scores, no diagnoses, no migration) are tested as
- * absences.
+ * RN-bound layers are pinned by source-text contract. P2.2 adds user-owned
+ * macro targets + scan-sum rings (macroTargets, tested separately);
+ * remaining absences (no deficit framing, no predictions, no diagnoses,
+ * no migration) are still tested as absences.
  */
 
 import { describe, test } from 'node:test';
@@ -442,7 +443,10 @@ describe('batch 6f wiring', () => {
     assert.ok(erase.includes('daily_log_events'), 'event rows wiped');
   });
 
-  test('scan macros never leak into the engine as persisted data', () => {
+  test('scan macros reach rings read-only: no new columns, no group-level leak', () => {
+    // P2.2: macro sums flow from existing scan breakdowns into the rings;
+    // nothing new is persisted (no columns, no tables) and the group-level
+    // dailyLogs query stays macro-free.
     const hay = [
       src('src/screens/NutritionEngine/nutritionEngine.ts'),
       src('src/screens/NutritionEngine/NutritionEngineScreen.tsx'),
@@ -451,14 +455,27 @@ describe('batch 6f wiring', () => {
     assert.ok(!hay.includes('protein_g'), 'no persisted protein');
     assert.ok(!hay.includes('carbs_g'), 'no persisted carbs');
     assert.ok(!hay.includes('fat_g'), 'no persisted fat');
+    const q = src('src/db/queries/dailyLogs.ts');
+    const start = q.indexOf('export async function getNutritionDays');
+    const nextExport = q.indexOf('\nexport ', start + 1);
+    const body = q.slice(start, nextExport === -1 ? undefined : nextExport);
+    assert.ok(!body.includes('protein'), 'group query stays macro-free');
+    const migrations = src('src/db/migrations.ts');
+    assert.ok(!migrations.toLowerCase().includes('macro_targets'), 'no macro table');
+    assert.ok(!migrations.toLowerCase().includes('food_entries'), 'no food entries table');
   });
 
   test('no fabricated values anywhere in the engine', () => {
-    const hay = [
+    const rawHay = [
       src('src/screens/NutritionEngine/nutritionEngine.ts'),
       src('src/screens/NutritionEngine/NutritionEngineScreen.tsx'),
       src('src/hooks/useNutritionEngine.ts'),
     ].join('\n');
+    // Input hints (TextInput placeholder props) are UX copy, not data:
+    // strip them so the ban targets fabricated content only.
+    const hay = rawHay
+      .replace(/placeholderTextColor/g, '')
+      .replace(/placeholder="[^"]*"/g, '');
     for (const phrase of ['Math.random', 'placeholder', 'sample data', 'mock meal', 'fake', 'score']) {
       assert.ok(!hay.toLowerCase().includes(phrase), phrase);
     }

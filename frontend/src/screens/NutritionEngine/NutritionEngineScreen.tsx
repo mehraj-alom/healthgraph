@@ -1,24 +1,29 @@
 /**
- * NutritionEngineScreen — the Nutrition goal engine (Batch 6F).
+ * NutritionEngineScreen — the Nutrition goal engine (Batch 6F + targets).
  *
  * Reports logged meals only: meal counts, food-scan estimated calories
  * (labeled as estimates, never measured), meal-type distribution over
- * logged meals, and real day history. Macros are not persisted anywhere
- * and therefore never appear. No deficit math, no targets, no adequacy
- * judgments, no diet ratings. Empty state is honest when nothing is logged, with
- * paths to the DailyLog check-in and FoodScan flows that create the
+ * logged meals, and real day history. Scan-derived macro sums light up
+ * the rings against targets the user sets for themselves (device-only,
+ * editable, starting-point suggestions). No adequacy judgments, no diet
+ * ratings, no predictions. Empty state is honest when nothing is logged,
+ * with paths to the DailyLog check-in and FoodScan flows that create the
  * data. Copy is descriptive — never healthy or unhealthy, never causal.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import Svg, { Circle } from 'react-native-svg';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
 import { EngineGraph } from '@/components/EngineGraph';
 import { HealthFact } from '@/components/HealthFact';
@@ -29,6 +34,16 @@ import {
   formatKcal,
   type NutritionDay,
 } from '@/screens/NutritionEngine/nutritionEngine';
+import {
+  nutrientProgress,
+  suggestTargets,
+  weekOnTarget,
+  type ActivityBand,
+  type IntakeGoal,
+  type MacroTargets,
+} from '@/screens/NutritionEngine/macroTargets';
+import { getCachedPatientId } from '@/services/patientIdentity';
+import { saveMacroTargets } from '@/services/macroTargetStore';
 
 function formatDayLabel(date: string): string {
   const d = new Date(`${date}T12:00:00`);
@@ -43,6 +58,72 @@ function daySub(day: NutritionDay): string {
   return parts.join(' · ');
 }
 
+function CalorieRing({ progress }: { progress: { actual: number; target: number; ratio: number; remaining: number } | null }) {
+  const size = 148;
+  const stroke = 13;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const frac = progress ? Math.max(0, Math.min(1, progress.ratio)) : 0;
+  return (
+    <View style={{ alignItems: 'center', marginVertical: 8 }}>
+      <Svg width={size} height={size}>
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.12)" strokeWidth={stroke} fill="none" />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="#4FD1C5"
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${c.toFixed(1)}`}
+          strokeDashoffset={(c * (1 - frac)).toFixed(1)}
+          rotation="-90"
+          origin={`${size / 2}, ${size / 2}`}
+        />
+      </Svg>
+      <View style={{ position: 'absolute', top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#FFFFFF', fontSize: 26, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+          {progress ? Math.round(progress.actual).toLocaleString('en-US') : '—'}
+        </Text>
+        <Text style={{ color: '#8EA0B8', fontSize: 12 }}>
+          {progress ? `of ${Math.round(progress.target).toLocaleString('en-US')} kcal` : 'no target'}
+        </Text>
+        {progress && progress.remaining > 0 ? (
+          <Text style={{ color: '#8EA0B8', fontSize: 12 }}>{`${Math.round(progress.remaining).toLocaleString('en-US')} left`}</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function MacroBar({
+  label,
+  color,
+  progress,
+  unit,
+}: {
+  label: string;
+  color: string;
+  progress: { actual: number; target: number; ratio: number; remaining: number } | null;
+  unit: string;
+}) {
+  const frac = progress ? Math.max(0, Math.min(1, progress.ratio)) : 0;
+  return (
+    <View style={{ marginTop: 10 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+        <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600' }}>{label}</Text>
+        <Text style={{ color: '#8EA0B8', fontSize: 12, fontVariant: ['tabular-nums'] }}>
+          {progress ? `${Math.round(progress.actual)}${unit} of ${Math.round(progress.target)}${unit}` : '—'}
+        </Text>
+      </View>
+      <View style={{ height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.12)' }}>
+        <View style={{ height: 8, borderRadius: 4, backgroundColor: color, width: `${Math.round(frac * 100)}%` }} />
+      </View>
+    </View>
+  );
+}
+
 export default function NutritionEngineScreen() {
   const navigation = useNavigation();
   const {
@@ -54,7 +135,115 @@ export default function NutritionEngineScreen() {
     typeCounts,
     classifiedMeals,
     isLoading,
+    todayMacros,
+    weekMacros,
+    storedTargets,
+    profileMeasures,
+    reloadTargets,
   } = useNutritionEngine();
+
+  const targets: MacroTargets = useMemo(() => ({
+    calories: storedTargets?.targets.calories ?? null,
+    protein: storedTargets?.targets.protein ?? null,
+    carbs: storedTargets?.targets.carbs ?? null,
+    fat: storedTargets?.targets.fat ?? null,
+  }), [storedTargets]);
+  const hasTargets = targets.calories != null;
+
+  const calProgress = useMemo(
+    () => nutrientProgress(todayMacros?.kcal ?? null, targets.calories),
+    [todayMacros, targets.calories],
+  );
+  const proteinProgress = useMemo(
+    () => nutrientProgress(todayMacros?.protein ?? null, targets.protein),
+    [todayMacros, targets.protein],
+  );
+  const carbsProgress = useMemo(
+    () => nutrientProgress(todayMacros?.carbs ?? null, targets.carbs),
+    [todayMacros, targets.carbs],
+  );
+  const fatProgress = useMemo(
+    () => nutrientProgress(todayMacros?.fat ?? null, targets.fat),
+    [todayMacros, targets.fat],
+  );
+  const weekLine = useMemo(() => {
+    const r = weekOnTarget(
+      weekMacros.map((d) => ({ date: d.log_date, kcal: d.kcal })),
+      targets.calories,
+    );
+    if (!r) return null;
+    return `${r.onTarget} of ${r.withData} days on target`;
+  }, [weekMacros, targets.calories]);
+
+  // ---- Targets editor state ----
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [savingTargets, setSavingTargets] = useState(false);
+  const [editGoal, setEditGoal] = useState<IntakeGoal>('maintain');
+  const [editActivity, setEditActivity] = useState<ActivityBand>('moderate');
+  const [editAge, setEditAge] = useState('');
+  const [editSex, setEditSex] = useState<'female' | 'male' | null>(null);
+  const [editCalories, setEditCalories] = useState('');
+  const [editProtein, setEditProtein] = useState('');
+  const [editCarbs, setEditCarbs] = useState('');
+  const [editFat, setEditFat] = useState('');
+
+  const openEditor = useCallback(() => {
+    setEditGoal(storedTargets?.goal ?? 'maintain');
+    setEditActivity(storedTargets?.activity ?? 'moderate');
+    setEditAge(storedTargets?.ageYears != null ? String(storedTargets.ageYears) : '');
+    setEditSex(storedTargets?.sex ?? null);
+    setEditCalories(targets.calories != null ? String(targets.calories) : '');
+    setEditProtein(targets.protein != null ? String(targets.protein) : '');
+    setEditCarbs(targets.carbs != null ? String(targets.carbs) : '');
+    setEditFat(targets.fat != null ? String(targets.fat) : '');
+    setEditorOpen(true);
+  }, [storedTargets, targets]);
+
+  const suggestFromProfile = useCallback(() => {
+    const age = editAge.trim() ? parseInt(editAge, 10) : null;
+    const s = suggestTargets({
+      weightKg: profileMeasures.weightKg,
+      heightCm: profileMeasures.heightCm,
+      ageYears: age != null && Number.isFinite(age) && age > 0 ? age : null,
+      sex: editSex,
+      goal: editGoal,
+      activity: editActivity,
+    });
+    if (s.calories != null) setEditCalories(String(s.calories));
+    if (s.protein != null) setEditProtein(String(s.protein));
+    if (s.carbs != null) setEditCarbs(String(s.carbs));
+    if (s.fat != null) setEditFat(String(s.fat));
+  }, [profileMeasures, editAge, editSex, editGoal, editActivity]);
+
+  const saveTargets = useCallback(async () => {
+    const patientId = getCachedPatientId();
+    if (!patientId) return;
+    const num = (v: string): number | null => {
+      const n = parseFloat(v);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    const age = editAge.trim() ? parseInt(editAge, 10) : null;
+    setSavingTargets(true);
+    try {
+      await saveMacroTargets(patientId, {
+        targets: {
+          calories: num(editCalories),
+          protein: num(editProtein),
+          carbs: num(editCarbs),
+          fat: num(editFat),
+        },
+        goal: editGoal,
+        activity: editActivity,
+        ageYears: age != null && Number.isFinite(age) && age > 0 ? age : null,
+        sex: editSex,
+        savedAt: Date.now(),
+      });
+      await reloadTargets();
+      setEditorOpen(false);
+    } finally {
+      setSavingTargets(false);
+    }
+  }, [editCalories, editProtein, editCarbs, editFat, editGoal, editActivity, editAge, editSex, reloadTargets]);
 
   const go = useCallback(
     (route: string) => {
@@ -127,6 +316,33 @@ export default function NutritionEngineScreen() {
               </>
             ) : null}
 
+            <SectionHeader dark title="Today" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              {!hasTargets ? (
+                <>
+                  <Text style={styles.bigValue}>—</Text>
+                  <Text style={styles.avgSub}>Set your targets to light up today&apos;s rings.</Text>
+                  <Button title="Set targets" onPress={openEditor} fullWidth textStyle={styles.ringBtnText} />
+                </>
+              ) : !todayMacros ? (
+                <>
+                  <Text style={styles.bigValue}>—</Text>
+                  <Text style={styles.avgSub}>No scans today yet — rings fill from food scans.</Text>
+                  <Button title="Set targets" variant="ghost" onPress={openEditor} fullWidth textStyle={styles.scanText} />
+                </>
+              ) : (
+                <>
+                  <CalorieRing progress={calProgress} />
+                  <MacroBar label="Protein" color="#7E9BF5" progress={proteinProgress} unit="g" />
+                  <MacroBar label="Carbs" color="#6BAFD4" progress={carbsProgress} unit="g" />
+                  <MacroBar label="Fat" color="#C9A24B" progress={fatProgress} unit="g" />
+                  {weekLine ? <Text style={styles.change}>{weekLine}</Text> : null}
+                  <Text style={styles.provenance}>From today&apos;s scans. Your targets, your call.</Text>
+                  <Button title="Edit targets" variant="ghost" onPress={openEditor} fullWidth textStyle={styles.scanText} />
+                </>
+              )}
+            </Card>
+
             {classifiedMeals > 0 ? (
               <>
                 <SectionHeader dark title="Logged meals by type" titleStyle={styles.histTitle} />
@@ -195,6 +411,139 @@ export default function NutritionEngineScreen() {
           fullWidth
           textStyle={styles.scanText}
         />
+
+        <Modal visible={editorOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditorOpen(false)}>
+          <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+              <Text style={styles.title}>Your targets.</Text>
+              <Text style={styles.sub}>Starting points only — adjust to what works for you.</Text>
+
+              <Text style={styles.editLabel}>Goal</Text>
+              <View style={styles.chipRow}>
+                {(['lose', 'maintain', 'gain'] as const).map((g) => (
+                  <Pressable
+                    key={g}
+                    onPress={() => setEditGoal(g)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: editGoal === g }}
+                    style={[styles.chip, editGoal === g && styles.chipOn]}
+                  >
+                    <Text style={[styles.chipTxt, editGoal === g && styles.chipTxtOn]}>
+                      {g === 'lose' ? 'Eat less' : g === 'gain' ? 'Eat more' : 'Stay steady'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={styles.editLabel}>Activity</Text>
+              <View style={styles.chipRow}>
+                {(['light', 'moderate', 'active', 'very-active'] as const).map((a) => (
+                  <Pressable
+                    key={a}
+                    onPress={() => setEditActivity(a)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: editActivity === a }}
+                    style={[styles.chip, editActivity === a && styles.chipOn]}
+                  >
+                    <Text style={[styles.chipTxt, editActivity === a && styles.chipTxtOn]}>{a}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <View style={styles.editRow}>
+                <View style={styles.editHalf}>
+                  <Text style={styles.editLabel}>Age (optional)</Text>
+                  <TextInput
+                    value={editAge}
+                    onChangeText={setEditAge}
+                    placeholder="—"
+                    placeholderTextColor="#5A6B85"
+                    keyboardType="numeric"
+                    style={styles.editInput}
+                  />
+                </View>
+                <View style={styles.editHalf}>
+                  <Text style={styles.editLabel}>Sex (optional)</Text>
+                  <View style={styles.chipRow}>
+                    {(['female', 'male'] as const).map((s) => (
+                      <Pressable
+                        key={s}
+                        onPress={() => setEditSex(editSex === s ? null : s)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: editSex === s }}
+                        style={[styles.chip, editSex === s && styles.chipOn]}
+                      >
+                        <Text style={[styles.chipTxt, editSex === s && styles.chipTxtOn]}>
+                          {s === 'female' ? 'F' : 'M'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              </View>
+
+              <Pressable
+                onPress={suggestFromProfile}
+                accessibilityRole="button"
+                accessibilityLabel="Suggest targets from profile"
+                style={({ pressed }) => [styles.suggestBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.suggestTxt}>
+                  {profileMeasures.weightKg != null
+                    ? `Suggest from profile (${profileMeasures.weightKg} kg)`
+                    : 'Add weight in your profile to unlock suggestions'}
+                </Text>
+              </Pressable>
+
+              <Text style={styles.editLabel}>Calories / day</Text>
+              <TextInput
+                value={editCalories}
+                onChangeText={setEditCalories}
+                placeholder="e.g., 2200"
+                placeholderTextColor="#5A6B85"
+                keyboardType="numeric"
+                style={styles.editInput}
+              />
+              <Text style={styles.editLabel}>Protein g / day</Text>
+              <TextInput
+                value={editProtein}
+                onChangeText={setEditProtein}
+                placeholder="e.g., 140"
+                placeholderTextColor="#5A6B85"
+                keyboardType="numeric"
+                style={styles.editInput}
+              />
+              <Text style={styles.editLabel}>Carbs g / day</Text>
+              <TextInput
+                value={editCarbs}
+                onChangeText={setEditCarbs}
+                placeholder="e.g., 250"
+                placeholderTextColor="#5A6B85"
+                keyboardType="numeric"
+                style={styles.editInput}
+              />
+              <Text style={styles.editLabel}>Fat g / day</Text>
+              <TextInput
+                value={editFat}
+                onChangeText={setEditFat}
+                placeholder="e.g., 70"
+                placeholderTextColor="#5A6B85"
+                keyboardType="numeric"
+                style={styles.editInput}
+              />
+
+              <Button
+                title={savingTargets ? 'Saving…' : 'Save targets'}
+                onPress={() => void saveTargets()}
+                disabled={savingTargets}
+                fullWidth
+                style={styles.logBtn}
+                textStyle={styles.logBtnText}
+              />
+              <Button title="Cancel" variant="ghost" onPress={() => setEditorOpen(false)} fullWidth textStyle={styles.scanText} />
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
         <Text style={styles.disclaimer}>
           From your check-ins and food scans on this device. Tracking only — not medical advice, diagnosis, or treatment.
         </Text>
@@ -236,5 +585,40 @@ const styles = StyleSheet.create({
   logBtn: { backgroundColor: '#4FD1C5' },
   logBtnText: { color: '#062A26' },
   scanText: { color: '#A7B8B2' },
+  ringBtnText: { color: '#062A26' },
   disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  editLabel: { ...TYPE.caption, color: GV.fog, marginTop: 14, marginBottom: 6 },
+  editInput: {
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderRadius: 10,
+    color: '#FFFFFF',
+    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontVariant: ['tabular-nums'],
+  },
+  editRow: { flexDirection: 'row', gap: 12 },
+  editHalf: { flex: 1 },
+  chipRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  chip: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  chipOn: { backgroundColor: '#4FD1C5', borderColor: '#4FD1C5' },
+  chipTxt: { color: '#A7B8B2', fontSize: 13, fontWeight: '600' },
+  chipTxtOn: { color: '#062A26' },
+  suggestBtn: {
+    borderWidth: 1,
+    borderColor: '#2A4A73',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  suggestTxt: { color: '#8EA0B8', fontSize: 13, fontWeight: '600' },
 });

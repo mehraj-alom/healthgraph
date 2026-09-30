@@ -187,3 +187,59 @@ export async function listFoodScanBreakdowns(
 ): Promise<FoodScanBreakdown[]> {
   return listFoodScanBreakdownsDb(await getDb(), patientId, logDate);
 }
+
+/** Per-day macro sums over a date range (inclusive), oldest first. */
+export interface DayMacroSums {
+  log_date: string;
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+/**
+ * Sum scan-breakdown macros per day. One bounded, patient-scoped query;
+ * item JSON is parsed and summed in JS (never trusted as numbers).
+ * Days without scans are absent from the map (missing stays missing).
+ */
+export async function sumMacroRangeDb(
+  db: FoodScanDb,
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<DayMacroSums[]> {
+  const rows = await db.getAllAsync<{ log_date: string; items_json: string | null }>(
+    `SELECT log_date, items_json FROM food_scan_items
+      WHERE patient_id = ? AND log_date >= ? AND log_date <= ?
+      ORDER BY log_date ASC`,
+    patientId,
+    startDate,
+    endDate,
+  );
+  const byDay = new Map<string, DayMacroSums>();
+  for (const r of rows) {
+    const day = (r.log_date ?? '').slice(0, 10);
+    if (!day) continue;
+    let entry = byDay.get(day);
+    if (!entry) {
+      entry = { log_date: day, kcal: 0, protein: 0, carbs: 0, fat: 0 };
+      byDay.set(day, entry);
+    }
+    for (const item of parseItems(r.items_json)) {
+      entry.kcal += item.kcal;
+      entry.protein += item.protein_g;
+      entry.carbs += item.carbs_g;
+      entry.fat += item.fat_g;
+    }
+  }
+  return [...byDay.values()].sort((a, b) => (a.log_date < b.log_date ? -1 : 1));
+}
+
+/** Production entry point (lazy connection). */
+export async function sumMacroRange(
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<DayMacroSums[]> {
+  return sumMacroRangeDb(await getDb(), patientId, startDate, endDate);
+}

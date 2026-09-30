@@ -15,11 +15,12 @@
  *   (parity-tested); the logic is inlined because node-tested pure
  *   modules keep zero imports.
  *
- * Deliberately absent: macros, fiber, sugar, sodium, micronutrients (not
- * persisted — the scan sheet shows them but stores only kcal), deficit
- * math, targets, adequacy judgments, diet ratings, nutrient-gap
- * inference, and any composite headline number. Copy is descriptive
- * counts only — never healthy or unhealthy, never causal.
+ * Deliberately absent from THIS group-level contract: fiber, sugar,
+ * sodium, micronutrients, adequacy judgments, diet ratings, nutrient-gap
+ * inference, predictions, and any composite headline number. Macros and
+ * user-owned targets live in the sibling macroTargets module (scan sums +
+ * device-only goals). Copy is descriptive counts only — never healthy or
+ * unhealthy, never causal.
  *
  * The meal-type list intentionally duplicates FoodScan/mealTypes (import
  * specifiers cannot satisfy Metro and node at once); a drift test in

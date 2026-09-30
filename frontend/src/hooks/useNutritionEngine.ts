@@ -14,6 +14,9 @@ import { useAuth } from '@/context/AuthContext';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { waitForIdentityReady } from '@/services/backendIdentity';
 import { getNutritionDays } from '@/db/queries/dailyLogs';
+import { sumMacroRange, type DayMacroSums } from '@/db/queries/foodScans';
+import { getProfileCache } from '@/db/queries/homeCache';
+import { loadMacroTargets, type StoredMacroTargets } from '@/services/macroTargetStore';
 import { subscribeDataRefresh } from '@/services/dataRefresh';
 import { todayKey } from '@/screens/Onboarding/momentum';
 import {
@@ -42,12 +45,28 @@ export function useNutritionEngine(): {
   today: string;
   isLoading: boolean;
   refetch: () => Promise<void>;
+  /** Scan-derived macro sums for today (null when no scans today). */
+  todayMacros: DayMacroSums | null;
+  /** Scan-derived macro sums for the trailing 7 days (oldest first). */
+  weekMacros: DayMacroSums[];
+  /** User-owned targets (null until the user saves them). */
+  storedTargets: StoredMacroTargets | null;
+  /** Profile weight/height for the target suggester (nulls when unknown). */
+  profileMeasures: { weightKg: number | null; heightCm: number | null };
+  reloadTargets: () => Promise<void>;
 } {
   const { user } = useAuth();
   const uid = user?.uid ?? null;
   const [days, setDays] = useState<NutritionDay[]>([]);
   const [today, setToday] = useState(() => todayKey());
   const [isLoading, setIsLoading] = useState(true);
+  const [todayMacros, setTodayMacros] = useState<DayMacroSums | null>(null);
+  const [weekMacros, setWeekMacros] = useState<DayMacroSums[]>([]);
+  const [storedTargets, setStoredTargets] = useState<StoredMacroTargets | null>(null);
+  const [profileMeasures, setProfileMeasures] = useState<{ weightKg: number | null; heightCm: number | null }>({
+    weightKg: null,
+    heightCm: null,
+  });
   const mounted = useRef(true);
 
   const load = useCallback(async () => {
@@ -72,6 +91,20 @@ export function useNutritionEngine(): {
         now,
       ).catch(() => []);
       if (!mounted.current) return;
+      // Scan-derived macro sums: one bounded range read for the trailing
+      // week (rings + on-target count). Missing days stay missing.
+      const weekStart = nutritionWindowStart(now, 7);
+      const sums = await sumMacroRange(patientId, weekStart, now).catch(() => []);
+      const profile = await getProfileCache(patientId).catch(() => ({ data: null }));
+      const stored = await loadMacroTargets(patientId).catch(() => null);
+      if (!mounted.current) return;
+      setTodayMacros(sums.find((s) => s.log_date === now) ?? null);
+      setWeekMacros(sums);
+      setStoredTargets(stored);
+      setProfileMeasures({
+        weightKg: profile?.data?.weight_kg ?? null,
+        heightCm: profile?.data?.height_cm ?? null,
+      });
       setToday(now);
       setDays(
         rows.map((r) => ({
@@ -111,6 +144,18 @@ export function useNutritionEngine(): {
     }, [load]),
   );
 
+  const reloadTargets = useCallback(async () => {
+    try {
+      await waitForIdentityReady().catch(() => {});
+      const patientId = getCachedPatientId();
+      if (!patientId || !mounted.current) return;
+      const stored = await loadMacroTargets(patientId).catch(() => null);
+      if (mounted.current) setStoredTargets(stored);
+    } catch {
+      // Best-effort.
+    }
+  }, []);
+
   const current = trailingWeekDays(days, today);
   const previous = priorWeekDays(days, today);
   const parsed = parseMealTypes(current);
@@ -128,5 +173,10 @@ export function useNutritionEngine(): {
     today,
     isLoading,
     refetch: load,
+    todayMacros,
+    weekMacros,
+    storedTargets,
+    profileMeasures,
+    reloadTargets,
   };
 }
