@@ -15,6 +15,7 @@ import {
   ensureReminderChannel,
   isReminderRuntimeSupported,
   requestReminderPermissions,
+  REMINDER_CHANNEL_ID,
 } from '@/services/reminderNotifications';
 
 export interface VoiceCheckinTime {
@@ -86,11 +87,23 @@ export async function setVoiceCheckin(next: VoiceCheckinTime): Promise<boolean> 
         type: N.SchedulableTriggerInputTypes.DAILY,
         hour: next.hour,
         minute: next.minute,
+        // Android 8+: without this the alarm lands on the OS default
+        // channel (silent/suppressed) instead of the MAX-importance alarm
+        // channel — the "timer saved, no call at 17:20" bug.
+        channelId: REMINDER_CHANNEL_ID,
       },
     });
     await AsyncStorage.setItem(NOTIF_ID_KEY, id).catch(() => {});
+    if (__DEV__) {
+      console.log(
+        `[VoiceCheckin] alarm booked id=${id} daily ${String(next.hour).padStart(2, '0')}:${String(next.minute).padStart(2, '0')}`,
+      );
+    }
     return true;
-  } catch {
+  } catch (err) {
+    if (__DEV__) {
+      console.log(`[VoiceCheckin] schedule failed: ${String((err as Error)?.message ?? err)}`);
+    }
     return false;
   }
 }
