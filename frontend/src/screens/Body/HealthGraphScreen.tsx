@@ -48,7 +48,7 @@ import { isDeviceHeartNode } from '@/screens/Body/deviceNodes';
 import { useTrends } from '@/hooks/useTrends';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { useCorrelationFeed } from '@/screens/Dashboard/correlations';
-import { buildSemanticEdges, neighborVerdictsFor, relationshipLabel, type NeighborVerdict } from '@/screens/Body/semanticEdges';
+import { neighborVerdictsFor, relationshipLabel, type NeighborVerdict } from '@/screens/Body/semanticEdges';
 import { formatSleepMinutes, formatWaterMl, formatDurationMinutes } from '@/screens/Dashboard/homeData';
 import { SPOKE_GUIDANCE } from '@/components/home/HGraphMap';
 import type { DailyCheckInDetail, RootStackParamList } from '@/types';
@@ -228,59 +228,127 @@ export interface NodeLabelDef {
 }
 
 function computeLayout(nodes: GraphNode[], edges: GraphEdge[]): Map<string, LayoutPos> {
-  // Inverted day tree (fixes the radial congestion): patient at top, one
-  // marker row per calendar day (newest first), each day's entries fanned
-  // beneath it — BPM/PPG, logs, medications, food, documents, everything
-  // dated. Undated nodes form a satellite annex to the left. Deterministic.
+  // Left-to-right time tree: YOU (patient) at x=0, one band per calendar
+  // day flowing right (oldest → newest, grows forever), each day's items
+  // gridded under its day node, and real 3rd/4th/5th-level neighbors
+  // (structures, documents, concepts…) continuing each band rightward over
+  // REAL edges only. Undated nodes annex LEFT of the root. Flat (z=0),
+  // deterministic, scrollable by one-finger drag.
   const positions = new Map<string, LayoutPos>();
-  const LEVEL_Y = 2.2;
-  const DAY_GAP = 2.8;
-  const ITEM_GAP = 0.85;
-  const ITEMS_PER_ROW = 12;
+  const ITEM_GAP = 0.95;
+  const ROW_GAP = 1.05;
+  const ITEMS_PER_ROW = 6;
+  const BAND_PAD = 1.1;
+  // BFS depth past a day's items: item(L2) → L3 → L4 → L5, then stop.
+  const DETAIL_DEPTH = 3;
+
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  // Undirected adjacency over the real-only edge list the caller passes.
+  const adj = new Map<string, string[]>();
+  const link = (a: string, b: string) => {
+    if (a === b || !byId.has(a) || !byId.has(b)) return;
+    const la = adj.get(a);
+    if (la) { if (!la.includes(b)) la.push(b); } else adj.set(a, [b]);
+    const lb = adj.get(b);
+    if (lb) { if (!lb.includes(a)) lb.push(a); } else adj.set(b, [a]);
+  };
+  for (const e of edges) link(e.source, e.target);
 
   const patient = nodes.find((n) => n.type === 'patient');
-  if (patient) positions.set(patient.id, { x: 0, y: 0, z: 0 });
+  const placed = new Set<string>();
+  if (patient) {
+    positions.set(patient.id, { x: 0, y: 0, z: 0 });
+    placed.add(patient.id);
+  }
 
-  const { groups, undated } = groupNodesByDay(nodes);
-  groups.forEach((group, i) => {
-    const dayX = (i - (groups.length - 1) / 2) * DAY_GAP;
-    const dayId = `__day:${group.dayKey}`;
-    positions.set(dayId, { x: dayX, y: -LEVEL_Y, z: 0 });
-    group.items.forEach((item, j) => {
+  const byTypeThenId = (a: GraphNode, b: GraphNode) =>
+    a.type < b.type ? -1 : a.type > b.type ? 1 : a.id < b.id ? -1 : 1;
+
+  // Level-order expansion of real neighbors past the seeds, excluding
+  // anything already placed (root, day headers, other bands' members).
+  const expandDetails = (seeds: GraphNode[]): GraphNode[] => {
+    const details: GraphNode[] = [];
+    let frontier = seeds.map((s) => s.id);
+    for (let d = 0; d < DETAIL_DEPTH; d++) {
+      const next: string[] = [];
+      const level: GraphNode[] = [];
+      const sortedFrontier = [...frontier].sort();
+      for (const id of sortedFrontier) {
+        const nbs = [...(adj.get(id) ?? [])].sort();
+        for (const nb of nbs) {
+          if (placed.has(nb)) continue;
+          placed.add(nb);
+          const node = byId.get(nb);
+          if (!node) continue;
+          level.push(node);
+          next.push(nb);
+        }
+      }
+      level.sort(byTypeThenId);
+      details.push(...level);
+      frontier = next;
+      if (frontier.length === 0) break;
+    }
+    return details;
+  };
+
+  // Grid a member list left→right inside [bandLeft, bandLeft+width].
+  // Returns the band width consumed.
+  const placeGrid = (bandLeft: number, members: GraphNode[]): number => {
+    const cols = Math.max(1, Math.min(ITEMS_PER_ROW, members.length));
+    members.forEach((node, j) => {
       const row = Math.floor(j / ITEMS_PER_ROW);
       const col = j % ITEMS_PER_ROW;
-      const rowCount = Math.min(ITEMS_PER_ROW, group.items.length - row * ITEMS_PER_ROW);
-      const h = stableHash(item.id);
-      positions.set(item.id, {
-        x: dayX + (col - (rowCount - 1) / 2) * ITEM_GAP,
-        y: -LEVEL_Y * 2 - row * 1.1,
-        z: ((h % 100) / 100 - 0.5) * 0.4,
-      });
-    });
-  });
-
-  if (undated.length > 0) {
-    const leftEdge = groups.length > 0 ? (-(groups.length - 1) / 2) * DAY_GAP : 0;
-    const perRow = 5;
-    undated.forEach((node, k) => {
-      const h = stableHash(node.id);
+      const rowCount = Math.min(ITEMS_PER_ROW, members.length - row * ITEMS_PER_ROW);
       positions.set(node.id, {
-        x: leftEdge - 2.4 - Math.floor(k / perRow) * 0.9,
-        y: -LEVEL_Y + ((k % perRow) - (Math.min(perRow, undated.length) - 1) / 2) * -0.9,
-        z: ((h % 100) / 100 - 0.5) * 0.4,
+        x: bandLeft + (col + (cols - rowCount) / 2) * ITEM_GAP,
+        y: -(row + 1) * ROW_GAP,
+        z: 0,
       });
     });
+    return Math.max(ITEM_GAP, cols * ITEM_GAP);
+  };
+
+  const { groups, undated } = groupNodesByDay(nodes);
+  // Oldest day first: time flows left → right, new days append at the end.
+  const ordered = [...groups].reverse();
+
+  // Reserve day header ids up front so detail expansion never swallows them.
+  for (const group of ordered) placed.add(`__day:${group.dayKey}`);
+
+  let cursor = 1.0; // right of YOU (patient radius 0.30 + breathing room)
+  for (const group of ordered) {
+    const dayId = `__day:${group.dayKey}`;
+    const items = [...group.items].sort(byTypeThenId);
+    for (const item of items) placed.add(item.id);
+    const details = expandDetails(items);
+    const members = [...items, ...details];
+    const cols = Math.max(1, Math.min(ITEMS_PER_ROW, Math.max(members.length, 1)));
+    const width = Math.max(1.6, cols * ITEM_GAP);
+    positions.set(dayId, { x: cursor + width / 2, y: 0, z: 0 });
+    if (members.length > 0) placeGrid(cursor + (width - cols * ITEM_GAP) / 2, members);
+    cursor += width + BAND_PAD;
+  }
+
+  // Undated annex: one band LEFT of the root (pre-history), same subtree
+  // treatment, no day header.
+  if (undated.length > 0) {
+    // A shared node (e.g. anatomy) may already sit inside a day band via
+    // real edges — never drag it into the annex as well.
+    const seeds = [...undated].sort(byTypeThenId).filter((s) => !placed.has(s.id));
+    for (const s of seeds) placed.add(s.id);
+    const members = [...seeds, ...expandDetails(seeds)];
+    const cols = Math.max(1, Math.min(ITEMS_PER_ROW, members.length));
+    const width = Math.max(1.2, cols * ITEM_GAP);
+    const bandLeft = -BAND_PAD - width;
+    placeGrid(bandLeft, members);
   }
 
   // Defensive: every input node gets a position (buildGraph skips the rest).
   for (const node of nodes) {
     if (!positions.has(node.id)) {
-      const h = stableHash(node.id);
-      positions.set(node.id, {
-        x: ((h % 360) / 360 - 0.5) * 1.5,
-        y: -1,
-        z: 0,
-      });
+      positions.set(node.id, { x: cursor + 0.5, y: -ROW_GAP, z: 0 });
+      cursor += ITEM_GAP;
     }
   }
 
@@ -581,6 +649,9 @@ class GraphSceneManager {
         HAS_FOOD_SCAN: new THREE.Color(0x6bafd4),
         HAS_ENTRY: new THREE.Color(0x6bafd4),
         HAS_BIOMETRIC: new THREE.Color(0xd4818d),
+        // Day-tree links (constructed client-side, always real).
+        HAS_DAY: new THREE.Color(0x0f6d66),
+        ON_DAY: new THREE.Color(0x43a099),
       };
     }
     return this.edgePalette[relationship] ?? new THREE.Color(0x6b7686);
@@ -955,7 +1026,8 @@ class GraphSceneManager {
 
     // Gentle sway — alive, but the framing never drifts away. (An unbounded
     // idle spin turned the tall ellipse edge-on: the "half screen" column.)
-    this.graphGroup.rotation.y = this.rotationY + (this.reduceMotion ? 0 : Math.sin(t * 0.15) * 0.12);
+    // No idle sway: a time tree must sit still to be readable.
+    this.graphGroup.rotation.y = this.rotationY;
     this.graphGroup.rotation.x = this.rotationX;
     this.graphGroup.scale.setScalar(this.zoom);
     this.graphGroup.position.x = this.panX;
@@ -1028,10 +1100,11 @@ class GraphSceneManager {
     }
   }
 
+  // One-finger drag pans the timeline (travel through days). Rotation is
+  // disabled: a time tree reads left-to-right, it never needs orbiting.
   handlePanMove(dx: number, dy: number) {
     this.lastInteract = this.clock;
-    this.rotationY += dx * 0.005;
-    this.rotationX = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.rotationX + dy * 0.005));
+    this.handlePan(dx, dy);
   }
 
   handlePinch(scale: number) {
@@ -1064,8 +1137,10 @@ class GraphSceneManager {
   }
 
   /**
-   * Auto-fit: bounding box → camera distance, so the constellation fills
-   * (never overflows) any viewport aspect. No more hand-tuned z per device.
+   * Auto-fit VERTICALLY only: the timeline grows infinitely rightward, so
+   * fitting the width would shrink the whole history into dust. Height
+   * fits; horizontal travel is one-finger drag (pan clamps scale with the
+   * fitted extents, so new days stay reachable).
    */
   private fitToView() {
     if (this.nodeBase.length === 0) return;
@@ -1075,11 +1150,8 @@ class GraphSceneManager {
       ey = Math.max(ey, Math.abs(n.pos.y) + n.size);
     }
     this.fitExtent = { x: ex, y: ey };
-    const aspect = this.viewport.width / Math.max(this.viewport.height, 1);
     const halfFovTan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-    const needH = ey / halfFovTan;
-    const needW = ex / (halfFovTan * Math.max(aspect, 0.3));
-    const dist = Math.max(needH, needW) * 1.1;
+    const dist = (ey / halfFovTan) * 1.12;
     this.camera.position.set(0, 1.0, Math.max(4.5, Math.min(14, dist)));
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
@@ -2257,26 +2329,23 @@ export default function HealthGraphScreen({
   const metricsQ = useDailyMetrics();
   const feedQ = useCorrelationFeed(trendsQ.data ?? null, metricsQ.data ?? null);
 
-  const semanticEdges = useMemo(() => buildSemanticEdges({
-    trends: trendsQ.data ?? null,
-    dailyMetrics: metricsQ.data ?? null,
-    localDetails: feedQ.localDetails,
-    nodes: graphNodes,
-  }), [trendsQ.data, metricsQ.data, feedQ.localDetails, graphNodes]);
-
+  // Canvas draws REAL edges only: server relationships + the day-tree
+  // links built below. Heuristic insight edges (pain↔water style) were the
+  // congestion/confusion source — they no longer render. Per-neighbor
+  // assessments survive as tap badges via neighborVerdictsFor, not lines.
   const allEdges = useMemo<GraphEdge[]>(() => {
     // Dedupe by edge id: duplicate tubes stack opacity and read as one
     // thick dark arc (a big share of the "congested" look).
     const seen = new Set<string>();
     const out: GraphEdge[] = [];
-    for (const e of [...(graphData?.edges ?? []), ...semanticEdges]) {
+    for (const e of (graphData?.edges ?? [])) {
       if (seen.has(e.id)) continue;
       seen.add(e.id);
       out.push(e);
     }
     return out;
-  }, [graphData, semanticEdges]);
-  const flowEdgeIds = useMemo(() => new Set(semanticEdges.map((e) => e.id)), [semanticEdges]);
+  }, [graphData]);
+  const flowEdgeIds = useMemo(() => new Set<string>(), []);
 
   // Day-tree overlay: virtual date markers + tree links merged over the
   // clinical graph. Layout-only (never persisted, never synced); the day
@@ -2307,16 +2376,12 @@ export default function HealthGraphScreen({
   }, [allEdges, graphNodes, dayGroups]);
 
 
-  // Live pattern counts for the HUD strip under the filters.
-  const patternCounts = useMemo(() => {
-    let bad = 0, good = 0;
-    for (const e of semanticEdges) {
-      const v = e.properties?.verdict;
-      if (v === 'bad') bad++;
-      else if (v === 'good') good++;
-    }
-    return { bad, good, total: semanticEdges.length };
-  }, [semanticEdges]);
+  // Live counts for the HUD strip: real nodes + real connections drawn.
+  const graphCounts = useMemo(() => {
+    const rels = new Set<string>();
+    for (const e of allEdges) rels.add(e.relationship);
+    return { nodes: graphNodes.length, edges: allEdges.length, relKinds: rels.size };
+  }, [graphNodes, allEdges]);
 
   // Verdict per 1-hop neighbor — drives badge dots + the neighbor card.
   const focusVerdicts = useMemo(() => {
@@ -2618,11 +2683,11 @@ export default function HealthGraphScreen({
         </View>
       )}
 
-      {/* Overlay: live pattern counts (full-screen, rests while focused) */}
-      {!embedded && patternCounts.total > 0 && !selectedNodeId && (
+      {/* Overlay: live counts (full-screen, rests while focused) */}
+      {!embedded && graphCounts.nodes > 0 && !selectedNodeId && (
         <View style={styles.patternStrip} pointerEvents="none">
           <Text style={styles.patternStripText}>
-            {patternCounts.bad} strained, {patternCounts.good} healthy, {patternCounts.total} patterns
+            {graphCounts.nodes} nodes · {graphCounts.edges} connections · {graphCounts.relKinds} link types
           </Text>
         </View>
       )}
@@ -2630,7 +2695,7 @@ export default function HealthGraphScreen({
       {/* Overlay: gesture hint (full-screen, floats over the canvas) */}
       {!embedded && !isEmpty && (
         <View style={styles.hintPill} pointerEvents="none">
-          <Text style={styles.hintTxt}>Drag to rotate · Pinch to zoom · Two-finger drag to pan</Text>
+          <Text style={styles.hintTxt}>Drag to travel through time · Pinch to zoom</Text>
         </View>
       )}
 

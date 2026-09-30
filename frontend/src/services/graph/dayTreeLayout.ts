@@ -1,8 +1,9 @@
 /**
- * dayTreeLayout — pure inverted day-tree layout for the health graph.
+ * dayTreeLayout — grouping for the health graph time tree.
  *
- * Patient at top, one marker row per calendar day (newest first), each
- * day's entries fanned beneath it. Zero imports: node-testable.
+ * Groups dated nodes by calendar day (newest first); the canvas lays the
+ * groups left-to-right (YOU → days → items → real neighbors). Zero
+ * imports: node-testable.
  */
 import type { GraphNode, GraphEdge } from '@/hooks/useHealthGraph';
 
