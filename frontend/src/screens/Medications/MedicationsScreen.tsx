@@ -415,10 +415,11 @@ export default function MedicationsScreen() {
   }, [navigation, premiumEntitled]);
 
   const addMedicationFromScan = useCallback((session: ScanSession) => {
-    setEditingMedication(null);
-    setScanSourceDocIds(session.document_ids);
-    setShowAddModal(true);
-  }, []);
+    navigation.navigate('PrescriptionReview', {
+      docIds: session.document_ids,
+      sessionId: session.session_id,
+    });
+  }, [navigation]);
 
   const markSessionReviewed = useCallback((session: ScanSession) => {
     void setScanStatus(session.session_id, 'reviewed').then(() => loadScanSessions());
@@ -723,11 +724,11 @@ export default function MedicationsScreen() {
                     <Pressable
                       onPress={() => addMedicationFromScan(session)}
                       accessibilityRole="button"
-                      accessibilityLabel="Verify scan and add medication"
+                      accessibilityLabel="Review extracted medicines"
                       hitSlop={8}
                       style={({ pressed }) => [styles.scanAddBtn, pressed && { opacity: 0.7 }]}
                     >
-                      <Text style={styles.scanAddText}>Verify & add</Text>
+                      <Text style={styles.scanAddText}>Review medicines</Text>
                     </Pressable>
                   ) : null}
                   {open ? (
@@ -1129,10 +1130,33 @@ function HistoryItem({
 
 // ── Add/Edit Medication Modal (sheet over navy; white wells like Chat) ──
 
-function AddMedicationModal({
+/** Pre-fill shape for prescription-review rows (superset of the form fields). */
+export interface ExtractInitial {
+  name: string | null;
+  generic_name: string | null;
+  brand_name: string | null;
+  strength: string | null;
+  strength_unit: string | null;
+  dose_amount: number | null;
+  dose_unit: string | null;
+  route: string | null;
+  frequency: string | null;
+  scheduled_times: string[];
+  start_date: string | null;
+  end_date: string | null;
+  purpose: string | null;
+  instructions: string | null;
+  prescriber: string | null;
+  prn: boolean;
+  reminder_enabled: boolean;
+  notes: string | null;
+}
+
+export function AddMedicationModal({
   visible,
   medication,
   sourceDocumentIds,
+  initialExtract,
   onClose,
   onSave,
 }: {
@@ -1140,9 +1164,12 @@ function AddMedicationModal({
   medication: Medication | null;
   /** Set when adding from a scanned prescription — linked, never auto-filled. */
   sourceDocumentIds?: string[];
+  /** Prescription-review row: pre-fills every field so review is confirm-or-tweak. */
+  initialExtract?: ExtractInitial | null;
   onClose: () => void;
   onSave: () => void;
 }) {
+  const init = medication == null ? initialExtract ?? null : null;
   const { colors } = useTheme();
   const docIds = sourceDocumentIds ?? [];
   // Verify mode: adding from a scan. The user types every field against
@@ -1154,24 +1181,32 @@ function AddMedicationModal({
   const [extractFailed, setExtractFailed] = useState(false);
   const [openPage, setOpenPage] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
-  const [name, setName] = useState(medication?.name || '');
-  const [genericName, setGenericName] = useState(medication?.generic_name || '');
-  const [brandName, setBrandName] = useState(medication?.brand_name || '');
-  const [strength, setStrength] = useState(medication?.strength || '');
-  const [strengthUnit, setStrengthUnit] = useState(medication?.strength_unit || '');
-  const [doseAmount, setDoseAmount] = useState(medication?.dose_amount?.toString() || '');
-  const [doseUnit, setDoseUnit] = useState(medication?.dose_unit || '');
-  const [route, setRoute] = useState<MedicationRoute | ''>(medication?.route || '');
-  const [frequency, setFrequency] = useState<MedicationFrequency>(medication?.frequency || 'ONCE_DAILY');
-  const [scheduledTimes, setScheduledTimes] = useState(medication?.scheduled_times?.join(', ') || '');
-  const [startDate, setStartDate] = useState(medication?.start_date || '');
-  const [endDate, setEndDate] = useState(medication?.end_date || '');
-  const [purpose, setPurpose] = useState(medication?.purpose || '');
-  const [instructions, setInstructions] = useState(medication?.instructions || '');
-  const [prescriber, setPrescriber] = useState(medication?.prescriber || '');
-  const [prn, setPrn] = useState(medication?.prn || false);
-  const [reminderEnabled, setReminderEnabled] = useState(medication?.reminder_enabled || false);
-  const [notes, setNotes] = useState(medication?.notes || '');
+  const [name, setName] = useState(medication?.name || init?.name || '');
+  const [genericName, setGenericName] = useState(medication?.generic_name || init?.generic_name || '');
+  const [brandName, setBrandName] = useState(medication?.brand_name || init?.brand_name || '');
+  const [strength, setStrength] = useState(medication?.strength || init?.strength || '');
+  const [strengthUnit, setStrengthUnit] = useState(medication?.strength_unit || init?.strength_unit || '');
+  const [doseAmount, setDoseAmount] = useState(
+    medication?.dose_amount?.toString() || (init?.dose_amount != null ? String(init.dose_amount) : '') || '',
+  );
+  const [doseUnit, setDoseUnit] = useState(medication?.dose_unit || init?.dose_unit || '');
+  const [route, setRoute] = useState<MedicationRoute | ''>(
+    medication?.route || (init?.route as MedicationRoute | null) || '',
+  );
+  const [frequency, setFrequency] = useState<MedicationFrequency>(
+    medication?.frequency || (init?.frequency as MedicationFrequency | null) || 'ONCE_DAILY',
+  );
+  const [scheduledTimes, setScheduledTimes] = useState(
+    medication?.scheduled_times?.join(', ') || init?.scheduled_times?.join(', ') || '',
+  );
+  const [startDate, setStartDate] = useState(medication?.start_date || init?.start_date || '');
+  const [endDate, setEndDate] = useState(medication?.end_date || init?.end_date || '');
+  const [purpose, setPurpose] = useState(medication?.purpose || init?.purpose || '');
+  const [instructions, setInstructions] = useState(medication?.instructions || init?.instructions || '');
+  const [prescriber, setPrescriber] = useState(medication?.prescriber || init?.prescriber || '');
+  const [prn, setPrn] = useState(medication?.prn || init?.prn || false);
+  const [reminderEnabled, setReminderEnabled] = useState(medication?.reminder_enabled || init?.reminder_enabled || false);
+  const [notes, setNotes] = useState(medication?.notes || init?.notes || '');
   const [saving, setSaving] = useState(false);
 
   // Verify mode loads what the scan actually read (fresh per open — the

@@ -131,6 +131,50 @@ def get_document_extraction(
     }
 
 
+@router.post("/{document_id}/prescription-meds")
+def extract_prescription_medicines(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+):
+    """Per-medicine rows for a scanned prescription, aligned to the Add
+    Medication form (name/dose/route/frequency/times/... + confidence +
+    needs_review per row) so review is confirm-or-tweak, not retyping.
+
+    Runs the dedicated prescription schema over the stored scan text —
+    never the generic lab-report schema. Computed on demand; nothing is
+    persisted. 422 while the scan text is not ready yet.
+    """
+    from models.events import RawExtractionData
+    from services.ocr.prescription_extract import extract_prescription_meds
+
+    doc = db.query(Document).filter(
+        Document.document_id == document_id,
+        Document.patient_id == patient_id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    raw = db.scalars(
+        select(RawExtractionData).where(RawExtractionData.document_id == document_id)
+    ).first()
+    if not raw or not (raw.markdown_text or "").strip():
+        raise HTTPException(status_code=422, detail="Scan text is not ready yet. Try again shortly.")
+
+    gateway = raw.gateway_json if isinstance(raw.gateway_json, dict) else {}
+    doc_type = str(gateway.get("document_type") or "").upper()
+    if doc_type and doc_type != "PRESCRIPTION":
+        raise HTTPException(status_code=400, detail="This document is not a prescription.")
+
+    try:
+        result = extract_prescription_meds(raw.markdown_text)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"document_id": str(document_id), **result}
+
+
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_document(
     file: UploadFile = File(...),

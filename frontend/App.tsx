@@ -70,6 +70,7 @@ import PulseInstrumentScreen from '@/screens/PpgMeasure/PulseInstrumentScreen';
 import ImproveScreen from '@/screens/Dashboard/ImproveScreen';
 import FoodScanScreen from '@/screens/FoodScan/FoodScanScreen';
 import PrescriptionScannerScreen from '@/screens/Medications/PrescriptionScannerScreen';
+import PrescriptionReviewScreen from '@/screens/Medications/PrescriptionReviewScreen';
 import HealthAreasScreen from '@/screens/HealthAreas/HealthAreasScreen';
 import SubstanceScreen from '@/screens/Substance/SubstanceScreen';
 import CycleScreen from '@/screens/Cycle/CycleScreen';
@@ -764,6 +765,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="PrescriptionScanner"
               component={PrescriptionScannerScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Confirm-or-tweak review of extracted prescription medicines. */}
+            <RootStack.Screen
+              name="PrescriptionReview"
+              component={PrescriptionReviewScreen}
               options={{
                 headerShown: false,
               }}

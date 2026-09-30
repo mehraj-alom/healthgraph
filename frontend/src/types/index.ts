@@ -432,6 +432,8 @@ export type RootStackParamList = {
   FoodScan: undefined;
   /** Guided multipage prescription capture (premium). */
   PrescriptionScanner: undefined;
+  /** Confirm-or-tweak review of extracted prescription medicines. */
+  PrescriptionReview: { docIds: string[]; sessionId?: string } | undefined;
   /** Call-like local medication reminder (one dose occurrence). */
   MedicationReminder: { occurrenceId: string; action?: 'taken' | 'snooze-30' | 'snooze-60' };
   /** Incoming-call medication reminder (same engine, call UX). */
