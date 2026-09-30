@@ -14,6 +14,7 @@ SECURITY MODEL:
 - Node detail endpoint verifies ownership before returning data
 """
 
+import time
 import uuid
 from typing import Optional
 
@@ -301,100 +302,133 @@ def get_health_graph(
     cypher = f"""
     MATCH (p:Patient {{id: $patient_id}})
 
-    // Depth 1: Patient → Observations (patient owns these)
-    OPTIONAL MATCH (p)-[:HAS_OBSERVATION]->(o:Observation)
+    // Independent per-type collectors. Each CALL aggregates immediately so
+    // rows never multiply across types. (Previously ~25 chained OPTIONAL
+    // MATCHes cartesian-exploded before the first collect → minutes-long
+    // hang that no client timeout could fix.) OPTIONAL MATCH inside every
+    // CALL keeps exactly one row even when a type has no data.
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_OBSERVATION]->(o:Observation)
+      RETURN collect(DISTINCT o)[..$node_cap] AS observations
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_OBSERVATION]->(:Observation)-[:AFFECTS]->(s:AnatomicalStructure)
+      RETURN collect(DISTINCT s)[..$node_cap] AS structures
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_OBSERVATION]->(:Observation)-[:SOURCE_DOCUMENT]->(d:Document)
+      RETURN collect(DISTINCT d)[..$node_cap] AS documents
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_OBSERVATION]->(:Observation)-[:DOCUMENTED_IN]->(dd:Document)
+      RETURN collect(DISTINCT dd)[..$node_cap] AS documents2
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_TIMELINE_EVENT]->(te:TimelineEvent)
+      RETURN collect(DISTINCT te)[..$node_cap] AS timeline_events1
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_OBSERVATION]->(:Observation)-[:LOGGED_ON]->(te2:TimelineEvent)
+      RETURN collect(DISTINCT te2)[..$node_cap] AS timeline_events2
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_TIMELINE_EVENT]->(:TimelineEvent)-[:HAS_CODE]->(c1:Concept)
+      RETURN collect(DISTINCT c1)[..$node_cap] AS concepts1
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_OBSERVATION]->(:Observation)-[:LOGGED_ON]->(:TimelineEvent)-[:HAS_CODE]->(c2:Concept)
+      RETURN collect(DISTINCT c2)[..$node_cap] AS concepts2
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:ACTIVE_MEDICATION]->(m:Medication)
+      RETURN collect(DISTINCT m)[..$node_cap] AS medications1
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_MEDICATION_TAKEN]->(e:MedicationTakenEvent)
+      RETURN collect(DISTINCT e)[..$node_cap] AS medication_events
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_MEDICATION_TAKEN]->(:MedicationTakenEvent)-[:TAKEN_FROM]->(m2:Medication)
+      RETURN collect(DISTINCT m2)[..$node_cap] AS medications2
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_MEDICATION_REQUEST]->(req:MedicationRequest)
+      RETURN collect(DISTINCT req)[..$node_cap] AS med_requests
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_MEDICATION_REQUEST]->(:MedicationRequest)-[:PRESCRIBES]->(cmc:Medication)
+      RETURN collect(DISTINCT cmc)[..$node_cap] AS canon_meds
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_CONDITION]->(cond:ConditionOccurrence)
+      RETURN collect(DISTINCT cond)[..$node_cap] AS conditions
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_VISIT]->(vv:Visit)
+      RETURN collect(DISTINCT vv)[..$node_cap] AS visits
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_STATEMENT]->(st:PatientStatement)
+      RETURN collect(DISTINCT st)[..$node_cap] AS statements
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_MEASUREMENT]->(mm:Measurement)
+      RETURN collect(DISTINCT mm)[..$node_cap] AS measurements
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_MEDICATION_REQUEST]->(:MedicationRequest)-[:HAS_VERSION]->(ver:MedicationVersion)
+      RETURN collect(DISTINCT ver)[..$node_cap] AS med_versions
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_SLEEP]->(sl:SleepEpisode)
+      RETURN collect(DISTINCT sl)[..$node_cap] AS sleep_eps
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_ACTIVITY]->(act:ActivityEvent)
+      RETURN collect(DISTINCT act)[..$node_cap] AS activities
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_NUTRITION]->(ni:NutritionIntake)
+      RETURN collect(DISTINCT ni)[..$node_cap] AS nutrition
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_FOOD_SCAN]->(fs:FoodScan)
+      RETURN collect(DISTINCT fs)[..$node_cap] AS food_scans
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_FOOD_SCAN]->(:FoodScan)-[:HAS_ENTRY]->(fe:FoodEntry)
+      RETURN collect(DISTINCT fe)[..$node_cap] AS food_entries
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_BIOMETRIC]->(pp:PPGMeasurement)
+      RETURN collect(DISTINCT pp)[..$node_cap] AS ppg
+    }}
 
-    // Depth 2: Observations → AnatomicalStructures (shared reference, terminal)
-    OPTIONAL MATCH (o)-[:AFFECTS]->(s:AnatomicalStructure)
-
-    // Depth 2: Observations → Documents (patient-specific via observation ownership)
-    // P0: SOURCE_DOCUMENT (legacy) + DOCUMENTED_IN (canonical) are
-    // dual-written; readers accept both for migration compatibility.
-    OPTIONAL MATCH (o)-[:SOURCE_DOCUMENT]->(d:Document)
-
-    // Depth 2: Observations → Documents via P0 canonical link
-    OPTIONAL MATCH (o)-[:DOCUMENTED_IN]->(dd:Document)
-
-    // Depth 1: Patient → TimelineEvents (patient owns these)
-    OPTIONAL MATCH (p)-[:HAS_TIMELINE_EVENT]->(te:TimelineEvent)
-
-    // Depth 2: Observations → TimelineEvents (via patient's observations)
-    OPTIONAL MATCH (o)-[:LOGGED_ON]->(te2:TimelineEvent)
-
-    // Depth 2: TimelineEvents → Concepts (P0 Concept-lite, flag-gated on
-    // write; shared terminology nodes, terminal for traversal)
-    OPTIONAL MATCH (te)-[:HAS_CODE]->(c1:Concept)
-    OPTIONAL MATCH (te2)-[:HAS_CODE]->(c2:Concept)
-
-    // Depth 1: Patient → Medications (patient owns these; legacy path,
-    // P1 dual-writes MedicationRequest alongside — see below)
-    OPTIONAL MATCH (p)-[:ACTIVE_MEDICATION]->(m:Medication)
-
-    // Depth 1: Patient → MedicationTakenEvents (patient owns these)
-    OPTIONAL MATCH (p)-[:HAS_MEDICATION_TAKEN]->(e:MedicationTakenEvent)
-
-    // Depth 2: MedicationTakenEvents → Medications (via TAKEN_FROM)
-    OPTIONAL MATCH (e)-[:TAKEN_FROM]->(m2:Medication)
-
-    // P1: Patient → MedicationRequests (regimen/order; canonical drug split)
-    OPTIONAL MATCH (p)-[:HAS_MEDICATION_REQUEST]->(req:MedicationRequest)
-
-    // P1: canonical Medication nodes via the patient's own requests
-    // (shared reference, terminal for traversal — same as Concept)
-    OPTIONAL MATCH (p)-[:HAS_MEDICATION_REQUEST]->(reqc:MedicationRequest)-[:PRESCRIBES]->(cmc:Medication)
-
-    // P1: Patient → ConditionOccurrences
-    OPTIONAL MATCH (p)-[:HAS_CONDITION]->(cond:ConditionOccurrence)
-
-    // P1: Patient → Visits (encounter grouping)
-    OPTIONAL MATCH (p)-[:HAS_VISIT]->(vv:Visit)
-
-    // P1: Patient → PatientStatements (user-reported, never diagnoses)
-    OPTIONAL MATCH (p)-[:HAS_STATEMENT]->(st:PatientStatement)
-
-    // P2: Patient → Measurements (one node per reading, never collapsed)
-    OPTIONAL MATCH (p)-[:HAS_MEASUREMENT]->(mm:Measurement)
-
-    // P2: regimen version nodes via the patient's own requests
-    OPTIONAL MATCH (p)-[:HAS_MEDICATION_REQUEST]->(reqv:MedicationRequest)-[:HAS_VERSION]->(ver:MedicationVersion)
-
-    // P3: longitudinal personal-health domains (all USER_REPORTED or
-    // device-derived; Visit-grouped, never a Patient-hub star)
-    OPTIONAL MATCH (p)-[:HAS_SLEEP]->(sl:SleepEpisode)
-    OPTIONAL MATCH (p)-[:HAS_ACTIVITY]->(act:ActivityEvent)
-    OPTIONAL MATCH (p)-[:HAS_NUTRITION]->(ni:NutritionIntake)
-    OPTIONAL MATCH (p)-[:HAS_FOOD_SCAN]->(fs:FoodScan)
-    OPTIONAL MATCH (p)-[:HAS_FOOD_SCAN]->(fs2:FoodScan)-[:HAS_ENTRY]->(fe:FoodEntry)
-    OPTIONAL MATCH (p)-[:HAS_BIOMETRIC]->(pp:PPGMeasurement)
-
-    // Collect all patient-owned nodes (anatomy is shared reference only)
-    WITH p,
-         collect(DISTINCT o) AS observations,
-         collect(DISTINCT s) AS structures,
-         collect(DISTINCT d) AS documents,
-         collect(DISTINCT dd) AS documents2,
-         collect(DISTINCT te) AS timeline_events1,
-         collect(DISTINCT te2) AS timeline_events2,
-         collect(DISTINCT m) AS medications1,
-         collect(DISTINCT e) AS medication_events,
-         collect(DISTINCT m2) AS medications2,
-         collect(DISTINCT c1) AS concepts1,
-         collect(DISTINCT c2) AS concepts2,
-         collect(DISTINCT req) AS med_requests,
-         collect(DISTINCT cmc) AS canon_meds,
-         collect(DISTINCT cond) AS conditions,
-         collect(DISTINCT vv) AS visits,
-         collect(DISTINCT st) AS statements,
-         collect(DISTINCT mm) AS measurements,
-         collect(DISTINCT ver) AS med_versions,
-         collect(DISTINCT sl) AS sleep_eps,
-         collect(DISTINCT act) AS activities,
-         collect(DISTINCT ni) AS nutrition,
-         collect(DISTINCT fs) AS food_scans,
-         collect(DISTINCT fe) AS food_entries,
-         collect(DISTINCT pp) AS ppg
-
-    // Merge medications from both paths (lists combine in this pure WITH —
+    // Merge dual-written paths (lists combine in this pure WITH —
     // no aggregation here, so list concatenation is legal).
     WITH p, observations, structures, medication_events, med_requests, conditions, visits, statements, measurements, med_versions, sleep_eps, activities, nutrition, food_scans, food_entries, ppg,
          documents, documents2,
@@ -405,16 +439,23 @@ def get_health_graph(
 
     // P1: documents linked from conditions / medication requests (patient-
     // scoped through the patient's own nodes) merge into the doc set.
-    // P2: same for measurement documents.
-    // GQL note: an expression alias (documents + documents2) may not appear
-    // inside a later aggregation, so the extra doc sets are collected here
-    // as plain collect() aliases and combined in the pure WITH below.
-    OPTIONAL MATCH (p)-[:HAS_CONDITION]->(cd1:ConditionOccurrence)-[:DOCUMENTED_IN]->(cdd:Document)
-    OPTIONAL MATCH (p)-[:HAS_MEDICATION_REQUEST]->(reqd:MedicationRequest)-[:DOCUMENTED_IN]->(reqdd:Document)
-    OPTIONAL MATCH (p)-[:HAS_MEASUREMENT]->(mdm:Measurement)-[:DOCUMENTED_IN]->(mdd:Document)
-    WITH p, observations, structures, medication_events, med_requests, conditions, visits, statements, measurements, med_versions, sleep_eps, activities, nutrition, food_scans, food_entries, ppg,
-         all_te, all_meds, all_concepts, all_canon_meds, documents, documents2,
-         collect(DISTINCT cdd) AS cdds, collect(DISTINCT reqdd) AS reqdds, collect(DISTINCT mdd) AS mdds
+    // P2: same for measurement documents. Same independent-collector shape
+    // as above: no cross-type row multiplication.
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_CONDITION]->(:ConditionOccurrence)-[:DOCUMENTED_IN]->(cdd:Document)
+      RETURN collect(DISTINCT cdd)[..$node_cap] AS cdds
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_MEDICATION_REQUEST]->(:MedicationRequest)-[:DOCUMENTED_IN]->(reqdd:Document)
+      RETURN collect(DISTINCT reqdd)[..$node_cap] AS reqdds
+    }}
+    CALL (p) {{
+      WITH p
+      OPTIONAL MATCH (p)-[:HAS_MEASUREMENT]->(:Measurement)-[:DOCUMENTED_IN]->(mdd:Document)
+      RETURN collect(DISTINCT mdd)[..$node_cap] AS mdds
+    }}
     WITH p, observations, structures, medication_events, med_requests, conditions, visits, statements, measurements, med_versions, sleep_eps, activities, nutrition, food_scans, food_entries, ppg,
          all_te, all_meds, all_concepts, all_canon_meds,
          documents + documents2 + cdds + reqdds + mdds AS all_docs2
@@ -669,10 +710,13 @@ def get_health_graph(
         with neo4j_driver.session() as session:
             # 25s server-side cap: previously unbounded, the client 120s
             # axios timeout fired first and surfaced as ERR_NETWORK NO_RESPONSE.
+            t0 = time.perf_counter()
             result = session.run(
                 cypher, patient_id=patient_id_str, node_cap=node_cap, timeout=25.0
             )
             record = result.single()
+            dt_ms = (time.perf_counter() - t0) * 1000
+            print(f"[HealthGraph] query ok depth={depth} limit={limit} ms={dt_ms:.0f}")
     except (ServiceUnavailable, SessionExpired):
         raise _neo4j_unavailable()
     except Exception as exc:
