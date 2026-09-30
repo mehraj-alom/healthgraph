@@ -37,10 +37,14 @@ def _strip_markdown(text: str) -> str:
     out = text
     out = re.sub(r'\*\*(.+?)\*\*', r'\1', out)
     out = re.sub(r'__(.+?)__', r'\1', out)
+    out = re.sub(r'\*([^*]+)\*', r'\1', out)
     out = re.sub(r'(?m)^\s*#{1,6}\s*', '', out)
-    out = re.sub(r'(?m)^\s*[-*]\s+', '', out)
-    out = re.sub(r'(?m)^\s*\d+\.\s+', '', out)
+    out = re.sub(r'(?m)^\s*[-*•]\s+', '', out)
+    out = re.sub(r'(?m)^\s*\d+[.)]\s+', '', out)
     out = re.sub(r'`(.+?)`', r'\1', out)
+    # Stragglers: unpaired markers the model leaves behind (e.g. "*** name**"
+    # or a lone "**"). Patient prose never legitimately contains these runs.
+    out = out.replace('***', '').replace('**', '').replace('__', '')
     out = re.sub(r'[ \t]{2,}', ' ', out)
     out = re.sub(r'\n{3,}', '\n\n', out)
     return out.strip()

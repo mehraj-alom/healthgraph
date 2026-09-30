@@ -36,6 +36,7 @@ import { toneForCategory } from '@/theme/tones';
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { useDocuments } from '@/context/DocumentsContext';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
+import { stripMarkdown } from '@/utils/stripMarkdown';
 
 // ─── Starry-night backdrop (pure code, static — no assets, no animation) ───
 // Deep-night base, deterministic star field, moon, two mountain ridges.
@@ -772,10 +773,13 @@ export default function ChatScreen() {
       if (__DEV__) console.log(`[Chat] responseParsed=${assistantText.length > 0}`);
       if (__DEV__) console.log(`[Chat] assistantTextLength=${assistantText.length}`);
 
+      // Client-side safety net: bubbles render raw <Text>, so strip any
+      // markdown the model emitted (stale backend can still send it).
+      const cleanText = stripMarkdown(assistantText);
       const assistantMessage: ChatMessage = {
         id: `${Date.now()}-assistant`,
         role: 'assistant',
-        content: assistantText.length > 0 ? assistantText : 'No response received.',
+        content: cleanText.length > 0 ? cleanText : 'No response received.',
         timestamp: new Date(),
         ui_actions: uiActions,
         citations,

@@ -19,6 +19,7 @@ import { api } from '@/services/api';
 import { createPakeetProvider } from '@/services/voice/stt';
 import { createPakeetTransport } from '@/services/voice/transport';
 import { logVoiceTurn } from '@/services/voice/log';
+import { stripMarkdown } from '@/utils/stripMarkdown';
 import { VoiceError } from '@/services/voice/errors';
 import { FONT } from '@/theme/guava';
 
@@ -112,7 +113,7 @@ export default function VoiceTurnScreen() {
       if (typeof text !== 'string' || text.trim() === '') {
         throw new VoiceError('TRANSCRIPTION_FAILED', 'The assistant returned no text.');
       }
-      setReply(text);
+      setReply(stripMarkdown(text));
       setPhase('DONE');
       setStatus('Turn complete. Playback of this reply needs on-device text phonemization (voice-session phase).');
       // Journal the completed turn (best-effort): a failed log never fails
