@@ -100,6 +100,13 @@ class Medication(Base, TimestampMixin):
     # Notes
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Supply tracking (refill countdown). All nullable: NULL means unknown
+    # and the refill UI hides itself. supply_started_on defaults to
+    # start_date client-side when absent.
+    supply_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    supply_started_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    refills_left: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Source tracking
     source_document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.document_id"), nullable=True)
 

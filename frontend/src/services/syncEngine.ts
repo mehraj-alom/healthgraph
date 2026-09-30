@@ -326,6 +326,9 @@ function getEndpointConfig(
           reminder_enabled: p.reminder_enabled,
           notes: p.notes,
           source_document_id: p.source_document_id,
+          supply_quantity: p.supply_quantity,
+          supply_started_on: p.supply_started_on,
+          refills_left: p.refills_left,
         }),
       };
     }
@@ -354,6 +357,9 @@ function getEndpointConfig(
           prn: p.prn,
           reminder_enabled: p.reminder_enabled,
           notes: p.notes,
+          supply_quantity: p.supply_quantity,
+          supply_started_on: p.supply_started_on,
+          refills_left: p.refills_left,
         }),
       };
     }

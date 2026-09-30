@@ -299,6 +299,8 @@ function toFormShape(med: ExtractedMed, prescriber: string | null): ExtractIniti
     prn: med.frequency === 'AS_NEEDED',
     reminder_enabled: med.scheduled_times.length > 0 && med.frequency !== 'AS_NEEDED',
     notes: med.warnings.length > 0 ? `Warnings on prescription: ${med.warnings.join('; ')}` : null,
+    supply_quantity: med.supply_quantity,
+    refills_left: med.refills_left,
   };
 }
 

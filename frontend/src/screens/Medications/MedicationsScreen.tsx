@@ -223,6 +223,7 @@ function NavySegmented({
 function MedTile({
   index,
   medication,
+  extraLines,
   fullWidth,
   expanded,
   onToggle,
@@ -233,6 +234,7 @@ function MedTile({
 }: {
   index: number;
   medication: Medication;
+  extraLines?: string[];
   fullWidth?: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -278,6 +280,11 @@ function MedTile({
         <Text style={styles.tileMeta} numberOfLines={1}>
           {timeLine}
         </Text>
+        {(extraLines ?? []).map((line, i) => (
+          <Text key={i} style={[styles.tileMeta, styles.tileInsight]} numberOfLines={1}>
+            {line}
+          </Text>
+        ))}
       </Pressable>
       {expanded ? (
         <Pressable
@@ -448,6 +455,79 @@ export default function MedicationsScreen() {
     () => medications.filter(m => m.status === 'ACTIVE'),
     [medications],
   );
+
+  // Adherence + refill + safety insights (one bounded taken-events fetch per
+  // active medication; skipped entirely when the list is empty).
+  const [insights, setInsights] = useState<{
+    adherence: Record<string, import('@/utils/medicationAdherence').Adherence>;
+    refills: Record<string, import('@/utils/medicationAdherence').Refill>;
+    flags: import('@/utils/medicationAdherence').SafetyFlag[];
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (activeMedications.length === 0) {
+      setInsights(null);
+      return () => { live = false; };
+    }
+    void (async () => {
+      try {
+        const { computeAdherence, computeRefill, safetyFlags } = await import('@/utils/medicationAdherence');
+        const settled = await Promise.allSettled(
+          activeMedications.map((m) =>
+            api.get<import('@/types').MedicationTakenEvent[]>(`/api/v1/medications/${m.medication_id}/taken`, {
+              params: { limit: 200 },
+            }),
+          ),
+        );
+        if (!live) return;
+        const eventsByMed: Record<string, import('@/types').MedicationTakenEvent[]> = {};
+        activeMedications.forEach((m, i) => {
+          const r = settled[i];
+          eventsByMed[m.medication_id] = r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : [];
+        });
+        const adherence: Record<string, import('@/utils/medicationAdherence').Adherence> = {};
+        const refills: Record<string, import('@/utils/medicationAdherence').Refill> = {};
+        for (const m of activeMedications) {
+          adherence[m.medication_id] = computeAdherence(m, eventsByMed[m.medication_id] ?? []);
+          const refill = computeRefill(m, eventsByMed[m.medication_id] ?? []);
+          if (refill) refills[m.medication_id] = refill;
+        }
+        setInsights({ adherence, refills, flags: safetyFlags(activeMedications, eventsByMed) });
+      } catch {
+        if (live) setInsights(null);
+      }
+    })();
+    return () => { live = false; };
+  }, [activeMedications]);
+
+  // Per-tile insight lines derived from the fetched insights.
+  const tileLines = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    if (!insights) return out;
+    for (const m of activeMedications) {
+      const lines: string[] = [];
+      const a = insights.adherence[m.medication_id];
+      if (a?.percent != null) lines.push(`${a.percent}% · 7 days`);
+      const r = insights.refills[m.medication_id];
+      if (r) {
+        if (r.out) {
+          lines.push('Out of supply');
+        } else if (r.daysLeft != null) {
+          const refillBit = m.refills_left != null ? ` · ${m.refills_left} refills` : '';
+          lines.push(`~${Math.max(1, Math.ceil(r.daysLeft))} days left${refillBit}`);
+        } else {
+          lines.push(`${Math.max(0, Math.floor(r.dosesLeft))} doses left`);
+        }
+      } else if (m.end_date) {
+        const daysLeft = Math.ceil(
+          (new Date(`${m.end_date}T12:00:00`).getTime() - Date.now()) / (24 * 3600 * 1000),
+        );
+        if (daysLeft >= 0 && daysLeft <= 14) lines.push(`Course ends in ${daysLeft}d`);
+      }
+      if (lines.length > 0) out[m.medication_id] = lines;
+    }
+    return out;
+  }, [insights, activeMedications]);
 
   const todayTaken = useMemo(() => schedule.filter((s) => s.taken).length, [schedule]);
   const todayTotal = schedule.length;
@@ -757,10 +837,23 @@ export default function MedicationsScreen() {
           </View>
         )}
 
+        {insights && insights.flags.length > 0 && selectedTab === 'active' && (
+          <View style={styles.safetyCard}>
+            <Text style={styles.safetyTitle}>Worth a look</Text>
+            {insights.flags.slice(0, 4).map((f, i) => (
+              <Text key={`${f.kind}-${i}`} style={styles.safetyText}>
+                {f.kind === 'duplicate' ? '⚠ ' : f.kind === 'polypharmacy' ? '💊 ' : f.kind === 'low-adherence' ? '📉 ' : '🔋 '}
+                {f.text}
+              </Text>
+            ))}
+          </View>
+        )}
+
         {selectedTab === 'active' && (
           <ActiveTilesTab
             medications={activeMedications}
             isLoading={medicationsLoading}
+            extraLines={tileLines}
             onAdd={openAdd}
             onEdit={(med) => {
               setEditingMedication(med);
@@ -824,6 +917,7 @@ function ActiveTilesTab({
   onPause,
   onResume,
   onStop,
+  extraLines,
 }: {
   medications: Medication[];
   isLoading: boolean;
@@ -832,6 +926,8 @@ function ActiveTilesTab({
   onPause: (med: Medication) => void;
   onResume: (med: Medication) => void;
   onStop: (med: Medication) => void;
+  /** Per-medication insight lines (adherence, refill) keyed by id. */
+  extraLines?: Record<string, string[]>;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -879,6 +975,7 @@ function ActiveTilesTab({
                 key={med.medication_id}
                 index={globalIndex}
                 medication={med}
+                extraLines={extraLines?.[med.medication_id]}
                 fullWidth={row.length === 1}
                 expanded={expandedId === med.medication_id}
                 onToggle={() => setExpandedId((cur) => (cur === med.medication_id ? null : med.medication_id))}
@@ -1150,6 +1247,8 @@ export interface ExtractInitial {
   prn: boolean;
   reminder_enabled: boolean;
   notes: string | null;
+  supply_quantity: number | null;
+  refills_left: number | null;
 }
 
 export function AddMedicationModal({
@@ -1207,6 +1306,20 @@ export function AddMedicationModal({
   const [prn, setPrn] = useState(medication?.prn || init?.prn || false);
   const [reminderEnabled, setReminderEnabled] = useState(medication?.reminder_enabled || init?.reminder_enabled || false);
   const [notes, setNotes] = useState(medication?.notes || init?.notes || '');
+  const [supplyQuantity, setSupplyQuantity] = useState(
+    medication?.supply_quantity != null
+      ? String(medication.supply_quantity)
+      : init?.supply_quantity != null
+        ? String(init.supply_quantity)
+        : '',
+  );
+  const [refillsLeft, setRefillsLeft] = useState(
+    medication?.refills_left != null
+      ? String(medication.refills_left)
+      : init?.refills_left != null
+        ? String(init.refills_left)
+        : '',
+  );
   const [saving, setSaving] = useState(false);
 
   // Verify mode loads what the scan actually read (fresh per open — the
@@ -1276,6 +1389,8 @@ export function AddMedicationModal({
         reminder_enabled: reminderEnabled,
         notes: notes.trim() || null,
         source_document_id: docIds[0] ?? medication?.source_document_id ?? null,
+        supply_quantity: supplyQuantity.trim() && Number.isFinite(parseFloat(supplyQuantity)) ? parseFloat(supplyQuantity) : null,
+        refills_left: refillsLeft.trim() && Number.isFinite(parseInt(refillsLeft, 10)) ? parseInt(refillsLeft, 10) : null,
       };
 
       let saved: Medication | null = null;
@@ -1315,7 +1430,7 @@ export function AddMedicationModal({
     } finally {
       setSaving(false);
     }
-  }, [name, genericName, brandName, strength, strengthUnit, doseAmount, doseUnit, route, frequency, scheduledTimes, startDate, endDate, purpose, instructions, prescriber, prn, reminderEnabled, notes, medication, docIds, verifyMode, verified, onSave]);
+  }, [name, genericName, brandName, strength, strengthUnit, doseAmount, doseUnit, route, frequency, scheduledTimes, startDate, endDate, purpose, instructions, prescriber, prn, reminderEnabled, notes, supplyQuantity, refillsLeft, medication, docIds, verifyMode, verified, onSave]);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -1557,6 +1672,29 @@ export function AddMedicationModal({
               onChangeText={setPurpose}
               placeholder="e.g., Blood pressure control"
             />
+          </Card>
+
+          <Card style={styles.fieldCard}>
+            <View style={styles.fieldRow}>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="Supply (doses)"
+                  value={supplyQuantity}
+                  onChangeText={setSupplyQuantity}
+                  placeholder="e.g., 30"
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.fieldHalf}>
+                <Input
+                  label="Refills left"
+                  value={refillsLeft}
+                  onChangeText={setRefillsLeft}
+                  placeholder="e.g., 2"
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
           </Card>
 
           <Card style={styles.fieldCard}>
@@ -2001,6 +2139,31 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.45)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  tileInsight: {
+    fontFamily: FONT.semi,
+    color: '#FFFFFF',
+  },
+  safetyCard: {
+    backgroundColor: '#2A1F0D',
+    borderRadius: 8,
+    padding: 14,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#6B4E1F',
+    marginBottom: 12,
+  },
+  safetyTitle: {
+    fontFamily: FONT.semi,
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#F5B453',
+  },
+  safetyText: {
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#F3E3C3',
   },
   emptyWrap: {
     alignItems: 'center',

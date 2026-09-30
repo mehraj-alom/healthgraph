@@ -27,6 +27,8 @@ export interface ExtractedMed {
   end_date: string | null;
   quantity: string | null;
   refills: string | null;
+  supply_quantity: number | null;
+  refills_left: number | null;
   purpose: string | null;
   instructions: string | null;
   warnings: string[];
@@ -82,6 +84,9 @@ export async function createMedicationFromExtract(
     purpose: med.purpose,
     instructions: med.instructions,
     prescriber: opts?.prescriber ?? null,
+    supply_quantity: med.supply_quantity,
+    supply_started_on: med.start_date,
+    refills_left: med.refills_left,
     prn: med.frequency === 'AS_NEEDED',
     reminder_enabled: med.scheduled_times.length > 0 && med.frequency !== 'AS_NEEDED',
     notes: med.warnings.length > 0 ? `Warnings on prescription: ${med.warnings.join('; ')}` : null,

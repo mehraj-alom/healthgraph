@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 17;
+export const CURRENT_SCHEMA_VERSION = 18;
 
 /**
  * Migration function type.
@@ -60,6 +60,37 @@ const migrations: Record<number, MigrationFn> = {
       17,
       'Document verification columns on documents (device-only)',
       17,
+    );
+  },
+  // ========================================================================
+  // Migration 18: medication supply tracking (additive, device-only)
+  // ========================================================================
+  // Refill countdown needs doses-on-hand + refills-left on the local
+  // medications row. Server hydration overwrites these on synced rows, so
+  // the columns are plain nullable storage. Guarded ALTERs keep re-runs
+  // safe on repaired databases.
+  18: async (db: SQLiteDatabase) => {
+    const cols = await db.getAllAsync<{ name: string }>(
+      `SELECT name FROM pragma_table_info('medications')`,
+    );
+    const names = new Set(cols.map((c) => c.name));
+    if (!names.has('supply_quantity')) {
+      await db.execAsync(`ALTER TABLE medications ADD COLUMN supply_quantity REAL`);
+    }
+    if (!names.has('supply_started_on')) {
+      await db.execAsync(`ALTER TABLE medications ADD COLUMN supply_started_on TEXT`);
+    }
+    if (!names.has('refills_left')) {
+      await db.execAsync(`ALTER TABLE medications ADD COLUMN refills_left INTEGER`);
+    }
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      18,
+      'Medication supply tracking columns on medications (device-only)',
+      18,
     );
   },
   /**
@@ -143,6 +174,9 @@ const migrations: Record<number, MigrationFn> = {
         reminder_enabled INTEGER NOT NULL DEFAULT 0,
         notes TEXT,
         source_document_id TEXT,
+        supply_quantity REAL,
+        supply_started_on TEXT,
+        refills_left INTEGER,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         local_id TEXT,

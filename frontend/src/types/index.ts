@@ -246,6 +246,9 @@ export interface Medication {
   reminder_enabled: boolean;
   notes: string | null;
   source_document_id: string | null;
+  supply_quantity: number | null;
+  supply_started_on: string | null;
+  refills_left: number | null;
   created_at: string;
   updated_at: string;
 }

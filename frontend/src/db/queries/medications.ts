@@ -73,6 +73,9 @@ interface MedicationRow {
   reminder_enabled: number;
   notes: string | null;
   source_document_id: string | null;
+  supply_quantity: number | null;
+  supply_started_on: string | null;
+  refills_left: number | null;
   created_at: string;
   updated_at: string;
   local_id: string | null;
@@ -105,6 +108,9 @@ function rowToMedication(row: MedicationRow): Medication {
     reminder_enabled: row.reminder_enabled === 1,
     notes: row.notes,
     source_document_id: row.source_document_id,
+    supply_quantity: row.supply_quantity,
+    supply_started_on: row.supply_started_on,
+    refills_left: row.refills_left,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -223,9 +229,10 @@ export async function insertMedication(
       strength, strength_unit, dose_amount, dose_unit, route,
       frequency, scheduled_times, scheduled_weekdays, start_date, end_date,
       status, purpose, instructions, prescriber, prn,
-      reminder_enabled, notes, source_document_id, created_at, updated_at,
+      reminder_enabled, notes, source_document_id, supply_quantity, supply_started_on, refills_left,
+      created_at, updated_at,
       local_id, sync_status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_create')`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_create')`,
     [
       localId,
       patientId,
@@ -250,6 +257,9 @@ export async function insertMedication(
       medication.reminder_enabled ? 1 : 0,
       medication.notes,
       medication.source_document_id,
+      medication.supply_quantity,
+      medication.supply_started_on,
+      medication.refills_left,
       now,
       now,
       localId,
@@ -311,6 +321,9 @@ export async function updateMedication(
   if (updates.reminder_enabled !== undefined) { setClauses.push('reminder_enabled = ?'); params.push(updates.reminder_enabled ? 1 : 0); }
   if (updates.notes !== undefined) { setClauses.push('notes = ?'); params.push(updates.notes); }
   if (updates.source_document_id !== undefined) { setClauses.push('source_document_id = ?'); params.push(updates.source_document_id); }
+  if (updates.supply_quantity !== undefined) { setClauses.push('supply_quantity = ?'); params.push(updates.supply_quantity); }
+  if (updates.supply_started_on !== undefined) { setClauses.push('supply_started_on = ?'); params.push(updates.supply_started_on); }
+  if (updates.refills_left !== undefined) { setClauses.push('refills_left = ?'); params.push(updates.refills_left); }
 
   if (setClauses.length === 0) return;
 
@@ -423,9 +436,10 @@ export async function hydrateMedications(
         strength, strength_unit, dose_amount, dose_unit, route,
         frequency, scheduled_times, scheduled_weekdays, start_date, end_date,
         status, purpose, instructions, prescriber, prn,
-        reminder_enabled, notes, source_document_id, created_at, updated_at,
+        reminder_enabled, notes, source_document_id, supply_quantity, supply_started_on, refills_left,
+        created_at, updated_at,
         sync_status, server_revision
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', NULL)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', NULL)
       ON CONFLICT(medication_id) DO UPDATE SET
         patient_id = excluded.patient_id,
         name = excluded.name,
@@ -449,6 +463,9 @@ export async function hydrateMedications(
         reminder_enabled = excluded.reminder_enabled,
         notes = excluded.notes,
         source_document_id = excluded.source_document_id,
+        supply_quantity = excluded.supply_quantity,
+        supply_started_on = excluded.supply_started_on,
+        refills_left = excluded.refills_left,
         created_at = excluded.created_at,
         updated_at = excluded.updated_at,
         sync_status = 'synced',
@@ -478,6 +495,9 @@ export async function hydrateMedications(
         med.reminder_enabled ? 1 : 0,
         med.notes,
         med.source_document_id,
+        med.supply_quantity,
+        med.supply_started_on,
+        med.refills_left,
         med.created_at,
         med.updated_at,
       ],

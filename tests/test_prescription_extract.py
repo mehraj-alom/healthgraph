@@ -95,3 +95,23 @@ class TestNormalizeResult:
     def test_empty_result(self):
         out = normalize_prescription_result(None)
         assert out == {"prescriber": None, "prescription_date": None, "pharmacy": None, "medications": []}
+
+
+class TestSupplyParsing:
+    def test_quantity_and_refills_parsed(self):
+        from services.ocr.prescription_extract import normalize_medicine
+        med = normalize_medicine({
+            "name": "X",
+            "frequency": "ONCE_DAILY",
+            "quantity": "30 tablets",
+            "refills": "2",
+            "confidence": 0.9,
+        })
+        assert med["supply_quantity"] == 30.0
+        assert med["refills_left"] == 2
+
+    def test_unparseable_supply_is_none(self):
+        from services.ocr.prescription_extract import normalize_medicine
+        med = normalize_medicine({"name": "X", "frequency": "ONCE_DAILY", "confidence": 0.9})
+        assert med["supply_quantity"] is None
+        assert med["refills_left"] is None

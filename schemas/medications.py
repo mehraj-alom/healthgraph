@@ -75,6 +75,9 @@ class MedicationCreate(BaseModel):
     reminder_enabled: bool = False
     notes: Optional[str] = None
     source_document_id: Optional[UUID] = None
+    supply_quantity: Optional[float] = None
+    supply_started_on: Optional[date] = None
+    refills_left: Optional[int] = None
 
 
 class MedicationUpdate(BaseModel):
@@ -99,6 +102,9 @@ class MedicationUpdate(BaseModel):
     prn: Optional[bool] = None
     reminder_enabled: Optional[bool] = None
     notes: Optional[str] = None
+    supply_quantity: Optional[float] = None
+    supply_started_on: Optional[date] = None
+    refills_left: Optional[int] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -130,6 +136,9 @@ class MedicationResponse(BaseModel):
     reminder_enabled: bool
     notes: Optional[str] = None
     source_document_id: Optional[UUID] = None
+    supply_quantity: Optional[float] = None
+    supply_started_on: Optional[date] = None
+    refills_left: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 

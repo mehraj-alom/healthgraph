@@ -83,6 +83,23 @@ def _clean_float(value):
         return None
 
 
+def _leading_number(text) -> float | None:
+    """Parse the leading number of strings like '30 tablets' or '2'."""
+    import re as _re
+
+    if isinstance(text, (int, float)):
+        return float(text)
+    if not isinstance(text, str):
+        return None
+    m = _re.match(r"\s*(\d+(?:[.,]\d+)?)", text)
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(",", "."))
+    except ValueError:
+        return None
+
+
 def normalize_medicine(raw: dict) -> dict:
     """Normalize one raw model row into a form-ready medicine dict."""
     raw = raw if isinstance(raw, dict) else {}
@@ -132,6 +149,12 @@ def normalize_medicine(raw: dict) -> dict:
         "end_date": _clean_str(raw.get("end_date")) or None,
         "quantity": _clean_str(raw.get("quantity")) or None,
         "refills": _clean_str(raw.get("refills")) or None,
+        "supply_quantity": _leading_number(raw.get("quantity")),
+        "refills_left": (
+            int(_leading_number(raw.get("refills")))
+            if _leading_number(raw.get("refills")) is not None
+            else None
+        ),
         "purpose": _clean_str(raw.get("purpose")) or None,
         "instructions": _clean_str(raw.get("instructions")) or None,
         "warnings": [w for w in (raw.get("warnings") or []) if isinstance(w, str)],

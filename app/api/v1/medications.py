@@ -279,6 +279,9 @@ def create_medication(
         reminder_enabled=payload.reminder_enabled,
         notes=payload.notes,
         source_document_id=payload.source_document_id,
+        supply_quantity=payload.supply_quantity,
+        supply_started_on=payload.supply_started_on,
+        refills_left=payload.refills_left,
     )
     
     db.add(medication)

@@ -651,7 +651,7 @@ describe('batch 1 wiring', () => {
   test('migration registered + app config carries permissions', () => {
     const mig = src('src/db/migrations.ts');
     assert.ok(mig.includes('reminder_instances'), 'migration 16 table');
-    assert.ok(mig.includes('CURRENT_SCHEMA_VERSION = 17'), 'version bump');
+    assert.ok(mig.includes('CURRENT_SCHEMA_VERSION = 18'), 'version bump');
     const config = src('app.json');
     assert.ok(config.includes('expo-notifications'), 'plugin registered');
     assert.ok(config.includes('POST_NOTIFICATIONS'), 'post permission');
