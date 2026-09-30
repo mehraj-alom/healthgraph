@@ -415,6 +415,8 @@ export type RootStackParamList = {
   Recovery: undefined;
   /** First-class cross-engine correlation feed (device-only). */
   Insights: undefined;
+  /** One-tap doctor report PDF (device-only). */
+  Report: undefined;
   /** Priority world (selected engines + shared dial, tracking only). */
   Priority: undefined;
   Main: { screen?: string } | undefined;

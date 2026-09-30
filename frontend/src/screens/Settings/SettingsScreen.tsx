@@ -548,6 +548,14 @@ export default function SettingsScreen() {
             accessibilityLabel="View health areas"
             onPress={() => navigation.navigate('HealthAreas')}
           />
+          <CategoryTile
+            tone={TILE_TONES.wellbeing}
+            label="Doctor report"
+            hint="30-day PDF"
+            active={false}
+            accessibilityLabel="Generate doctor report PDF"
+            onPress={() => navigation.navigate('Report')}
+          />
         </View>
 
         {/* ── 3D anatomy downloads ── */}

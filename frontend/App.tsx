@@ -83,6 +83,7 @@ import WellbeingEngineScreen from '@/screens/WellbeingEngine/WellbeingEngineScre
 import HeartEngineScreen from '@/screens/HeartEngine/HeartEngineScreen';
 import RecoveryScreen from '@/screens/Recovery/RecoveryScreen';
 import InsightsScreen from '@/screens/Insights/InsightsScreen';
+import ReportScreen from '@/screens/Report/ReportScreen';
 import PriorityWorldScreen from '@/screens/Priority/PriorityWorldScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
@@ -882,6 +883,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="Insights"
               component={InsightsScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* One-tap doctor report PDF (device-only). */}
+            <RootStack.Screen
+              name="Report"
+              component={ReportScreen}
               options={{
                 headerShown: false,
               }}
