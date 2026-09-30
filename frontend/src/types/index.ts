@@ -413,6 +413,8 @@ export type RootStackParamList = {
   HeartEngine: undefined;
   /** Overnight-recovery hint from the user's own baseline (device-only). */
   Recovery: undefined;
+  /** First-class cross-engine correlation feed (device-only). */
+  Insights: undefined;
   /** Priority world (selected engines + shared dial, tracking only). */
   Priority: undefined;
   Main: { screen?: string } | undefined;

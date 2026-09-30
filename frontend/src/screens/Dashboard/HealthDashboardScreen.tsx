@@ -75,6 +75,7 @@ import { useTrends } from '@/hooks/useTrends';
 import { localDateString } from '@/screens/Dashboard/homeData';
 import { useHomeStory } from '@/screens/Dashboard/useHomeStory';
 import { useCorrelationFeed, pairToFeedItem, correlationPairKey, getPair, type CorrelationFeedItem, type CorrelationPair, type StreamSeries } from '@/screens/Dashboard/correlations';
+import { useCuratedFeed } from '@/screens/Dashboard/useCuratedFeed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BottomSheet } from '@/components/BottomSheet';
 import { ProfileSheet } from '@/components/ProfileSheet';
@@ -694,139 +695,7 @@ function ExploreSection() {
     </View>
   );
 }
-// ─── Correlations curation ───────────────────────────────────────────────────
-// Unusual/system streams never reach the feed: records processed, logging
-// rhythm, calories (a pure derivative of active minutes), and unlabeled
-// generic vitals ("Vital (mg)" with no concept name).
-const DROPPED_ITEM_IDS = new Set(['series-records', 'series-rhythm', 'series-calories']);
-
-function isUnusualItem(item: CorrelationFeedItem): boolean {
-  if (DROPPED_ITEM_IDS.has(item.id)) return true;
-  if (item.id.startsWith('series-vital:') && /^Vital(\s|\(|$)/i.test(item.title)) return true;
-  return false;
-}
-
-// Core daily signals in display order — the default 6–8 cards.
-const CORE_STREAM_ORDER = [
-  'sleepDur',
-  'wellbeing',
-  'energy',
-  'stress',
-  'water',
-  'activity',
-  'pain',
-  'hr',
-];
-const MAX_CORE_SERIES = 5;
-const MAX_TOP_SCATTERS = 3;
-
-const FEED_PREFS_KEY = 'hg:feed-custom:v1';
-
-interface FeedPrefs {
-  series: string[];
-  pairs: string[];
-}
-
-/**
- * useCuratedFeed — curated correlations: unusual cards dropped, 6–8 core
- * cards by default, user-added series + custom-built pairs persisted.
- * Pure derivation over the live feed; no fetching of its own.
- */
-function useCuratedFeed(
-  liveItems: CorrelationFeedItem[],
-  streams: StreamSeries[],
-  pairs: CorrelationPair[],
-): {
-  visibleFeed: CorrelationFeedItem[];
-  poolItems: CorrelationFeedItem[];
-  addedSeries: string[];
-  addedPairs: string[];
-  toggleSeries: (streamId: string) => void;
-  togglePair: (pairKey: string) => void;
-} {
-  const [addedSeries, setAddedSeries] = useState<string[]>([]);
-  const [addedPairs, setAddedPairs] = useState<string[]>([]);
-  const loadedRef = useRef(false);
-
-  useEffect(() => {
-    AsyncStorage.getItem(FEED_PREFS_KEY)
-      .then((raw) => {
-        if (!raw) return;
-        try {
-          const parsed = JSON.parse(raw) as FeedPrefs;
-          if (Array.isArray(parsed.series)) setAddedSeries(parsed.series.filter((s) => typeof s === 'string'));
-          if (Array.isArray(parsed.pairs)) setAddedPairs(parsed.pairs.filter((s) => typeof s === 'string'));
-        } catch {
-          // Corrupt prefs — fall back to defaults.
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        loadedRef.current = true;
-      });
-  }, []);
-
-  useEffect(() => {
-    if (!loadedRef.current) return;
-    AsyncStorage.setItem(FEED_PREFS_KEY, JSON.stringify({ series: addedSeries, pairs: addedPairs } satisfies FeedPrefs)).catch(
-      () => {},
-    );
-  }, [addedSeries, addedPairs]);
-
-  const toggleSeries = useCallback((streamId: string) => {
-    setAddedSeries((prev) => (prev.includes(streamId) ? prev.filter((s) => s !== streamId) : [...prev, streamId]));
-  }, []);
-
-  const togglePair = useCallback((pairKey: string) => {
-    setAddedPairs((prev) => (prev.includes(pairKey) ? prev.filter((s) => s !== pairKey) : [...prev, pairKey]));
-  }, []);
-
-  const curated = useMemo(() => {
-    const live = liveItems.filter((i) => !isUnusualItem(i));
-    const series = live.filter((i) => i.data.kind === 'timeSeries');
-    const scatters = live.filter((i) => i.data.kind === 'correlation');
-    const seriesById = new Map(series.map((s) => [s.id, s]));
-
-    // Default core: first present core streams (≤5) + top verdict scatters (≤3).
-    const core: CorrelationFeedItem[] = [];
-    for (const sid of CORE_STREAM_ORDER) {
-      if (core.length >= MAX_CORE_SERIES) break;
-      const it = seriesById.get(`series-${sid}`);
-      if (it) core.push(it);
-    }
-    const top = scatters.slice(0, MAX_TOP_SCATTERS);
-
-    // User additions, resolved against live data (stale ids drop out).
-    const added: CorrelationFeedItem[] = [];
-    for (const sid of addedSeries) {
-      const it = seriesById.get(`series-${sid}`);
-      if (it) added.push(it);
-    }
-    for (const key of addedPairs) {
-      const p = pairs.find((q) => correlationPairKey(q.aId, q.bId) === key) ?? null;
-      if (p) added.push(pairToFeedItem(p));
-    }
-
-    const seen = new Set<string>();
-    const visibleFeed: CorrelationFeedItem[] = [];
-    for (const it of [...core, ...top, ...added]) {
-      if (seen.has(it.id)) continue;
-      seen.add(it.id);
-      visibleFeed.push(it);
-    }
-    const poolItems = live.filter((i) => !seen.has(i.id));
-    return { visibleFeed, poolItems };
-  }, [liveItems, pairs, addedSeries, addedPairs]);
-
-  return {
-    visibleFeed: curated.visibleFeed,
-    poolItems: curated.poolItems,
-    addedSeries,
-    addedPairs,
-    toggleSeries,
-    togglePair,
-  };
-}
+// Curation lives in useCuratedFeed (shared with the Insights feed).
 
 // ─── Build-your-own correlation sheet ────────────────────────────────────────
 // Two metric pickers (A + B) backed by live streams. A pair only becomes
@@ -1239,6 +1108,7 @@ export default function HealthDashboardScreen() {
   }, [upNextMed, story, medications]);
 
   const goToDailyLog = useCallback(() => navigation.navigate('DailyLog'), [navigation]);
+  const goToInsights = useCallback(() => navigation.navigate('Insights'), [navigation]);
   const goToMedications = useCallback(() => navigation.navigate('Medications'), [navigation]);
   const goToTimeline = useCallback(() => navigation.navigate('Timeline'), [navigation]);
   const goToBody = useCallback(() => navigation.navigate('Body'), [navigation]);
@@ -1290,7 +1160,7 @@ export default function HealthDashboardScreen() {
         onMedications={goToMedications}
         onToggleUpNextTaken={() => void toggleUpNextTaken()}
       />
-      <CorrelationHeading count={feed.length} />
+      <CorrelationHeading count={feedQuery.items.length} />
     </View>
   ), [
     loggedToday, metrics.data?.today_wellbeing, waterMl, medNames, activeMeds.length, medTaken, medExpected, medActive,
@@ -1319,6 +1189,20 @@ export default function HealthDashboardScreen() {
   const feedLoading = feed.length === 0 && (feedQuery.isLocalLoading || trends.data == null);
   const feedFooter = feedLoading ? null : (
     <View style={styles.section}>
+      {feed.length > 3 ? (
+        <Card
+          onPress={goToInsights}
+          style={styles.addCard}
+          accessibilityLabel={`See all ${feed.length} insights`}
+        >
+          <Text style={styles.addGlyph}>→</Text>
+          <View style={styles.addText}>
+            <Text style={styles.addTitle}>See all {feed.length} insights</Text>
+            <Text style={styles.addSub}>Your cross-engine connections, full screen</Text>
+          </View>
+          <Text style={styles.addArrow}>›</Text>
+        </Card>
+      ) : null}
       <Card
         onPress={() => setFeedSheetOpen(true)}
         style={styles.addCard}
@@ -1379,7 +1263,7 @@ export default function HealthDashboardScreen() {
       />
 
       <Animated.FlatList
-        data={feed}
+        data={feed.slice(0, 3)}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListHeaderComponent={

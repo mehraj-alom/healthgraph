@@ -82,6 +82,7 @@ import NutritionEngineScreen from '@/screens/NutritionEngine/NutritionEngineScre
 import WellbeingEngineScreen from '@/screens/WellbeingEngine/WellbeingEngineScreen';
 import HeartEngineScreen from '@/screens/HeartEngine/HeartEngineScreen';
 import RecoveryScreen from '@/screens/Recovery/RecoveryScreen';
+import InsightsScreen from '@/screens/Insights/InsightsScreen';
 import PriorityWorldScreen from '@/screens/Priority/PriorityWorldScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
@@ -873,6 +874,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="Recovery"
               component={RecoveryScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* First-class cross-engine correlation feed. */}
+            <RootStack.Screen
+              name="Insights"
+              component={InsightsScreen}
               options={{
                 headerShown: false,
               }}
