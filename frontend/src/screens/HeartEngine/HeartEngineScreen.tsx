@@ -59,6 +59,13 @@ export default function HeartEngineScreen() {
     nav.navigate('Main', { screen: 'PpgMeasure' });
   }, [navigation]);
 
+  const goRecovery = useCallback(() => {
+    const nav = navigation as unknown as {
+      navigate: (route: string) => void;
+    };
+    nav.navigate('Recovery');
+  }, [navigation]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -174,6 +181,13 @@ export default function HeartEngineScreen() {
           style={styles.measureBtn}
           textStyle={styles.measureBtnText}
         />
+        <Button
+          title="Recovery"
+          variant="ghost"
+          onPress={goRecovery}
+          fullWidth
+          textStyle={styles.recoveryText}
+        />
         <Pressable
           onPress={() => setDisclaimerOpen((v) => !v)}
           accessibilityRole="button"
@@ -233,6 +247,7 @@ const styles = StyleSheet.create({
   tileFlag: { width: 6, height: 6, borderRadius: 3, backgroundColor: GV.danger, marginTop: 3 },
   measureBtn: { backgroundColor: '#4FD1C5' },
   measureBtnText: { color: '#062A26' },
+  recoveryText: { color: '#A7B8B2' },
   disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
   disclaimerHit: { alignItems: 'center', paddingVertical: 4 },
   disclaimerMore: { ...TYPE.caption, fontFamily: FONT.semi, color: '#4FD1C5', textAlign: 'center', marginTop: 2 },

@@ -411,6 +411,8 @@ export type RootStackParamList = {
   WellbeingEngine: undefined;
   /** Heart goal engine (camera measurements, tracking only). */
   HeartEngine: undefined;
+  /** Overnight-recovery hint from the user's own baseline (device-only). */
+  Recovery: undefined;
   /** Priority world (selected engines + shared dial, tracking only). */
   Priority: undefined;
   Main: { screen?: string } | undefined;

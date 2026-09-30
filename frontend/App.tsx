@@ -81,6 +81,7 @@ import FitnessEngineScreen from '@/screens/FitnessEngine/FitnessEngineScreen';
 import NutritionEngineScreen from '@/screens/NutritionEngine/NutritionEngineScreen';
 import WellbeingEngineScreen from '@/screens/WellbeingEngine/WellbeingEngineScreen';
 import HeartEngineScreen from '@/screens/HeartEngine/HeartEngineScreen';
+import RecoveryScreen from '@/screens/Recovery/RecoveryScreen';
 import PriorityWorldScreen from '@/screens/Priority/PriorityWorldScreen';
 
 // Lazy-load the 3D Body screen to keep Three.js/expo-gl code out of the main bundle
@@ -864,6 +865,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="HeartEngine"
               component={HeartEngineScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Overnight-recovery hint from the user's own baseline. */}
+            <RootStack.Screen
+              name="Recovery"
+              component={RecoveryScreen}
               options={{
                 headerShown: false,
               }}

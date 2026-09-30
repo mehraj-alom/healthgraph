@@ -7,6 +7,9 @@
  * seam with patient-isolation checks. RN-bound layers are pinned by
  * source-text contract. Absences (no resting HR, no SpO2, no min/max
  * range, no scores, no diagnoses, no migration) are tested as absences.
+ * P2.3 adds the overnight-recovery hint as a SEPARATE surface (Recovery
+ * screen + hook + pure module, tested in recovery.test.mts) — the Heart
+ * engine files below stay free of rated-number language.
  */
 
 import { describe, test } from 'node:test';
