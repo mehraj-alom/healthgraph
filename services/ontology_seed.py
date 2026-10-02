@@ -26,6 +26,16 @@ MANUAL_LOG_CONCEPTS = (
         "display_name": "Body Weight", "short_name": "Weight",
         "aliases": ("weight", "body weight", "bodyweight", "weigh-in", "weigh in"),
     },
+    {
+        "terminology": "LOINC", "code": "8480-6",
+        "display_name": "Systolic blood pressure", "short_name": "Systolic",
+        "aliases": ("systolic", "systolic blood pressure", "sys", "top number", "blood pressure systolic"),
+    },
+    {
+        "terminology": "LOINC", "code": "8462-4",
+        "display_name": "Diastolic blood pressure", "short_name": "Diastolic",
+        "aliases": ("diastolic", "diastolic blood pressure", "dia", "bottom number", "blood pressure diastolic"),
+    },
     # ── Symptoms (SNOMED CT) ──
     {
         "terminology": "SNOMED", "code": "25064002",

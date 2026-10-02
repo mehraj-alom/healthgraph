@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 20;
+export const CURRENT_SCHEMA_VERSION = 21;
 
 /**
  * Migration function type.
@@ -1029,6 +1029,40 @@ const migrations: Record<number, MigrationFn> = {
       20,
       'Craving/trigger log (device-only)',
       20,
+    );
+  },
+  // ========================================================================
+  // Migration 21: strength sets (additive, device-only)
+  // ========================================================================
+  // One row per logged set: exercise name, weight + unit, reps, time.
+  // Device-local only like substance_entries: no sync_status column, no
+  // queue rows, wiped with the patient — the UI labels this data
+  // accordingly until server sync for strength exists.
+  21: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS strength_sets (
+        entry_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        exercise TEXT NOT NULL,
+        weight_value REAL NOT NULL,
+        weight_unit TEXT NOT NULL,
+        reps INTEGER NOT NULL,
+        occurred_at TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_strength_patient_time ON strength_sets (patient_id, occurred_at);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      21,
+      'Strength sets (device-only)',
+      21,
     );
   },
 };

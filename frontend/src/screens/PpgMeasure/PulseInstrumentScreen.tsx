@@ -24,6 +24,8 @@ import { RppgCameraPreview, RppgCameraPreviewBoundary } from 'healthgraph-rppg';
 import { usePpgMeasurement } from '@/hooks/usePpgMeasurement';
 import { useRppgMeasurement } from '@/hooks/useRppgMeasurement';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import { hrvBaseline, rmssd as computeRmssd, type HrvBaseline } from '@/services/hrv';
+import { todayKeyLocal } from '@/utils/dayKey';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getRecentRppgMeasurements } from '@/db/queries/rppg';
 import {
@@ -131,6 +133,7 @@ export default function PulseInstrumentScreen() {
   const ppg = usePpgMeasurement();
   const [recentPpg, setRecentPpg] = useState<RecentRow | null>(null);
   const [recentRppg, setRecentRppg] = useState<RecentRow | null>(null);
+  const [hrvBase, setHrvBase] = useState<HrvBaseline | null>(null);
   const [trend, setTrend] = useState<BpmPoint[]>([]);
   const [elapsed, setElapsed] = useState(0);
 
@@ -156,12 +159,24 @@ export default function PulseInstrumentScreen() {
       if (!patientId) {
         setRecentPpg(null);
         setRecentRppg(null);
+        setHrvBase(null);
         return;
       }
       const [ppgRows, rppgRows] = await Promise.all([
         getRecentPpgMeasurements(patientId, 1),
         getRecentRppgMeasurements(patientId, 1),
       ]);
+      try {
+        const history = await getRecentPpgMeasurements(patientId, 60);
+        setHrvBase(
+          hrvBaseline(
+            history.map((h) => ({ measured_at: h.measured_at, rmssd_ms: h.rmssd_ms })),
+            todayKeyLocal(),
+          ),
+        );
+      } catch {
+        setHrvBase(null);
+      }
       const p = ppgRows[0];
       setRecentPpg(
         p?.heart_rate_bpm != null
@@ -373,6 +388,13 @@ export default function PulseInstrumentScreen() {
   const faceActive = machine.mode === 'face' && (machine.phase === 'CHECKING' || machine.phase === 'FACE_RUN');
   const fingertipActive = machine.mode === 'fingertip' && machine.phase === 'FINGERTIP_RUN';
 
+  // HRV from this fingertip read's beat intervals (null when too few).
+  const hrvNow = useMemo(
+    () => computeRmssd(ppg.result?.rrIntervalsMs ?? []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ppg.result],
+  );
+
   const liveReadout = useMemo(() => {
     if (machine.phase === 'FINGERTIP_RUN') {
       if (ppg.liveBpm !== null) return { value: `${Math.round(ppg.liveBpm)}`, unit: 'BPM · LIVE' };
@@ -413,6 +435,11 @@ export default function PulseInstrumentScreen() {
               </View>
             )}
             <TactileButton title="Begin check" onPress={beginCheck} accessibilityLabel="Begin automatic measurement check" />
+            <View style={styles.protoCard}>
+              <Text style={styles.protoTitle}>Morning read</Text>
+              <Text style={styles.protoLine}>On waking · lying still · breathe normally</Text>
+              <Text style={styles.protoLine}>60 seconds of stillness · same time daily builds the baseline</Text>
+            </View>
           </Panel>
         )}
 
@@ -549,6 +576,19 @@ export default function PulseInstrumentScreen() {
                   Quality {qualityLabel(ppg.result.signalQuality)} · {ppg.result.durationSeconds}s ·{' '}
                   {ppg.result.algorithmVersion}
                 </Text>
+                {hrvNow !== null && !ppg.simulated ? (
+                  <View style={styles.readout}>
+                    <Text style={styles.readoutValue}>{hrvNow}</Text>
+                    <Text style={styles.readoutUnit}>MS · HRV RMSSD</Text>
+                  </View>
+                ) : null}
+                {hrvNow !== null && !ppg.simulated ? (
+                  <Text style={styles.meta}>
+                    {hrvBase !== null
+                      ? `7-day baseline ${hrvBase.mean} ms · usual range ${hrvBase.lo}–${hrvBase.hi} · ${hrvBase.count} readings`
+                      : 'Baseline builds after 4 morning readings.'}
+                  </Text>
+                ) : null}
                 {ppg.rawSignal && ppg.rawSignal.length > 1 ? (
                   <PulseTraceView
                     samples={ppg.rawSignal}
@@ -643,6 +683,17 @@ const styles = StyleSheet.create({
   },
   recentBpm: { fontFamily: FONT.semi, fontSize: 16, color: INST.steel, fontVariant: ['tabular-nums'] },
   recentMeta: { fontSize: 12, color: INST.dim },
+  protoCard: {
+    borderWidth: 1,
+    borderColor: INST.engraved,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+    marginTop: 4,
+  },
+  protoTitle: { fontFamily: FONT.semi, fontSize: 14, color: INST.steel },
+  protoLine: { fontSize: 12, color: INST.dim },
   previewWell: { minHeight: 300, justifyContent: 'center' },
   preview: { width: '100%', height: 300 },
   overlayFloat: {

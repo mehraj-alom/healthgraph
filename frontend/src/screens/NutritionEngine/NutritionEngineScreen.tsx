@@ -11,7 +11,7 @@
  * data. Copy is descriptive — never healthy or unhealthy, never causal.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -25,6 +25,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Svg, { Circle } from 'react-native-svg';
 import { Button, Card, EmptyState, SectionHeader } from '@/components';
+import { getFasting, startFast, endFast } from '@/services/fastingStore';
+import {
+  FASTING_WINDOWS,
+  fastStatus,
+  fmtFastDuration,
+  type FastState,
+} from '@/services/fasting';
 import { EngineGraph } from '@/components/EngineGraph';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
@@ -121,6 +128,118 @@ function MacroBar({
         <View style={{ height: 8, borderRadius: 4, backgroundColor: color, width: `${Math.round(frac * 100)}%` }} />
       </View>
     </View>
+  );
+}
+
+/**
+ * FastingCard — on-device fasting timer. One tap starts a preset window;
+ * elapsed derives from the stored start time (kill-safe, no background
+ * timer). Ending at or past target completes, earlier ends early. Timer
+ * only — no stage guidance, no health claims.
+ */
+function FastingCard() {
+  const [state, setState] = useState<FastState | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void getFasting().then((s) => {
+      if (live) setState(s);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (state?.active === null) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [state?.active !== null]);
+
+  const start = useCallback(async (windowId: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setState(await startFast(windowId));
+      setNowMs(Date.now());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start this fast.');
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+
+  const end = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { state: next } = await endFast();
+      setState(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not end this fast.');
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+
+  const status = fastStatus(state?.active ?? null, nowMs);
+  const last = state && state.history.length > 0 ? state.history[state.history.length - 1] : null;
+  const lastMs = last ? new Date(last.endedAt).getTime() - new Date(last.startedAt).getTime() : 0;
+
+  return (
+    <>
+      <SectionHeader dark title="Fasting" titleStyle={styles.histTitle} />
+      <Card style={styles.darkCard}>
+        {state === null ? (
+          <Text style={styles.avgSub}>Loading…</Text>
+        ) : status.phase === 'idle' ? (
+          <>
+            <Text style={styles.avgSub}>Pick a window to start fasting.</Text>
+            <View style={styles.presetRow}>
+              {FASTING_WINDOWS.map((w) => (
+                <Pressable
+                  key={w.id}
+                  onPress={() => void start(w.id)}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Start ${w.id} fast`}
+                  style={({ pressed }) => [styles.presetBtn, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.presetText}>{w.id}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.bigValue}>
+              {fmtFastDuration(status.elapsedMs)} / {status.targetMs !== null ? fmtFastDuration(status.targetMs) : '—'}
+            </Text>
+            <Text style={styles.avgSub}>
+              {status.phase === 'done' ? 'Target reached — end your fast below.' : 'Fasting'}
+            </Text>
+            <Button
+              title={busy ? 'Saving…' : 'End fast'}
+              onPress={() => void end()}
+              disabled={busy}
+              fullWidth
+            />
+          </>
+        )}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {last ? (
+          <Text style={styles.avgSub}>
+            {`Last: ${last.windowId} · ${last.completed ? 'completed' : 'ended early'} in ${fmtFastDuration(lastMs)}`}
+          </Text>
+        ) : null}
+        <Text style={styles.provenance}>Timer only. Stays on this device.</Text>
+      </Card>
+    </>
   );
 }
 
@@ -343,6 +462,8 @@ export default function NutritionEngineScreen() {
               )}
             </Card>
 
+            <FastingCard />
+
             {classifiedMeals > 0 ? (
               <>
                 <SectionHeader dark title="Logged meals by type" titleStyle={styles.histTitle} />
@@ -558,6 +679,18 @@ const styles = StyleSheet.create({
   title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
   sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
   histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
+  presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  presetBtn: {
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 16,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  presetText: { ...TYPE.chip, color: '#FFFFFF' },
+  error: { ...TYPE.caption, color: GV.danger },
   loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
   fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
   darkCard: {

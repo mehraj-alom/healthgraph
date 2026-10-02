@@ -22,6 +22,7 @@ import {
   type PpgState,
 } from '@/services/ppg';
 import { saveAndSyncPpgResult, syncPendingPpg } from '@/services/ppgService';
+import { rmssd as computeRmssd, sdnn as computeSdnn } from '@/services/hrv';
 import { ensureCameraPermission } from '@/services/ppg/cameraPermission';
 
 export interface UsePpgMeasurement {
@@ -186,12 +187,15 @@ export function usePpgMeasurement(): UsePpgMeasurement {
       // can never be bypassed by flag-stripping, even though sim returns
       // early above and should never reach this call.
       try {
+        // Native HRV when the pipeline provides it; otherwise derive from
+        // the stored beat intervals with the same gated math. Face path
+        // untouched — its model emits no intervals.
         const out = await saveAndSyncPpgResult({
           heartRateBpm: r.heartRateBpm,
           signalQuality: r.signalQuality,
           durationSeconds: r.durationSeconds,
-          rmssdMs: r.rmssdMs ?? null,
-          sdnnMs: r.sdnnMs ?? null,
+          rmssdMs: r.rmssdMs ?? computeRmssd(r.rrIntervalsMs ?? []),
+          sdnnMs: r.sdnnMs ?? computeSdnn(r.rrIntervalsMs ?? []),
           rrIntervalsMs: r.rrIntervalsMs,
           algorithmVersion: r.algorithmVersion,
           measuredAt: new Date().toISOString(),

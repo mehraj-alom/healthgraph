@@ -219,10 +219,52 @@ export async function getSleepTimes(
   return times;
 }
 
-export interface SymptomDayRow {
+export interface BpReadingRow {
   log_date: string;
   concept_id: string | null;
-  severity: number | null;
+  value: number | null;
+  unit: string | null;
+}
+
+/**
+ * Bounded BP readings for the vitals display: VITAL_SIGN events inside
+ * [startDate, endDate], oldest first. Pairing, plausibility, and
+ * averaging happen in bloodPressure.ts — this returns raw rows only.
+ */
+export async function getBpReadings(
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<BpReadingRow[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ log_date: string; concept_id: string | null; payload_json: string }>(
+    `SELECT g.log_date AS log_date, e.concept_id AS concept_id, e.payload_json AS payload_json
+     FROM daily_log_events e
+     INNER JOIN daily_logs g ON e.group_id = g.group_id
+     WHERE g.patient_id = ?
+       AND e.event_type = 'VITAL_SIGN'
+       AND g.log_date >= ? AND g.log_date <= ?
+     ORDER BY g.log_date ASC, e.created_at ASC`,
+    [patientId, startDate, endDate],
+  );
+  const out: BpReadingRow[] = [];
+  for (const r of rows) {
+    const payload = parseJsonPayload(r.payload_json);
+    const rawValue = payload.value;
+    const value =
+      typeof rawValue === 'string'
+        ? Number(rawValue)
+        : typeof rawValue === 'number'
+          ? rawValue
+          : null;
+    out.push({
+      log_date: r.log_date.slice(0, 10),
+      concept_id: r.concept_id,
+      value: value !== null && Number.isFinite(value) ? value : null,
+      unit: typeof payload.unit === 'string' ? payload.unit : null,
+    });
+  }
+  return out;
 }
 
 /**
@@ -231,6 +273,12 @@ export interface SymptomDayRow {
  * group's patient_id. Display names resolve separately through the
  * manual-log concepts endpoint (events carry concept ids only).
  */
+export interface SymptomDayRow {
+  log_date: string;
+  concept_id: string | null;
+  severity: number | null;
+}
+
 export async function getSymptomDays(
   patientId: string,
   startDate: string,

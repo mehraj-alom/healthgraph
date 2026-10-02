@@ -6,6 +6,7 @@ import {
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   Share,
@@ -39,6 +40,12 @@ import { useDocuments } from '@/context/DocumentsContext';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { stripMarkdown } from '@/utils/stripMarkdown';
 import { buildChatExport } from '@/services/chatExport';
+import {
+  CRISIS_FOOTER,
+  CRISIS_RESOURCES,
+  CRISIS_SLIM_LINE,
+  CRISIS_TITLE,
+} from '@/services/crisisResources';
 
 // ─── Starry-night backdrop (pure code, static — no assets, no animation) ───
 // Deep-night base, deterministic star field, moon, two mountain ridges.
@@ -589,6 +596,54 @@ function Composer({
 }
 
 /**
+ * Crisis support: static US resources, opened through core Linking.
+ * Always visible (empty state card + slim line in the disclaimer
+ * footnote). No detection, no triage — the rows never see the chat.
+ */
+function openCrisisUrl(url: string): void {
+  void Linking.openURL(url).catch(() => {});
+}
+
+function CrisisCard() {
+  return (
+    <View style={styles.crisisCard}>
+      <Text style={styles.crisisTitle}>{CRISIS_TITLE}</Text>
+      {CRISIS_RESOURCES.map((r) => (
+        <Pressable
+          key={r.url}
+          onPress={() => openCrisisUrl(r.url)}
+          accessibilityRole="button"
+          accessibilityLabel={`${r.label}. ${r.sub}`}
+          hitSlop={8}
+          style={({ pressed }) => [styles.crisisRow, pressed && { opacity: 0.7 }]}
+        >
+          <View style={styles.crisisMain}>
+            <Text style={styles.crisisLabel}>{r.label}</Text>
+            <Text style={styles.crisisSub}>{r.sub}</Text>
+          </View>
+          <Text style={styles.crisisChev}>›</Text>
+        </Pressable>
+      ))}
+      <Text style={styles.crisisFoot}>{CRISIS_FOOTER}</Text>
+    </View>
+  );
+}
+
+function CrisisLine() {
+  return (
+    <Pressable
+      onPress={() => openCrisisUrl('tel:988')}
+      accessibilityRole="button"
+      accessibilityLabel="In crisis? Call or text 988"
+      hitSlop={8}
+      style={styles.crisisLineHit}
+    >
+      <Text style={styles.crisisLine}>{CRISIS_SLIM_LINE}</Text>
+    </Pressable>
+  );
+}
+
+/**
  * Quiet disclaimer — a one-line footnote that expands to the full medical
  * text on tap. Legally present, visually out of the way.
  */
@@ -609,6 +664,7 @@ function DisclaimerNote({ style }: { style?: object }) {
       {open ? (
         <Text style={styles.disclaimerText}>{MEDICAL_DISCLAIMER}</Text>
       ) : null}
+      <CrisisLine />
     </View>
   );
 }
@@ -990,6 +1046,7 @@ export default function ChatScreen() {
                     </Text>
 
                     <DisclaimerNote />
+                    <CrisisCard />
                   </View>
                 }
                 contentContainerStyle={styles.messagesContent}
@@ -1188,6 +1245,24 @@ const styles = StyleSheet.create({
   dnHeadText: { ...TYPE.caption, color: GV.fog },
   dnChevron: { color: GV.fog, fontSize: 11, fontFamily: FONT.semi },
   disclaimerText: { ...TYPE.caption, color: GV.fog, lineHeight: 18, textAlign: 'center' },
+  crisisCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 16,
+    padding: 14,
+    gap: 6,
+    marginTop: 8,
+  },
+  crisisTitle: { ...TYPE.chip, color: GV.fog, letterSpacing: 1 },
+  crisisRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  crisisMain: { flex: 1, gap: 1 },
+  crisisLabel: { ...TYPE.button, fontSize: 14, color: '#FFFFFF' },
+  crisisSub: { ...TYPE.caption, color: GV.fog },
+  crisisChev: { fontSize: 18, color: GV.fog },
+  crisisFoot: { ...TYPE.caption, color: GV.fog },
+  crisisLineHit: { minHeight: 32, alignItems: 'center', justifyContent: 'center' },
+  crisisLine: { ...TYPE.caption, color: GV.fog, textDecorationLine: 'underline' },
 
   // Starters — plain text rows, small and tight. No cards, no numerals.
   suggestionsContainer: { paddingHorizontal: SPACE.screenH, paddingBottom: 4, gap: 0 },

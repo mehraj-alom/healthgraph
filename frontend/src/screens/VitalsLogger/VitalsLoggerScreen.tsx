@@ -29,12 +29,14 @@ import { usePriority } from '@/hooks/usePriority';
 import { useActiveMedications } from '@/hooks/useMedications';
 import { durationFromBedWake, parseClockTime } from '@/screens/SleepEngine/sleepEngine';
 import {
+  getBpReadings as dbGetBpReadings,
   getDailyLogDetail as dbGetDailyLogDetail,
   upsertDailyLog as dbUpsertDailyLog,
   hydrateDailyLog as dbHydrateDailyLog,
   getPendingMutationId as dbGetPendingMutationId,
   reconcileDailyLogGroupId as dbReconcileDailyLogGroupId,
 } from '@/db/queries/dailyLogs';
+import { bpAverages, pairBpDays } from '@/services/bloodPressure';
 import type {
   DailyCheckInRequest,
   DailyCheckInResponse,
@@ -516,17 +518,21 @@ function OptionChips({
 // Smart vital inputs — per-concept "doctor's device" dials
 // ---------------------------------------------------------------------------
 
-type VitalPresetKind = 'hr' | 'glucose' | 'temp';
+type VitalPresetKind = 'hr' | 'glucose' | 'temp' | 'bpSys' | 'bpDia';
 
 /** Recognize backend manual-log concepts that deserve a dedicated dial. */
 function vitalPresetFor(concept: ManualLogConcept | undefined): VitalPresetKind | null {
   if (!concept) return null;
   if (concept.terminology === 'LOINC' && concept.code === '8867-4') return 'hr';
   if (concept.terminology === 'LOINC' && concept.code === '2339-0') return 'glucose';
+  if (concept.terminology === 'LOINC' && concept.code === '8480-6') return 'bpSys';
+  if (concept.terminology === 'LOINC' && concept.code === '8462-4') return 'bpDia';
   const name = `${concept.short_name ?? ''} ${concept.display_name}`.toLowerCase();
   if (/heart|pulse/.test(name)) return 'hr';
   if (/gluc|sugar/.test(name)) return 'glucose';
   if (/temp|thermal/.test(name)) return 'temp';
+  if (/systolic/.test(name)) return 'bpSys';
+  if (/diastolic/.test(name)) return 'bpDia';
   return null;
 }
 
@@ -544,6 +550,8 @@ const VITAL_DIALS: Record<
   hr: { min: 30, max: 220, step: 1, unit: 'bpm', label: 'Heart rate' },
   glucose: { min: 20, max: 600, step: 1, unit: 'mg/dL', label: 'Blood glucose' },
   temp: { min: 95, max: 108, step: 0.1, unit: '°F', label: 'Temperature' },
+  bpSys: { min: 50, max: 300, step: 1, unit: 'mmHg', label: 'Systolic' },
+  bpDia: { min: 30, max: 200, step: 1, unit: 'mmHg', label: 'Diastolic' },
 };
 
 /** Default unit stamped when a vital concept is picked. */
@@ -661,6 +669,58 @@ type VitalDraft = { id: number; conceptId: string; value: string; unit: string }
 type PainDraft = { id: number; structureId: string; bodyLocationId: string; severity: string; painType: string };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * BpHistoryCard — cuff readings the user logged, as neutral history.
+ * Latest pair plus trailing averages with reading counts. No ranges,
+ * no staging, no alerts — log and averages only. Reads SQLite directly;
+ * refreshes when the daily log saves (bp-readings invalidation).
+ */
+function BpHistoryCard() {
+  const bpQuery = useQuery({
+    queryKey: ['bp-readings'],
+    queryFn: async () => {
+      const patientId = getCachedPatientId();
+      if (!patientId) return [];
+      const today = todayKeyLocal();
+      const start = shiftDayKey(today, -89);
+      return dbGetBpReadings(patientId, start, today);
+    },
+    staleTime: 60_000,
+  });
+  const pairs = pairBpDays(bpQuery.data ?? []);
+  const today = todayKeyLocal();
+  const week = bpAverages(pairs, today, 7);
+  const month = bpAverages(pairs, today, 30);
+  const latest = pairs.length > 0 ? pairs[pairs.length - 1] : null;
+  return (
+    <View style={styles.bpCard}>
+      <Text style={styles.fieldLabel}>Blood pressure history</Text>
+      {bpQuery.isLoading ? (
+        <Text style={styles.bpSub}>Loading…</Text>
+      ) : !latest ? (
+        <Text style={styles.bpSub}>No readings yet. Log systolic + diastolic above.</Text>
+      ) : (
+        <>
+          <Text style={styles.bpLatest}>
+            {latest.systolic}/{latest.diastolic} mmHg · {latest.log_date.slice(5)}
+          </Text>
+          {week.count > 0 ? (
+            <Text style={styles.bpSub}>
+              7-day avg {week.avgSystolic}/{week.avgDiastolic} · {week.count} {week.count === 1 ? 'reading' : 'readings'}
+            </Text>
+          ) : null}
+          {month.count > 0 ? (
+            <Text style={styles.bpSub}>
+              30-day avg {month.avgSystolic}/{month.avgDiastolic} · {month.count} {month.count === 1 ? 'reading' : 'readings'}
+            </Text>
+          ) : null}
+        </>
+      )}
+      <Text style={styles.bpSub}>Cuff readings you logged. Averages only.</Text>
+    </View>
+  );
+}
 
 export default function VitalsLoggerScreen() {
   const navigation = useNavigation<Nav>();
@@ -1098,6 +1158,7 @@ export default function VitalsLoggerScreen() {
         queryClient.invalidateQueries({ queryKey: ['daily-metrics'] }),
         queryClient.invalidateQueries({ queryKey: ['daily-log'] }),
         queryClient.invalidateQueries({ queryKey: ['daily-checkin'] }),
+        queryClient.invalidateQueries({ queryKey: ['bp-readings'] }),
       ]);
       if (serverSaved) {
         setFeedback({
@@ -2118,6 +2179,7 @@ export default function VitalsLoggerScreen() {
               );
             })}
             <Pressable onPress={addVital} style={styles.addBtn}><Text style={styles.addBtnText}>+ Add vital</Text></Pressable>
+            <BpHistoryCard />
           </View>
         </Section>
 
@@ -3002,6 +3064,26 @@ const styles = StyleSheet.create({
     color: GV.fog,
     textAlign: 'center',
     marginTop: 8,
+  },
+  bpCard: {
+    backgroundColor: '#10141F',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 16,
+    padding: 14,
+    gap: 4,
+    marginTop: 12,
+  },
+  bpLatest: {
+    ...TYPE.button,
+    fontSize: 17,
+    color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
+  },
+  bpSub: {
+    ...TYPE.caption,
+    color: GV.fog,
+    fontVariant: ['tabular-nums'],
   },
   essMedRow: {
     flexDirection: 'row',

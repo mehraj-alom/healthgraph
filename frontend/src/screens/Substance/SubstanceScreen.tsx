@@ -49,6 +49,18 @@ import {
 } from '@/services/substanceGoals';
 import { getSubstanceGoals, setSubstanceGoal } from '@/services/substanceGoalStore';
 import {
+  addPledge,
+  getPledges,
+  getSavings,
+  setSavingsPlan,
+} from '@/services/substancePledgeStore';
+import {
+  hasPledgedToday,
+  pledgeStreak,
+  savingsSince,
+  savingsStatusLine,
+} from '@/services/substancePledge';
+import {
   CRAVING_TRIGGERS,
   cravingStatusLine,
   deleteCravingEntry,
@@ -200,8 +212,148 @@ function GoalsSection({ entries, today }: { entries: SubstanceEntry[]; today: st
   );
 }
 
-export default function SubstanceScreen() {
-  const [entries, setEntries] = useState<SubstanceEntry[]>([]);
+function PledgeSection({ today }: { today: string }) {
+  const [pledges, setPledges] = useState<{ category: string; day: string; reason: string | null }[]>([]);
+  const [reasons, setReasons] = useState<{ alcohol: string; tobacco: string }>({ alcohol: '', tobacco: '' });
+  const [spends, setSpends] = useState<{ alcohol: string; tobacco: string }>({ alcohol: '', tobacco: '' });
+  const [plans, setPlans] = useState<{ alcohol: { amountPerDay: number; currency: string } | null; tobacco: { amountPerDay: number; currency: string } | null }>({ alcohol: null, tobacco: null });
+  const [quitDates, setQuitDates] = useState<{ alcohol?: string; tobacco?: string }>({});
+  const [saving, setSaving] = useState<GoalCategory | null>(null);
+  const [pledgeError, setPledgeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const patientId = getCachedPatientId();
+    if (!patientId) return;
+    void Promise.all([getPledges(patientId), getSavings(patientId), getSubstanceGoals(patientId)]).then(
+      ([p, s, g]) => {
+        setPledges(p.pledges);
+        setPlans({ alcohol: s.alcohol, tobacco: s.tobacco });
+        setSpends({
+          alcohol: s.alcohol != null ? String(s.alcohol.amountPerDay) : '',
+          tobacco: s.tobacco != null ? String(s.tobacco.amountPerDay) : '',
+        });
+        setQuitDates({
+          ...(g.alcohol.quitDate ? { alcohol: g.alcohol.quitDate } : {}),
+          ...(g.tobacco.quitDate ? { tobacco: g.tobacco.quitDate } : {}),
+        });
+      },
+    );
+  }, []);
+
+  const pledge = useCallback(
+    async (category: GoalCategory) => {
+      const patientId = getCachedPatientId();
+      if (!patientId || saving) return;
+      setSaving(category);
+      setPledgeError(null);
+      try {
+        const next = await addPledge(patientId, {
+          category,
+          day: today,
+          reason: reasons[category],
+        });
+        setPledges(next.pledges);
+        setReasons((r) => ({ ...r, [category]: '' }));
+      } catch (err) {
+        setPledgeError(err instanceof Error ? err.message : 'Could not save this pledge.');
+      } finally {
+        setSaving(null);
+      }
+    },
+    [saving, reasons, today],
+  );
+
+  const saveSpend = useCallback(
+    async (category: GoalCategory) => {
+      const patientId = getCachedPatientId();
+      if (!patientId || saving) return;
+      setSaving(category);
+      try {
+        const next = await setSavingsPlan(patientId, {
+          category,
+          amountPerDay: spends[category].trim() ? Number(spends[category]) : null,
+        });
+        setPlans({ alcohol: next.alcohol, tobacco: next.tobacco });
+      } catch {
+        setPledgeError('Enter a typical spend per day above zero.');
+      } finally {
+        setSaving(null);
+      }
+    },
+    [saving, spends],
+  );
+
+  return (
+    <>
+      {(['alcohol', 'tobacco'] as GoalCategory[]).map((category) => {
+        const streak = pledgeStreak(pledges, category, today);
+        const pledged = hasPledgedToday(pledges, category, today);
+        const plan = plans[category];
+        const firstPledge = pledges
+          .filter((p) => p.category === category)
+          .map((p) => p.day)
+          .sort()[0];
+        const summary = savingsSince(quitDates[category] ?? firstPledge ?? null, plan?.amountPerDay ?? null, today);
+        return (
+          <View key={category}>
+            <SectionHeader
+              dark
+              title={category === 'alcohol' ? 'Alcohol pledge' : 'Tobacco pledge'}
+              titleStyle={styles.histTitle}
+            />
+            <Card style={styles.darkCard}>
+              <Text style={styles.bigValue}>{streak}</Text>
+              <Text style={styles.avgSub}>
+                {streak === 1 ? 'day in a row pledged' : 'days in a row pledged'}
+              </Text>
+              {!pledged ? (
+                <>
+                  <Input
+                    label="Why — optional"
+                    value={reasons[category]}
+                    onChangeText={(v) => setReasons((r) => ({ ...r, [category]: v }))}
+                    placeholder="One line for today"
+                  />
+                  <Button
+                    title={saving === category ? 'Saving…' : 'Pledge today'}
+                    onPress={() => void pledge(category)}
+                    disabled={saving === category}
+                    fullWidth
+                  />
+                </>
+              ) : (
+                <Text style={styles.avgSub}>Pledged for today.</Text>
+              )}
+              {pledgeError && saving === category ? <Text style={styles.error}>{pledgeError}</Text> : null}
+              <View style={styles.capRow}>
+                <Input
+                  label="Typical spend per day"
+                  value={spends[category]}
+                  onChangeText={(v) => setSpends((s) => ({ ...s, [category]: v.replace(/[^0-9.]/g, '') }))}
+                  placeholder="e.g. 12.50"
+                  keyboardType="decimal-pad"
+                />
+                <Button
+                  title="Set"
+                  onPress={() => void saveSpend(category)}
+                  disabled={saving === category}
+                  style={styles.capBtn}
+                  textStyle={styles.capBtnText}
+                />
+              </View>
+              <Text style={styles.avgSub}>
+                {savingsStatusLine(summary, plan?.currency ?? '$')}
+              </Text>
+              <Text style={styles.provenance}>Pledges and spend stay on this device only.</Text>
+            </Card>
+          </View>
+        );
+      })}
+    </>
+  );
+}
+
+export default function SubstanceScreen() {  const [entries, setEntries] = useState<SubstanceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<SubstanceEntry | null>(null);
@@ -458,6 +610,8 @@ export default function SubstanceScreen() {
         </Card>
 
         <GoalsSection entries={entries} today={todayKey()} />
+
+        <PledgeSection today={todayKey()} />
 
         <SectionHeader dark title="Cravings" titleStyle={styles.histTitle} />
         <Card style={styles.darkCard}>

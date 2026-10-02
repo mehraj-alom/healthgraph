@@ -12,8 +12,9 @@
  * Copy is descriptive — never fitter/healthier, never causal.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,10 +22,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Button, Card, EmptyState, SectionHeader } from '@/components';
+import { Button, Card, Chip, EmptyState, Input, SectionHeader } from '@/components';
 import { EngineGraph } from '@/components/EngineGraph';
 import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { getCachedPatientId } from '@/services/patientIdentity';
+import { todayKey } from '@/screens/Onboarding/momentum';
+import {
+  deleteStrengthSet,
+  exerciseVolume,
+  insertStrengthSet,
+  listStrengthSets,
+  normalizeStrengthInput,
+  personalRecords,
+  type StrengthSet,
+} from '@/db/queries/strength';
 import { TILE_TONES } from '@/theme/tones';
 import { useFitnessEngine } from '@/hooks/useFitnessEngine';
 import {
@@ -38,10 +50,168 @@ function formatDayLabel(date: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function sessionSub(session: FitnessSession): string {
-  const parts = [formatDayLabel(session.date)];
+function sessionSub(session: FitnessSession): string {  const parts = [formatDayLabel(session.date)];
   if (session.durationMinutes != null) parts.push(formatActiveMinutes(session.durationMinutes));
   return parts.join(' · ');
+}
+
+/**
+ * StrengthSection — set logging with volume + estimated PRs.
+ * One row per set (exercise, weight, reps); volume sums weight×reps
+ * in kg per exercise for today; PRs are best Epley estimates labeled
+ * as estimates. Device-only like the sessions above it.
+ */
+function StrengthSection({ today }: { today: string }) {
+  const [sets, setSets] = useState<StrengthSet[]>([]);
+  const [exercise, setExercise] = useState('');
+  const [weight, setWeight] = useState('');
+  const [reps, setReps] = useState('');
+  const [unit, setUnit] = useState<'kg' | 'lb'>('kg');
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const patientId = getCachedPatientId();
+      if (!patientId) return;
+      setSets(await listStrengthSets(patientId, 200));
+    } catch {
+      // List is convenience — the form still works.
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleAdd = useCallback(async () => {
+    if (saving) return;
+    const patientId = getCachedPatientId();
+    if (!patientId) {
+      setFormError('Your session has expired. Please sign in again.');
+      return;
+    }
+    let input;
+    try {
+      input = normalizeStrengthInput({
+        exercise,
+        weight_value: weight.trim() ? Number(weight) : null,
+        weight_unit: unit,
+        reps: reps.trim() ? Number(reps) : null,
+        occurred_at: `${today}T12:00:00`,
+      });
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Check the highlighted fields.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await insertStrengthSet(patientId, input);
+      setExercise('');
+      setWeight('');
+      setReps('');
+      setFormError(null);
+      await load();
+    } catch {
+      setFormError('Could not save this set. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }, [saving, exercise, weight, reps, unit, today, load]);
+
+  const handleDelete = useCallback(
+    async (entryId: string) => {
+      const patientId = getCachedPatientId();
+      if (!patientId) return;
+      await deleteStrengthSet(patientId, entryId).catch(() => false);
+      await load();
+    },
+    [load],
+  );
+
+  const todaySets = sets.filter((s) => s.occurred_at.slice(0, 10) === today);
+  const volume = exerciseVolume(todaySets);
+  const prs = personalRecords(sets);
+  const prExercises = Object.keys(prs).sort();
+
+  return (
+    <>
+      <SectionHeader dark title="Strength" titleStyle={styles.histTitle} />
+      <Card style={styles.darkCard}>
+        <Input
+          label="Exercise"
+          value={exercise}
+          onChangeText={setExercise}
+          placeholder="e.g. Bench Press"
+        />
+        <View style={styles.setRow}>
+          <View style={styles.setField}>
+            <Input
+              label="Weight"
+              value={weight}
+              onChangeText={setWeight}
+              placeholder="e.g. 60"
+              keyboardType="decimal-pad"
+            />
+          </View>
+          <View style={styles.setField}>
+            <Input
+              label="Reps"
+              value={reps}
+              onChangeText={setReps}
+              placeholder="e.g. 8"
+              keyboardType="number-pad"
+            />
+          </View>
+          <View style={styles.setUnit}>
+            <Chip label="kg" selected={unit === 'kg'} onPress={() => setUnit('kg')} size="medium" />
+            <Chip label="lb" selected={unit === 'lb'} onPress={() => setUnit('lb')} size="medium" />
+          </View>
+        </View>
+        {formError ? <Text style={styles.error}>{formError}</Text> : null}
+        <Button
+          title={saving ? 'Saving…' : 'Add set'}
+          onPress={() => void handleAdd()}
+          disabled={saving}
+          fullWidth
+        />
+        {Object.keys(volume).length > 0 ? (
+          <Text style={styles.avgSub}>
+            {`Today: ${Object.entries(volume).map(([name, v]) => `${name} ${Math.round(v)} kg`).join(' · ')}`}
+          </Text>
+        ) : null}
+        {prExercises.length > 0 ? (
+          <Text style={styles.avgSub}>
+            {`Best: ${prExercises.map((name) => `${name} ${prs[name]} kg est. 1RM`).join(' · ')}`}
+          </Text>
+        ) : null}
+        <Text style={styles.provenance}>Sets stay on this device only. Estimates, not measurements.</Text>
+      </Card>
+      {todaySets.length > 0 ? (
+        <View style={styles.list}>
+          {todaySets.map((s) => (
+            <Card key={s.entry_id} style={styles.darkCard}>
+              <View style={styles.rowTop}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowTitle}>{s.exercise}</Text>
+                  <Text style={styles.rowSub}>{`${s.weight_value} ${s.weight_unit} × ${s.reps}`}</Text>
+                </View>
+                <Pressable
+                  onPress={() => void handleDelete(s.entry_id)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${s.exercise} set`}
+                  style={styles.rowBtn}
+                >
+                  <Text style={[styles.rowBtnText, styles.deleteText]}>Delete</Text>
+                </Pressable>
+              </View>
+            </Card>
+          ))}
+        </View>
+      ) : null}
+    </>
+  );
 }
 
 export default function FitnessEngineScreen() {
@@ -177,6 +347,8 @@ export default function FitnessEngineScreen() {
           </>
         )}
 
+        <StrengthSection today={todayKey()} />
+
         <Button
           title="Log activity"
           onPress={goLog}
@@ -228,6 +400,13 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, gap: 4 },
   rowTitle: { ...TYPE.button, fontSize: 15, color: '#FFFFFF' },
   rowSub: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
+  rowBtn: { minWidth: 44, minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  rowBtnText: { ...TYPE.chip, color: '#3DDC84' },
+  deleteText: { color: GV.danger },
+  setRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-end' },
+  setField: { flex: 1 },
+  setUnit: { flexDirection: 'row', gap: 8, paddingBottom: 4 },
+  error: { ...TYPE.caption, color: GV.danger },
   logBtn: { backgroundColor: '#4FD1C5' },
   logBtnText: { color: '#062A26' },
   disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
