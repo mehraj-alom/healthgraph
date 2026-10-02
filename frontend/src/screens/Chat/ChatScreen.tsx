@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Share,
   useWindowDimensions,
 } from 'react-native';
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
@@ -37,6 +38,7 @@ import { useReducedMotion } from '@/theme/useReducedMotion';
 import { useDocuments } from '@/context/DocumentsContext';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { stripMarkdown } from '@/utils/stripMarkdown';
+import { buildChatExport } from '@/services/chatExport';
 
 // ─── Starry-night backdrop (pure code, static — no assets, no animation) ───
 // Deep-night base, deterministic star field, moon, two mountain ridges.
@@ -872,6 +874,16 @@ export default function ChatScreen() {
     setRevealingId(null);
   }, []);
 
+  // Share chat: export the visible turns as labeled text through the OS
+  // share sheet. Nothing is uploaded — the text never leaves the device
+  // except through the user's own share action.
+  const shareChat = useCallback(() => {
+    if (sending) return;
+    const text = buildChatExport(messages);
+    if (!text) return;
+    void Share.share({ message: text, title: 'HealthGraph chat export' }).catch(() => {});
+  }, [sending, messages]);
+
   const lastAssistantId =
     messages.length > 0 && messages[messages.length - 1].role === 'assistant'
       ? messages[messages.length - 1].id
@@ -935,6 +947,21 @@ export default function ChatScreen() {
               <Text style={styles.topGlyph}>‹</Text>
             </Pressable>
             <Text style={styles.topTitle}>New chat</Text>
+            <Pressable
+              onPress={shareChat}
+              accessibilityRole="button"
+              accessibilityLabel="Share chat"
+              accessibilityState={{ disabled: isEmpty || sending }}
+              hitSlop={12}
+              disabled={isEmpty || sending}
+              style={({ pressed }) => [
+                styles.topBtn,
+                pressed && { opacity: 0.6 },
+                (isEmpty || sending) && styles.topBtnDisabled,
+              ]}
+            >
+              <Text style={[styles.topGlyph, styles.topShareGlyph]}>⤴</Text>
+            </Pressable>
             <Pressable
               onPress={newChat}
               accessibilityRole="button"
@@ -1090,6 +1117,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: FONT.semi,
     marginTop: -2,
+  },
+  topShareGlyph: {
+    fontSize: 17,
+    marginTop: -1,
+  },
+  topBtnDisabled: {
+    opacity: 0.35,
   },
   topTitle: {
     flex: 1,

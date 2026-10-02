@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HealthGraph — Competitive Teardown: Every Engine vs Its App</title>
+<style>
+  :root{
+    --bg:#080A11; --card:#10141F; --line:rgba(255,255,255,.10);
+    --txt:#FFFFFF; --fog:#8B95A7; --teal:#4FD1C5; --teal-dim:#062A26;
+    --danger:#FF7A7A; --warn:#FFC857; --good:#3DDC84;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    line-height:1.55}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:30px;letter-spacing:-.4px;margin:0 0 6px}
+  .lede{color:var(--fog);max-width:760px;margin:0 0 4px}
+  .meta{color:var(--fog);font-size:12px;margin:8px 0 24px}
+  .meta b{color:var(--teal)}
+  nav.toc{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:16px 20px;margin:0 0 24px}
+  nav.toc b{font-size:13px;letter-spacing:1px;color:var(--teal);text-transform:uppercase}
+  nav.toc .links{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  nav.toc a{color:var(--txt);text-decoration:none;font-size:13px;background:rgba(255,255,255,.06);
+    border:1px solid var(--line);padding:5px 11px;border-radius:9999px}
+  nav.toc a:hover{border-color:var(--teal)}
+  .dash{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 24px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+  .stat .n{font-size:28px;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums}
+  .stat .l{font-size:12px;color:var(--fog)}
+  h2.sec{font-size:19px;margin:30px 0 4px;letter-spacing:-.2px}
+  h2.sec .pct{color:var(--teal);font-variant-numeric:tabular-nums}
+  .comp{color:var(--fog);font-size:13px;margin:0 0 10px}
+  .comp b{color:var(--txt)}
+  .bar{height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin:6px 0 12px}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--teal),#3DDC84);border-radius:4px}
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  @media(max-width:760px){.cols{grid-template-columns:1fr}}
+  .col{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .col h3{margin:0 0 8px;font-size:12px;letter-spacing:1px;text-transform:uppercase}
+  .col.have h3{color:var(--good)} .col.part h3{color:var(--warn)} .col.miss h3{color:var(--danger)}
+  .col ul{margin:0;padding-left:18px;font-size:13px}
+  .col li{margin:3px 0} .col li::marker{color:var(--fog)}
+  .note{font-size:13px;color:var(--fog);background:rgba(79,209,197,.07);
+    border:1px solid rgba(79,209,197,.25);border-radius:12px;padding:10px 14px;margin:10px 0 0}
+  .note b{color:var(--teal)}
+  .p0{font-size:13px;background:rgba(255,122,122,.07);border:1px solid rgba(255,122,122,.3);
+    border-radius:12px;padding:10px 14px;margin:10px 0 0}
+  .p0 b{color:var(--danger)}
+  table.top{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0 0}
+  table.top th{text-align:left;color:var(--fog);font-weight:600;border-bottom:1px solid var(--line);padding:8px 8px 8px 0}
+  table.top td{border-bottom:1px solid rgba(255,255,255,.06);padding:8px 8px 8px 0;vertical-align:top}
+  table.top td:first-child{color:var(--danger);font-weight:700;white-space:nowrap}
+  footer{color:var(--fog);font-size:12px;margin-top:40px;border-top:1px solid var(--line);padding-top:16px}
+  .pill{display:inline-block;font-size:11px;border:1px solid var(--line);border-radius:9999px;
+    padding:2px 9px;color:var(--fog);margin:0 6px 6px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Every engine vs its whole app.</h1>
+<p class="lede">Competitive teardown of HealthGraph's engines against the best single-purpose apps in each category.
+The bar for each engine: <b style="color:#fff">could a user delete the competitor app and lose nothing?</b>
+Green = we have it · Yellow = partial · Red = missing. “Intentional-out” = deliberately not built (diagnosis, medical-device claims, surveillance).</p>
+<p class="meta">Researched <b>October 2026</b> · competitors: Whoop · Oura · Sleep Cycle · HRV4Training · Welltory · Strava · Strong · MyFitnessPal · Cronometer · Yazio · Lose It! · Happy Scale · Flo · Clue · I Am Sober · Sunnyside · Reframe · Medisafe · Daylio · Bearable · How We Feel · Streaks · Habitica · Woebot · Wysa · Ada · Withings/Apple BP · Visible Body/BioDigital · Apple Health Records · <span title="could not verify">(?) = single-source, unverified</span></p>
+
+<nav class="toc"><b>Engines</b><div class="links">
+<a href="#heart">Heart 35%</a><a href="#sleep">Sleep 40%</a><a href="#recovery">Recovery 30%</a>
+<a href="#fitness">Fitness 30%</a><a href="#nutrition">Nutrition 55%</a><a href="#weight">Weight 50%</a>
+<a href="#mood">Mood 35%</a><a href="#cycle">Cycle 55%</a><a href="#substance">Substance 60%</a>
+<a href="#meds">Medications 75%</a><a href="#voice">Voice 70%</a><a href="#chat">Chat 50%</a>
+<a href="#vitals">Vitals 45%</a><a href="#camhr">Camera HR 30%</a><a href="#habits">Habits 30%</a>
+<a href="#records">Records 55%</a><a href="#body3d">3D Body —</a><a href="#insights">Insights 55%</a><a href="#compliance">⚖️ Compliance</a>
+</div></nav>
+
+<div class="dash">
+  <div class="stat"><div class="n">47%</div><div class="l">mean replacement score, 17 engines</div></div>
+  <div class="stat"><div class="n">41</div><div class="l">P0 gaps across all engines</div></div>
+  <div class="stat"><div class="n">3</div><div class="l">engines ≥ 60% (Meds, Voice, Substance)</div></div>
+  <div class="stat"><div class="n">9</div><div class="l">intentional-outs (diagnosis/device claims)</div></div>
+</div>
+
+<h2 class="sec">Top P0 gaps, all engines</h2>
+<table class="top">
+<tr><th>#</th><th>Gap</th><th>Engine</th><th>Competitor proof</th></tr>
+<tr><td>P0-1</td><td>Blood-pressure logging + averages + 7-day protocol reminders</td><td>Vitals</td><td>Apple native BP log, Withings, Medisafe measurements</td></tr>
+<tr><td>P0-2</td><td>Barcode scan for food logging</td><td>Nutrition</td><td>MFP, Cronometer, Yazio, Lose It — all have it</td></tr>
+<tr><td>P0-3</td><td>Camera HRV + morning readiness protocol</td><td>Camera HR</td><td>HRV4Training's signature, validated vs ECG</td></tr>
+<tr><td>P0-4</td><td>Strength logging: sets × reps, volume, PRs, rest timer</td><td>Fitness</td><td>Strong's entire app is this</td></tr>
+<tr><td>P0-5</td><td>Morning pledge + cost-savings calculator</td><td>Substance</td><td>I Am Sober's accountability loop</td></tr>
+<tr><td>P0-6</td><td>Family missed-dose alerts (Medfriend-style)</td><td>Medications</td><td>Medisafe's safety net</td></tr>
+<tr><td>P0-7</td><td>Behavior-impact analysis (X affects Y, with confidence)</td><td>Insights</td><td>Whoop Impacts, Bearable grid, Daylio influence</td></tr>
+<tr><td>P0-8</td><td>Crisis resources in chat (hotlines, escalation)</td><td>Chat</td><td>Wysa, Woebot, How We Feel all carry this</td></tr>
+<tr><td>P0-9</td><td>TTC / pregnancy / perimenopause modes</td><td>Cycle</td><td>Flo + Clue both; fertile-window algorithm</td></tr>
+<tr><td>P0-10</td><td>Fasting timer integrated with diary</td><td>Nutrition</td><td>Yazio, MFP, Cronometer Gold</td></tr>
+</table>
+
+<h2 class="sec" id="compliance">⚖️ Compliance map: what we can build without becoming a regulated company</h2>
+<p class="comp">Researched <b>October 2026</b> · FDA (General Wellness guidance reissued Jan 2026, device-software policy, warning letters, 510(k)/De Novo database) · FTC enforcement (Flo, GoodRx, Premom, BetterHelp, Instant BP) · HHS/OCR FAQs · WA MHMDA · CCPA · GDPR/MDR · Apple + Google store policy. (?) = single-source, unverified.</p>
+<div class="note"><b>The core rule — FDA's two-factor test (both required):</b> (1) only a <i>general-wellness intended use</i> — fitness, nutrition, weight, sleep, stress, mindfulness, reproductive health in general terms, judged from labeling, ads, UI <i>and functionality</i>, not just the disclaimer; (2) <i>low risk</i>. Backed by the Cures Act: software “for maintaining or encouraging a healthy lifestyle and unrelated to diagnosis, cure, mitigation, prevention, or treatment” is <b>not a device at all</b>. Jan 2026 clarification: non-invasive sensing (PPG, accelerometer) may show values, ranges, trends, baselines — but <b>any one of these flips you out</b>: references to specific diseases or clinical thresholds · alerts prompting clinical action · treatment guidance (dosing) · “clinical-grade / medical-grade / as accurate as” claims · measuring or estimating physiology <i>for</i> screening, diagnosis, monitoring, or management.</div>
+<div class="p0"><b>Disclaimer truth, validated:</b> disclaimers do <b>not</b> cure device intent. FDA's July 2025 warning letter to Whoop's BP estimation held that BP measurement is “inherently associated with diagnosis” and <b>disclaimers do not cure</b> — Whoop closed it only by changing the feature (June 2026). FTC barred Instant Blood Pressure ($596k) and melanoma-risk apps despite fine print; efficacy claims need real evidence, testimonials don't count. <b>But disclaimers are still mandatory:</b> Google Play requires the literal sentence <i>“not a medical device and does not diagnose, treat, cure, or prevent any medical condition”</i> in the listing, and Apple requires reminding users to check with a doctor before medical decisions. So: disclaimers are necessary, never sufficient. The feature's <i>function and claims</i> do the real work.</div>
+
+<h2 class="sec">Verdict table — every gap, build / constrain / don't-touch</h2>
+<table class="top">
+<tr><th>Verdict</th><th>Feature / gap</th><th>Basis</th></tr>
+<tr><td>BUILD FREELY</td><td>Manual BP logging + averages + neutral trends</td><td>Enforcement discretion: collect/log vitals to share with a clinician needs no premarket (DSF App. B.9)</td></tr>
+<tr><td>NEEDS CLEARANCE</td><td>AHA staging colors, hypertension alerts, “pattern suggests hypertension” notifications</td><td>Disease thresholds + clinical prompts exit wellness; Apple's hypertension notification needed a 510(k) (K250507, 2025)</td></tr>
+<tr><td>DON'T TOUCH</td><td>Camera/PPG BP or SpO2 <i>estimation</i></td><td>Whoop warning letter 2025 + FDA safety comm: BP estimation is never low-risk wellness; disclaimers don't cure</td></tr>
+<tr><td>BUILD FREELY</td><td>Camera HRV + morning readiness protocol + baselines</td><td>HRV4Training precedent: non-invasive, fitness-framed, no clearance</td></tr>
+<tr><td>BUILD FREELY</td><td>Snore/cough counting + trends for sleep journaling</td><td>Wellness journaling; line is crossed only at apnea-risk/AHI/diagnosis claims (Samsung De Novo, Apple 510(k) precedents)</td></tr>
+<tr><td>BUILD FREELY</td><td>Cycle predictions + trying-to-conceive planning</td><td>General fertility awareness is wellness; contraception / “safe days” / effectiveness % = Class II device (Natural Cycles De Novo)</td></tr>
+<tr><td>BUILD FREELY</td><td>Drug-interaction lookup with label references shown</td><td>Enforcement discretion for matching meds to FDA-approved labeling with basis visible; personalized stop/start/dose directives would be a device</td></tr>
+<tr><td>BUILD FREELY</td><td>Mood correlations, pledges, savings calculator, SOS breathing/meditation, CBT/mindfulness content, crisis hotline (988) resources</td><td>General wellness content; no federal duty to carry hotlines found, but standard-of-care and expected — safe to add</td></tr>
+<tr><td>DON'T TOUCH</td><td>Condition likelihoods, urgency triage, automated risk assessment</td><td>Patient-facing diagnosis/triage = device (Ada Assess is CE Class IIa); automated crisis <i>triage</i> also risks device framing — static resources only</td></tr>
+<tr><td>BUILD</td><td>FHIR provider-record pull at patient request; doctor/caregiver PDFs via user share</td><td>No Business Associate relationship created (HHS FAQs 3009/3013) — BA status needs a provider contract, which we don't have</td></tr>
+<tr><td>BUILD FREELY</td><td>Barcode scan, fasting timer, strength logging, HR zones, VO2max, sleep score/debt, smart alarm, soundscapes, behavior impacts, pledges, family missed-dose alerts, pill identifier (info + label link, no dosing direction)</td><td>No device nexus: logging, fitness math, reminders, and information lookup</td></tr>
+<tr><td>BUILD WITH CARE</td><td>RHR/HRV deviation heads-up (“8% above baseline 3 nights”)</td><td>Wellness-framed deviation is allowed; naming the illness (“possible flu”) is diagnosis</td></tr>
+<tr><td>BUILD WITH CARE</td><td>Longevity framing (vascular age / pace-of-aging style)</td><td>Allowed as validated wellness estimate; no disease claims attached</td></tr>
+<tr><td>DON'T TOUCH</td><td>Withdrawal timelines, treatment guidance, dosing direction</td><td>Treatment-guidance content = device/exit from wellness</td></tr>
+</table>
+
+<div class="note"><b>Privacy posture, validated:</b> as a direct-to-consumer app with no provider contracts we are <b>generally outside HIPAA</b> — and user-directed sharing (doctor PDF, caregiver report, FHIR pull) does <b>not</b> create Business-Associate status. The real exposure is elsewhere: <b>FTC Health Breach Notification Rule</b> (GoodRx $1.5M, Premom $100K, BetterHelp $7.8M — every case was <i>sharing health data with ad/analytics SDKs against promises</i>), <b>Flo 2021</b> (period data to Facebook/Google analytics; consent order, no fine), <b>WA My Health My Data Act</b> (broad health-data definition, <b>private right of action</b>, geofence ban — on-device storage reduces but does not exempt; needs policy + consent + deletion flows), <b>CCPA</b> (Healthline $1.55M for purpose-limitation violations and trackers on health content), <b>GDPR</b> (health = special-category data: explicit consent + DPIA for large-scale processing; Clue's posture is the reference), <b>EU MDR Rule 11</b> (decision-support software = Class IIa minimum — we stay out by never interpreting data for clinical decisions; note Clue's fertility algorithm is CE Class I, so even light predictions can qualify if framed as medical). Our shield is architectural: <b>on-device data + zero third-party health-data sharing + affirmative consent before any share</b>. No analytics SDK touching health content, ever.</div>
+<div class="note"><b>Store gates (both mandatory):</b> <b>Apple</b> (Mar 2026): medical-device transparency declaration per region (existing apps must declare by early 2027 or lose updates); dosage calculators only from approved entities; remind users to check with a doctor. <b>Google Play</b>: Health-apps declaration (done/required), the literal “not a medical device…” sentence in the listing, in-app privacy policy, prominent consent. Ban on sensor-only BP/temp/glucose/SpO2 claims on both stores.</div>
+
+<h2 class="sec" id="heart">❤️ Heart — <span class="pct">35%</span></h2>
+<p class="comp">vs <b>Whoop</b> (strain/recovery/sleep loop, $199–359/yr) · <b>Oura</b> (readiness, $70/yr + ring) · <b>HRV4Training</b> ($12 one-time) · <b>Welltory</b> ($100/yr)</p>
+<div class="bar"><i style="width:35%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>30-day heart view + trailing/prior-month comparison</li>
+<li>Health Connect import (HR, sleep, exercise, weight, steps)</li>
+<li>Readiness hook fed by HRV + sleep inputs</li>
+<li>Wellness-only positioning (no fake diagnoses)</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>HRV present as readiness input, no dedicated HRV trend/baseline card</li>
+<li>Resting-HR visible in data, no RHR trend card or deviation alerts</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>HR zones + time-in-zone per workout (Strava/Whoop standard)</li>
+<li>VO2max estimate</li>
+<li>Strain / training-load score (acute vs chronic, fitness–fatigue–form)</li>
+<li>Respiratory rate, SpO2, skin-temp, RHR-deviation illness heads-up</li>
+<li>Behavior-impacts analysis (what moved HRV/RHR this week)</li>
+<li>Exportable 30/180-day heart report for clinicians</li>
+<li>Morning-measurement protocol (HRV4Training-style guided read)</li></ul></div></div>
+<div class="p0"><b>P0:</b> RHR trend card · HRV baseline card · HR zones · behavior impacts. Next: VO2max, clinician report.</div>
+<div class="note"><b>Intentional-out:</b> ECG/AFib detection, BP estimation, irregular-rhythm notifications — regulated medical-device claims. Never built without clearance. <b>Proven by enforcement:</b> FDA's July 2025 Whoop warning letter held BP estimation “inherently associated with diagnosis” and stated <b>disclaimers do not cure</b> device intent.</div>
+
+<h2 class="sec" id="sleep">😴 Sleep — <span class="pct">40%</span></h2>
+<p class="comp">vs <b>Sleep Cycle</b> (~$40/yr, no wearable) · <b>Oura</b> (stages + score) · <b>Whoop</b> (sleep coach + haptic alarm)</p>
+<div class="bar"><i style="width:40%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Bedtime reminders + sleep/wake time logging</li>
+<li>Sleep consistency view</li>
+<li>Health Connect sleep import</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Sleep duration tracked; no stage breakdown (light/deep/REM)</li>
+<li>No single sleep score 0–100</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Snore + cough detection with trends and playback</li>
+<li>Smart alarm (wake-window, lightest phase)</li>
+<li>Sleep debt + sleep-need target</li>
+<li>Sleep soundscapes / wind-down programs</li>
+<li>Wake-up mood check-in tied to the night</li>
+<li>AI sleep coach linking sleep to energy/focus/stress</li>
+<li>Bedtime routine reminders + schedule regularity score</li></ul></div></div>
+<div class="p0"><b>P0:</b> sleep score · sleep debt/need · smart alarm (needs BG audio + mic — hardest build here) · snore detection.</div>
+<div class="note"><b>Note:</b> snore/cough <i>counting</i> for journaling is wellness; <i>apnea-risk, AHI, or “possible sleep apnea”</i> claims need clearance (Samsung De Novo 2024, Apple 510(k) 2024). Smart alarm + soundscapes are free territory. All-night mic needs OS background privileges — the most expensive sleep gap technically. Everything else is presentation over data we already import.</div>
+
+<h2 class="sec" id="recovery">🔋 Recovery / Readiness — <span class="pct">30%</span></h2>
+<p class="comp">vs <b>Whoop Recovery %</b> (HRV+RHR+sleep+resp) · <b>Oura Readiness 0–100</b> (20+ signals)</p>
+<div class="bar"><i style="width:30%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Readiness hook from HRV + sleep inputs</li>
+<li>Recovery screen with baseline-relative hints</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Factor breakdown exists; no plain-language recovery %</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Strain input — readiness without load is half an equation</li>
+<li>RHR / respiratory / temperature-deviation inputs</li>
+<li>Single 0–100 recovery score with Green/Yellow/Red guidance</li>
+<li>Recovery-impacts: which behaviors moved recovery this week</li>
+<li>Illness heads-up from vitals deviation (fever/cold style)</li>
+<li>Longevity framing (vascular age / pace-of-aging style)</li></ul></div></div>
+<div class="p0"><b>P0:</b> strain input wiring · single recovery score · recovery-impacts list.</div>
+<div class="note"><b>Intentional-out:</b> illness <i>diagnosis</i>. Deviation heads-up (“RHR 8% above baseline 3 nights”) is wellness-framed and allowed; naming the illness is not.</div>
+
+<h2 class="sec" id="fitness">🏃 Fitness / Activity — <span class="pct">30%</span></h2>
+<p class="comp">vs <b>Strava</b> ($80/yr, GPS + segments + social) · <b>Strong</b> ($30/yr, gym logging) · <b>Google Fit / Apple Fitness</b></p>
+<div class="bar"><i style="width:30%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Steps via Health Connect + daily step counts table</li>
+<li>Exercise import (Health Connect sessions)</li>
+<li>Basic workout record exists</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Workouts tracked; no structured set/rep/volume model</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Strength logging: sets × reps × weight, volume graphs, PRs, 1RM estimate, rest timer, plate calculator</li>
+<li>GPS route tracking + route builder + heatmaps</li>
+<li>Segments/leaderboards, clubs, challenges, kudos (social layer)</li>
+<li>Training load: fitness–fatigue–form, power/pace zones, FTP</li>
+<li>Beacon-style live location safety sharing</li>
+<li>Training plans / AI workout generation</li></ul></div></div>
+<div class="p0"><b>P0:</b> strength logging (Strong's whole app, zero hardware needed) · training-load chart · HR zones.</div>
+<div class="note"><b>Strategic call:</b> GPS + social (Strava's moat) is a company-size build. Strength logging + load analytics gets to ~65% replacement without it.</div>
+
+<h2 class="sec" id="nutrition">🥗 Nutrition / Food Scan — <span class="pct">55%</span></h2>
+<p class="comp">vs <b>MyFitnessPal</b> ($80/yr, 20M foods) · <b>Cronometer</b> ($60/yr, lab-verified + 95 nutrients) · <b>Yazio</b> ($48/yr, fasting) · <b>Lose It!</b> ($80/yr, photo logging)</p>
+<div class="bar"><i style="width:55%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>USDA-backed micros (fiber, sugar, sodium) + merge logic</li>
+<li>Macro rings + user-owned targets + scan-sum adherence</li>
+<li>Label scan flow</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Micronutrient panel is 3 nutrients; Cronometer tracks 95</li>
+<li>Scan covers labels; no AI meal-photo estimation</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Barcode scan (table stakes — every competitor has it)</li>
+<li>AI meal-photo logging with portion estimate</li>
+<li>Voice meal logging</li>
+<li>Fasting timer integrated with the diary</li>
+<li>Recipe builder + URL recipe importer</li>
+<li>Meal plans, grocery lists, repeat-item scheduling</li>
+<li>Per-day macro scheduler (training vs rest days)</li>
+<li>Full micro panel + nutrient oracle (“eat X to fill Y”)</li>
+<li>Water tracking with reminders</li>
+<li>Weight-goal programs + GLP-1-era medication-aware tracking</li></ul></div></div>
+<div class="p0"><b>P0:</b> barcode scan · fasting timer · water tracking · recipe builder · broader micro panel.</div>
+
+<h2 class="sec" id="weight">⚖️ Weight — <span class="pct">50%</span></h2>
+<p class="comp">vs <b>Happy Scale</b> ($12/yr, smoothing psychology) · Apple Health trends</p>
+<div class="bar"><i style="width:50%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Weight history + trend + basic prediction</li>
+<li>Weight via Health Connect import</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Prediction exists; no date-based forecast (“at this rate, goal by …”)</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Moving-average smoothing options to cut daily noise</li>
+<li>Milestone ladder (big goal → small targets)</li>
+<li>Rate display (lb/week) + 10-day-best framing</li>
+<li>BMI categories + body measurements (waist/hips)</li>
+<li>Weigh-in guidance + logbook notes/filters</li></ul></div></div>
+<div class="p0"><b>P0:</b> smoothing toggle · rate display · milestone ladder · goal-date forecast.</div>
+
+<h2 class="sec" id="mood">🙂 Mood / Wellbeing — <span class="pct">35%</span></h2>
+<p class="comp">vs <b>Daylio</b> ($36/yr, 2-tap journal) · <b>Bearable</b> ($35/yr, correlations) · <b>How We Feel</b> (free, emotion science)</p>
+<div class="bar"><i style="width:35%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Mood + energy logging, daily check-in fields</li>
+<li>Voice journal with transcripts</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Entries exist; no activity tagging per entry</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Activity/context tags (“with X, doing Y”) per entry</li>
+<li>Mood-vs-activity correlations with confidence + lag (same-day/next-day)</li>
+<li>Goals, streaks, Year-in-Pixels view</li>
+<li>Emotion granularity beyond 1–5 (144-word style picker)</li>
+<li>Regulation toolkit (1-min CBT/move/mindfulness exercises)</li>
+<li>Journal prompts + PDF export of entries</li>
+<li>Entry reminders</li></ul></div></div>
+<div class="p0"><b>P0:</b> activity tags · mood correlations (feeds Insights P0-7) · streaks · journal export.</div>
+
+<h2 class="sec" id="cycle">🌸 Cycle — <span class="pct">55%</span></h2>
+<p class="comp">vs <b>Flo</b> (~$60/yr, 70+ symptoms, partners, AI assistant) · <b>Clue</b> (~$40/yr, GDPR, conceive algorithm)</p>
+<div class="bar"><i style="width:55%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Period predictions + fertile-window estimates from recorded starts</li>
+<li>Symptom–phase co-occurrence patterns (counts with basis, no causal claims)</li>
+<li>Honest contraception/medical disclaimers</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Manual-log symptom concepts exist; nowhere near Flo's 70+ / Clue's 100+ tracking options</li>
+<li>Generic doctor report exists; no cycle-specific clinician report</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>TTC / pregnancy / perimenopause modes</li>
+<li>BBT + ovulation-test + cervical-fluid logging</li>
+<li>Partner sharing (Flo for Partners / Clue Connect style)</li>
+<li>Cycle-aware AI assistant answers</li>
+<li>Pill/reminder + birth-control logging</li>
+<li>Content library (PCOS, endometriosis, hormones)</li></ul></div></div>
+<div class="p0"><b>P0:</b> TTC + pregnancy + perimenopause modes · BBT/ovulation-test logging · partner sharing · symptom breadth.</div>
+<div class="note"><b>Our edge to protect:</b> everything is on-device — Flo/Clue's privacy story (anonymous mode, GDPR pledges) exists because their data leaves the phone. Ours never does. Say it louder. <b>Regulatory edge:</b> TTC/pregnancy planning is wellness; contraception, “safe days,” or effectiveness percentages = Class II device (Natural Cycles De Novo) — never phrase predictions that way.</div>
+
+<h2 class="sec" id="substance">🚭 Substance — <span class="pct">60%</span></h2>
+<p class="comp">vs <b>I Am Sober</b> ($30–40/yr, pledges + community) · <b>Sunnyside</b> (~$100/yr, moderation + human coaches) · <b>Reframe</b> (~$100/yr, neuroscience + SOS toolkit)</p>
+<div class="bar"><i style="width:60%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Use goals (track/reduce/quit) + drink-equivalent counting</li>
+<li>Streaks + milestone ladder (I-Am-Sober-style)</li>
+<li>Craving/trigger log with patterns + intensity + outcomes</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Milestones exist; no milestone-grouped peer notes (no community by design)</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Morning pledge + evening review accountability loop</li>
+<li>Cost/time-savings calculator</li>
+<li>Craving SOS toolkit (breathing, meditation, redirect, journaling prompt)</li>
+<li>Cut-back plan wizard (weekly targets, moderation path)</li>
+<li>Reasons memory (why-I-quit with photos, surfaced daily)</li>
+<li>Human or AI coaching check-ins</li></ul></div></div>
+<div class="p0"><b>P0:</b> pledge + review loop · savings calculator · SOS toolkit · reasons memory.</div>
+<div class="note"><b>Intentional-out:</b> withdrawal timelines and community forums. Withdrawal info is medical content; forums are a moderation company, not a feature.</div>
+
+<h2 class="sec" id="meds">💊 Medications — <span class="pct">75%</span> · strongest engine</h2>
+<p class="comp">vs <b>Medisafe</b> (free/premium $40/yr, Medfriend + interactions + refills)</p>
+<div class="bar"><i style="width:75%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Reminders + adherence % + refill countdown</li>
+<li>One-tap refill pickup logging (resets supply, burns a refill)</li>
+<li>Drug-interaction flags (10 FDA-label rules)</li>
+<li>Doctor PDF + caregiver summary reports, on-device share</li>
+<li>Prescription scan → confirm-or-tweak intake</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>PRN meds supported; “weekend/sleep-in” schedule modes missing</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Family missed-dose push alerts (Medfriend safety net)</li>
+<li>Pill identifier (shape/color/imprint lookup)</li>
+<li>Appointment manager + doctor-visit reminders</li>
+<li>Pharmacy coupons/discounts <span style="color:var(--fog)">(partnership, not product)</span></li>
+<li>Adaptive reminder timing (learns when you actually take it)</li></ul></div></div>
+<div class="p0"><b>P0:</b> family missed-dose alerts · pill identifier · appointment reminders.</div>
+<div class="note"><b>Compliance comfort:</b> interaction lookup against FDA-label references with the basis shown sits in enforcement-discretion territory; the line is personalized directives (“stop/start/change your dose”). Our 10-rule engine is on the safe side of it — keep it there.</div>
+
+<h2 class="sec" id="voice">🎙️ Voice (check-in call + journal) — <span class="pct">70%</span></h2>
+<p class="comp">vs phone-call check-ins (none exist like this) · voice journals: <b>Mindsera / Day One</b> · Wysa voice-adjacent coaching</p>
+<div class="bar"><i style="width:70%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Scheduled daily call: ringing, interview, summary → daily fields</li>
+<li>STT-down apology + manual entry + outage marking</li>
+<li>TTS-down recorded prompt + whole-answer LLM structuring</li>
+<li>Voice journal with transcripts</li>
+<li>Onboarding demo + setup step</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Journal entries exist; no export/share of journal audio/text</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Guided prompt packs (gratitude, sleep review, symptom narrate)</li>
+<li>Journal streaks + reminders</li>
+<li>Journal search (find “that entry about headaches”)</li>
+<li>Multi-language interview + transcription</li>
+<li>Wearable/tap-to-talk quick capture</li></ul></div></div>
+<div class="p0"><b>P0:</b> journal export/share · guided prompt packs · journal search.</div>
+<div class="note"><b>Moat check:</b> nobody ships a scheduled <i>call that interviews you into structured health data</i> with dual STT/TTS fallbacks. This engine is ahead of the market, not behind it — invest accordingly.</div>
+
+<h2 class="sec" id="chat">💬 Chat assistant — <span class="pct">50%</span></h2>
+<p class="comp">vs <b>Ada</b> (free, symptom interview + likelihoods) · <b>Woebot</b> (B2B CBT) · <b>Wysa</b> (CBT + human coaches)</p>
+<div class="bar"><i style="width:50%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Health assistant chat with citations + evidence levels</li>
+<li>Chat export/share as labeled text</li>
+<li>Markdown stripped for safe bubbles</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Answers from user data; no structured programs (CBT courses etc.)</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Crisis resources + escalation (hotlines, SOS detection) — safety, not diagnosis</li>
+<li>Structured CBT/mindfulness programs and exercises library</li>
+<li>Mood check-in prompts + progress tracking</li>
+<li>Human-coach handoff ladder</li></ul></div></div>
+<div class="p0"><b>P0:</b> crisis resources (no federal duty found — but standard-of-care and expected in every rival chat; static 988 resources only, never automated triage) · CBT exercise library.</div>
+<div class="note"><b>Intentional-out:</b> condition likelihoods, urgency triage, symptom-interview diagnosis (Ada's core — Ada Assess is CE Class IIa under EU MDR). That is regulated diagnostic territory — our chat must never go there. Compete on programs + coaching, not probabilities.</div>
+
+<h2 class="sec" id="vitals">🌡️ Vitals logger — <span class="pct">45%</span></h2>
+<p class="comp">vs <b>Apple native BP log</b> (free, 7-day protocol, doctor PDF) · <b>Withings</b> (cuff + app) · <b>Medisafe measurements</b> (20+ metrics)</p>
+<div class="bar"><i style="width:45%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Glucose, height, temperature, weight logging</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Vitals stored; no averages/ranges/protocol views</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li><b>Blood-pressure logging (systolic/diastolic) — the single biggest vitals gap</b></li>
+<li>BP averages + neutral range context (diagnostic AHA <i>staging</i> needs clearance — keep ranges neutral)</li>
+<li>SpO2 logging (manual; camera SpO2 is unreliable — don't build that)</li>
+<li>Measurement reminders (weigh-in, BP windows)</li>
+<li>Vitals in doctor report with ranges</li></ul></div></div>
+<div class="p0"><b>P0:</b> BP logging + averages + protocol reminders. This alone unlocks hypertension users Apple and Withings fight over.</div>
+<div class="note"><b>Intentional-out:</b> camera-based SpO2/BP estimation and any cuff-less claims — junk science until proven otherwise.</div>
+
+<h2 class="sec" id="camhr">📷 Camera heart-rate — <span class="pct">30%</span></h2>
+<p class="comp">vs <b>HRV4Training camera PPG</b> (validated vs ECG) · <b>Welltory camera</b> · Cardiio-style instant HR</p>
+<div class="bar"><i style="width:30%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Camera BPM measurement in-app</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>BPM only; no HRV features (rMSSD/SDNN), no signal-quality view</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Camera HRV (rMSSD) with validation framing</li>
+<li>Morning-measurement protocol (guided 1–3 min read)</li>
+<li>Baseline + normal-range methodology (n-day windows)</li>
+<li>Orthostatic (lying + standing) test option</li>
+<li>Signal-quality indicator during capture</li></ul></div></div>
+<div class="p0"><b>P0:</b> camera HRV + signal quality + morning protocol — this is HRV4Training's $12 app; it ports directly onto our camera stack.</div>
+<div class="note"><b>Intentional-out (enforced, not theoretical):</b> camera BP/SpO2 <i>estimation</i> — FDA Whoop letter + Sept 2025 safety comm put BP estimation permanently outside wellness. Morning HRV protocol is the free, proven territory.</div>
+
+<h2 class="sec" id="habits">🔥 Habits / Discipline — <span class="pct">30%</span></h2>
+<p class="comp">vs <b>Streaks</b> ($6 one-time, Watch + widgets) · <b>Habitica</b> (free, RPG + parties) · Fabulous</p>
+<div class="bar"><i style="width:30%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Streak counting</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Streaks exist; scheduling/reminder depth unknown, no negative habits</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Per-habit reminders + flexible schedules (x-times-a-week, weekdays)</li>
+<li>Negative habits (break-a-habit mode)</li>
+<li>Widgets + Watch complications for one-tap complete</li>
+<li>Forgiveness rules (2-day rule) + best-streak stats</li>
+<li>Social accountability (shared streaks, parties)</li>
+<li>Health auto-complete (steps/sleep auto-tick habits)</li></ul></div></div>
+<div class="p0"><b>P0:</b> per-habit reminders + schedules · negative habits · best-streak stats.</div>
+
+<h2 class="sec" id="records">📄 Records / Documents + Reports — <span class="pct">55%</span></h2>
+<p class="comp">vs <b>Apple Health Records / CommonHealth</b> (free, FHIR EHR pull) · prescription-scan apps</p>
+<div class="bar"><i style="width:55%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Document upload + detail share/export</li>
+<li>Prescription scan → med intake</li>
+<li>Doctor PDF (30-day, adherence, interactions) + caregiver summary, on-device share</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Sharing is file/PDF export; no live provider-dashboard sharing</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>FHIR provider connections (labs, meds, immunizations auto-pull)</li>
+<li>Vaccination/immunization record section</li>
+<li>Lab result tracking alongside nutrition/biometrics</li>
+<li>Time-bound, per-topic sharing consent model</li>
+<li>Pill/prescription refill request channel</li></ul></div></div>
+<div class="p0"><b>P0:</b> FHIR connections (the moat of every records app) · immunizations · lab tracking.</div>
+<div class="note"><b>Cost warning:</b> FHIR is an integration marathon (provider-by-provider auth, regional coverage). Highest leverage, highest cost — schedule deliberately. <b>Good news:</b> patient-requested FHIR pull creates <b>no</b> Business-Associate relationship (HHS FAQ) — no BAA needed unless a provider contracts us.</div>
+
+<h2 class="sec" id="body3d">🧬 3D Body / HealthGraph — <span class="pct">n/a</span></h2>
+<p class="comp">vs <b>Visible Body</b> (~$23 one-time, cadaver + quizzes + AR) · <b>BioDigital</b> (cloud authoring, conditions library)</p>
+<div class="bar"><i style="width:2%"></i></div>
+<p class="comp">Honest framing: <b>different products</b>. Ours is a time-tree of <i>your</i> data; theirs are anatomy references. There is no gap to close unless we reposition into anatomy education — which would mean dissectible systems, quizzes, AR, condition models. Recommendation: don't chase; keep the time-tree and link body regions to tracked data (already started).</p>
+
+<h2 class="sec" id="insights">📊 Insights / Trends / Timeline — <span class="pct">55%</span></h2>
+<p class="comp">vs <b>Welltory</b> (battery + correlations) · <b>Bearable</b> (lag-aware grid) · <b>Daylio</b> (influence + confidence) · <b>Gyroscope</b> (life-density)</p>
+<div class="bar"><i style="width:55%"></i></div>
+<div class="cols">
+<div class="col have"><h3>Have</h3><ul>
+<li>Correlation feed + curated feed + timeline + trends</li>
+<li>Priority intro layer</li></ul></div>
+<div class="col part"><h3>Partial</h3><ul>
+<li>Correlations exist; no lag windows or confidence labels</li></ul></div>
+<div class="col miss"><h3>Missing</h3><ul>
+<li>Behavior-impact analysis: X→Y with confidence (Whoop Impacts / Bearable grid / Daylio influence)</li>
+<li>Lag-aware correlations (same-day, next-day, 7-day)</li>
+<li>Energy/battery forecast (“plan your day” curve)</li>
+<li>Year-in-Pixels / life-density view</li>
+<li>Custom behavior journal (140+ trackables feeding impacts)</li>
+<li>Weekly insight report (push + in-app)</li></ul></div></div>
+<div class="p0"><b>P0:</b> behavior impacts with confidence · lag windows · battery forecast — this single build lifts Mood, Heart, Sleep, and Substance simultaneously.</div>
+
+<footer>
+Method: feature inventories gathered from public listings, pricing pages, and reviews, October 2026. (?) marks single-source claims.
+Compliance map researched October 2026 from primary sources: FDA General Wellness guidance (reissued Jan 2026), Cures Act §520(o), device-software policy, warning letters (Whoop 2025), 510(k)/De Novo database (Apple ECG/AF history/sleep-apnea/hypertension, Samsung, Withings, Natural Cycles), FTC cases (Flo, GoodRx, Premom, BetterHelp, Instant BP, MelApp), HHS/OCR FAQs, WA MHMDA, CCPA enforcement (Healthline 2025), GDPR/MDR incl. Clue Class I and Ada Class IIa, Apple + Google store health policies.
+Scores are replacement estimates: could a user delete the competitor and lose nothing? 100% = full replacement.
+Intentional-outs are regulatory or strategic (diagnosis, device claims, forums, surveillance) — not backlog.
+Slice C (day-one strip) is written but unverified; slices A1/A2/B shipped. Next backlog per this teardown: BP logging → barcode scan → camera HRV → strength logging.
+</footer>
+
+</div>
+</body>
+</html>

@@ -26,7 +26,7 @@ export function GoalsStep({
   return (
     <View style={styles.wrap}>
       <Reveal>
-        <Text style={styles.overline}>Step 1 of 3 · Goals</Text>
+        <Text style={styles.overline}>Step 1 of 4 · Goals</Text>
       </Reveal>
       <Reveal>
         <Text style={styles.headline}>Select your goals.</Text>

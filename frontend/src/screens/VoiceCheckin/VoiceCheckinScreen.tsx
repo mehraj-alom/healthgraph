@@ -18,12 +18,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAudioPlayer, setAudioModeAsync, requestRecordingPermissionsAsync, useAudioRecorder } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { Button } from '@/components';
+import { Button, Input } from '@/components';
 import { api } from '@/services/api';
 import { todayKeyLocal } from '@/utils/dayKey';
 import { requestDataRefresh } from '@/services/dataRefresh';
 import { createPakeetProvider } from '@/services/voice/stt';
 import { createPakeetTransport } from '@/services/voice/transport';
+import { isSttOutage, markSttOutage } from '@/services/voice/outageLog';
 import { VoiceError } from '@/services/voice/errors';
 import {
   CLOSING_PROMPT,
@@ -48,10 +49,16 @@ import type { DailyCheckInRequest, RootStackParamList } from '@/types';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'VoiceCheckin'>;
 
-type Mode = 'setup' | 'ringing' | 'interview' | 'summary';
+type Mode = 'setup' | 'ringing' | 'interview' | 'apology' | 'whole' | 'summary';
 type Phase = 'speaking' | 'listening' | 'working' | 'heard';
+type WholePhase = 'prompt' | 'recording' | 'working' | 'done';
 
 const LISTEN_SECONDS = 12;
+/** Whole-answer fallback cap: one continuous answer, two minutes. */
+const WHOLE_ANSWER_SECONDS = 120;
+
+/** Bundled spoken prompt for the TTS-down path ("see on your screen…"). */
+const FALLBACK_PROMPT_ASSET = require('../../../assets/audio/checkin-fallback-prompt.wav');
 
 const FIELD_LABEL: Record<AnswerField, string> = {
   overall_wellbeing: 'Mood',
@@ -105,26 +112,37 @@ const ripple = StyleSheet.create({
   ring: { position: 'absolute', width: 170, height: 170, borderRadius: 85, borderWidth: 2, borderColor: '#4FD1C5' },
 });
 
-function speak(text: string): Promise<void> {
-  return new Promise((resolve) => {
-    try {
-      Speech.speak(text, {
-        rate: 0.95,
-        onDone: () => resolve(),
-        onError: () => resolve(),
-        onStopped: () => resolve(),
-      });
-    } catch {
-      resolve();
-    }
-  });
-}
-
 function stopSpeaking(): void {
   try {
     void Speech.stop();
   } catch {
     // Best-effort.
+  }
+}
+
+/** Fallible speak: true when the utterance completed, false on TTS failure. */
+function speakLoud(text: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      Speech.speak(text, {
+        rate: 0.95,
+        onDone: () => resolve(true),
+        onError: () => resolve(false),
+        onStopped: () => resolve(false),
+      });
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+/** Device speech preflight: any usable voice means TTS is available. */
+async function isDeviceSpeechAvailable(): Promise<boolean> {
+  try {
+    const voices = await Speech.getAvailableVoicesAsync();
+    return Array.isArray(voices) && voices.length > 0;
+  } catch {
+    return false;
   }
 }
 
@@ -150,6 +168,21 @@ export default function VoiceCheckinScreen() {
   const [savingLog, setSavingLog] = useState(false);
   const [saved, setSaved] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+
+  // ---- apology (STT down) state ----
+  const [manual, setManual] = useState<Record<AnswerField, string>>({
+    overall_wellbeing: '',
+    energy_level: '',
+    stress_level: '',
+    sleep_hours: '',
+    water_glasses: '',
+  });
+  const [manualError, setManualError] = useState<string | null>(null);
+
+  // ---- whole-answer (TTS down) state ----
+  const [wholePhase, setWholePhase] = useState<WholePhase>('prompt');
+  const [wholeElapsed, setWholeElapsed] = useState(0);
+  const promptPlayer = useAudioPlayer(FALLBACK_PROMPT_ASSET);
 
   const stateRef = useRef({ qIndex, phase, retries, answers });
   stateRef.current = { qIndex, phase, retries, answers };
@@ -254,7 +287,13 @@ export default function VoiceCheckinScreen() {
             setRetries(r + 1);
             setParsed(null);
             setPhase('speaking');
-            await speak(`Sorry, I did not catch that. ${q.prompt}`);
+            const reasked = await speakLoud(`Sorry, I did not catch that. ${q.prompt}`);
+            if (!reasked) {
+              // TTS died mid-interview: counted as heard-nothing, move on.
+              setParsed(null);
+              setPhase('heard');
+              return;
+            }
             setPhase('listening');
             await startListening();
           } else {
@@ -268,6 +307,26 @@ export default function VoiceCheckinScreen() {
         setPhase('heard');
         advanceTimer.current = setTimeout(() => advance(), 1400);
       } catch (e) {
+        // Server transcription itself is down: apologize, mark the outage
+        // for observability, and offer manual entry. Transient turn
+        // failures keep the existing retry path below.
+        if (e instanceof VoiceError && isSttOutage(e.code)) {
+          clearTimers();
+          stopSpeaking();
+          void markSttOutage(e.code);
+          const heard = stateRef.current.answers;
+          setManual({
+            overall_wellbeing: heard.overall_wellbeing != null ? String(heard.overall_wellbeing) : '',
+            energy_level: heard.energy_level != null ? String(heard.energy_level) : '',
+            stress_level: heard.stress_level != null ? String(heard.stress_level) : '',
+            sleep_hours: heard.sleep_hours != null ? String(heard.sleep_hours) : '',
+            water_glasses: heard.water_glasses != null ? String(heard.water_glasses) : '',
+          });
+          setManualError(null);
+          setError(null);
+          setMode('apology');
+          return;
+        }
         setError(e instanceof VoiceError ? e.message : 'Transcription failed. Try again.');
         setPhase('heard');
       }
@@ -327,15 +386,31 @@ export default function VoiceCheckinScreen() {
     }
   }, [recorder, finishAnswer, clearTimers]);
 
+  /** Mid-interview TTS failure: keep heard answers, flip to whole-answer. */
+  const flipToWhole = useCallback(() => {
+    clearTimers();
+    stopSpeaking();
+    setWholePhase('prompt');
+    setWholeElapsed(0);
+    setError(null);
+    setTranscript(null);
+    setParsed(null);
+    setMode('whole');
+  }, [clearTimers]);
+
   const askCurrent = useCallback(async () => {
     const { qIndex: qi } = stateRef.current;
     const q = INTERVIEW_SCRIPT[qi];
     if (!q) return;
     setPhase('speaking');
-    await speak(q.prompt);
+    const heard = await speakLoud(q.prompt);
     if (stateRef.current.qIndex !== qi) return;
+    if (!heard) {
+      flipToWhole();
+      return;
+    }
     await startListening();
-  }, [startListening]);
+  }, [startListening, flipToWhole]);
 
   const advance = useCallback(() => {
     const { qIndex: qi } = stateRef.current;
@@ -345,7 +420,7 @@ export default function VoiceCheckinScreen() {
     setError(null);
     if (qi + 1 >= INTERVIEW_SCRIPT.length) {
       void (async () => {
-        await speak(CLOSING_PROMPT);
+        await speakLoud(CLOSING_PROMPT);
         setMode('summary');
       })();
       return;
@@ -370,6 +445,181 @@ export default function VoiceCheckinScreen() {
     await finishAnswer(uri);
   }, [finishAnswer, stopRecording]);
 
+  // ---- whole-answer (TTS down): one recording, structured server-side ----
+  const finishWholeAnswer = useCallback(
+    async (uri: string | null) => {
+      if (!uri) {
+        setError('No recording was captured.');
+        setWholePhase('recording');
+        return;
+      }
+      setWholePhase('working');
+      setError(null);
+      try {
+        const formData = new FormData();
+        formData.append('file', {
+          uri,
+          name: 'whole-answer.m4a',
+          type: 'audio/mp4',
+        } as unknown as Blob);
+        const resp = await api.getClient().post<{ transcript?: unknown; fields?: unknown }>(
+          '/api/v1/voice/structure-checkin',
+          formData,
+          { timeout: 150_000 },
+        );
+        const body = (resp.data ?? {}) as { transcript?: unknown; fields?: unknown };
+        const rawFields =
+          body.fields && typeof body.fields === 'object' ? (body.fields as Record<string, unknown>) : {};
+        // Server values pass through the interview parsers: out-of-range
+        // or nonsense becomes a skip, never a stored guess.
+        const next: Partial<Record<AnswerField, number>> = {};
+        for (const q of INTERVIEW_SCRIPT) {
+          const raw = rawFields[q.field];
+          if (raw == null) continue;
+          const value = q.parse(String(raw));
+          if (value != null) next[q.field] = value;
+        }
+        setTranscript(
+          typeof body.transcript === 'string' && body.transcript.trim().length > 0
+            ? body.transcript.trim()
+            : null,
+        );
+        const heardCount = Object.keys(next).length;
+        if (heardCount === 0) {
+          // Nothing usable came back: same honest path as STT-down.
+          clearTimers();
+          stopSpeaking();
+          void markSttOutage('MODEL_UNAVAILABLE');
+          setManual({
+            overall_wellbeing: '',
+            energy_level: '',
+            stress_level: '',
+            sleep_hours: '',
+            water_glasses: '',
+          });
+          setManualError(null);
+          setError(null);
+          setMode('apology');
+          return;
+        }
+        setAnswers(next);
+        setWholePhase('done');
+        setMode('summary');
+      } catch (e: unknown) {
+        const status = (e as { response?: { status?: number } })?.response?.status;
+        if (status === 503) {
+          // Structuring needs transcription: same outage, same path.
+          clearTimers();
+          stopSpeaking();
+          void markSttOutage('MODEL_UNAVAILABLE');
+          setManual({
+            overall_wellbeing: '',
+            energy_level: '',
+            stress_level: '',
+            sleep_hours: '',
+            water_glasses: '',
+          });
+          setManualError(null);
+          setError(null);
+          setMode('apology');
+          return;
+        }
+        setError('Could not understand that recording. Try recording again.');
+        setWholePhase('recording');
+      }
+    },
+    [clearTimers],
+  );
+
+  const startWholeRecording = useCallback(async () => {
+    clearTimers();
+    setTranscript(null);
+    setError(null);
+    setWholeElapsed(0);
+    try {
+      const perm = await requestRecordingPermissionsAsync();
+      if (!perm.granted) {
+        setError('Microphone denied. Enable it in Settings to answer by voice.');
+        setWholePhase('recording');
+        return;
+      }
+      try {
+        if (recorder.isRecording) await recorder.stop();
+      } catch {
+        // Stale handle — prepare below will re-arm.
+      }
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setWholePhase('recording');
+      const t0 = Date.now();
+      timer.current = setInterval(() => {
+        const s = (Date.now() - t0) / 1000;
+        setWholeElapsed(s);
+        if (s >= WHOLE_ANSWER_SECONDS) {
+          if (timer.current) {
+            clearInterval(timer.current);
+            timer.current = null;
+          }
+          void (async () => {
+            try {
+              if (recorder.isRecording) await recorder.stop();
+            } catch {
+              // ignore — uri read below still valid
+            }
+            await new Promise<void>((r) => setTimeout(r, 150));
+            await finishWholeAnswer(recorder.uri);
+          })();
+        }
+      }, 250);
+    } catch {
+      setError('Microphone could not start.');
+      setWholePhase('recording');
+    }
+  }, [recorder, finishWholeAnswer, clearTimers]);
+
+  const stopWholeRecording = useCallback(async () => {
+    if (timer.current) {
+      clearInterval(timer.current);
+      timer.current = null;
+    }
+    try {
+      if (recorder.isRecording) await recorder.stop();
+    } catch {
+      // ignore — uri read below still valid
+    }
+    await new Promise<void>((r) => setTimeout(r, 150));
+    await finishWholeAnswer(recorder.uri);
+  }, [recorder, finishWholeAnswer]);
+
+  // Whole-answer entry: play the recorded prompt, then auto-start the
+  // single recording. Questions stay on screen the whole time.
+  useEffect(() => {
+    if (mode !== 'whole') return;
+    setWholePhase('prompt');
+    let cancelled = false;
+    let poll: ReturnType<typeof setInterval> | null = null;
+    try {
+      promptPlayer.play();
+    } catch {
+      // Prompt asset failure still leaves the on-screen questions usable.
+    }
+    const t0 = Date.now();
+    poll = setInterval(() => {
+      if (cancelled) return;
+      const finished = promptPlayer.duration > 0 && !promptPlayer.playing;
+      if (finished || Date.now() - t0 > 25000) {
+        if (poll) clearInterval(poll);
+        poll = null;
+        if (!cancelled) void startWholeRecording();
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      if (poll) clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
   const answerCall = useCallback(() => {
     tapTick();
     setQIndex(0);
@@ -379,7 +629,18 @@ export default function VoiceCheckinScreen() {
     setParsed(null);
     setError(null);
     setSaved(false);
-    setMode('interview');
+    // TTS preflight: no device voices → whole-answer mode with the
+    // recorded prompt instead of a silent interview.
+    void isDeviceSpeechAvailable().then((ok) => {
+      if (ok) {
+        setMode('interview');
+      } else {
+        setWholePhase('prompt');
+        setWholeElapsed(0);
+        setError(null);
+        setMode('whole');
+      }
+    });
   }, []);
 
   const declineCall = useCallback(() => {
@@ -389,10 +650,11 @@ export default function VoiceCheckinScreen() {
   }, [navigation, clearTimers]);
 
   // ---- save to daily log ----
-  const saveLog = useCallback(async () => {
+  const saveLog = useCallback(async (override?: Partial<Record<AnswerField, number>>) => {
     if (savingLog) return;
     setSavingLog(true);
     try {
+      const got = override ?? answers;
       const payload: DailyCheckInRequest = {
         log_date: todayKeyLocal(),
         symptoms: [],
@@ -401,14 +663,14 @@ export default function VoiceCheckinScreen() {
         activities: [],
         medications: [],
       };
-      if (answers.overall_wellbeing != null) payload.overall_wellbeing = answers.overall_wellbeing;
-      if (answers.energy_level != null) payload.energy_level = answers.energy_level;
-      if (answers.stress_level != null) payload.stress_level = answers.stress_level;
-      if (answers.sleep_hours != null) {
-        payload.sleep = { duration_minutes: Math.round(answers.sleep_hours * 60) };
+      if (got.overall_wellbeing != null) payload.overall_wellbeing = got.overall_wellbeing;
+      if (got.energy_level != null) payload.energy_level = got.energy_level;
+      if (got.stress_level != null) payload.stress_level = got.stress_level;
+      if (got.sleep_hours != null) {
+        payload.sleep = { duration_minutes: Math.round(got.sleep_hours * 60) };
       }
-      if (answers.water_glasses != null) {
-        payload.nutrition = { water_ml: answers.water_glasses * 250 };
+      if (got.water_glasses != null) {
+        payload.nutrition = { water_ml: got.water_glasses * 250 };
       }
       await api.post('/api/v1/logs/daily-checkin', payload);
       requestDataRefresh();
@@ -419,6 +681,24 @@ export default function VoiceCheckinScreen() {
       setSavingLog(false);
     }
   }, [answers, savingLog]);
+
+  // ---- apology: typed answers through the same parsers, blanks skipped ----
+  const saveManual = useCallback(async () => {
+    const next: Partial<Record<AnswerField, number>> = {};
+    for (const q of INTERVIEW_SCRIPT) {
+      const raw = (manual[q.field] ?? '').trim();
+      if (!raw) continue;
+      const value = q.parse(raw);
+      if (value == null) {
+        setManualError(`${FIELD_LABEL[q.field]}: ${q.hint.toLowerCase()}`);
+        return;
+      }
+      next[q.field] = value;
+    }
+    setManualError(null);
+    setAnswers(next);
+    await saveLog(next);
+  }, [manual, saveLog]);
 
   const goPulse = useCallback(() => {
     (navigation.navigate as (r: string, p?: object) => void)('Main', { screen: 'PpgMeasure' });
@@ -572,6 +852,93 @@ export default function VoiceCheckinScreen() {
     );
   }
 
+  // ================= whole-answer (TTS down) =================
+  if (mode === 'whole') {
+    const mm = Math.floor(Math.min(wholeElapsed, WHOLE_ANSWER_SECONDS) / 60);
+    const ss = Math.floor(Math.min(wholeElapsed, WHOLE_ANSWER_SECONDS) % 60);
+    const clock = `${mm}:${String(ss).padStart(2, '0')} / 2:00`;
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>One recording.</Text>
+          <Text style={styles.sub}>
+            Answer everything below in one go — say as much as you like. Stops at 2:00.
+          </Text>
+          <View style={styles.summaryCard}>
+            {INTERVIEW_SCRIPT.map((q) => (
+              <View key={q.field} style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>{FIELD_LABEL[q.field]}</Text>
+                <Text style={styles.wholeHint}>{q.hint}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.statusBox}>
+            {wholePhase === 'prompt' ? <Text style={styles.status}>Playing the prompt…</Text> : null}
+            {wholePhase === 'recording' ? (
+              <>
+                <View style={styles.liveDot} />
+                <Text style={styles.status}>Recording… {clock}</Text>
+              </>
+            ) : null}
+            {wholePhase === 'working' ? <Text style={styles.status}>Understanding your answers…</Text> : null}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+          </View>
+          {wholePhase === 'recording' ? (
+            <Button title="Stop recording" onPress={() => void stopWholeRecording()} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
+          ) : null}
+          <Button title="End call" variant="ghost" onPress={declineCall} fullWidth textStyle={styles.ghostText} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ================= apology (STT down) =================
+  if (mode === 'apology') {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Voice typing is down.</Text>
+          <Text style={styles.sub}>
+            Sorry — voice transcription isn&apos;t working right now. We&apos;re working on it. You can enter your answers below instead.
+          </Text>
+          {!saved ? (
+            <>
+              {INTERVIEW_SCRIPT.map((q) => (
+                <Input
+                  key={q.field}
+                  label={`${FIELD_LABEL[q.field]} (${q.hint.toLowerCase()})`}
+                  value={manual[q.field]}
+                  onChangeText={(v) => setManual((prev) => ({ ...prev, [q.field]: v }))}
+                  placeholder="Leave blank to skip"
+                  keyboardType="decimal-pad"
+                />
+              ))}
+              {manualError ? <Text style={styles.error}>{manualError}</Text> : null}
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              <Button
+                title={savingLog ? 'Saving…' : 'Save answers'}
+                onPress={() => void saveManual()}
+                disabled={savingLog}
+                loading={savingLog}
+                fullWidth
+                size="large"
+                style={styles.goBtn}
+                textStyle={styles.goBtnText}
+              />
+            </>
+          ) : (
+            <View style={styles.pulseCard}>
+              <Text style={styles.pulseTitle}>Saved.</Text>
+              <Text style={styles.pulseSub}>Check your pulse now while you are still.</Text>
+              <Button title="Open pulse check" onPress={goPulse} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
+            </View>
+          )}
+          <Button title="End call" variant="ghost" onPress={declineCall} fullWidth textStyle={styles.ghostText} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   // ================= summary =================
   const answered = INTERVIEW_SCRIPT.filter((q) => answers[q.field] != null);
   return (
@@ -646,6 +1013,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  wholeHint: { ...TYPE.caption, color: GV.fog, textAlign: 'right', flexShrink: 1, marginLeft: 12 },
   summaryLabel: { ...TYPE.body, color: GV.fog },
   summaryValue: { ...TYPE.button, fontSize: 15, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
   pulseCard: { gap: 8, alignItems: 'stretch' },

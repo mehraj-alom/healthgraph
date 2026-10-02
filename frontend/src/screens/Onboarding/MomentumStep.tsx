@@ -62,7 +62,7 @@ export function MomentumStep() {
   return (
     <View style={styles.wrap}>
       <Reveal>
-        <Text style={styles.overline}>Step 3 of 3 · Momentum</Text>
+        <Text style={styles.overline}>Step 3 of 4 · Momentum</Text>
       </Reveal>
       <Reveal>
         <Text style={styles.headline}>Your week</Text>

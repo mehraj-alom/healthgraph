@@ -52,6 +52,7 @@ import { useReducedMotion } from '@/theme';
 import { IconButton } from '@/components/movements/IconButton';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import DayOneSection from '@/screens/Dashboard/DayOneSection';
 import { GlassCuboid } from '@/components/GlassCuboid';
 import { SectionHeader } from '@/components/SectionHeader';
 import HGraphMap, { type HMetric, HMAP_ASPECT } from '@/components/home/HGraphMap';
@@ -1160,6 +1161,7 @@ export default function HealthDashboardScreen() {
         onMedications={goToMedications}
         onToggleUpNextTaken={() => void toggleUpNextTaken()}
       />
+      <DayOneSection loggedToday={loggedToday} medications={medications.data ?? []} />
       <CorrelationHeading count={feedQuery.items.length} />
     </View>
   ), [

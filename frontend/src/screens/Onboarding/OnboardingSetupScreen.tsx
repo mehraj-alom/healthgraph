@@ -32,10 +32,11 @@ import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { GoalsStep } from './GoalsStep';
 import { FocusStep } from './FocusStep';
 import { MomentumStep } from './MomentumStep';
+import { CheckinStep } from './CheckinStep';
 import { DoneStep } from './DoneStep';
 
-const PAGES = [0, 1, 2, 3] as const;
-const PAGE_LIST: number[] = [0, 1, 2, 3];
+const PAGES = [0, 1, 2, 3, 4] as const;
+const PAGE_LIST: number[] = [0, 1, 2, 3, 4];
 
 export default function OnboardingSetupScreen() {
   const { width } = useWindowDimensions();
@@ -128,12 +129,13 @@ export default function OnboardingSetupScreen() {
           <FocusStep selected={focus} onToggle={(id) => toggle(focus, id, setFocus)} />
         ) : null}
         {item === 2 ? <MomentumStep /> : null}
-        {item === 3 ? <DoneStep goals={goals} focus={focus} /> : null}
+        {item === 3 ? <CheckinStep /> : null}
+        {item === 4 ? <DoneStep goals={goals} focus={focus} /> : null}
       </ScrollView>
     </View>
   );
 
-  const isDone = step === 3;
+  const isDone = step === 4;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -206,8 +208,8 @@ export default function OnboardingSetupScreen() {
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleMomentumEnd}
         getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
-        initialNumToRender={4}
-        windowSize={4}
+        initialNumToRender={5}
+        windowSize={5}
         style={styles.pager}
       />
 
@@ -217,7 +219,7 @@ export default function OnboardingSetupScreen() {
             onPress={() => void (isDone ? handleStart() : handleContinue())}
             disabled={busy}
             accessibilityRole="button"
-            accessibilityLabel={isDone ? 'Start' : step < 2 ? 'Continue' : 'See my summary'}
+            accessibilityLabel={isDone ? 'Start' : 'Continue'}
             hitSlop={12}
             style={({ pressed }) => [
               styles.goCircle,
