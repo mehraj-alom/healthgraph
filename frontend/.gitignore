@@ -40,3 +40,13 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Re-include Expo app assets ignored by blanket image rules in the repo-root
+# .gitignore (EAS Build skips git-ignored files during upload, which breaks
+# prebuild icon generation). Keep this list in sync with app.json.
+!assets/icon.png
+!assets/adaptive-icon.png
+!assets/splash-icon.png
+!assets/favicon.png
+!assets/android-icon-*.png
+!assets/logo.png

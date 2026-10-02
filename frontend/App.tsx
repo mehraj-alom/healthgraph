@@ -63,6 +63,7 @@ import MedicationsScreen from '@/screens/Medications/MedicationsScreen';
 import MedicationReminderScreen from '@/screens/Medications/MedicationReminderScreen';
 import MedicationCallScreen from '@/screens/Medications/MedicationCallScreen';
 import VoiceCheckinScreen from '@/screens/VoiceCheckin/VoiceCheckinScreen';
+import VoiceJournalScreen from '@/screens/Voice/VoiceJournalScreen';
 import SattsTestScreen from '@/screens/Voice/SattsTestScreen';
 import VoiceTurnScreen from '@/screens/Voice/VoiceTurnScreen';
 import SymptomMapScreen from '@/screens/Body/SymptomMapScreen';
@@ -645,6 +646,14 @@ function AppNavigator() {
             <RootStack.Screen
               name="VoiceCheckin"
               component={VoiceCheckinScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+            {/* Free-form voice journal (verbatim turns → today's notes). */}
+            <RootStack.Screen
+              name="VoiceJournal"
+              component={VoiceJournalScreen}
               options={{
                 headerShown: false,
               }}

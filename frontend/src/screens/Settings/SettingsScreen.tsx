@@ -18,6 +18,7 @@ import type { Gender } from '@/services/anatomyDownload';
 import { useProfilePhoto } from '@/hooks/useProfilePhoto';
 import { useHabitTracker } from '@/hooks/useHabitTracker';
 import { HabitGrid } from '@/screens/Settings/HabitGrid';
+import { HealthConnectSection } from '@/screens/Settings/HealthConnectSection';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, Input, NumberInput } from '@/components';
@@ -560,6 +561,9 @@ export default function SettingsScreen() {
 
         {/* ── 3D anatomy downloads ── */}
         <AnatomyStorageSection />
+
+        {/* ── Health Connect sync (sleep + workouts, explicit consent) ── */}
+        <HealthConnectSection />
 
         {/* ── Account Section ── */}
         <Button

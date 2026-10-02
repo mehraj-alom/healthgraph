@@ -16,8 +16,11 @@ import { fileURLToPath } from 'node:url';
 import {
   buildSleepWeek,
   describeSleepChange,
+  describeSleepConsistency,
+  durationFromBedWake,
   formatSleepDuration,
   isSleepEngineActive,
+  parseClockTime,
   sleepWindowStart,
   summarizeSleepNights,
   SLEEP_HISTORY_DAYS,
@@ -196,6 +199,59 @@ describe('real-data state', () => {
     assert.equal(formatSleepDuration(450), '7h 30m');
     assert.equal(formatSleepDuration(480), '8h');
     assert.equal(formatSleepDuration(45), '45m');
+  });
+
+  test('clock times parse strictly; garbage never becomes a time', () => {
+    assert.equal(parseClockTime('22:30'), 1350);
+    assert.equal(parseClockTime('06:05'), 365);
+    assert.equal(parseClockTime('6:05'), null);
+    assert.equal(parseClockTime('24:00'), null);
+    assert.equal(parseClockTime('22:60'), null);
+    assert.equal(parseClockTime(''), null);
+    assert.equal(parseClockTime('night'), null);
+    assert.equal(parseClockTime(null), null);
+  });
+
+  test('bed-to-wake duration crosses midnight correctly', () => {
+    assert.equal(durationFromBedWake('22:30', '06:30'), 480);
+    assert.equal(durationFromBedWake('23:00', '23:00'), null);
+    assert.equal(durationFromBedWake('08:00', '09:00'), 60);
+    assert.equal(durationFromBedWake('garbage', '06:30'), null);
+    assert.equal(durationFromBedWake('22:30', null), null);
+  });
+
+  test('consistency needs two timed nights; line is purely descriptive', () => {
+    assert.equal(describeSleepConsistency([], '2026-09-21'), null);
+    assert.equal(
+      describeSleepConsistency([{ ...N('2026-09-20', 430), bedtime: '22:30' }], '2026-09-21'),
+      null,
+    );
+    assert.equal(
+      describeSleepConsistency(
+        [
+          { ...N('2026-09-18', 420), bedtime: '22:00' },
+          { ...N('2026-09-19', 440), bedtime: '22:30' },
+          { ...N('2026-09-20', 460), bedtime: '23:20' },
+          { ...N('2026-09-10', 400), bedtime: '21:00' },
+        ],
+        '2026-09-21',
+      ),
+      'Bedtimes spanned 1h 20m across 3 nights',
+    );
+  });
+
+  test('consistency counts only nights inside the trailing window', () => {
+    assert.equal(
+      describeSleepConsistency(
+        [
+          { ...N('2026-08-01', 420), bedtime: '19:00' },
+          { ...N('2026-09-20', 460), bedtime: '22:30' },
+          { ...N('2026-09-19', 440), bedtime: '22:30' },
+        ],
+        '2026-09-21',
+      ),
+      'Bedtimes spanned 0m across 2 nights',
+    );
   });
 });
 

@@ -428,17 +428,20 @@ describe('batch 3 wiring', () => {
       assert.ok(!substance.includes(pattern), `substance: ${pattern}`);
     }
     const cycle = src('src/screens/Cycle/CycleScreen.tsx').toLowerCase();
+    // Estimates are deliberate (period range + fertile window from recorded
+    // starts); certainties and contraception/pregnancy uses stay banned.
     for (const pattern of [
-      'fertile window',
       'ovulation day',
       'you are pregnant',
       'you are fertile',
       'will ovulate',
-      'expected period',
-      'next period',
+      'safe day',
+      'infertile',
     ]) {
       assert.ok(!cycle.includes(pattern), `cycle: ${pattern}`);
     }
+    assert.ok(cycle.includes('not for contraception'), 'cycle: contraception disclaimer');
+    assert.ok(cycle.includes('estimat'), 'cycle: estimate framing');
     const areas = src('src/screens/HealthAreas/areas.ts').toLowerCase();
     assert.ok(!areas.includes('diagnos'), 'areas: diagnosis framing');
   });

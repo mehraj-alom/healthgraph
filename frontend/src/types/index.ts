@@ -175,7 +175,7 @@ export interface DailyCheckInRequest {
   overall_wellbeing?: number;
   energy_level?: number;
   stress_level?: number;
-  sleep?: { duration_minutes: number; sleep_quality?: number; awakenings?: number };
+  sleep?: { duration_minutes: number; sleep_quality?: number; awakenings?: number; bedtime?: string; wake_time?: string };
   nutrition?: { water_ml?: number; meals_count?: number; appetite_level?: number; calories_kcal?: number; food_label?: string };
   notes?: string;
   symptoms: Array<{ concept_id: string; severity: number; duration_minutes?: number; notes?: string }>;
@@ -200,6 +200,8 @@ export interface DailyCheckInDetail {
   sleep_duration_minutes: number | null;
   sleep_quality: number | null;
   sleep_awakenings: number | null;
+  bedtime: string | null;
+  wake_time: string | null;
   water_ml: number | null;
   meals_count: number | null;
   appetite_level: number | null;
@@ -449,6 +451,7 @@ export type RootStackParamList = {
   MedicationCall: { occurrenceId: string };
   /** Scheduled voice check-in call (setup, ringing, interview, summary). */
   VoiceCheckin: { mode?: 'setup' | 'ringing' } | undefined;
+  VoiceJournal: undefined;
   /** Isolated sanoTTS synthesis test (development only, no call flow). */
   SattsTest: undefined;
   /** Isolated turn-based voice loop (development only, no call flow). */

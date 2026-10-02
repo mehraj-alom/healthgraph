@@ -105,7 +105,7 @@ export function computeRefill(
 }
 
 export interface SafetyFlag {
-  kind: 'duplicate' | 'polypharmacy' | 'low-adherence' | 'refill-soon' | 'refill-out';
+  kind: 'duplicate' | 'polypharmacy' | 'low-adherence' | 'refill-soon' | 'refill-out' | 'interaction';
   text: string;
   medicationIds: string[];
 }
@@ -175,4 +175,41 @@ export function safetyFlags(
     }
   }
   return flags;
+}
+
+export interface RefillPickupUpdate {
+  supply_quantity: number;
+  supply_started_on: string;
+  refills_left: number | null;
+}
+
+const PICKUP_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Validate a refill pickup and compute the medication update: supply resets
+ * to the new fill size starting the pickup day, refills_left drops by one
+ * (floor zero; unknown stays unknown). Throws on a bad fill size or a bad
+ * pickup day — future days included, a pickup cannot happen tomorrow.
+ */
+export function refillPickup(
+  med: Pick<{ supply_quantity?: number | null; refills_left?: number | null }, 'supply_quantity' | 'refills_left'>,
+  pickup: { quantity: unknown; pickedUpOn: unknown },
+  todayKey: string,
+): RefillPickupUpdate {
+  const quantity = pickup.quantity;
+  if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity <= 0) {
+    throw new Error('Enter the new fill size as a whole number of doses.');
+  }
+  const day = typeof pickup.pickedUpOn === 'string' ? pickup.pickedUpOn.slice(0, 10) : '';
+  const today = typeof todayKey === 'string' ? todayKey.slice(0, 10) : '';
+  if (!PICKUP_DAY_RE.test(day) || !PICKUP_DAY_RE.test(today) || day > today) {
+    throw new Error('Enter the pickup day as YYYY-MM-DD, not in the future.');
+  }
+  const left = med.refills_left;
+  return {
+    supply_quantity: quantity,
+    supply_started_on: day,
+    refills_left:
+      typeof left === 'number' && Number.isInteger(left) ? Math.max(0, left - 1) : null,
+  };
 }

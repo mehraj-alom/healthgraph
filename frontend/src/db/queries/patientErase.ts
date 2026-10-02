@@ -43,8 +43,10 @@ const PATIENT_TABLES: readonly string[] = [
   'ppg_measurements',
   'rppg_measurements',
   'substance_entries',
+  'craving_entries',
   'cycle_entries',
   'food_scan_items',
+  'step_counts',
   'reminder_instances',
   'onboarding_state',
 ];

@@ -16,12 +16,14 @@
  *   the logic is inlined because node-tested pure modules keep zero
  *   imports.
  *
- * Deliberately absent: step counts, distance tracking, composite metrics,
+ * Deliberately absent: distance tracking, composite metrics,
  * aerobic-capacity estimates, training-volume math, recovery estimates,
  * calorie math, targets, predictions, and any composite headline number.
- * PPG measurements are intentional measurements, NOT workouts, and never
- * enter this module. Copy is descriptive counts only — never fitter or
- * healthier, never causal.
+ * Step counts live outside this module (device-only step_counts table,
+ * rendered by the screen in a separate card) and never enter the session
+ * math below. PPG measurements are intentional measurements, NOT
+ * workouts, and never enter this module. Copy is descriptive counts
+ * only — never fitter or healthier, never causal.
  *
  * Zero imports except the pure day-key module: safe for node unit tests.
  */

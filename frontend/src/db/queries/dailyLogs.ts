@@ -10,10 +10,18 @@
 
 import { getDatabase, withSerializedTransaction } from '@/db/connection';
 import { todayKeyLocal } from '@/utils/dayKey';
+import { parseClockTime } from '@/screens/SleepEngine/sleepEngine';
+import { buildNotesAppend } from '@/services/voiceJournal';
 import type {
   DailyCheckInRequest,
   DailyCheckInDetail,
 } from '@/types';
+
+/** Validated 'HH:MM' or null — garbage clock strings never reach storage. */
+function validClockOrNull(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  return parseClockTime(value) === null ? null : value;
+}
 
 // ─── Event Types (matches backend EventType enum) ────────────────────────────
 
@@ -166,6 +174,91 @@ export async function getSleepNights(
     });
   }
   return nights.sort((a, b) => (a.log_date < b.log_date ? -1 : a.log_date > b.log_date ? 1 : 0));
+}
+
+export interface SleepTimeRow {
+  log_date: string;
+  bedtime: string | null;
+  wake_time: string | null;
+}
+/**
+ * Bounded bedtime/wake-time history for the Sleep Engine: validated clock
+ * times from SLEEP_LOG event payloads inside [startDate, endDate].
+ * One row per day (latest event wins); nights without clock times are
+ * absent (never null-filled) so consistency math only sees real times.
+ * Patient-scoped through the group's patient_id.
+ */
+export async function getSleepTimes(
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<SleepTimeRow[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ log_date: string; payload_json: string; created_at: string }>(
+    `SELECT g.log_date AS log_date, e.payload_json AS payload_json, e.created_at AS created_at
+     FROM daily_log_events e
+     INNER JOIN daily_logs g ON e.group_id = g.group_id
+     WHERE g.patient_id = ?
+       AND e.event_type = 'SLEEP_LOG'
+       AND g.log_date >= ? AND g.log_date <= ?
+     ORDER BY g.log_date ASC, e.created_at DESC`,
+    [patientId, startDate, endDate],
+  );
+  const seen = new Set<string>();
+  const times: SleepTimeRow[] = [];
+  for (const r of rows) {
+    const day = r.log_date.slice(0, 10);
+    if (seen.has(day)) continue;
+    seen.add(day);
+    const payload = parseJsonPayload(r.payload_json);
+    const bedtime = validClockOrNull(typeof payload.bedtime === 'string' ? payload.bedtime : null);
+    const wakeTime = validClockOrNull(typeof payload.wake_time === 'string' ? payload.wake_time : null);
+    if (bedtime === null && wakeTime === null) continue;
+    times.push({ log_date: day, bedtime, wake_time: wakeTime });
+  }
+  return times;
+}
+
+export interface SymptomDayRow {
+  log_date: string;
+  concept_id: string | null;
+  severity: number | null;
+}
+
+/**
+ * Bounded daily symptom occurrences for pattern displays: SYMPTOM events
+ * inside [startDate, endDate], oldest first. Patient-scoped through the
+ * group's patient_id. Display names resolve separately through the
+ * manual-log concepts endpoint (events carry concept ids only).
+ */
+export async function getSymptomDays(
+  patientId: string,
+  startDate: string,
+  endDate: string,
+): Promise<SymptomDayRow[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ log_date: string; concept_id: string | null; payload_json: string }>(
+    `SELECT g.log_date AS log_date, e.concept_id AS concept_id, e.payload_json AS payload_json
+     FROM daily_log_events e
+     INNER JOIN daily_logs g ON e.group_id = g.group_id
+     WHERE g.patient_id = ?
+       AND e.event_type = 'SYMPTOM'
+       AND g.log_date >= ? AND g.log_date <= ?
+     ORDER BY g.log_date ASC, e.created_at ASC`,
+    [patientId, startDate, endDate],
+  );
+  const out: SymptomDayRow[] = [];
+  for (const r of rows) {
+    const day = r.log_date.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    const payload = parseJsonPayload(r.payload_json);
+    const severity =
+      typeof payload.severity === 'number' && Number.isFinite(payload.severity)
+        ? payload.severity
+        : null;
+    out.push({ log_date: day, concept_id: r.concept_id, severity });
+  }
+  return out;
 }
 
 /**
@@ -567,6 +660,12 @@ export interface DailyLogOverlay {
   water_ml?: number;
   vitals?: { concept_id: string; value: number; unit: string }[];
   pain?: { severity: number }[];
+  /** Bedtime 'HH:MM' — wins over the day's existing value, never wipes. */
+  bedtime?: string;
+  /** Wake time 'HH:MM' — wins over the day's existing value, never wipes. */
+  wake_time?: string;
+  /** Journal transcript appended to the day's notes (capped, never wiped). */
+  notes_append?: string;
 }
 
 /**
@@ -597,7 +696,17 @@ export function buildCheckinRequestFromDetail(
   const stress = overlay.stress_level ?? detail?.stress_level ?? null;
   // Sleep merges overlay-first like the other scalars: an overlay value wins,
   // otherwise the day's existing duration survives (never wiped by a partial write).
+  // Bedtime/wake ride along the same way — validated clock times only, and
+  // they live in the SLEEP_LOG event payload (never in the synced scalar).
   const sleepMinutes = overlay.sleep_minutes ?? detail?.sleep_duration_minutes ?? null;
+  const bedtime =
+    validClockOrNull(overlay.bedtime) ??
+    validClockOrNull(detail?.bedtime ?? null) ??
+    null;
+  const wakeTime =
+    validClockOrNull(overlay.wake_time) ??
+    validClockOrNull(detail?.wake_time ?? null) ??
+    null;
   // Nutrition merges field-by-field: a water top-up must never wipe meals.
   const nutrition: NonNullable<DailyCheckInRequest['nutrition']> = {
     ...(detail?.water_ml != null ? { water_ml: detail.water_ml } : {}),
@@ -608,6 +717,12 @@ export function buildCheckinRequestFromDetail(
     ...(overlay.water_ml != null ? { water_ml: overlay.water_ml } : {}),
   };
   const hasNutrition = Object.keys(nutrition).length > 0;
+  // Journal transcripts append to the day's notes (capped); existing notes
+  // are never cut to make room — buildNotesAppend keeps them intact.
+  const notes = buildNotesAppend(
+    detail?.notes ?? null,
+    overlay.notes_append ?? '',
+  );
   return {
     log_date: logDate,
     ...(wellbeing != null ? { overall_wellbeing: wellbeing } : {}),
@@ -619,11 +734,13 @@ export function buildCheckinRequestFromDetail(
             duration_minutes: sleepMinutes,
             ...(detail?.sleep_quality != null ? { sleep_quality: detail.sleep_quality } : {}),
             ...(detail?.sleep_awakenings != null ? { awakenings: detail.sleep_awakenings } : {}),
+            ...(bedtime != null ? { bedtime } : {}),
+            ...(wakeTime != null ? { wake_time: wakeTime } : {}),
           },
         }
       : {}),
     ...(hasNutrition ? { nutrition } : {}),
-    ...(detail?.notes ? { notes: detail.notes } : {}),
+    ...(notes ? { notes } : {}),
     symptoms: (detail?.symptoms ?? []).map((s) => ({
       concept_id: s.concept_id ?? '',
       severity: s.severity,
@@ -1052,6 +1169,14 @@ function buildEventsFromRequest(
         duration_minutes: request.sleep.duration_minutes,
         sleep_quality: request.sleep.sleep_quality ?? null,
         awakenings: request.sleep.awakenings ?? null,
+        // Optional clock times ride the event payload only (validated);
+        // the synced sleep scalar stays duration/quality/awakenings.
+        ...(validClockOrNull(request.sleep.bedtime) != null
+          ? { bedtime: request.sleep.bedtime }
+          : {}),
+        ...(validClockOrNull(request.sleep.wake_time) != null
+          ? { wake_time: request.sleep.wake_time }
+          : {}),
       },
     });
   }
@@ -1295,6 +1420,8 @@ function reconstructDetail(
   let sleep_duration_minutes: number | null = null;
   let sleep_quality: number | null = null;
   let sleep_awakenings: number | null = null;
+  let bedtime: string | null = null;
+  let wake_time: string | null = null;
   let water_ml: number | null = null;
   let meals_count: number | null = null;
   let appetite_level: number | null = null;
@@ -1335,6 +1462,8 @@ function reconstructDetail(
         sleep_duration_minutes = payload.duration_minutes as number ?? null;
         sleep_quality = payload.sleep_quality as number ?? null;
         sleep_awakenings = payload.awakenings as number ?? null;
+        bedtime = validClockOrNull(payload.bedtime as string | null) ?? null;
+        wake_time = validClockOrNull(payload.wake_time as string | null) ?? null;
         break;
 
       case 'ACTIVITY_LOG':
@@ -1384,6 +1513,8 @@ function reconstructDetail(
     sleep_duration_minutes,
     sleep_quality,
     sleep_awakenings,
+    bedtime,
+    wake_time,
     water_ml,
     meals_count,
     appetite_level,

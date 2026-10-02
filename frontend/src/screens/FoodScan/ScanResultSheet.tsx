@@ -9,6 +9,7 @@ import {
   type FoodScanResult,
 } from '@/services/nutritionService';
 import { MEAL_TYPES, suggestMealType, type MealType } from './mealTypes';
+import { microLine } from './microDisplay';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { saveFoodScanBreakdown } from '@/db/queries/foodScans';
 
@@ -115,6 +116,9 @@ export default function ScanResultSheet({
           protein: scale(item.protein_g, factor),
           carbs: scale(item.carbs_g, factor),
           fat: scale(item.fat_g, factor),
+          fiber: item.fiber_g != null ? scale(item.fiber_g, factor) : null,
+          sugar: item.sugar_g != null ? scale(item.sugar_g, factor) : null,
+          sodium: item.sodium_mg != null ? scale(item.sodium_mg, factor) : null,
           // Retail barcode survives portion edits into the breakdown row.
           ...(item.barcode ? { barcode: item.barcode } : {}),
         };
@@ -126,6 +130,15 @@ export default function ScanResultSheet({
     () => rows.reduce((sum, row) => sum + row.kcal, 0),
     [rows],
   );
+
+  const sumOrNull = (values: (number | null)[]): number | null => {
+    const clean = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    if (clean.length === 0) return null;
+    return Math.round(clean.reduce((a, b) => a + b, 0) * 10) / 10;
+  };
+  const totalFiber = useMemo(() => sumOrNull(rows.map((r) => r.fiber)), [rows]);
+  const totalSugar = useMemo(() => sumOrNull(rows.map((r) => r.sugar)), [rows]);
+  const totalSodium = useMemo(() => sumOrNull(rows.map((r) => r.sodium)), [rows]);
 
   const adjust = (index: number, delta: number) => {
     setGrams((prev) =>
@@ -215,6 +228,11 @@ export default function ScanResultSheet({
       <Text style={styles.range}>
         {kcalRange(totalKcal, result.confidence)}. Estimate, not exact.
       </Text>
+      {(totalFiber != null || totalSugar != null || totalSodium != null) && (
+        <Text style={styles.range}>
+          {microLine(totalFiber, totalSugar, totalSodium)} · from matched foods
+        </Text>
+      )}
 
       <Text style={styles.sectionLabel}>Items</Text>
       <View style={styles.items}>
@@ -232,6 +250,11 @@ export default function ScanResultSheet({
               <Text style={styles.itemMacros}>
                 {row.kcal} kcal · P {row.protein}g · C {row.carbs}g · F {row.fat}g
               </Text>
+              {(row.fiber != null || row.sugar != null || row.sodium != null) && (
+                <Text style={styles.itemMacros}>
+                  {microLine(row.fiber, row.sugar, row.sodium)}
+                </Text>
+              )}
             </View>
             <View style={styles.stepper}>
               <Pressable

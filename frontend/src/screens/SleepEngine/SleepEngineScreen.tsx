@@ -2,18 +2,19 @@
  * SleepEngineScreen — the Sleep goal engine (Batch 6B).
  *
  * Active when 'sleep' is among the Batch 6A active-engine ids. Tracking,
- * NOT treatment: average duration, trailing-week strip, period comparison
- * and real night history — all from logged daily-check-in sleep columns on
- * this device. No bedtime/wake times exist, no stages, no wearables, so no
- * consistency section and no charts beyond real nights.
+ * NOT treatment: average duration, trailing-week strip, period comparison,
+ * bedtime consistency from optionally logged clock times, one daily bedtime
+ * reminder, and real night history — all from logged daily-check-in sleep
+ * columns on this device. No stages, no wearables, no smart alarm.
  *
  * Empty state is honest ("no sleep logged yet") with a path to the DailyLog
  * check-in that creates the data. Copy is descriptive ("Track your sleep
  * patterns") — never improve/fix/prevent, never diagnosis.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +28,8 @@ import { HealthFact } from '@/components/HealthFact';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { TILE_TONES } from '@/theme/tones';
 import { useSleepEngine } from '@/hooks/useSleepEngine';
+import { describeReminder, type SleepReminderState } from '@/services/sleepReminderPlan';
+import { getSleepReminder, setSleepReminder } from '@/services/sleepReminders';
 import {
   formatSleepDuration,
   type SleepNight,
@@ -62,9 +65,111 @@ function nightSub(night: SleepNight): string {
   return parts.join(' · ');
 }
 
+/**
+ * BedtimeReminderSection — one daily nudge at a fixed clock time.
+ * Local state only; saving persists + (re)arms the OS schedule. A plain
+ * reminder, never a smart alarm: no staging, no wake windows.
+ */
+function BedtimeReminderSection() {
+  const [state, setState] = useState<SleepReminderState>({ enabled: false, hour: 22, minute: 30 });
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getSleepReminder().then((s) => {
+      setState(s);
+      setLoaded(true);
+    });
+  }, []);
+
+  const adjust = useCallback((field: 'hour' | 'minute', delta: number) => {
+    setMsg(null);
+    setState((s) => {
+      if (field === 'hour') return { ...s, hour: (s.hour + delta + 24) % 24 };
+      const stepped = Math.round(s.minute / 5) * 5;
+      return { ...s, minute: (((stepped + delta) % 60) + 60) % 60 };
+    });
+  }, []);
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    setMsg(null);
+    const ok = await setSleepReminder(state).catch(() => false);
+    setMsg(
+      !ok
+        ? 'Could not arm the reminder (notifications unavailable here).'
+        : state.enabled
+          ? 'Bedtime reminder set. It fires daily at your time.'
+          : 'Bedtime reminder off.',
+    );
+    setSaving(false);
+  }, [state]);
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    <>
+      <SectionHeader dark title="Bedtime reminder" titleStyle={styles.histTitle} />
+      <Card style={styles.darkCard}>
+        {!loaded ? (
+          <Text style={styles.avgSub}>Loading…</Text>
+        ) : (
+          <>
+            <View style={styles.timeRow}>
+              <View style={styles.stepper}>
+                <Pressable onPress={() => adjust('hour', -1)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour down">
+                  <Text style={styles.stepText}>−</Text>
+                </Pressable>
+                <Text style={styles.timeValue}>{pad(state.hour)}</Text>
+                <Pressable onPress={() => adjust('hour', 1)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour up">
+                  <Text style={styles.stepText}>+</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.timeColon}>:</Text>
+              <View style={styles.stepper}>
+                <Pressable onPress={() => adjust('minute', -5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute down">
+                  <Text style={styles.stepText}>−</Text>
+                </Pressable>
+                <Text style={styles.timeValue}>{pad(state.minute)}</Text>
+                <Pressable onPress={() => adjust('minute', 5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute up">
+                  <Text style={styles.stepText}>+</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                onPress={() => {
+                  setMsg(null);
+                  setState((s) => ({ ...s, enabled: !s.enabled }));
+                }}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: state.enabled }}
+                accessibilityLabel="Bedtime reminder on or off"
+                style={[styles.toggle, state.enabled && styles.toggleOn]}
+              >
+                <Text style={[styles.toggleText, state.enabled && styles.toggleTextOn]}>
+                  {state.enabled ? 'On' : 'Off'}
+                </Text>
+              </Pressable>
+            </View>
+            <Text style={styles.avgSub}>{describeReminder(state)}</Text>
+            <Button
+              title={saving ? 'Saving…' : 'Save reminder'}
+              onPress={() => void save()}
+              disabled={saving}
+              fullWidth
+              style={styles.remindBtn}
+              textStyle={styles.remindBtnText}
+            />
+            {msg ? <Text style={styles.avgSub}>{msg}</Text> : null}
+          </>
+        )}
+      </Card>
+    </>
+  );
+}
+
 export default function SleepEngineScreen() {
   const navigation = useNavigation();
-  const { nights, summary, week, changeLine, isLoading } = useSleepEngine();
+  const { nights, summary, week, changeLine, consistencyLine, isLoading } = useSleepEngine();
 
   const goLog = useCallback(() => {
     const nav = navigation as unknown as {
@@ -106,6 +211,18 @@ export default function SleepEngineScreen() {
               </Text>
               {changeLine ? <Text style={styles.change}>{changeLine}</Text> : null}
             </Card>
+
+            {consistencyLine ? (
+              <>
+                <SectionHeader dark title="Bedtime consistency" titleStyle={styles.histTitle} />
+                <Card style={styles.darkCard}>
+                  <Text style={styles.change}>{consistencyLine}</Text>
+                  <Text style={styles.provenance}>From nights with a logged bedtime (last 7 days).</Text>
+                </Card>
+              </>
+            ) : null}
+
+            <BedtimeReminderSection />
 
             <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
             <Card style={styles.darkCard}>
@@ -192,6 +309,27 @@ const styles = StyleSheet.create({
   avgValue: { ...TYPE.display, fontSize: 40, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
   avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
   change: { ...TYPE.body, color: '#E8ECF1', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
+  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
+  timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  stepper: { alignItems: 'center', gap: 4 },
+  stepBtn: { minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  stepText: { fontSize: 26, color: '#FFFFFF', fontFamily: FONT.semi },
+  timeValue: { fontSize: 44, lineHeight: 50, color: '#FFFFFF', fontFamily: FONT.semi, fontVariant: ['tabular-nums'] },
+  timeColon: { fontSize: 40, color: GV.fog, fontFamily: FONT.semi },
+  toggle: {
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    minWidth: 84,
+    alignItems: 'center',
+  },
+  toggleOn: { backgroundColor: '#4FD1C5', borderColor: '#4FD1C5' },
+  toggleText: { ...TYPE.chip, color: GV.fog },
+  toggleTextOn: { color: '#062A26' },
+  remindBtn: { backgroundColor: '#4FD1C5', marginTop: 8 },
+  remindBtnText: { color: '#062A26' },
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   bar: { width: 16, height: 44, borderRadius: 8, justifyContent: 'flex-end' },

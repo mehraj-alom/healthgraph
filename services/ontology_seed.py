@@ -21,6 +21,11 @@ MANUAL_LOG_CONCEPTS = (
         "display_name": "Heart rate", "short_name": "Resting pulse",
         "aliases": ("heart rate", "pulse", "resting pulse", "resting heart rate"),
     },
+    {
+        "terminology": "LOINC", "code": "29463-7",
+        "display_name": "Body Weight", "short_name": "Weight",
+        "aliases": ("weight", "body weight", "bodyweight", "weigh-in", "weigh in"),
+    },
     # ── Symptoms (SNOMED CT) ──
     {
         "terminology": "SNOMED", "code": "25064002",

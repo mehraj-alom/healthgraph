@@ -4,11 +4,12 @@
  * Reports logged activity only: sessions this week, active minutes from
  * recorded durations, period change lines, and real session history.
  * Duration-less sessions count as sessions but contribute no minutes;
- * user-logged calories appear only as labeled logged sums. No step
- * source, no composite metrics, no targets, no predictions. Empty state is honest
- * when no activity is logged, with a path to the DailyLog check-in that
- * creates the data. Copy is descriptive — never fitter/healthier,
- * never causal.
+ * user-logged calories appear only as labeled logged sums. Step counts
+ * from the device-only Health Connect import render in their own card
+ * and never enter the session/minute math. No composite metrics, no
+ * targets, no predictions. Empty state is honest when no activity is
+ * logged, with a path to the DailyLog check-in that creates the data.
+ * Copy is descriptive — never fitter/healthier, never causal.
  */
 
 import { useCallback } from 'react';
@@ -45,7 +46,7 @@ function sessionSub(session: FitnessSession): string {
 
 export default function FitnessEngineScreen() {
   const navigation = useNavigation();
-  const { sessions, summary, week, sessionsLine, minutesLine, isLoading } = useFitnessEngine();
+  const { sessions, summary, week, sessionsLine, minutesLine, stepDays, stepsToday, isLoading } = useFitnessEngine();
 
   const goLog = useCallback(() => {
     const nav = navigation as unknown as {
@@ -64,6 +65,8 @@ export default function FitnessEngineScreen() {
   const minutesPoints = [...minutesByDay.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([date, value]) => ({ date, value }));
+  const hasContent = summary.sessions > 0 || stepDays.length > 0;
+  const stepPoints = stepDays.map((d) => ({ date: d.log_date, value: d.steps }));
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -76,13 +79,30 @@ export default function FitnessEngineScreen() {
             <Text style={styles.loading}>Loading…</Text>
             <HealthFact style={styles.fact} />
           </>
-        ) : summary.sessions === 0 ? (
+        ) : !hasContent ? (
           <EmptyState
             title="No activity logged yet"
             message="Log a walk, run, or any exercise to begin."
           />
         ) : (
           <>
+            {stepDays.length > 0 ? (
+              <>
+                <SectionHeader dark title="Steps" titleStyle={styles.histTitle} />
+                <Card style={styles.darkCard}>
+                  {stepsToday != null ? (
+                    <Text style={styles.bigValue}>{stepsToday.toLocaleString()}</Text>
+                  ) : null}
+                  <Text style={styles.avgSub}>
+                    {stepsToday != null ? 'Steps today' : `${stepDays.length} ${stepDays.length === 1 ? 'day' : 'days'} counted`}
+                  </Text>
+                  <EngineGraph points={stepPoints} tone={TILE_TONES.fitness[1]} decimals={0} />
+                  <Text style={styles.provenance}>From Health Connect · on this device only.</Text>
+                </Card>
+              </>
+            ) : null}
+            {summary.sessions > 0 ? (
+              <>
             <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
             <Card style={styles.darkCard}>
               <Text style={styles.bigValue}>
@@ -152,6 +172,8 @@ export default function FitnessEngineScreen() {
                   </Card>
                 ))}
             </View>
+              </>
+            ) : null}
           </>
         )}
 

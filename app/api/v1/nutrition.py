@@ -92,6 +92,9 @@ def _merge_items(vlm_items: list[VlmItem]) -> tuple[list[ScanItem], bool]:
                     protein_g=round(scaled.protein_g, 1),
                     carbs_g=round(scaled.carbs_g, 1),
                     fat_g=round(scaled.fat_g, 1),
+                    fiber_g=round(scaled.fiber_g, 1) if scaled.fiber_g is not None else None,
+                    sugar_g=round(scaled.sugar_g, 1) if scaled.sugar_g is not None else None,
+                    sodium_mg=round(scaled.sodium_mg, 1) if scaled.sodium_mg is not None else None,
                     confidence=round(detected.confidence, 2),
                 )
             )

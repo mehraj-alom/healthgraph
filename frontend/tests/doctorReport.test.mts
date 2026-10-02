@@ -31,6 +31,7 @@ const FULL: ReportInput = {
     { name: 'Amoxicillin', detail: '500 mg · twice daily', adherence: 87, status: 'ACTIVE' },
     { name: 'Vitamin D', detail: null, adherence: null, status: 'ACTIVE' },
   ],
+  interactions: [],
   observations: [{ title: 'Knee pain', sub: 'mild' }],
   sleep: { nights: 21, avgMinutes: 452 },
   weight: { startKg: 82, endKg: 79.5, changeKg: -2.5 },
@@ -56,6 +57,19 @@ describe('buildReportHtml', () => {
     assert.ok(html.includes('7h 32m'));
     assert.ok(html.includes('82 kg → 79.5 kg (-2.5 kg)'));
     assert.ok(html.includes('Test Patient'));
+    assert.ok(!html?.includes('Possible interactions'), 'no interaction section when empty');
+  });
+
+  test('renders interaction flags for clinician review, escaped', () => {
+    const html = buildReportHtml({
+      ...FULL,
+      interactions: [
+        { medicines: 'Warfarin + Ibuprofen', note: 'Bleeding risk <script> — ask doctor.' },
+      ],
+    });
+    assert.ok(html?.includes('Possible interactions (for clinician review)'));
+    assert.ok(html?.includes('Warfarin + Ibuprofen'));
+    assert.ok(!html?.includes('<script>'), 'interaction note escaped');
   });
 
   test('escapes hostile input everywhere', () => {

@@ -52,11 +52,19 @@
       "expo-video",
       "expo-font",
       [
-        "expo-build-properties"
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 26
+          }
+        }
       ],
       "./plugins/withArm64Abi.js",
       "expo-sharing",
-      "expo-audio"
+      "expo-audio",
+      "react-native-health-connect"
     ],
     "extra": {
       "eas": {

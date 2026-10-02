@@ -29,9 +29,11 @@ import {
   isHeartEngineActive,
   latestHeartPoint,
   methodLabel,
+  priorMonthHeart,
   priorWeekHeart,
   summarizeHeart,
   summarizeHrv,
+  trailingMonthHeart,
   trailingWeekHeart,
   type HeartPoint,
 } from '../src/screens/HeartEngine/heartEngine.ts';
@@ -261,6 +263,45 @@ describe('real-data state', () => {
     assert.equal(methodLabel('ppg'), 'Fingertip PPG');
     assert.equal(methodLabel('rppg'), 'Face RPPG');
     assert.ok(!formatMeasuredAt('2026-09-20T08:00:00Z').includes('resting'), 'never resting');
+  });
+
+  test('trailing month covers 30 days inclusive, prior month the 30 before', () => {
+    const points = [
+      P('2026-09-21T08:00:00Z', 74, 'rppg'),
+      P('2026-08-23T08:00:00Z', 72, 'ppg'),
+      P('2026-08-22T08:00:00Z', 69, 'ppg'),
+      P('2026-07-24T08:00:00Z', 70, 'ppg'),
+      P('2026-07-23T08:00:00Z', 71, 'ppg'),
+    ];
+    assert.deepEqual(
+      trailingMonthHeart(points, TODAY).map((p) => p.bpm),
+      [74, 72],
+    );
+    assert.deepEqual(
+      priorMonthHeart(points, TODAY).map((p) => p.bpm),
+      [69, 70],
+    );
+  });
+
+  test('month change line is descriptive with the 30-day label', () => {
+    const points = [
+      P('2026-09-21T08:00:00Z', 74, 'rppg'),
+      P('2026-08-23T08:00:00Z', 72, 'ppg'),
+      P('2026-08-22T08:00:00Z', 69, 'ppg'),
+      P('2026-07-24T08:00:00Z', 70, 'ppg'),
+    ];
+    assert.equal(
+      describeHeartChange(
+        trailingMonthHeart(points, TODAY),
+        priorMonthHeart(points, TODAY),
+        'vs prior 30 days',
+      ),
+      'Average HR +3.5 bpm vs prior 30 days',
+    );
+  });
+
+  test('empty months yield no change line', () => {
+    assert.equal(describeHeartChange([], [], 'vs prior 30 days'), null);
   });
 });
 

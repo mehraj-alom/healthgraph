@@ -14,13 +14,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/context/AuthContext';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { waitForIdentityReady } from '@/services/backendIdentity';
-import { getSleepNights } from '@/db/queries/dailyLogs';
+import { getSleepNights, getSleepTimes } from '@/db/queries/dailyLogs';
 import { subscribeDataRefresh } from '@/services/dataRefresh';
 import { todayKey } from '@/screens/Onboarding/momentum';
 import {
   SLEEP_HISTORY_DAYS,
   buildSleepWeek,
   describeSleepChange,
+  describeSleepConsistency,
   sleepWindowStart,
   summarizeSleepNights,
   type SleepNight,
@@ -33,6 +34,7 @@ export function useSleepEngine(): {
   summary: SleepSummary;
   week: SleepWeekDay[];
   changeLine: string | null;
+  consistencyLine: string | null;
   today: string;
   isLoading: boolean;
   refetch: () => Promise<void>;
@@ -60,20 +62,34 @@ export function useSleepEngine(): {
         return;
       }
       const now = todayKey();
-      const rows = await getSleepNights(
-        patientId,
-        sleepWindowStart(now, SLEEP_HISTORY_DAYS),
-        now,
-      ).catch(() => []);
+      const [rows, times] = await Promise.all([
+        getSleepNights(
+          patientId,
+          sleepWindowStart(now, SLEEP_HISTORY_DAYS),
+          now,
+        ).catch(() => []),
+        getSleepTimes(
+          patientId,
+          sleepWindowStart(now, SLEEP_HISTORY_DAYS),
+          now,
+        ).catch(() => []),
+      ]);
       if (!mounted.current) return;
       setToday(now);
+      const timesByDay = new Map(times.map((t) => [t.log_date.slice(0, 10), t]));
       setNights(
-        rows.map((r) => ({
-          date: r.log_date.slice(0, 10),
-          durationMinutes: r.sleep_duration_minutes,
-          quality: r.sleep_quality,
-          awakenings: r.sleep_awakenings,
-        })),
+        rows.map((r) => {
+          const day = r.log_date.slice(0, 10);
+          const t = timesByDay.get(day);
+          return {
+            date: day,
+            durationMinutes: r.sleep_duration_minutes,
+            quality: r.sleep_quality,
+            awakenings: r.sleep_awakenings,
+            ...(t?.bedtime != null ? { bedtime: t.bedtime } : {}),
+            ...(t?.wake_time != null ? { wakeTime: t.wake_time } : {}),
+          };
+        }),
       );
       setIsLoading(false);
     } catch {
@@ -111,6 +127,7 @@ export function useSleepEngine(): {
     summary,
     week: buildSleepWeek(nights, today),
     changeLine: describeSleepChange(nights, today),
+    consistencyLine: describeSleepConsistency(nights, today),
     today,
     isLoading,
     refetch: load,

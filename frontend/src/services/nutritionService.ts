@@ -35,6 +35,10 @@ export interface FoodScanItem {
   confidence: FoodScanConfidence;
   /** Retail barcode when the item came from a barcode scan (else absent). */
   barcode?: string;
+  /** Display-only micros, USDA-sourced; absent on estimated items. */
+  fiber_g?: number | null;
+  sugar_g?: number | null;
+  sodium_mg?: number | null;
 }
 
 export interface FoodScanResult {

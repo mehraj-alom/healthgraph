@@ -87,8 +87,10 @@ const DDL = `
   CREATE TABLE ppg_measurements (measurement_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE rppg_measurements (measurement_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE substance_entries (entry_id TEXT PRIMARY KEY, patient_id TEXT);
+  CREATE TABLE craving_entries (entry_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE cycle_entries (entry_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE food_scan_items (scan_id TEXT PRIMARY KEY, patient_id TEXT);
+  CREATE TABLE step_counts (patient_id TEXT, log_date TEXT, steps INTEGER);
   CREATE TABLE onboarding_state (patient_id TEXT PRIMARY KEY, completed INTEGER);
   CREATE TABLE reminder_instances (occurrence_id TEXT PRIMARY KEY, patient_id TEXT, medication_id TEXT, scheduled_at TEXT);
   CREATE TABLE hydration_state (scope TEXT, key TEXT, value TEXT);
@@ -116,8 +118,10 @@ function seedDb() {
     INSERT INTO ppg_measurements VALUES ('p-a1','${A}'), ('p-b1','${B}');
     INSERT INTO rppg_measurements VALUES ('r-a1','${A}'), ('r-b1','${B}');
     INSERT INTO substance_entries VALUES ('u-a1','${A}'), ('u-b1','${B}');
+    INSERT INTO craving_entries VALUES ('v-a1','${A}'), ('v-b1','${B}');
     INSERT INTO cycle_entries VALUES ('c-a1','${A}'), ('c-b1','${B}');
     INSERT INTO food_scan_items VALUES ('f-a1','${A}'), ('f-b1','${B}');
+    INSERT INTO step_counts VALUES ('${A}','2026-09-30',8000), ('${B}','2026-09-30',9000);
     INSERT INTO onboarding_state VALUES ('${A}',1), ('${B}',0);
     INSERT INTO reminder_instances VALUES ('r-a1','${A}','m-a1','08:00'), ('r-b1','${B}','m-b1','08:00');
     INSERT INTO hydration_state VALUES ('taken-events','taken_hydrated:${A}','{}'), ('taken-events','taken_hydrated:${B}','{}');
@@ -151,7 +155,7 @@ describe('wipePatientTables', () => {
       'medications', 'medication_taken_events', 'daily_logs', 'observations',
       'body_state_snapshots', 'documents', 'profile_cache', 'daily_metrics_cache',
       'trends_cache', 'trends_cache_new', 'scan_sessions', 'ppg_measurements',
-      'rppg_measurements', 'substance_entries', 'cycle_entries', 'food_scan_items', 'onboarding_state',
+      'rppg_measurements', 'substance_entries', 'craving_entries', 'cycle_entries', 'food_scan_items', 'step_counts', 'onboarding_state',
     ]) {
       const remaining = await db.getAllAsync<{ patient_id: string }>(
         `SELECT patient_id FROM ${table}`,

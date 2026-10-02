@@ -14,6 +14,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { waitForIdentityReady } from '@/services/backendIdentity';
 import { getActivityLogs } from '@/db/queries/dailyLogs';
+import { getLocalStepHistory, type StepHistoryPoint } from '@/db/queries/stepCounts';
 import { subscribeDataRefresh } from '@/services/dataRefresh';
 import { todayKey } from '@/screens/Onboarding/momentum';
 import {
@@ -36,6 +37,8 @@ export function useFitnessEngine(): {
   week: FitnessWeekDay[];
   sessionsLine: string | null;
   minutesLine: string | null;
+  stepDays: StepHistoryPoint[];
+  stepsToday: number | null;
   today: string;
   isLoading: boolean;
   refetch: () => Promise<void>;
@@ -43,6 +46,7 @@ export function useFitnessEngine(): {
   const { user } = useAuth();
   const uid = user?.uid ?? null;
   const [sessions, setSessions] = useState<FitnessSession[]>([]);
+  const [stepDays, setStepDays] = useState<StepHistoryPoint[]>([]);
   const [today, setToday] = useState(() => todayKey());
   const [isLoading, setIsLoading] = useState(true);
   const mounted = useRef(true);
@@ -52,6 +56,7 @@ export function useFitnessEngine(): {
       if (!uid) {
         if (mounted.current) {
           setSessions([]);
+          setStepDays([]);
           setIsLoading(false);
         }
         return;
@@ -63,13 +68,17 @@ export function useFitnessEngine(): {
         return;
       }
       const now = todayKey();
-      const rows = await getActivityLogs(
-        patientId,
-        fitnessWindowStart(now, FITNESS_HISTORY_DAYS),
-        now,
-      ).catch(() => []);
+      const [rows, steps] = await Promise.all([
+        getActivityLogs(
+          patientId,
+          fitnessWindowStart(now, FITNESS_HISTORY_DAYS),
+          now,
+        ).catch(() => []),
+        getLocalStepHistory(patientId, fitnessWindowStart(now, 14), now).catch(() => []),
+      ]);
       if (!mounted.current) return;
       setToday(now);
+      setStepDays(steps);
       setSessions(
         rows.map((r) => ({
           date: r.log_date.slice(0, 10),
@@ -111,12 +120,15 @@ export function useFitnessEngine(): {
   const summary = summarizeFitness(trailingWeekSessions(sessions, today));
   const current = trailingWeekSessions(sessions, today);
   const previous = priorWeekSessions(sessions, today);
+  const todaySteps = stepDays.find((d) => d.log_date === today)?.steps ?? null;
   return {
     sessions,
     summary,
     week: buildFitnessWeek(sessions, today),
     sessionsLine: describeSessionsChange(current, previous),
     minutesLine: describeMinutesChange(current, previous),
+    stepDays,
+    stepsToday: todaySteps,
     today,
     isLoading,
     refetch: load,

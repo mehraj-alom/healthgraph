@@ -27,6 +27,7 @@ import { requestDataRefresh } from '@/services/dataRefresh';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { usePriority } from '@/hooks/usePriority';
 import { useActiveMedications } from '@/hooks/useMedications';
+import { durationFromBedWake, parseClockTime } from '@/screens/SleepEngine/sleepEngine';
 import {
   getDailyLogDetail as dbGetDailyLogDetail,
   upsertDailyLog as dbUpsertDailyLog,
@@ -672,6 +673,8 @@ export default function VitalsLoggerScreen() {
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const [sleepQuality, setSleepQuality] = useState<number | null>(null);
   const [awakenings, setAwakenings] = useState<number | null>(null);
+  const [bedtime, setBedtime] = useState('');
+  const [wakeTime, setWakeTime] = useState('');
   const [waterMl, setWaterMl] = useState('');
   const [mealsCount, setMealsCount] = useState('');
   const [appetiteLevel, setAppetiteLevel] = useState<number | null>(null);
@@ -903,6 +906,8 @@ export default function VitalsLoggerScreen() {
     if (existing.sleep_duration_minutes != null && Number.isFinite(existing.sleep_duration_minutes)) setSleepMinutes(existing.sleep_duration_minutes);
     if (existing.sleep_quality != null) setSleepQuality(existing.sleep_quality);
     if (existing.sleep_awakenings != null) setAwakenings(existing.sleep_awakenings);
+    if (existing.bedtime) setBedtime(existing.bedtime);
+    if (existing.wake_time) setWakeTime(existing.wake_time);
     if (existing.water_ml != null) setWaterMl(String(existing.water_ml));
     if (existing.meals_count != null) setMealsCount(String(existing.meals_count));
     if (existing.appetite_level != null) setAppetiteLevel(existing.appetite_level);
@@ -928,7 +933,7 @@ export default function VitalsLoggerScreen() {
     setFormInitialized(false);
     setEditingGroupId(null);
     setEditing(false);
-    setMood(null); setEnergy(null); setStress(null); setSleepMinutes(0); setSleepQuality(null); setAwakenings(null);
+    setMood(null); setEnergy(null); setStress(null); setSleepMinutes(0); setSleepQuality(null); setAwakenings(null); setBedtime(''); setWakeTime('');
     setWaterMl(''); setMealsCount(''); setAppetiteLevel(null); setSymptoms([]); setPain([]);
     setActivities([]); setMedications([]); setVitals([]); setNotes(''); setErrors({});
   }, [selectedDate]);
@@ -1305,6 +1310,8 @@ export default function VitalsLoggerScreen() {
 
     if (waterMl && (!Number.isInteger(Number(waterMl)) || Number(waterMl) < 0)) e.water = 'Use whole millilitres.';
     if (awakenings != null && sleepMinutes === 0) e.sleepAwakenings = 'Log sleep duration to record wake-ups.';
+    if (bedtime.trim() !== '' && parseClockTime(bedtime.trim()) === null) e.bedtime = 'Use 24-hour HH:MM, e.g. 22:30.';
+    if (wakeTime.trim() !== '' && parseClockTime(wakeTime.trim()) === null) e.wakeTime = 'Use 24-hour HH:MM, e.g. 06:30.';
     if (mealsCount && (!Number.isInteger(Number(mealsCount)) || Number(mealsCount) < 0)) e.meals = 'Use a whole meal count.';
     pain.forEach((item) => {
       if (!item.severity || Number(item.severity) < 1 || Number(item.severity) > 10) e[`pain-${item.id}`] = 'Choose a severity from 1 to 10.';
@@ -1354,6 +1361,8 @@ export default function VitalsLoggerScreen() {
               duration_minutes: sleepMinutes,
               ...(sleepQuality != null ? { sleep_quality: sleepQuality } : {}),
               ...(awakenings != null ? { awakenings } : {}),
+              ...(parseClockTime(bedtime.trim()) !== null ? { bedtime: bedtime.trim() } : {}),
+              ...(parseClockTime(wakeTime.trim()) !== null ? { wake_time: wakeTime.trim() } : {}),
             },
           }
         : {}),
@@ -1721,6 +1730,42 @@ export default function VitalsLoggerScreen() {
               totalMinutes={sleepMinutes}
               onChange={setSleepMinutes}
             />
+
+            <View style={styles.fieldSpacer} />
+            <Text style={styles.fieldLabel}>Bedtime (optional)</Text>
+            <Input
+              value={bedtime}
+              onChangeText={setBedtime}
+              placeholder="22:30"
+              keyboardType="numbers-and-punctuation"
+              autoCapitalize="none"
+            />
+            {errors.bedtime ? <Text style={styles.fieldError}>{errors.bedtime}</Text> : null}
+            <View style={styles.fieldSpacer} />
+            <Text style={styles.fieldLabel}>Wake time (optional)</Text>
+            <Input
+              value={wakeTime}
+              onChangeText={setWakeTime}
+              placeholder="06:30"
+              keyboardType="numbers-and-punctuation"
+              autoCapitalize="none"
+            />
+            {errors.wakeTime ? <Text style={styles.fieldError}>{errors.wakeTime}</Text> : null}
+            {parseClockTime(bedtime.trim()) !== null && parseClockTime(wakeTime.trim()) !== null ? (
+              <Pressable
+                onPress={() => {
+                  const mins = durationFromBedWake(bedtime.trim(), wakeTime.trim());
+                  if (mins != null) setSleepMinutes(mins);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Fill duration from bedtime and wake time"
+                hitSlop={8}
+              >
+                <Text style={styles.qualityHint}>
+                  {`Bedtime to wake is ${formatSleepDuration(durationFromBedWake(bedtime.trim(), wakeTime.trim()) ?? 0)} — tap to use it as the duration.`}
+                </Text>
+              </Pressable>
+            ) : null}
 
             <View style={styles.fieldSpacer} />
             <Text style={styles.fieldLabel}>Quality</Text>

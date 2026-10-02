@@ -56,6 +56,7 @@ import { api } from '@/services/api';
 import {
   hydrateMedications as dbHydrateMedications,
   markMedicationStatusLocal as dbMarkMedicationStatusLocal,
+  updateMedication as dbUpdateMedication,
 } from '@/db/queries/medications';
 import { reconcileMedicationReminders } from '@/services/medicationReminders';
 import {
@@ -231,6 +232,7 @@ function MedTile({
   onPause,
   onResume,
   onStop,
+  onRefill,
 }: {
   index: number;
   medication: Medication;
@@ -242,6 +244,7 @@ function MedTile({
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
+  onRefill: () => void;
 }) {
   const solid = solidForMedication(medication.medication_id, index);
   const frequencyLabel = FREQUENCY_LABELS[medication.frequency] || medication.frequency;
@@ -333,6 +336,17 @@ function MedTile({
             >
               <Text style={styles.popoverBtnText}>Stop</Text>
             </Pressable>
+            {medication.status === 'ACTIVE' ? (
+              <Pressable
+                onPress={onRefill}
+                accessibilityRole="button"
+                accessibilityLabel={`Log refill for ${medication.name}`}
+                hitSlop={8}
+                style={({ pressed }) => [styles.popoverBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.popoverBtnText}>Log refill</Text>
+              </Pressable>
+            ) : null}
           </View>
         </Pressable>
       ) : null}
@@ -472,6 +486,7 @@ export default function MedicationsScreen() {
     void (async () => {
       try {
         const { computeAdherence, computeRefill, safetyFlags } = await import('@/utils/medicationAdherence');
+        const { interactionFlags } = await import('@/utils/drugInteractions');
         const settled = await Promise.allSettled(
           activeMedications.map((m) =>
             api.get<import('@/types').MedicationTakenEvent[]>(`/api/v1/medications/${m.medication_id}/taken`, {
@@ -492,7 +507,11 @@ export default function MedicationsScreen() {
           const refill = computeRefill(m, eventsByMed[m.medication_id] ?? []);
           if (refill) refills[m.medication_id] = refill;
         }
-        setInsights({ adherence, refills, flags: safetyFlags(activeMedications, eventsByMed) });
+        setInsights({
+          adherence,
+          refills,
+          flags: [...interactionFlags(activeMedications), ...safetyFlags(activeMedications, eventsByMed)],
+        });
       } catch {
         if (live) setInsights(null);
       }
@@ -620,8 +639,7 @@ export default function MedicationsScreen() {
     }
   }, [refetchMedications]);
 
-  const handleStopMedication = useCallback(async (medication: Medication) => {
-    Alert.alert(
+  const handleStopMedication = useCallback(async (medication: Medication) => {    Alert.alert(
       'Stop Medication',
       `Are you sure you want to stop ${medication.name}?`,
       [
@@ -651,6 +669,57 @@ export default function MedicationsScreen() {
       ],
     );
   }, [refetchMedications]);
+
+  // ── Refill pickup: one-tap restock of supply + refill count ──
+
+  const [refillMed, setRefillMed] = useState<Medication | null>(null);
+  const [refillQty, setRefillQty] = useState('');
+  const [refillDate, setRefillDate] = useState('');
+  const [refillError, setRefillError] = useState<string | null>(null);
+  const [savingRefill, setSavingRefill] = useState(false);
+
+  const openRefill = useCallback((medication: Medication) => {
+    setRefillMed(medication);
+    setRefillQty(
+      medication.supply_quantity != null && medication.supply_quantity > 0
+        ? String(medication.supply_quantity)
+        : '',
+    );
+    setRefillDate(todayKey());
+    setRefillError(null);
+  }, []);
+
+  const handleSaveRefill = useCallback(async () => {
+    if (savingRefill || !refillMed) return;
+    const patientId = getCachedPatientId();
+    if (!patientId) {
+      setRefillError('Your session has expired. Please sign in again.');
+      return;
+    }
+    let update;
+    try {
+      const { refillPickup } = await import('@/utils/medicationAdherence');
+      update = refillPickup(
+        { supply_quantity: refillMed.supply_quantity, refills_left: refillMed.refills_left },
+        { quantity: refillQty.trim() ? Number(refillQty) : null, pickedUpOn: refillDate },
+        todayKey(),
+      );
+    } catch (err) {
+      setRefillError(err instanceof Error ? err.message : 'Check the highlighted fields.');
+      return;
+    }
+    setSavingRefill(true);
+    try {
+      await dbUpdateMedication(patientId, refillMed.medication_id, update);
+      setRefillMed(null);
+      refetchMedications();
+      if (patientId) void reconcileMedicationReminders(patientId);
+    } catch {
+      setRefillError('Could not save this refill. Please try again.');
+    } finally {
+      setSavingRefill(false);
+    }
+  }, [savingRefill, refillMed, refillQty, refillDate, refetchMedications]);
 
   // ── Render ──
 
@@ -842,7 +911,7 @@ export default function MedicationsScreen() {
             <Text style={styles.safetyTitle}>Worth a look</Text>
             {insights.flags.slice(0, 4).map((f, i) => (
               <Text key={`${f.kind}-${i}`} style={styles.safetyText}>
-                {f.kind === 'duplicate' ? '⚠ ' : f.kind === 'polypharmacy' ? '💊 ' : f.kind === 'low-adherence' ? '📉 ' : '🔋 '}
+                {f.kind === 'interaction' ? '⚠ ' : f.kind === 'duplicate' ? '⚠ ' : f.kind === 'polypharmacy' ? '💊 ' : f.kind === 'low-adherence' ? '📉 ' : '🔋 '}
                 {f.text}
               </Text>
             ))}
@@ -862,6 +931,7 @@ export default function MedicationsScreen() {
             onPause={handlePauseMedication}
             onResume={handleResumeMedication}
             onStop={handleStopMedication}
+            onRefill={openRefill}
           />
         )}
 
@@ -903,6 +973,46 @@ export default function MedicationsScreen() {
           if (patientId) void reconcileMedicationReminders(patientId);
         }}
       />
+      {/* Refill pickup modal */}
+      <Modal
+        visible={refillMed !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRefillMed(null)}
+      >
+        <View style={styles.refillOverlay}>
+          <View style={styles.refillBox}>
+            <Text style={styles.refillTitle}>
+              {refillMed ? `Log refill · ${refillMed.name}` : 'Log refill'}
+            </Text>
+            <Text style={styles.refillSub}>
+              Resets supply to the new fill and uses one refill.
+            </Text>
+            <Input
+              label="New fill size (doses)"
+              value={refillQty}
+              onChangeText={setRefillQty}
+              placeholder="e.g. 30"
+              keyboardType="numeric"
+            />
+            <Input
+              label="Pickup day (YYYY-MM-DD)"
+              value={refillDate}
+              onChangeText={setRefillDate}
+              placeholder="2026-10-02"
+            />
+            {refillError ? <Text style={styles.refillError}>{refillError}</Text> : null}
+            <Button
+              title={savingRefill ? 'Saving…' : 'Save refill'}
+              onPress={() => void handleSaveRefill()}
+              disabled={savingRefill}
+              loading={savingRefill}
+              fullWidth
+            />
+            <Button title="Cancel" variant="ghost" onPress={() => setRefillMed(null)} fullWidth />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -917,6 +1027,7 @@ function ActiveTilesTab({
   onPause,
   onResume,
   onStop,
+  onRefill,
   extraLines,
 }: {
   medications: Medication[];
@@ -926,6 +1037,7 @@ function ActiveTilesTab({
   onPause: (med: Medication) => void;
   onResume: (med: Medication) => void;
   onStop: (med: Medication) => void;
+  onRefill: (med: Medication) => void;
   /** Per-medication insight lines (adherence, refill) keyed by id. */
   extraLines?: Record<string, string[]>;
 }) {
@@ -983,6 +1095,7 @@ function ActiveTilesTab({
                 onPause={() => { setExpandedId(null); onPause(med); }}
                 onResume={() => { setExpandedId(null); onResume(med); }}
                 onStop={() => { setExpandedId(null); onStop(med); }}
+                onRefill={() => { setExpandedId(null); onRefill(med); }}
               />
             );
           })}
@@ -2088,6 +2201,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: '#FFFFFF',
+  },
+  refillOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  refillBox: {
+    backgroundColor: '#10141F',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    padding: 20,
+    gap: 12,
+  },
+  refillTitle: {
+    fontFamily: FONT.semi,
+    fontSize: 17,
+    lineHeight: 22,
+    color: '#FFFFFF',
+  },
+  refillSub: {
+    ...TYPE.caption,
+    color: GV.fog,
+  },
+  refillError: {
+    ...TYPE.caption,
+    color: GV.danger,
   },
   tile: {
     width: '100%',

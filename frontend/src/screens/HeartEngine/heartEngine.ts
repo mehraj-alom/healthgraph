@@ -112,6 +112,31 @@ export function priorWeekHeart(
   });
 }
 
+/** Points inside the trailing 30 days (inclusive of todayKey). */
+export function trailingMonthHeart(
+  points: readonly HeartPoint[],
+  todayKey: string,
+): HeartPoint[] {
+  const start = shiftDayKey(todayKey, -29);
+  return points.filter((p) => {
+    const day = heartDayKey(p.measuredAt);
+    return day !== null && day >= start && day <= todayKey;
+  });
+}
+
+/** Points inside the prior 30 days (comparison baseline). */
+export function priorMonthHeart(
+  points: readonly HeartPoint[],
+  todayKey: string,
+): HeartPoint[] {
+  const start = shiftDayKey(todayKey, -59);
+  const end = shiftDayKey(todayKey, -30);
+  return points.filter((p) => {
+    const day = heartDayKey(p.measuredAt);
+    return day !== null && day >= start && day <= end;
+  });
+}
+
 export interface HeartSummary {
   /** Measured rows in the window. */
   measurements: number;

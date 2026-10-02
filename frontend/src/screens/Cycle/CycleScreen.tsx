@@ -1,10 +1,12 @@
 /**
  * CycleScreen — explicit cycle tracking (device-only).
  *
- * User-entered starts, ends, and notes grouped into plain history spans.
- * No predictions of any kind: no fertility, ovulation, pregnancy, or
- * condition inference — the history below shows recorded days only. All
- * rows are patient-scoped SQLite; nothing syncs (the UI says so).
+ * User-entered starts, ends, and notes grouped into plain history spans,
+ * plus estimates from recorded starts: an expected next-period range and
+ * an approximate fertile window. Estimates are labeled as estimates with
+ * their basis attached — never certainties, never for contraception, no
+ * pregnancy mode, no condition inference. All rows are patient-scoped
+ * SQLite; nothing syncs (the UI says so).
  */
 
 import { useCallback, useState } from 'react';
@@ -24,6 +26,12 @@ import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { todayKeyLocal } from '@/utils/dayKey';
 import { EXTRA_TONES, TILE_TONES } from '@/theme/tones';
 import { getCachedPatientId } from '@/services/patientIdentity';
+import {
+  describePrediction,
+  fertileEstimate,
+  predictNextPeriod,
+} from '@/services/cyclePredictions';
+import { useCyclePatterns } from '@/hooks/useCyclePatterns';
 import {
   CYCLE_KINDS,
   deleteCycleEntry,
@@ -277,6 +285,16 @@ export default function CycleScreen() {
 
   const spans = groupCycleSpans(entries);
 
+  const starts = entries
+    .filter((e) => e.kind === 'period-start')
+    .map((e) => ({ date: e.date }));
+  const periodPred = predictNextPeriod(starts);
+  const fertileEst = fertileEstimate(starts);
+
+  // Symptom patterns live in the hook so this tracker screen stays
+  // device-only (batch3 wiring guard): no API imports, no network calls.
+  const patternLines = useCyclePatterns(entries);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -284,6 +302,40 @@ export default function CycleScreen() {
         <Text style={styles.sub}>Recorded days only.</Text>
 
         <SectionHeader dark title="History" titleStyle={styles.histTitle} />
+        {!loading && (periodPred !== null || fertileEst !== null) ? (
+          <>
+            <SectionHeader dark title="Coming up" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              {periodPred !== null ? (
+                <>
+                  <Text style={styles.bigValue}>{describePrediction(periodPred)}</Text>
+                  <Text style={styles.avgSub}>Next period · estimated range</Text>
+                </>
+              ) : null}
+              {fertileEst !== null ? (
+                <Text style={styles.avgSub}>
+                  {`Fertile window roughly ${shortDay(fertileEst.fertileFrom)} – ${shortDay(fertileEst.fertileTo)}`}
+                </Text>
+              ) : null}
+              <Text style={styles.provenance}>
+                Estimates from recorded starts — not for contraception, not medical advice.
+              </Text>
+            </Card>
+          </>
+        ) : null}
+        {patternLines !== null && patternLines.length > 0 ? (
+          <>
+            <SectionHeader dark title="Patterns" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              {patternLines.map((line) => (
+                <Text key={line} style={styles.avgSub}>{line}</Text>
+              ))}
+              <Text style={styles.provenance}>
+                Logged symptoms placed in cycle phases · co-occurrence counts only.
+              </Text>
+            </Card>
+          </>
+        ) : null}
         {!loading && (
           <CycleCalendar
             entries={entries}
@@ -348,7 +400,7 @@ export default function CycleScreen() {
         )}
 
         <Text style={styles.disclaimer}>
-          Recorded history only. No fertility, ovulation, or pregnancy predictions.
+          Recorded history plus estimates. Estimates are not for contraception — not medical advice, diagnosis, or treatment.
         </Text>
         <Button
           title="Add entry"
@@ -467,6 +519,18 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   spanTitle: { fontFamily: FONT.semi, fontSize: 17, lineHeight: 22, color: '#FFFFFF', marginBottom: 8, fontVariant: ['tabular-nums'] },
+  darkCard: {
+    backgroundColor: '#10141F',
+    borderColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  bigValue: { fontFamily: FONT.semi, fontSize: 20, lineHeight: 26, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
+  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
   entryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 8 },
   entryRowDivided: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
   entryMain: { flex: 1, gap: 2 },

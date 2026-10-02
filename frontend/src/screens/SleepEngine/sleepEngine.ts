@@ -4,10 +4,10 @@
  * The first goal-driven engine: active when 'sleep' is among the Batch 6A
  * active-engine ids. Every number here comes from real logged nights
  * supplied by the caller; the module never fetches, never synthesizes, and
- * never interprets. No bedtime/wake timestamps exist on device, no sleep
- * stages exist, no wearable integration exists — so there is no consistency
- * or stage math here, only logged duration (minutes), 1–5 quality, and
- * awakenings from daily check-ins. Empty in → null out, never a zero chart.
+ * never interprets. Bedtime/wake times are optional per night (from the
+ * SLEEP_LOG event payload when the user logs them) and feed one
+ * descriptive consistency line only — no stages, no wearable integration,
+ * no scores, no recommendations. Empty in → null out, never a zero chart.
  *
  * Period comparison mirrors the shared changes.ts contract (same trailing-7
  * vs prior-7 windows, same absolute-minute deltas, same descriptive copy)
@@ -26,6 +26,10 @@ export interface SleepNight {
   durationMinutes: number;
   quality: number | null;
   awakenings: number | null;
+  /** Optional bedtime 'HH:MM' from the SLEEP_LOG event payload. */
+  bedtime?: string | null;
+  /** Optional wake time 'HH:MM' from the SLEEP_LOG event payload. */
+  wakeTime?: string | null;
 }
 
 /** One cell of the trailing-7-day strip. */
@@ -172,4 +176,70 @@ export function formatSleepDuration(totalMinutes: number): string {
   const m = mins % 60;
   if (h <= 0) return `${m}m`;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+const CLOCK_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * Strict 'HH:MM' → minutes since midnight, or null. Clock times come from
+ * user input and event payloads — both untrusted, both validated here.
+ */
+export function parseClockTime(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const m = CLOCK_RE.exec(value);
+  if (m === null) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/**
+ * Minutes from bedtime to wake time, crossing midnight when needed.
+ * Null when either side is missing/invalid or the span is zero (a
+ * zero-length "night" is a logging mistake, never a measurement).
+ */
+export function durationFromBedWake(bedtime: unknown, wakeTime: unknown): number | null {
+  const bed = parseClockTime(bedtime);
+  const wake = parseClockTime(wakeTime);
+  if (bed === null || wake === null) return null;
+  const span = (wake - bed + 1440) % 1440;
+  return span === 0 ? null : span;
+}
+
+/**
+ * Bedtime minutes linearized from noon, so night times order correctly
+ * (22:30 → evening, 06:30 → next morning) for span math.
+ */
+function linearBedMinutes(clockMinutes: number): number {
+  return (clockMinutes - 720 + 1440) % 1440;
+}
+
+/** "45m" / "1h 20m" — display only. */
+function formatSpanMinutes(spanMinutes: number): string {
+  const mins = Math.round(spanMinutes);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h <= 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+/**
+ * Descriptive bedtime consistency over the trailing 7 days, e.g.
+ * "Bedtimes spanned 1h 20m across 3 nights". Null with fewer than two
+ * timed nights — a single bedtime has no spread to describe. Purely
+ * descriptive: no score, no judgment, no recommendation.
+ */
+export function describeSleepConsistency(
+  nights: readonly SleepNight[],
+  todayKey: string,
+): string | null {
+  const start = shiftDayKey(todayKey, -6);
+  const times: number[] = [];
+  for (const n of nights) {
+    const day = n.date.slice(0, 10);
+    if (day < start || day > todayKey) continue;
+    const parsed = parseClockTime(n.bedtime);
+    if (parsed !== null) times.push(linearBedMinutes(parsed));
+  }
+  if (times.length < 2) return null;
+  const span = Math.max(...times) - Math.min(...times);
+  return `Bedtimes spanned ${formatSpanMinutes(span)} across ${times.length} ${times.length === 1 ? 'night' : 'nights'}`;
 }

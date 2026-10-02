@@ -490,6 +490,13 @@ export default function VoiceCheckinScreen() {
             fullWidth
             textStyle={styles.ghostText}
           />
+          <Button
+            title="Speak freely instead"
+            variant="ghost"
+            onPress={() => navigation.navigate('VoiceJournal')}
+            fullWidth
+            textStyle={styles.ghostText}
+          />
           <Text style={styles.disclaimer}>Answers save to your daily log. Tracking only.</Text>
           <Text style={styles.disclaimer}>Rings exactly on time only if the system allows “Alarms & reminders” for this app — otherwise Android may delay the call by minutes.</Text>
         </ScrollView>

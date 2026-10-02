@@ -28,13 +28,17 @@ import { getObservations } from '@/db/queries/observations';
 import { getSleepNights, getWeightHistory } from '@/db/queries/dailyLogs';
 import { getProfileCache } from '@/db/queries/homeCache';
 import { summarizeSleepNights } from '@/screens/SleepEngine/sleepEngine';
-import { computeAdherence } from '@/utils/medicationAdherence';
+import { computeAdherence, computeRefill } from '@/utils/medicationAdherence';
+import { interactionFlags } from '@/utils/drugInteractions';
 import {
+  buildCaregiverReportHtml,
   buildReportHtml,
+  type CaregiverReportMed,
   type ReportInput,
 } from '@/services/doctorReportHtml';
 
 const WINDOW_DAYS = 30;
+const CAREGIVER_WINDOW_DAYS = 7;
 
 function shiftDay(today: string, delta: number): string {
   const d = new Date(`${today}T12:00:00`);
@@ -51,6 +55,9 @@ function freqLabel(frequency: string): string {
 
 export default function ReportScreen() {
   const [input, setInput] = useState<ReportInput | null>(null);
+  const [caregiverMeds, setCaregiverMeds] = useState<CaregiverReportMed[]>([]);
+  const [caregiverName, setCaregiverName] = useState<string | null>(null);
+  const [variant, setVariant] = useState<'doctor' | 'caregiver'>('doctor');
   const [isLoading, setIsLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const mounted = useRef(true);
@@ -107,6 +114,13 @@ export default function ReportScreen() {
           title: o.finding_display_name || o.finding_code,
           sub: o.clinical_summary || o.visual_status || null,
         })),
+        interactions: interactionFlags(active).map((f) => ({
+          medicines: f.medicationIds
+            .map((id) => active.find((m) => m.medication_id === id)?.name ?? null)
+            .filter((n): n is string => n !== null)
+            .join(' + '),
+          note: f.text,
+        })),
         sleep:
           sleep.loggedNights > 0
             ? { nights: sleep.loggedNights, avgMinutes: sleep.avgMinutes }
@@ -121,6 +135,34 @@ export default function ReportScreen() {
             : null,
       };
       setInput(buildReportHtml(assembled) ? assembled : null);
+      const todayNoon = new Date(`${today}T12:00:00`);
+      setCaregiverMeds(
+        active.map((m) => {
+          const events = taken.filter((e) => e.medication_id === m.medication_id);
+          const adh = computeAdherence(m, events, CAREGIVER_WINDOW_DAYS, todayNoon);
+          const refill = computeRefill(m, events, todayNoon);
+          const dose = [
+            m.strength ? `${m.strength}${m.strength_unit ? ` ${m.strength_unit}` : ''}` : null,
+            m.dose_amount ? `${m.dose_amount}${m.dose_unit ? ` ${m.dose_unit}` : ''}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          const schedule = [dose || null, freqLabel(m.frequency)].filter(Boolean).join(' · ') || null;
+          let supply: string | null = null;
+          if (refill) {
+            if (refill.out) {
+              supply = 'Out of supply';
+            } else if (refill.daysLeft != null) {
+              const refillBit = m.refills_left != null ? ` · ${m.refills_left} ${m.refills_left === 1 ? 'refill' : 'refills'} left` : '';
+              supply = `~${Math.max(1, Math.ceil(refill.daysLeft))} days left${refillBit}`;
+            } else {
+              supply = `${Math.max(0, Math.floor(refill.dosesLeft))} doses left`;
+            }
+          }
+          return { name: m.name, schedule, adherence: adh.percent, supply };
+        }),
+      );
+      setCaregiverName(profile?.data?.display_name ?? null);
       setIsLoading(false);
     } catch {
       if (mounted.current) setIsLoading(false);
@@ -137,15 +179,26 @@ export default function ReportScreen() {
   }, [load]);
 
   const generate = useCallback(async () => {
-    if (!input) return;
-    const html = buildReportHtml(input);
-    if (!html) return;
     setGenerating(true);
     try {
+      const html =
+        variant === 'caregiver'
+          ? buildCaregiverReportHtml({
+              generatedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+              windowDays: CAREGIVER_WINDOW_DAYS,
+              patientName: caregiverName,
+              meds: caregiverMeds,
+            })
+          : input
+            ? buildReportHtml(input)
+            : null;
+      if (!html) return;
       const { uri } = await Print.printToFileAsync({ html });
       const canShare = await Sharing.isAvailableAsync().catch(() => false);
       if (canShare) {
-        await Sharing.shareAsync(uri, { dialogTitle: 'Share doctor report' });
+        await Sharing.shareAsync(uri, {
+          dialogTitle: variant === 'caregiver' ? 'Share caregiver report' : 'Share doctor report',
+        });
       } else {
         Alert.alert('Report ready', `Saved to: ${uri}`);
       }
@@ -154,32 +207,71 @@ export default function ReportScreen() {
     } finally {
       setGenerating(false);
     }
-  }, [input]);
+  }, [input, variant, caregiverMeds, caregiverName]);
+
+  const showingCaregiver = variant === 'caregiver';
+  const hasContent = showingCaregiver ? caregiverMeds.length > 0 : input !== null;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Doctor report.</Text>
-        <Text style={styles.sub}>Last 30 days, one PDF for appointments.</Text>
+        <Text style={styles.title}>{showingCaregiver ? 'Caregiver report.' : 'Doctor report.'}</Text>
+        <Text style={styles.sub}>
+          {showingCaregiver
+            ? 'Last 7 days · schedule, recent taking, and supply for a family member or caregiver.'
+            : 'Last 30 days, one PDF for appointments.'}
+        </Text>
+
+        <View style={styles.variantRow}>
+          <Button
+            title="Doctor"
+            variant={showingCaregiver ? 'ghost' : 'primary'}
+            onPress={() => setVariant('doctor')}
+            style={styles.variantBtn}
+          />
+          <Button
+            title="Caregiver"
+            variant={showingCaregiver ? 'primary' : 'ghost'}
+            onPress={() => setVariant('caregiver')}
+            style={styles.variantBtn}
+          />
+        </View>
 
         {isLoading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color="#4FD1C5" />
             <Text style={styles.body}>Gathering your data on this device…</Text>
           </View>
-        ) : !input ? (
+        ) : !hasContent ? (
           <EmptyState
             title="Nothing to report yet"
             message="Log medications, sleep, or weight — then come back for your PDF."
           />
+        ) : showingCaregiver ? (
+          <>
+            <SectionHeader dark title="Included" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              <Text style={styles.line}>{`${caregiverMeds.length} ${caregiverMeds.length === 1 ? 'medicine' : 'medicines'} with recent taking`}</Text>
+              <Text style={styles.line}>Schedule and supply included</Text>
+            </Card>
+            <Button
+              title={generating ? 'Creating PDF…' : 'Generate caregiver PDF'}
+              onPress={() => void generate()}
+              disabled={generating}
+              fullWidth
+              size="large"
+              style={styles.genBtn}
+              textStyle={styles.genBtnText}
+            />
+          </>
         ) : (
           <>
             <SectionHeader dark title="Included" titleStyle={styles.histTitle} />
             <Card style={styles.darkCard}>
-              <Text style={styles.line}>{`${input.meds.length} ${input.meds.length === 1 ? 'medication' : 'medications'} with adherence`}</Text>
-              <Text style={styles.line}>{`${input.observations.length} recorded ${input.observations.length === 1 ? 'observation' : 'observations'}`}</Text>
-              <Text style={styles.line}>{input.sleep ? `Sleep · ${input.sleep.nights} nights` : 'Sleep · none logged'}</Text>
-              <Text style={styles.line}>{input.weight ? `Weight · ${input.weight.startKg} → ${input.weight.endKg} kg` : 'Weight · none logged'}</Text>
+              <Text style={styles.line}>{`${input!.meds.length} ${input!.meds.length === 1 ? 'medication' : 'medications'} with adherence`}</Text>
+              <Text style={styles.line}>{`${input!.observations.length} recorded ${input!.observations.length === 1 ? 'observation' : 'observations'}`}</Text>
+              <Text style={styles.line}>{input!.sleep ? `Sleep · ${input!.sleep.nights} nights` : 'Sleep · none logged'}</Text>
+              <Text style={styles.line}>{input!.weight ? `Weight · ${input!.weight.startKg} → ${input!.weight.endKg} kg` : 'Weight · none logged'}</Text>
             </Card>
             <Button
               title={generating ? 'Creating PDF…' : 'Generate PDF'}
@@ -218,6 +310,8 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   line: { ...TYPE.body, color: '#FFFFFF', paddingVertical: 4 },
+  variantRow: { flexDirection: 'row', gap: 8 },
+  variantBtn: { flex: 1 },
   genBtn: { backgroundColor: '#4FD1C5' },
   genBtnText: { color: '#062A26' },
   disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },

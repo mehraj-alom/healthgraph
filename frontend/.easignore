@@ -1,0 +1,7 @@
+# EAS Build upload excludes — native builds don't need these.
+dist/
+public/
+.agents/
+.expo/
+tests/
+*.html

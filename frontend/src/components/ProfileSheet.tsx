@@ -52,7 +52,7 @@ const EXPLORE_FEATURES: FeatureDef[] = [
 const TERMS_COPY =  'Your health data belongs to you. Records you upload are processed to build your timeline and insights, and stay on this device and your private account. HealthGraph is a wellness companion, not a medical device — nothing here is medical advice, diagnosis, or treatment. If something feels urgent, contact a clinician. You can request deletion of your data at any time from Account settings.';
 
 const PRIVACY_COPY =
-  'Daily logs, vitals, and documents sync to your account so they survive reinstalls. We never sell personal health data. Processing happens only to power the features you use — timeline, correlations, chat answers. Sign out keeps your local data on the device; uninstalling removes it.';
+  'Daily logs, vitals, and documents sync to your account so they survive reinstalls. We never sell personal health data. Processing happens only to power the features you use — timeline, correlations, chat answers. Sign out keeps your local data on the device; uninstalling removes it. Optional Health Connect import (sleep, workouts) runs only after your explicit opt-in, stays on your device and account like hand-logged entries, and stops the moment you disconnect.';
 
 function fmtDocDate(iso: string): string {
   const d = new Date(iso);

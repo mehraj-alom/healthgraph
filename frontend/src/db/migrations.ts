@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 18;
+export const CURRENT_SCHEMA_VERSION = 20;
 
 /**
  * Migration function type.
@@ -960,6 +960,75 @@ const migrations: Record<number, MigrationFn> = {
       14,
       'Priority intro exposure columns on onboarding_state',
       14,
+    );
+  },
+  // ========================================================================
+  // Migration 19: Health Connect daily step counts (additive, device-only)
+  // ========================================================================
+  // Passive step totals land here, one row per patient per day, monotonic
+  // max on re-import (never double-counted, never zero-filled). Device-local
+  // only like food_scan_items: no sync_status column, no queue rows, wiped
+  // with the patient — the UI labels this data accordingly until server
+  // sync for steps exists.
+  19: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS step_counts (
+        patient_id TEXT NOT NULL,
+        log_date TEXT NOT NULL,
+        steps INTEGER NOT NULL,
+        source TEXT NOT NULL DEFAULT 'health_connect',
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (patient_id, log_date)
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_stepcounts_patient_date ON step_counts (patient_id, log_date);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      19,
+      'Health Connect daily step counts (device-only)',
+      19,
+    );
+  },
+  // ========================================================================
+  // Migration 20: craving/trigger log (additive, device-only)
+  // ========================================================================
+  // One row per logged craving: category, optional trigger, optional 1-5
+  // intensity, optional passed/used outcome, optional notes. Device-local
+  // only like substance_entries: no sync_status column, no queue rows,
+  // wiped with the patient — the UI labels this data accordingly until
+  // server sync for cravings exists.
+  20: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS craving_entries (
+        entry_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        trigger TEXT,
+        occurred_at TEXT NOT NULL,
+        intensity INTEGER,
+        outcome TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_craving_patient_time ON craving_entries (patient_id, occurred_at);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      20,
+      'Craving/trigger log (device-only)',
+      20,
     );
   },
 };

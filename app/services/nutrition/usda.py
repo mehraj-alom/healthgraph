@@ -31,6 +31,11 @@ class NutrientsPer100g(BaseModel):
     protein_g: float = Field(ge=0)
     carbs_g: float = Field(ge=0)
     fat_g: float = Field(ge=0)
+    # Display-only micros, USDA-sourced: None when the matched row lacks
+    # them (never estimated — the caller keeps fallback items at None).
+    fiber_g: float | None = Field(default=None, ge=0)
+    sugar_g: float | None = Field(default=None, ge=0)
+    sodium_mg: float | None = Field(default=None, ge=0)
 
 
 def _cache_get(label: str) -> NutrientsPer100g | None:
@@ -49,6 +54,7 @@ def _cache_set(label: str, value: NutrientsPer100g) -> None:
 
 def _nutrients_from_list(nutrients: list[dict]) -> NutrientsPer100g | None:
     kcal = protein = carbs = fat = None
+    fiber_g = sugar_g = sodium_mg = None
     for n in nutrients:
         name = str(n.get("nutrientName", "")).lower()
         unit = str(n.get("unitName", "")).lower()
@@ -73,6 +79,15 @@ def _nutrients_from_list(nutrients: list[dict]) -> NutrientsPer100g | None:
         elif "total lipid" in name or name.strip() == "fat" or "fat" in name:
             if fat is None:
                 fat = value
+        elif "fiber" in name or "fibre" in name:
+            if fiber_g is None:
+                fiber_g = value / 1000.0 if unit == "mg" else value
+        elif "sugar" in name and "added" not in name:
+            if sugar_g is None:
+                sugar_g = value / 1000.0 if unit == "mg" else value
+        elif "sodium" in name:
+            if sodium_mg is None:
+                sodium_mg = value * 1000.0 if unit == "g" else value
     if kcal is None:
         return None
     return NutrientsPer100g(
@@ -80,6 +95,9 @@ def _nutrients_from_list(nutrients: list[dict]) -> NutrientsPer100g | None:
         protein_g=max(0.0, protein or 0.0),
         carbs_g=max(0.0, carbs or 0.0),
         fat_g=max(0.0, fat or 0.0),
+        fiber_g=max(0.0, fiber_g) if fiber_g is not None else None,
+        sugar_g=max(0.0, sugar_g) if sugar_g is not None else None,
+        sodium_mg=max(0.0, sodium_mg) if sodium_mg is not None else None,
     )
 
 
@@ -169,9 +187,16 @@ def lookup_per_100g(label: str) -> NutrientsPer100g | None:
 def scale_to_portion(per_100g: NutrientsPer100g, portion_g: float) -> NutrientsPer100g:
     """Scale per-100-g nutrients to the photographed portion."""
     factor = max(0.0, float(portion_g)) / 100.0
+
+    def scaled(value: float | None) -> float | None:
+        return value * factor if value is not None else None
+
     return NutrientsPer100g(
         kcal=per_100g.kcal * factor,
         protein_g=per_100g.protein_g * factor,
         carbs_g=per_100g.carbs_g * factor,
         fat_g=per_100g.fat_g * factor,
+        fiber_g=scaled(per_100g.fiber_g),
+        sugar_g=scaled(per_100g.sugar_g),
+        sodium_mg=scaled(per_100g.sodium_mg),
     )

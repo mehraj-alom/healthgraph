@@ -49,7 +49,7 @@ function fmtTime(measuredAt: string): string {
 
 export default function HeartEngineScreen() {
   const navigation = useNavigation();
-  const { latest, summary, changeLine, recent, hrv, isLoading } = useHeartEngine();
+  const { latest, summary, changeLine, monthSummary, monthChangeLine, recent, monthPoints, hrv, isLoading } = useHeartEngine();
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
 
   const goMeasure = useCallback(() => {
@@ -111,6 +111,22 @@ export default function HeartEngineScreen() {
               </>
             ) : null}
 
+            {monthSummary.avgBpm != null ? (
+              <>
+                <SectionHeader dark title="Last 30 days" titleStyle={styles.histTitle} />
+                <Card style={styles.darkCard}>
+                  <Text style={styles.bigValue}>{formatBpm(monthSummary.avgBpm)}</Text>
+                  <Text style={styles.avgSub}>
+                    {`Average · ${monthSummary.measurements} ${monthSummary.measurements === 1 ? 'reading' : 'readings'} · ${monthSummary.measuredDays} ${monthSummary.measuredDays === 1 ? 'day' : 'days'}`}
+                  </Text>
+                  {monthChangeLine ? <Text style={styles.change}>{monthChangeLine}</Text> : null}
+                  <Text style={styles.provenance}>
+                    {`${monthSummary.reliableCount} of ${monthSummary.measurements} good signal.`}
+                  </Text>
+                </Card>
+              </>
+            ) : null}
+
             <SectionHeader dark title="Heart rate variability" titleStyle={styles.histTitle} />
             <Card style={styles.darkCard}>
               {hrv.latest !== null ? (
@@ -153,19 +169,17 @@ export default function HeartEngineScreen() {
               ))}
             </View>
 
-            {recent.length > 0 ? (
+            {monthPoints.length > 0 ? (
               <>
                 <SectionHeader dark title="Heart trend" titleStyle={styles.histTitle} />
                 <Card style={styles.darkCard}>
                   <EngineGraph
-                    points={[...recent]
-                      .sort((a, b) => (a.measuredAt < b.measuredAt ? -1 : a.measuredAt > b.measuredAt ? 1 : 0))
-                      .map((p) => ({ date: p.measuredAt.slice(0, 10), value: Math.round(p.bpm) }))}
+                    points={monthPoints.map((p) => ({ date: p.measuredAt.slice(0, 10), value: Math.round(p.bpm) }))}
                     tone={TILE_TONES.heart[1]}
                     decimals={0}
                   />
                   <Text style={styles.avgSub}>
-                    {`${recent.length} ${recent.length === 1 ? 'reading' : 'readings'}`}
+                    {`${monthPoints.length} ${monthPoints.length === 1 ? 'reading' : 'readings'} · last 30 days`}
                   </Text>
                 </Card>
               </>

@@ -22,9 +22,11 @@ import {
   HEART_FEED_LIMIT,
   describeHeartChange,
   latestHeartPoint,
+  priorMonthHeart,
   priorWeekHeart,
   summarizeHeart,
   summarizeHrv,
+  trailingMonthHeart,
   trailingWeekHeart,
   type HeartPoint,
   type HeartSummary,
@@ -35,7 +37,10 @@ export function useHeartEngine(): {
   latest: HeartPoint | null;
   summary: HeartSummary;
   changeLine: string | null;
+  monthSummary: HeartSummary;
+  monthChangeLine: string | null;
   recent: HeartPoint[];
+  monthPoints: HeartPoint[];
   hrv: HrvSummary;
   today: string;
   isLoading: boolean;
@@ -131,14 +136,22 @@ export function useHeartEngine(): {
 
   const current = trailingWeekHeart(points, today);
   const previous = priorWeekHeart(points, today);
+  const monthCurrent = trailingMonthHeart(points, today);
+  const monthPrevious = priorMonthHeart(points, today);
   const recent = [...points]
     .sort((a, b) => (a.measuredAt < b.measuredAt ? 1 : a.measuredAt > b.measuredAt ? -1 : 0))
     .slice(0, 14);
+  const monthPoints = [...monthCurrent].sort((a, b) =>
+    a.measuredAt < b.measuredAt ? -1 : a.measuredAt > b.measuredAt ? 1 : 0,
+  );
   return {
     latest: latestHeartPoint(points),
     summary: summarizeHeart(current),
     changeLine: describeHeartChange(current, previous),
+    monthSummary: summarizeHeart(monthCurrent),
+    monthChangeLine: describeHeartChange(monthCurrent, monthPrevious, 'vs prior 30 days'),
     recent,
+    monthPoints,
     hrv: summarizeHrv(hrvPoints),
     today,
     isLoading,

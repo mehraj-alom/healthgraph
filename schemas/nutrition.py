@@ -13,6 +13,11 @@ class ScanItem(BaseModel):
     carbs_g: float = Field(ge=0)
     fat_g: float = Field(ge=0)
     confidence: float = Field(ge=0, le=1)
+    # Display-only micros, USDA-sourced: None on VLM-fallback items (never
+    # estimated) — the client renders values or an honest absence.
+    fiber_g: Optional[float] = Field(default=None, ge=0)
+    sugar_g: Optional[float] = Field(default=None, ge=0)
+    sodium_mg: Optional[float] = Field(default=None, ge=0)
 
 
 class AnalyzeResponse(BaseModel):
