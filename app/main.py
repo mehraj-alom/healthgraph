@@ -16,6 +16,7 @@ from app.api.v1 import (
     body_state,
     chat,
     daily_logs,
+    early_access,
     daily_metrics,
     documents,
     health_graph,
@@ -371,6 +372,7 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(auth_router)
+    app.include_router(early_access.router)
     app.include_router(documents.router)
     app.include_router(nutrition.router)
     app.include_router(review.router)
