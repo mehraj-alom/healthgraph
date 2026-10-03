@@ -43,6 +43,7 @@ import { HealthFact } from '@/components/HealthFact';
 import { getMapping, buildNodeToStructureMap } from '@/assets/anatomy/anatomyMap';
 import {
   getProceduralBodyUri,
+  getProceduralFemaleUri,
   proceduralHighlightNodes,
   proceduralNodeEntries,
 } from '@/services/proceduralBody';
@@ -124,22 +125,18 @@ const FilamentBodyInner = forwardRef<FilamentSceneHandle, FilamentBodyProps>(
     const nodeToStructureRef = useRef(buildNodeToStructureMap(gender));
     const [proceduralUri, setProceduralUri] = useState<string | null>(null);
 
-    // Bundled procedural shell (male v1): resolves once, offline-safe.
-    // Merged into the tap map (identity entries never collide with
-    // Anatria node names) and used as the base layer whenever the
-    // downloaded regional model is missing — the blank-screen killer.
+    // Bundled procedural shells (v2, male + female): resolve once,
+    // offline-safe. Merged into the tap map (identity entries never
+    // collide with Anatria node names) and used as the base layer whenever
+    // the downloaded regional model is missing — the blank-screen killer.
     useEffect(() => {
-      if (gender !== 'male') {
-        setProceduralUri(null);
-        return;
-      }
       let live = true;
       for (const [node, structure] of proceduralNodeEntries()) {
         if (!nodeToStructureRef.current.has(node)) {
           nodeToStructureRef.current.set(node, structure);
         }
       }
-      void getProceduralBodyUri().then((uri) => {
+      void (gender === 'male' ? getProceduralBodyUri() : getProceduralFemaleUri()).then((uri) => {
         if (live) setProceduralUri(uri);
       });
       return () => {
@@ -160,8 +157,8 @@ const FilamentBodyInner = forwardRef<FilamentSceneHandle, FilamentBodyProps>(
     const regionalUri = localFiles?.get(regionalFile);
 
     // Procedural fallback: bundled shell renders when the download missed.
-    const proceduralActive = !regionalUri && proceduralUri !== null && gender === 'male';
-    const displayRegionalUri = regionalUri ?? (gender === 'male' ? proceduralUri : null);
+    const proceduralActive = !regionalUri && proceduralUri !== null;
+    const displayRegionalUri = regionalUri ?? proceduralUri;
 
     // Highlighted node names
     const highlightedNodes = useMemo(() => {

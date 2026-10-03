@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
+  PROCEDURAL_ORGAN_IDS,
   PROCEDURAL_REGION_IDS,
   proceduralHighlightNodes,
 } from '../src/services/proceduralBody.ts';
@@ -64,18 +65,38 @@ describe('procedural shell GLB', () => {
     assert.equal(PROCEDURAL_REGION_IDS.length, 33);
   });
 
+  test('female shell carries the 33 zones plus the 7 organ meshes', () => {
+    const glb = path.join(ROOT, 'assets', 'anatomy', 'procedural_female_shell.glb');
+    assert.ok(fs.existsSync(glb), 'bundled female GLB present');
+    const names = glbNodeNames(glb);
+    for (const id of [...PROCEDURAL_REGION_IDS, ...PROCEDURAL_ORGAN_IDS]) {
+      assert.ok(names.includes(id), `node present: ${id}`);
+    }
+    assert.deepEqual(PROCEDURAL_ORGAN_IDS, [
+      'BRAIN', 'HEART', 'LUNG_L', 'LUNG_R', 'LIVER', 'STOMACH', 'INTESTINES',
+    ]);
+  });
+
   test('fine ids resolve to zones; systems resolve to nothing', () => {
     assert.deepEqual(proceduralHighlightNodes('LEFT_INDEX_FINGER'), ['LEFT_HAND']);
-    assert.deepEqual(proceduralHighlightNodes('HEART'), ['CHEST']);
     assert.deepEqual(proceduralHighlightNodes('CHEST'), ['CHEST']);
     assert.deepEqual(proceduralHighlightNodes('MUSCULAR_SYSTEM'), []);
     assert.deepEqual(proceduralHighlightNodes(null), []);
+  });
+
+  test('organ meshes highlight themselves; legacy fine ids still map to zones', () => {
+    assert.deepEqual(proceduralHighlightNodes('HEART'), ['HEART']);
+    assert.deepEqual(proceduralHighlightNodes('LUNG_L'), ['LUNG_L']);
+    assert.deepEqual(proceduralHighlightNodes('INTESTINES'), ['INTESTINES']);
+    assert.deepEqual(proceduralHighlightNodes('LEFT_LUNG'), ['CHEST']);
+    assert.deepEqual(proceduralHighlightNodes('GALLBLADDER'), ['ABDOMEN']);
   });
 
   test('screen falls back to the bundled shell when downloads miss', () => {
     const body = fs.readFileSync(path.join(ROOT, 'src', 'screens', 'Body', 'FilamentBody.tsx'), 'utf8');
     assert.ok(body.includes('procedural'), 'fallback wired');
     assert.ok(body.includes('proceduralHighlightNodes'), 'highlight resolves zones');
+    assert.ok(body.includes('getProceduralFemaleUri'), 'female fallback wired');
   });
 
   test('no clinical language in the new module', () => {
