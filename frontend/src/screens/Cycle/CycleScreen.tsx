@@ -5,8 +5,13 @@
  * plus estimates from recorded starts: an expected next-period range and
  * an approximate fertile window. Estimates are labeled as estimates with
  * their basis attached — never certainties, never for contraception, no
- * pregnancy mode, no condition inference. All rows are patient-scoped
- * SQLite; nothing syncs (the UI says so).
+ * condition inference. A per-patient reproductive mode (standard / trying
+ * to conceive / pregnant / perimenopause) reshapes the top card: TTC
+ * surfaces the fertile window for planning with an ovulation-test log,
+ * pregnant shows the week from a recorded LMP or due date with a
+ * logistics checklist, perimenopause frames cycle variability with no
+ * condition claims. All rows are patient-scoped SQLite or device storage;
+ * nothing syncs (the UI says so).
  */
 
 import { useCallback, useState } from 'react';
@@ -28,9 +33,30 @@ import { EXTRA_TONES, TILE_TONES } from '@/theme/tones';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import {
   describePrediction,
+  cycleStats,
   fertileEstimate,
   predictNextPeriod,
 } from '@/services/cyclePredictions';
+import {
+  PRENATAL_CHECKLIST,
+  TTC_DISCLAIMER,
+  periNote,
+  pregnancyWeekFromDueDate,
+  pregnancyWeekFromLmp,
+  ttcCard,
+  type OvulationResult,
+  type ReproductiveMode,
+} from '@/services/reproductiveModes';
+import {
+  addOvulationTest,
+  getAnchor,
+  getMode,
+  getOvulationTests,
+  setAnchor,
+  setMode,
+  type StoredAnchor,
+  type StoredOvulationTests,
+} from '@/services/reproductiveModeStore';
 import { useCyclePatterns } from '@/hooks/useCyclePatterns';
 import {
   CYCLE_KINDS,
@@ -193,6 +219,14 @@ export default function CycleScreen() {
   const [date, setDate] = useState('');
   const [notes, setNotes] = useState('');
 
+  const [mode, setModeState] = useState<ReproductiveMode>('standard');
+  const [anchor, setAnchorState] = useState<StoredAnchor | null>(null);
+  const [ovu, setOvu] = useState<StoredOvulationTests | null>(null);
+  const [lmpInput, setLmpInput] = useState('');
+  const [dueInput, setDueInput] = useState('');
+  const [ovuResult, setOvuResult] = useState<OvulationResult>('positive');
+  const [modeMsg, setModeMsg] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     try {
       const patientId = getCachedPatientId();
@@ -202,6 +236,12 @@ export default function CycleScreen() {
         return;
       }
       setEntries(await listCycleEntries(patientId, 200));
+      setModeState(await getMode(patientId));
+      const a = await getAnchor(patientId);
+      setAnchorState(a);
+      setLmpInput(a.lmp ?? '');
+      setDueInput(a.due ?? '');
+      setOvu(await getOvulationTests(patientId));
       setLoading(false);
     } catch {
       setLoading(false);
@@ -285,6 +325,38 @@ export default function CycleScreen() {
 
   const spans = groupCycleSpans(entries);
 
+  const switchMode = useCallback(async (next: ReproductiveMode) => {
+    const patientId = getCachedPatientId();
+    if (!patientId) return;
+    setModeState(await setMode(patientId, next));
+    setModeMsg(null);
+  }, []);
+
+  const saveAnchor = useCallback(async () => {
+    const patientId = getCachedPatientId();
+    if (!patientId) return;
+    const next = await setAnchor(patientId, { lmp: lmpInput.trim(), due: dueInput.trim() });
+    setAnchorState(next);
+    setLmpInput(next.lmp ?? '');
+    setDueInput(next.due ?? '');
+    setModeMsg(
+      next.lmp === null && next.due === null
+        ? 'Enter your last period start or due date to see the week.'
+        : 'Saved on this device only.',
+    );
+  }, [lmpInput, dueInput]);
+
+  const logOvu = useCallback(async () => {
+    const patientId = getCachedPatientId();
+    if (!patientId) return;
+    try {
+      setOvu(await addOvulationTest(patientId, { day: todayKeyLocal(), result: ovuResult }));
+      setModeMsg('Logged on this device only.');
+    } catch {
+      setModeMsg('Could not log this test. Please try again.');
+    }
+  }, [ovuResult]);
+
   const starts = entries
     .filter((e) => e.kind === 'period-start')
     .map((e) => ({ date: e.date }));
@@ -301,8 +373,158 @@ export default function CycleScreen() {
         <Text style={styles.title}>Cycle.</Text>
         <Text style={styles.sub}>Recorded days only.</Text>
 
+        <SectionHeader dark title="Mode" titleStyle={styles.histTitle} />
+        <View style={styles.chips}>
+          {(
+            [
+              ['standard', 'Standard'],
+              ['ttc', 'Trying to conceive'],
+              ['pregnant', 'Pregnant'],
+              ['perimenopause', 'Perimenopause'],
+            ] as [ReproductiveMode, string][]
+          ).map(([m, label]) => (
+            <Chip
+              key={m}
+              label={label}
+              selected={mode === m}
+              onPress={() => void switchMode(m)}
+              size="medium"
+              accessibilityLabel={`Cycle mode: ${label}`}
+            />
+          ))}
+        </View>
+        {modeMsg !== null ? <Text style={styles.avgSub}>{modeMsg}</Text> : null}
+
+        {mode === 'ttc' ? (
+          <>
+            <SectionHeader dark title="Trying to conceive" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              {(() => {
+                const card = ttcCard(starts);
+                if (card === null) {
+                  return (
+                    <Text style={styles.avgSub}>
+                      Log at least 3 period starts to see a fertile-window estimate.
+                    </Text>
+                  );
+                }
+                return (
+                  <>
+                    <Text style={styles.bigValue}>
+                      {`Fertile window roughly ${shortDay(card.fertileFrom)} – ${shortDay(card.fertileTo)}`}
+                    </Text>
+                    <Text style={styles.avgSub}>
+                      {`Ovulation around ${shortDay(card.ovulationAround)} · from ${card.basedOn} past cycles`}
+                    </Text>
+                  </>
+                );
+              })()}
+              <Text style={styles.provenance}>{TTC_DISCLAIMER}</Text>
+            </Card>
+            <SectionHeader dark title="Ovulation tests" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              <View style={styles.chips}>
+                {(['positive', 'negative'] as OvulationResult[]).map((r) => (
+                  <Chip
+                    key={r}
+                    label={r === 'positive' ? 'Positive' : 'Negative'}
+                    selected={ovuResult === r}
+                    onPress={() => setOvuResult(r)}
+                    size="medium"
+                    accessibilityLabel={`Ovulation test result: ${r}`}
+                  />
+                ))}
+              </View>
+              <Button title="Log today's test" onPress={() => void logOvu()} size="medium" />
+              {(ovu?.tests ?? []).length > 0 ? (
+                <Text style={styles.avgSub}>
+                  {(ovu?.tests ?? [])
+                    .slice(-5)
+                    .reverse()
+                    .map((t) => `${shortDay(t.day)}: ${t.result}`)
+                    .join(' · ')}
+                </Text>
+              ) : (
+                <Text style={styles.avgSub}>No tests logged yet.</Text>
+              )}
+            </Card>
+          </>
+        ) : null}
+        {mode === 'pregnant' ? (
+          <>
+            <SectionHeader dark title="Pregnancy" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              {(() => {
+                const today = todayKeyLocal();
+                const week =
+                  anchor?.lmp !== null && anchor?.lmp !== undefined
+                    ? pregnancyWeekFromLmp(anchor.lmp, today)
+                    : anchor?.due
+                      ? pregnancyWeekFromDueDate(anchor.due, today)
+                      : null;
+                if (week === null) {
+                  return (
+                    <Text style={styles.avgSub}>
+                      Enter your last period start or your due date below to see the current week.
+                    </Text>
+                  );
+                }
+                return (
+                  <>
+                    <Text style={styles.bigValue}>{`Week ${week} of pregnancy`}</Text>
+                    <Text style={styles.avgSub}>
+                      From your recorded {anchor?.lmp ? 'last period start' : 'due date'} — an
+                      estimate, not medical advice. Discuss everything with your provider.
+                    </Text>
+                  </>
+                );
+              })()}
+              <Input
+                label="Last period start (YYYY-MM-DD)"
+                value={lmpInput}
+                onChangeText={setLmpInput}
+                placeholder="2026-08-01"
+              />
+              <Input
+                label="Due date (YYYY-MM-DD)"
+                value={dueInput}
+                onChangeText={setDueInput}
+                placeholder="2027-05-08"
+              />
+              <Button title="Save dates" onPress={() => void saveAnchor()} size="medium" />
+            </Card>
+            <SectionHeader dark title="Before your visit" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              {PRENATAL_CHECKLIST.map((item) => (
+                <Text key={item} style={styles.avgSub}>{`• ${item}`}</Text>
+              ))}
+              <Text style={styles.provenance}>
+                Logistics topics for your provider — not medical guidance.
+              </Text>
+            </Card>
+          </>
+        ) : null}
+        {mode === 'perimenopause' ? (
+          <>
+            <SectionHeader dark title="Perimenopause" titleStyle={styles.histTitle} />
+            <Card style={styles.darkCard}>
+              {(() => {
+                const note = periNote(cycleStats(starts));
+                return (
+                  <Text style={styles.avgSub}>
+                    {note ?? 'Log period starts to see how your cycle timing varies over time.'}
+                  </Text>
+                );
+              })()}
+              <Text style={styles.provenance}>
+                Timing variability only — this screen does not assess symptoms or conditions.
+              </Text>
+            </Card>
+          </>
+        ) : null}
+
         <SectionHeader dark title="History" titleStyle={styles.histTitle} />
-        {!loading && (periodPred !== null || fertileEst !== null) ? (
+        {mode === 'standard' && !loading && (periodPred !== null || fertileEst !== null) ? (
           <>
             <SectionHeader dark title="Coming up" titleStyle={styles.histTitle} />
             <Card style={styles.darkCard}>
