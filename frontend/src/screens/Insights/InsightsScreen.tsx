@@ -27,6 +27,33 @@ import {
   type CorrelationFeedItem,
 } from '@/screens/Dashboard/correlations';
 import { useCuratedFeed } from '@/screens/Dashboard/useCuratedFeed';
+import { useBehaviorImpacts } from '@/hooks/useBehaviorImpacts';
+import type { Impact } from '@/services/behaviorImpacts';
+
+const IMPACT_CONFIDENCE_COLORS: Record<string, string> = {
+  high: '#4FD1C5',
+  medium: '#8EA0B8',
+  low: '#5A6472',
+};
+
+function ImpactRows({ impacts }: { impacts: Impact[] }) {
+  if (impacts.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.patternsTitle}>Day patterns</Text>
+      <Text style={styles.patternsSub}>Same behavior, different days — compared.</Text>
+      {impacts.map((item, i) => (
+        <View key={`${item.factor}-${item.outcome}-${item.lag}-${i}`} style={styles.impactRow}>
+          <View style={[styles.verdictDot, { backgroundColor: IMPACT_CONFIDENCE_COLORS[item.confidence] ?? '#8EA0B8' }]} />
+          <View style={styles.impactMain}>
+            <Text style={styles.impactLine}>{item.line}</Text>
+            <Text style={styles.impactConf}>{item.confidence} confidence</Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 const VERDICT_COLORS: Record<string, string> = {
   good: '#4FD1C5',
@@ -59,6 +86,7 @@ export default function InsightsScreen() {
   const metrics = useDailyMetrics();
   const feedQuery = useCorrelationFeed(trends.data, metrics.data, 60);
   const { visibleFeed } = useCuratedFeed(feedQuery.items, feedQuery.streams, feedQuery.pairs);
+  const { impacts } = useBehaviorImpacts();
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -98,6 +126,7 @@ export default function InsightsScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor="#4FD1C5" />
           }
+          ListHeaderComponent={<ImpactRows impacts={impacts} />}
           ListEmptyComponent={
             <View style={styles.center}>
               <Text style={styles.title2}>No insights yet</Text>
@@ -122,6 +151,12 @@ const styles = StyleSheet.create({
   sub: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 2 },
   list: { paddingHorizontal: SPACE.screenH, paddingBottom: 24, gap: 12 },
   section: { marginTop: 4 },
+  patternsTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', marginLeft: 4 },
+  patternsSub: { color: '#8EA0B8', fontSize: 13, marginLeft: 4, marginTop: 2, marginBottom: 8 },
+  impactRow: { flexDirection: 'row', gap: 10, paddingVertical: 8, paddingHorizontal: 4 },
+  impactMain: { flex: 1, gap: 2 },
+  impactLine: { color: '#FFFFFF', fontSize: 14, fontVariant: ['tabular-nums'] },
+  impactConf: { color: '#8EA0B8', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4 },
   verdictRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, marginLeft: 4 },
   verdictDot: { width: 8, height: 8, borderRadius: 4 },
   verdictText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },

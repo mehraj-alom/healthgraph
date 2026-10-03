@@ -23,6 +23,7 @@ import {
   gateRppgQuality,
   getRppgFrameSource,
   getRppgProvider,
+  getOnnxRuntimeStatus,
   isExpoGoRuntime,
   mapNativeCaptureState,
   measuredFps,
@@ -229,10 +230,22 @@ export function useRppgMeasurement(): UseRppgMeasurement {
         provider.isAvailable,
     );
     if (!provider.isAvailable) {
+      // Surface the machine-readable probe leg in the user-visible Detail
+      // line (not just logcat): the next preview screenshot names the exact
+      // failing leg — native-module-absent, require-failed, exports-missing.
+      let detail =
+        'The on-device pulse model did not load in this build. Reinstall the newest preview build and try again.';
+      if (!isExpoGoRuntime()) {
+        try {
+          detail += ` (code: ${getOnnxRuntimeStatus().reason})`;
+        } catch {
+          // Generic detail stands — never fail the failure path.
+        }
+      }
       fail(
         isExpoGoRuntime()
           ? 'Face measurement needs the HealthGraph app build — it cannot run inside Expo Go. Install the preview build and try again.'
-          : 'The on-device pulse model did not load in this build. Reinstall the newest preview build and try again.',
+          : detail,
       );
       return;
     }

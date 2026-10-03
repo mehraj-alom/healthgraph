@@ -206,3 +206,9 @@ test('pulse machine module carries the mode contract', () => {
   assert.ok(m.includes('CHOOSE_FINGERTIP'), 'explicit fallback transition');
   assert.ok(m.includes('most common cause is low light'), 'honest low-light copy');
 });
+
+test('unavailable provider surfaces the probe reason in user-visible detail', () => {
+  const hook = src('src/hooks/useRppgMeasurement.ts');
+  assert.ok(hook.includes('getOnnxRuntimeStatus'), 'probe status read on failure path');
+  assert.ok(hook.includes('(code: '), 'reason code appended to detail');
+});

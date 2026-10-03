@@ -41,6 +41,11 @@ import type { Entity } from 'react-native-filament';
 import { COLORS, SPACING, TYPOGRAPHY } from '@/constants';
 import { HealthFact } from '@/components/HealthFact';
 import { getMapping, buildNodeToStructureMap } from '@/assets/anatomy/anatomyMap';
+import {
+  getProceduralBodyUri,
+  proceduralHighlightNodes,
+  proceduralNodeEntries,
+} from '@/services/proceduralBody';
 import type { LayerLoadState } from './BodyScreen';
 import type { Gender } from '@/services/anatomyDownload';
 
@@ -117,6 +122,30 @@ const FilamentBodyInner = forwardRef<FilamentSceneHandle, FilamentBodyProps>(
     const onAutoLoadLayerRef = useRef<((layerKey: string) => Promise<void>) | null>(null);
     const onStructureSelectedRef = useRef<((id: string | null) => void) | null>(null);
     const nodeToStructureRef = useRef(buildNodeToStructureMap(gender));
+    const [proceduralUri, setProceduralUri] = useState<string | null>(null);
+
+    // Bundled procedural shell (male v1): resolves once, offline-safe.
+    // Merged into the tap map (identity entries never collide with
+    // Anatria node names) and used as the base layer whenever the
+    // downloaded regional model is missing — the blank-screen killer.
+    useEffect(() => {
+      if (gender !== 'male') {
+        setProceduralUri(null);
+        return;
+      }
+      let live = true;
+      for (const [node, structure] of proceduralNodeEntries()) {
+        if (!nodeToStructureRef.current.has(node)) {
+          nodeToStructureRef.current.set(node, structure);
+        }
+      }
+      void getProceduralBodyUri().then((uri) => {
+        if (live) setProceduralUri(uri);
+      });
+      return () => {
+        live = false;
+      };
+    }, [gender]);
     const loadedFilesRef = useRef<Set<string>>(new Set(['regional']));
 
     // Camera manipulator
@@ -130,13 +159,18 @@ const FilamentBodyInner = forwardRef<FilamentSceneHandle, FilamentBodyProps>(
     const regionalFile = gender === 'male' ? 'regional_male.glb' : 'skeletal_female.glb';
     const regionalUri = localFiles?.get(regionalFile);
 
+    // Procedural fallback: bundled shell renders when the download missed.
+    const proceduralActive = !regionalUri && proceduralUri !== null && gender === 'male';
+    const displayRegionalUri = regionalUri ?? (gender === 'male' ? proceduralUri : null);
+
     // Highlighted node names
     const highlightedNodes = useMemo(() => {
       if (!selectedStructure) return new Set<string>();
+      if (proceduralActive) return new Set(proceduralHighlightNodes(selectedStructure));
       const mapping = getMapping(selectedStructure);
       if (!mapping) return new Set<string>();
       return new Set([...mapping.male, ...mapping.female].map((r) => r.nodeName));
-    }, [selectedStructure]);
+    }, [selectedStructure, proceduralActive]);
 
     // ----- Focus-aware lifecycle -----
     // FilamentView handles surface lifecycle automatically.
@@ -290,10 +324,11 @@ const FilamentBodyInner = forwardRef<FilamentSceneHandle, FilamentBodyProps>(
           />
           <DefaultLight />
 
-          {/* Regional body — always loaded */}
-          {regionalUri && (
+          {/* Regional body — downloaded when present, bundled procedural shell otherwise */}
+          {displayRegionalUri && (
             <Model
-              source={{ uri: regionalUri }}
+              key={proceduralActive ? 'procedural-shell' : regionalUri}
+              source={{ uri: displayRegionalUri }}
               onPress={handleEntityPress}
               castShadow
               receiveShadow
