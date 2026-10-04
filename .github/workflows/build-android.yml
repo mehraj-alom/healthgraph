@@ -43,7 +43,7 @@ jobs:
         run: npx expo export --platform android --output-dir /tmp/hg-export
 
   build:
-    name: Assemble debug APK
+    name: Assemble release APK (self-contained preview)
     needs: checks
     runs-on: ubuntu-latest
     defaults:
@@ -80,13 +80,17 @@ jobs:
       - name: Prebuild Android project
         run: npx expo prebuild --platform android --no-install
 
-      - name: Assemble debug APK
+      # Release (not debug): the APK carries its own bundled JS + Hermes
+      # bytecode, so testers install and run it with no dev server.
+      # Signed with the Expo template debug key — for testers only,
+      # never for the Play Console.
+      - name: Assemble release APK
         working-directory: frontend/android
-        run: ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: healthgraph-debug-apk
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          name: healthgraph-preview-apk
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
