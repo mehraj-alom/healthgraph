@@ -65,6 +65,7 @@ import {
 } from '@/services/reminderNotifications';
 import { GV, TYPE, FONT } from '@/theme/guava';
 import { Button, Card, Chip, Input } from '@/components';
+import FamilyWatchSection from '@/screens/Medications/FamilyWatchSection';
 import { HealthFact } from '@/components/HealthFact';
 import type { Medication, MedicationFrequency, MedicationRoute, MedicationStatus, DailyMedicationSchedule, MedicationTakenEvent } from '@/types';
 import type { RootStackParamList } from '@/types';
@@ -940,6 +941,14 @@ export default function MedicationsScreen() {
             schedule={schedule}
             isLoading={scheduleLoading}
             onTakeDose={handleTakeDose}
+          />
+        )}
+
+        {selectedTab === 'schedule' && (
+          <FamilyWatchSection
+            medications={activeMedications.map((m) => ({ medication_id: m.medication_id, name: m.name }))}
+            schedule={schedule}
+            today={today}
           />
         )}
 
