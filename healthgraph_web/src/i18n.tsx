@@ -36,7 +36,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
 export interface CapabilityGroup {
   title: string;
-  items: { name: string; desc: string }[];
+  items: { name: string; desc: string; detail: string }[];
 }
 
 export interface Point {
@@ -155,37 +155,37 @@ const en: {
     {
       title: 'Measure',
       items: [
-        { name: 'Camera pulse', desc: 'Fingertip on the lens, 60 seconds. Heart rate plus HRV, no watch, no chest strap, no subscription. The phone already in your pocket is the wearable.' },
-        { name: 'Face pulse', desc: 'A short selfie video becomes a pulse reading, computed on your device. Your face never uploads anywhere. Processed, then forgotten.' },
-        { name: 'Vitals logger', desc: 'Blood pressure, glucose, weight, temperature — typed in once, trended forever. Your cuff and scale finally feed the same chart.' },
-        { name: 'Food & barcode scan', desc: 'Point the camera at a barcode, get macros from a free food database. Scan again offline — your phone remembers the product. No signal needed in the supermarket basement.' },
+        { name: 'Camera pulse', desc: 'Fingertip on the lens, 60 seconds. Heart rate plus HRV, no watch, no chest strap, no subscription. The phone already in your pocket is the wearable.', detail: 'The app reads tiny color shifts in your skin — the same photoplethysmography hospitals use, minus the clip on your finger. Morning and evening readings build your HRV baseline, which is how the readiness score knows you at all.' },
+        { name: 'Face pulse', desc: 'A short selfie video becomes a pulse reading, computed on your device. Your face never uploads anywhere. Processed, then forgotten.', detail: 'Prop your phone up and look at it for half a minute. The same skin-color signal, read from your face — no touch needed. Every frame is analyzed on your device and never stored.' },
+        { name: 'Vitals logger', desc: 'Blood pressure, glucose, weight, temperature — typed in once, trended forever. Your cuff and scale finally feed the same chart.', detail: 'Four dials, ten seconds each. Every entry lands timestamped in your graph, so your 7-day blood pressure average and weight trend are one tap away — ready to show your doctor, exported in seconds.' },
+        { name: 'Food & barcode scan', desc: 'Point the camera at a barcode, get macros from a free food database. Scan again offline — your phone remembers the product. No signal needed in the supermarket basement.', detail: 'The database is Open Food Facts — free, open, two million products. The first scan downloads the macros; every repeat scan after that works with zero bars of signal. Your most-scanned products live on your phone.' },
       ],
     },
     {
       title: 'Understand',
       items: [
-        { name: 'Health graph', desc: 'Sleep, meds, meals, cycle, mood — every entry lands in one connected graph. Why do Tuesdays feel heavy? Ask your own weeks, not generic advice.' },
-        { name: 'Priority engines', desc: 'Seven lenses that watch what matters: heart, sleep, fitness, nutrition, weight, wellbeing, discipline. Each one turns raw logs into one clear next step.' },
-        { name: 'Trends & timeline', desc: 'A longitudinal view of you, not just today. Scroll back months and watch habits compound — or spot the week everything slipped.' },
-        { name: 'Sanotts AI', desc: 'A health companion that answers from your data, receipts attached. “Why am I tired?” “Your last five short nights.” Not horoscope. Evidence.' },
+        { name: 'Health graph', desc: 'Sleep, meds, meals, cycle, mood — every entry lands in one connected graph. Why do Tuesdays feel heavy? Ask your own weeks, not generic advice.', detail: 'Sixteen capabilities write into one timeline. The graph does not care which screen you used — a bad night, a missed dose, and a heavy Tuesday finally sit side by side. Patterns stop hiding.' },
+        { name: 'Priority engines', desc: 'Seven lenses that watch what matters: heart, sleep, fitness, nutrition, weight, wellbeing, discipline. Each one turns raw logs into one clear next step.', detail: 'Each engine watches its own signals and speaks only when it has something worth your attention. One clear next step, not a dashboard of dials competing for your anxiety.' },
+        { name: 'Trends & timeline', desc: 'A longitudinal view of you, not just today. Scroll back months and watch habits compound — or spot the week everything slipped.', detail: 'Every measurement ever, scrollable. Watch resting pulse drift down across a training block, or find the exact week the evening snacking started. Memory beats motivation.' },
+        { name: 'Sanotts AI', desc: 'A health companion that answers from your data, receipts attached. “Why am I tired?” “Your last five short nights.” Not horoscope. Evidence.', detail: 'Ask in plain words, get answers footnoted to your own logs. It can only see your data — it cannot browse, cannot guess, cannot flatter. If the data does not support an answer, it says so.' },
       ],
     },
     {
       title: 'Manage',
       items: [
-        { name: 'Medications', desc: 'Schedules, dose logging, refill-aware reminders that know your supply. Miss a linked dose and one tap notifies the family member you invited. From your phone. Never automatic.' },
-        { name: 'Medical documents', desc: 'Scan lab reports and prescriptions, search them like email. Encrypted at rest, wiped on logout. Your filing cabinet, minus the cabinet.' },
-        { name: 'Sleep & recovery', desc: 'Nights, naps, bedtimes, wake times. See which evenings buy you good mornings — and which ones charge interest.' },
-        { name: 'Cycle & substance', desc: 'Cycle tracking with fertile-window planning, TTC and pregnancy modes, plus substance logs with pledges and money-saved counters. Judgment-free by design.' },
+        { name: 'Medications', desc: 'Schedules, dose logging, refill-aware reminders that know your supply. Miss a linked dose and one tap notifies the family member you invited. From your phone. Never automatic.', detail: 'Schedules with dose logging, refill tracking that counts your supply down, and family watch for the doses that matter most. Snooze with a reason, and the graph learns the difference between forgot and chose.' },
+        { name: 'Medical documents', desc: 'Scan lab reports and prescriptions, search them like email. Encrypted at rest, wiped on logout. Your filing cabinet, minus the cabinet.', detail: 'Lab PDFs, prescriptions, discharge papers — photographed, text-searched, filed by date. Ask what your cholesterol was in March and get the number, not a folder to dig through.' },
+        { name: 'Sleep & recovery', desc: 'Nights, naps, bedtimes, wake times. See which evenings buy you good mornings — and which ones charge interest.', detail: 'Bedtime, wake time, naps, quality notes. The engine pairs nights with next-day energy until your personal formula appears: which bedtime actually buys you a good morning.' },
+        { name: 'Cycle & substance', desc: 'Cycle tracking with fertile-window planning, TTC and pregnancy modes, plus substance logs with pledges and money-saved counters. Judgment-free by design.', detail: 'Period tracking with planning modes, perimenopause notes, plus substance logs with pledges and a running money-saved total. Private, unjudged, exportable.' },
       ],
     },
     {
       title: 'Act',
       items: [
-        { name: 'Voice check-in calls', desc: 'A daily call that logs for you, hands-free. Talk for a minute while the kettle boils; your timeline fills itself in.' },
-        { name: 'Voice alarms', desc: 'Spoken reminders you simply answer. Say what you took, ate, or felt — no typing, no unlocking, no excuses.' },
-        { name: '3D body', desc: 'A full anatomy view wired straight to your graph — zones, organs, both included. Tap your chest and see your heart data. It works offline, because the model ships inside the app.' },
-        { name: 'Your data rights', desc: 'Export everything or delete everything, any time, in one tap. DSGVO-compliant. Never sold — it never leaves your hands in the first place.' },
+        { name: 'Voice check-in calls', desc: 'A daily call that logs for you, hands-free. Talk for a minute while the kettle boils; your timeline fills itself in.', detail: 'One scheduled call a day. The voice asks, you answer, the timeline fills — sleep, meds, mood, symptoms. Miss the call and it tries once more; ignore it twice and it leaves you alone.' },
+        { name: 'Voice alarms', desc: 'Spoken reminders you simply answer. Say what you took, ate, or felt — no typing, no unlocking, no excuses.', detail: 'Alarms that talk and listen. “Did you take the midday dose?” Answer taken and it is logged with a timestamp. No unlocking, no typing, no I will log it later.' },
+        { name: '3D body', desc: 'A full anatomy view wired straight to your graph — zones, organs, both included. Tap your chest and see your heart data. It works offline, because the model ships inside the app.', detail: 'Male and female shells with seven organ meshes, generated by this project and shipped inside the app — no downloads, no licenses, works in airplane mode. Tap a zone and the graph answers with your data for it.' },
+        { name: 'Your data rights', desc: 'Export everything or delete everything, any time, in one tap. DSGVO-compliant. Never sold — it never leaves your hands in the first place.', detail: 'One tap exports everything in open formats; one tap deletes everything. No retention tricks, no contact-support-to-delete. Leaving is easy, which is exactly why staying is a choice.' },
       ],
     },
   ],
@@ -297,37 +297,37 @@ const de: typeof en = {
     {
       title: 'Messen',
       items: [
-        { name: 'Kamera-Puls', desc: 'Finger auf die Linse, 60 Sekunden, und du hast Herzfrequenz plus HRV. Keine Uhr, kein Brustgurt, kein Abo. Läuft auf dem Handy, das eh in deiner Tasche ist.' },
-        { name: 'Gesichts-Puls', desc: 'Ein kurzes Selfie-Video wird zur Pulsmessung — direkt am Gerät gerechnet. Dein Gesicht lädt nirgends hoch; das Video wird verarbeitet und vergessen.' },
-        { name: 'Vitalwerte', desc: 'Blutdruck, Zucker, Gewicht, Temperatur — einmal eingetippt, für immer im Trend. Manschette und Waage füttern endlich dasselbe Diagramm.' },
-        { name: 'Food- & Barcode-Scan', desc: 'Kamera auf den Barcode, Makros aus einer freien Lebensmitteldatenbank. Beim zweiten Scan kennt dein Handy das Produkt schon — offline, im Supermarktkeller ohne Empfang.' },
+        { name: 'Kamera-Puls', desc: 'Finger auf die Linse, 60 Sekunden, und du hast Herzfrequenz plus HRV. Keine Uhr, kein Brustgurt, kein Abo. Läuft auf dem Handy, das eh in deiner Tasche ist.', detail: 'Die App liest winzige Farbverschiebungen deiner Haut — dieselbe Photoplethysmographie wie im Krankenhaus, minus Clip am Finger. Morgen- und Abendmessungen bauen deine HRV-Basis, und nur so kennt der Bereitschaftswert dich überhaupt.' },
+        { name: 'Gesichts-Puls', desc: 'Ein kurzes Selfie-Video wird zur Pulsmessung — direkt am Gerät gerechnet. Dein Gesicht lädt nirgends hoch; das Video wird verarbeitet und vergessen.', detail: 'Handy aufstellen, eine halbe Minute hineinschauen. Dasselbe Hautfarb-Signal, vom Gesicht gelesen — ganz ohne Berührung. Jeder Frame wird am Gerät analysiert und nie gespeichert.' },
+        { name: 'Vitalwerte', desc: 'Blutdruck, Zucker, Gewicht, Temperatur — einmal eingetippt, für immer im Trend. Manschette und Waage füttern endlich dasselbe Diagramm.', detail: 'Vier Regler, je zehn Sekunden. Jeder Eintrag landet mit Zeitstempel im Graph — dein 7-Tage-Blutdruckmittel und dein Gewichtstrend sind einen Tipp entfernt. Bereit für den Arztbesuch, in Sekunden exportiert.' },
+        { name: 'Food- & Barcode-Scan', desc: 'Kamera auf den Barcode, Makros aus einer freien Lebensmitteldatenbank. Beim zweiten Scan kennt dein Handy das Produkt schon — offline, im Supermarktkeller ohne Empfang.', detail: 'Die Datenbank heißt Open Food Facts — frei, offen, zwei Millionen Produkte. Der erste Scan lädt die Makros; jeder Scan danach geht mit null Balken Empfang. Deine meistgescannten Produkte wohnen auf deinem Handy.' },
       ],
     },
     {
       title: 'Verstehen',
       items: [
-        { name: 'Health-Graph', desc: 'Schlaf, Medis, Essen, Zyklus, Stimmung — jeder Eintrag landet in einem verbundenen Graph. Frag, warum Dienstage sich schwer anfühlen, und bekomm eine Antwort aus deinen eigenen Wochen, nicht aus dem Kalender.' },
-        { name: 'Priority-Engines', desc: 'Sieben Blickwinkel, die aufpassen, was zählt: Herz, Schlaf, Fitness, Ernährung, Gewicht, Wohlbefinden, Disziplin. Jede macht aus rohen Logs einen klaren nächsten Schritt.' },
-        { name: 'Trends & Timeline', desc: 'Dein Langzeitverlauf, nicht nur heute. Scroll Monate zurück und sieh, wie Gewohnheiten sich summieren — oder in welcher Woche alles gerissen ist.' },
-        { name: 'Sanotts KI', desc: 'Ein Gesundheitsbegleiter, der aus deinen Daten antwortet — mit Belegen. „Warum bin ich müde?“ bekommt „deine letzten fünf kurzen Nächte“, kein Horoskop.' },
+        { name: 'Health-Graph', desc: 'Schlaf, Medis, Essen, Zyklus, Stimmung — jeder Eintrag landet in einem verbundenen Graph. Frag, warum Dienstage sich schwer anfühlen, und bekomm eine Antwort aus deinen eigenen Wochen, nicht aus dem Kalender.', detail: 'Sechzehn Fähigkeiten schreiben in eine Timeline. Dem Graph ist egal, welchen Screen du benutzt hast — schlechte Nacht, vergessene Dosis und schwerer Dienstag liegen endlich nebeneinander. Muster hören auf, sich zu verstecken.' },
+        { name: 'Priority-Engines', desc: 'Sieben Blickwinkel, die aufpassen, was zählt: Herz, Schlaf, Fitness, Ernährung, Gewicht, Wohlbefinden, Disziplin. Jede macht aus rohen Logs einen klaren nächsten Schritt.', detail: 'Jede Engine beobachtet ihre eigenen Signale und meldet sich nur, wenn sie etwas hat, das deine Aufmerksamkeit verdient. Ein klarer nächster Schritt — kein Armaturenbrett voller Zeiger, die um deine Sorge konkurrieren.' },
+        { name: 'Trends & Timeline', desc: 'Dein Langzeitverlauf, nicht nur heute. Scroll Monate zurück und sieh, wie Gewohnheiten sich summieren — oder in welcher Woche alles gerissen ist.', detail: 'Jede Messung aller Zeiten, scrollbar. Sieh, wie der Ruhepuls über einen Trainingsblock sinkt, oder finde die exakte Woche, in der das Abendsnacken anfing. Erinnerung schlägt Motivation.' },
+        { name: 'Sanotts KI', desc: 'Ein Gesundheitsbegleiter, der aus deinen Daten antwortet — mit Belegen. „Warum bin ich müde?“ bekommt „deine letzten fünf kurzen Nächte“, kein Horoskop.', detail: 'Frag in normalen Worten, bekomm Antworten mit Fußnoten zu deinen Logs. Sie sieht nur deine Daten — sie surft nicht, rät nicht, schmeichelt nicht. Wenn die Daten keine Antwort hergeben, sagt sie das.' },
       ],
     },
     {
       title: 'Verwalten',
       items: [
-        { name: 'Medikamente', desc: 'Pläne, Dosen-Logging, Nachfüll-Erinnerungen, die deinen Vorrat kennen. Verpasste Dosis? Ein Tipp benachrichtigt die Person, die du eingeladen hast — von deinem Handy, niemals automatisch.' },
-        { name: 'Medizinische Dokumente', desc: 'Laborbefunde und Rezepte scannen, durchsuchen wie E-Mails. Verschlüsselt gespeichert, beim Logout gelöscht. Dein Aktenschrank, minus Schrank.' },
-        { name: 'Schlaf & Erholung', desc: 'Nächte, Nickerchen, Bett- und Aufstehzeiten. Sieh, welche Abende dir gute Morgen kaufen — und welche Zinsen verlangen.' },
-        { name: 'Zyklus & Substanzen', desc: 'Zyklustracking mit Fruchtbarkeitsplanung, Kinderwunsch- und Schwangerschaftsmodus, dazu Substanz-Logs mit Zielen und Ersparniszähler. Ohne erhobenen Zeigefinger.' },
+        { name: 'Medikamente', desc: 'Pläne, Dosen-Logging, Nachfüll-Erinnerungen, die deinen Vorrat kennen. Verpasste Dosis? Ein Tipp benachrichtigt die Person, die du eingeladen hast — von deinem Handy, niemals automatisch.', detail: 'Pläne mit Dosen-Logging, Nachfüll-Tracking, das deinen Vorrat herunterzählt, und Family Watch für die Dosen, die wirklich zählen. Schlummern mit Grund — und der Graph lernt den Unterschied zwischen vergessen und entschieden.' },
+        { name: 'Medizinische Dokumente', desc: 'Laborbefunde und Rezepte scannen, durchsuchen wie E-Mails. Verschlüsselt gespeichert, beim Logout gelöscht. Dein Aktenschrank, minus Schrank.', detail: 'Labor-PDFs, Rezepte, Entlassbriefe — fotografiert, texterkannt, nach Datum abgelegt. Frag, was dein Cholesterin im März war, und bekomm die Zahl, nicht einen Ordner zum Wühlen.' },
+        { name: 'Schlaf & Erholung', desc: 'Nächte, Nickerchen, Bett- und Aufstehzeiten. Sieh, welche Abende dir gute Morgen kaufen — und welche Zinsen verlangen.', detail: 'Bettzeit, Aufstehzeit, Nickerchen, Qualitätsnotizen. Die Engine paart Nächte mit Tagesenergie, bis deine persönliche Formel auftaucht: welche Bettzeit dir wirklich einen guten Morgen kauft.' },
+        { name: 'Zyklus & Substanzen', desc: 'Zyklustracking mit Fruchtbarkeitsplanung, Kinderwunsch- und Schwangerschaftsmodus, dazu Substanz-Logs mit Zielen und Ersparniszähler. Ohne erhobenen Zeigefinger.', detail: 'Periodentracking mit Planungsmodi, Perimenopausen-Notizen, dazu Substanz-Logs mit Zielen und laufender Ersparnis. Privat, unbewertet, exportierbar.' },
       ],
     },
     {
       title: 'Handeln',
       items: [
-        { name: 'Sprach-Check-in-Anrufe', desc: 'Ein täglicher Anruf, der für dich loggt. Eine Minute reden, während der Wasserkocher läuft; deine Timeline füllt sich von selbst.' },
-        { name: 'Sprach-Alarme', desc: 'Gesprochene Erinnerungen, die du einfach beantwortest. Sag, was du genommen, gegessen, gefühlt hast — kein Tippen, kein Entsperren, keine Ausreden.' },
-        { name: '3D-Körper', desc: 'Eine komplette Anatomie-Ansicht, direkt mit deinem Graph verdrahtet — Zonen, Organe, alles dabei. Tipp auf die Brust und sieh deine Herzdaten. Läuft offline, weil das Modell in der App steckt.' },
-        { name: 'Deine Datenrechte', desc: 'Alles exportieren oder alles löschen, jederzeit, mit einem Tipp. DSGVO-konform. Deine Daten werden nie verkauft — sie verlassen deine Hände gar nicht erst.' },
+        { name: 'Sprach-Check-in-Anrufe', desc: 'Ein täglicher Anruf, der für dich loggt. Eine Minute reden, während der Wasserkocher läuft; deine Timeline füllt sich von selbst.', detail: 'Ein geplanter Anruf am Tag. Die Stimme fragt, du antwortest, die Timeline füllt sich — Schlaf, Medis, Stimmung, Symptome. Verpasst du ihn, versucht sie es einmal mehr; ignorierst du zweimal, lässt sie dich in Ruhe.' },
+        { name: 'Sprach-Alarme', desc: 'Gesprochene Erinnerungen, die du einfach beantwortest. Sag, was du genommen, gegessen, gefühlt hast — kein Tippen, kein Entsperren, keine Ausreden.', detail: 'Alarme, die reden und zuhören. „Mittagsdosis genommen?“ Antwortest du „genommen“, ist es mit Zeitstempel geloggt. Kein Entsperren, kein Tippen, kein ich-trag-es-später-nach.' },
+        { name: '3D-Körper', desc: 'Eine komplette Anatomie-Ansicht, direkt mit deinem Graph verdrahtet — Zonen, Organe, alles dabei. Tipp auf die Brust und sieh deine Herzdaten. Läuft offline, weil das Modell in der App steckt.', detail: 'Männliche und weibliche Hüllen mit sieben Organ-Meshes, von diesem Projekt erzeugt und in der App mitgeliefert — keine Downloads, keine Lizenzen, geht im Flugmodus. Tipp auf eine Zone und der Graph antwortet mit deinen Daten dazu.' },
+        { name: 'Deine Datenrechte', desc: 'Alles exportieren oder alles löschen, jederzeit, mit einem Tipp. DSGVO-konform. Deine Daten werden nie verkauft — sie verlassen deine Hände gar nicht erst.', detail: 'Ein Tipp exportiert alles in offenen Formaten; ein Tipp löscht alles. Keine Aufbewahrungstricks, kein Support-Anrufen-zum-Löschen. Gehen ist leicht — genau deshalb ist Bleiben eine Entscheidung.' },
       ],
     },
   ],
