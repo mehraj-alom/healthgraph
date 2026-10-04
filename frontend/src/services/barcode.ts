@@ -11,6 +11,7 @@ import axios from 'axios';
 import { api } from '@/services/api';
 import type { FoodScanConfidence, FoodScanResult } from './nutritionService';
 import { barcodeResultFor as barcodeResultForPure, normalizeBarcode } from './barcodePure';
+import { getCachedBarcode, putCachedBarcode } from './barcodeCache';
 
 export { normalizeBarcode };
 
@@ -29,29 +30,48 @@ export interface BarcodeProduct {
   serving_size: string;
   image_url: string;
   source: string;
+  /** True when served from the device cache (offline repeat scan). */
+  cached?: boolean;
 }
 
 /** GS1 validation + portion math live in the zero-import pure module. */
 
+/**
+ * Network-first lookup with a device-cache fallback: wins are cached for
+ * offline repeats; network failures serve the last cached product labeled
+ * as cached; true misses still throw the honest error.
+ */
 export async function lookupBarcode(code: string): Promise<BarcodeProduct> {
   const normalized = normalizeBarcode(code);
   if (!normalized) {
     throw new Error("That code isn't a valid product barcode. Try again or enter the food manually.");
   }
-  let response;
   try {
-    response = await api.getClient().get<BarcodeProduct>(
+    const response = await api.getClient().get<BarcodeProduct>(
       `/api/v1/nutrition/barcode/${encodeURIComponent(normalized)}`,
       { timeout: 30000 },
     );
+    const data = response.data;
+    if (!data || typeof data.name !== 'string' || !data.name || !data.nutrients) {
+      throw new Error('No product found for that barcode. Try a photo scan or enter it manually.');
+    }
+    void putCachedBarcode(data).catch(() => {});
+    return data;
   } catch (error: unknown) {
+    // A definitive miss (bad code, unknown product) stays an honest error —
+    // the cache only covers transport failures (offline, timeout, 5xx).
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      if (status === 400 || status === 404) {
+        throw new Error(barcodeErrorMessage(error));
+      }
+    }
+    const cached = await getCachedBarcode(normalized);
+    if (cached !== null) {
+      return { ...cached, cached: true };
+    }
     throw new Error(barcodeErrorMessage(error));
   }
-  const data = response.data;
-  if (!data || typeof data.name !== 'string' || !data.name || !data.nutrients) {
-    throw new Error('No product found for that barcode. Try a photo scan or enter it manually.');
-  }
-  return data;
 }
 
 export function barcodeErrorMessage(error: unknown): string {

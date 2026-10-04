@@ -120,12 +120,14 @@ export default function FoodScanScreen() {
   const pick = (m: 'photo' | 'barcode') => {
     setBarcodeResult(null);
     setBarcodeImage(null);
+    setBarcodeCached(false);
     reset();
     setMode(m);
     setChosen(m);
   };
   const [barcodeResult, setBarcodeResult] = useState<FoodScanResult | null>(null);
   const [barcodeImage, setBarcodeImage] = useState<string | null>(null);
+  const [barcodeCached, setBarcodeCached] = useState(false);
 
   // Slow top-to-bottom teal sweep; static when reduced motion is requested.
   useEffect(() => {
@@ -164,6 +166,11 @@ export default function FoodScanScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Scan food</Text>
           </View>
+          {barcodeCached ? (
+            <Text style={styles.cachedNote}>
+              From your saved products — you appear to be offline. Check the label if the recipe changed.
+            </Text>
+          ) : null}
           <ScanResultSheet
             photoUri={barcodeResult ? barcodeImage : photoUri}
             photoLabel={barcodeResult ? 'Product image' : undefined}
@@ -171,6 +178,7 @@ export default function FoodScanScreen() {
             onRetake={() => {
               setBarcodeResult(null);
               setBarcodeImage(null);
+              setBarcodeCached(false);
               reset();
             }}
             onLogged={goBack}
@@ -263,6 +271,7 @@ export default function FoodScanScreen() {
             onProduct={(product: BarcodeProduct, barcode: string) => {
               setBarcodeResult(barcodeResultFor(product, 100, barcode));
               setBarcodeImage(product.image_url || null);
+              setBarcodeCached(product.cached === true);
             }}
             onCancel={() => setChosen(null)}
           />
@@ -571,6 +580,13 @@ const styles = StyleSheet.create({
     ...TYPE.caption,
     color: GV.fog,
     textAlign: 'center',
+  },
+  cachedNote: {
+    ...TYPE.caption,
+    color: GV.fog,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    marginBottom: 8,
   },
   overlay: {
     position: 'absolute',

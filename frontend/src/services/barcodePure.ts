@@ -100,3 +100,56 @@ export function barcodeResultFor(
     note: `Open Food Facts · barcode ${barcode}${product.serving_size ? ` · pack: ${product.serving_size}` : ''}`,
   };
 }
+
+/** Device cache for looked-up products (offline repeats, LRU-capped). */
+export const BARCODE_CACHE_KEY = 'hg:barcode-cache:v1';
+export const BARCODE_CACHE_MAX = 200;
+
+export interface CachedBarcodeProduct {
+  barcode: string;
+  name: string;
+  brand: string;
+  nutrients: ProductNutrients;
+  serving_size: string;
+  image_url: string;
+  source: string;
+}
+
+function finiteNonNegative(n: unknown): n is number {
+  return typeof n === 'number' && Number.isFinite(n) && n >= 0;
+}
+
+/**
+ * Validate a cached row; junk (corrupt storage, bad digits, negative
+ * nutrients) returns null so the store drops it — never served.
+ */
+export function normalizeCachedProduct(raw: unknown): CachedBarcodeProduct | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.barcode !== 'string' || normalizeBarcode(r.barcode) === null) return null;
+  if (typeof r.name !== 'string' || r.name.trim() === '') return null;
+  if (typeof r.nutrients !== 'object' || r.nutrients === null || Array.isArray(r.nutrients)) return null;
+  const n = r.nutrients as Record<string, unknown>;
+  if (
+    !finiteNonNegative(n.kcal_per_100g) ||
+    !finiteNonNegative(n.protein_g) ||
+    !finiteNonNegative(n.carbs_g) ||
+    !finiteNonNegative(n.fat_g)
+  ) {
+    return null;
+  }
+  return {
+    barcode: normalizeBarcode(r.barcode) as string,
+    name: r.name.slice(0, 200),
+    brand: typeof r.brand === 'string' ? r.brand.slice(0, 200) : '',
+    nutrients: {
+      kcal_per_100g: n.kcal_per_100g as number,
+      protein_g: n.protein_g as number,
+      carbs_g: n.carbs_g as number,
+      fat_g: n.fat_g as number,
+    },
+    serving_size: typeof r.serving_size === 'string' ? r.serving_size.slice(0, 100) : '',
+    image_url: typeof r.image_url === 'string' ? r.image_url.slice(0, 500) : '',
+    source: typeof r.source === 'string' ? r.source.slice(0, 100) : 'openfoodfacts',
+  };
+}
