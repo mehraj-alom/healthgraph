@@ -46,6 +46,19 @@ jobs:
     name: Assemble release APK (self-contained preview)
     needs: checks
     runs-on: ubuntu-latest
+    env:
+      # Same public runtime config as the release workflow — without these
+      # the bundled JS boots against empty API/Firebase/CDN URLs and dies
+      # on launch. Values live in GitHub Actions Variables (no secrets).
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+      EXPO_PUBLIC_ASSET_CDN_URL: ${{ vars.EXPO_PUBLIC_ASSET_CDN_URL }}
+      EXPO_PUBLIC_ANATOMY_CDN_URL: ${{ vars.EXPO_PUBLIC_ANATOMY_CDN_URL }}
+      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+      EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
     defaults:
       run:
         working-directory: frontend
