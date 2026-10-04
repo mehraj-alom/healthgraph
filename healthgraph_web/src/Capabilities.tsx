@@ -2,20 +2,47 @@ import { useState } from 'react';
 import { useStaggeredReveal } from './hooks';
 import { copy, useLocale, type CapabilityGroup } from './i18n';
 
-function GroupCard({ group, animStyle }: { group: CapabilityGroup; animStyle: React.CSSProperties }) {
+const NUMERALS = ['01', '02', '03', '04'];
+
+function StoryPanel({
+  group,
+  numeral,
+  flip,
+  animStyle,
+}: {
+  group: CapabilityGroup;
+  numeral: string;
+  flip: boolean;
+  animStyle: React.CSSProperties;
+}) {
   const reveal = useStaggeredReveal(1 + group.items.length);
   const [open, setOpen] = useState<number | null>(null);
 
-  return (
-    <div
-      ref={reveal.containerRef as React.Ref<HTMLDivElement>}
-      style={animStyle}
-      className="rounded-card bg-white/[0.045] border border-white/10 p-5 md:p-7 flex flex-col gap-4 hairline-cobalt"
-    >
-      <h3
-        className="text-xl md:text-2xl font-semibold tracking-[-0.01em] text-ink"
-        style={reveal.getAnimStyle(0)}
+  const visual = (
+    <div className="relative flex flex-col justify-center items-start p-5 md:p-10 min-h-[220px] md:min-h-[320px] overflow-hidden">
+      <span
+        aria-hidden
+        className="font-semibold leading-none tracking-[-0.04em] text-white/[0.07] select-none text-[clamp(6rem,18vw,13rem)]"
       >
+        {numeral}
+      </span>
+      <span className="mt-2 text-xs md:text-sm font-semibold tracking-[0.25em] uppercase text-teal">
+        {group.title}
+      </span>
+      <div
+        aria-hidden
+        className={`pointer-events-none absolute inset-0 ${
+          flip
+            ? 'bg-[radial-gradient(80%_80%_at_20%_50%,rgba(59,91,255,0.20),transparent_70%)]'
+            : 'bg-[radial-gradient(80%_80%_at_80%_50%,rgba(59,91,255,0.20),transparent_70%)]'
+        }`}
+      />
+    </div>
+  );
+
+  const story = (
+    <div className="flex flex-col gap-2 p-5 md:p-10">
+      <h3 className="text-2xl md:text-4xl font-semibold tracking-[-0.02em] text-ink" style={reveal.getAnimStyle(0)}>
         {group.title}
       </h3>
       <ul className="flex flex-col divide-y divide-white/[0.07]">
@@ -60,6 +87,28 @@ function GroupCard({ group, animStyle }: { group: CapabilityGroup; animStyle: Re
       </ul>
     </div>
   );
+
+  return (
+    <div
+      ref={reveal.containerRef as React.Ref<HTMLDivElement>}
+      style={animStyle}
+      className="rounded-card bg-white/[0.045] border border-white/10 overflow-hidden hairline-cobalt"
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2">
+        {flip ? (
+          <>
+            <div className="order-2 md:order-1">{story}</div>
+            <div className="order-1 md:order-2 border-b md:border-b-0 md:border-l border-white/10">{visual}</div>
+          </>
+        ) : (
+          <>
+            <div className="border-b md:border-b-0 md:border-r border-white/10">{visual}</div>
+            <div>{story}</div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function Capabilities() {
@@ -83,9 +132,15 @@ export default function Capabilities() {
         <p className="text-xs md:text-sm font-medium text-fog mt-2">{t.capabilitiesSub}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2">
+      <div className="flex flex-col gap-1.5 md:gap-2">
         {t.capabilities.map((group, gi) => (
-          <GroupCard key={group.title} group={group} animStyle={reveal.getAnimStyle(gi + 1)} />
+          <StoryPanel
+            key={group.title}
+            group={group}
+            numeral={NUMERALS[gi] ?? String(gi + 1).padStart(2, '0')}
+            flip={gi % 2 === 1}
+            animStyle={reveal.getAnimStyle(gi + 1)}
+          />
         ))}
       </div>
     </section>
