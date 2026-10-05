@@ -26,14 +26,11 @@ export function GoalsStep({
   return (
     <View style={styles.wrap}>
       <Reveal>
-        <Text style={styles.overline}>Step 1 of 4 · Goals</Text>
-      </Reveal>
-      <Reveal>
-        <Text style={styles.headline}>Select your goals.</Text>
+        <Text style={styles.headline}>What matters most?</Text>
       </Reveal>
       <Reveal>
         <Text style={styles.sub}>
-          Pick goals. You can change them anytime.
+          Pick as many as you like.
         </Text>
       </Reveal>
       <View style={styles.grid} accessibilityRole="list">
@@ -63,27 +60,20 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingTop: 8,
   },
-  overline: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 3,
-    color: GV.teal,
-    textAlign: 'center',
-  },
   headline: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 32,
     lineHeight: 38,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -0.3,
+    letterSpacing: -0.6,
   },
   sub: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(233, 240, 255, 0.66)',
     textAlign: 'center',
-    maxWidth: 330,
     alignSelf: 'center',
   },
   grid: {

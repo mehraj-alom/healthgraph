@@ -18,7 +18,8 @@ import {
 import Constants from 'expo-constants';
 import { BlurView } from 'expo-blur';
 import { useReducedMotion } from '@/theme';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { GV, TYPE, SPACE, FONT } from '@/theme/guava'
+import { LG } from '@/theme/liquidGlass';;
 import { useDocuments } from '@/context/DocumentsContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/Toast';
@@ -132,8 +133,14 @@ export function ProfileSheet({
   const closeBtnRef = useRef<ComponentRef<typeof Pressable>>(null);
   useEffect(() => {
     if (!visible) return;
-    const node = findNodeHandle(closeBtnRef.current);
-    if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    try {
+      // react-native-web does not implement findNodeHandle — focus management
+      // here is a progressive enhancement, never worth crashing the sheet.
+      const node = findNodeHandle(closeBtnRef.current);
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    } catch {
+      // Web (and any host without findNodeHandle): skip focus steering.
+    }
   }, [visible]);
   const slideX = useRef(new Animated.Value(0)).current;
   const panX = useRef(new Animated.Value(0)).current;
@@ -280,7 +287,7 @@ export function ProfileSheet({
             <Text style={styles.sectionLabel}>My records</Text>
             <View style={styles.card}>
               {recentDocs.length === 0 ? (
-                <Text style={styles.emptyText}>No records yet. Upload your first report.</Text>
+                <Text style={styles.emptyText}>No records yet.</Text>
               ) : (
                 recentDocs.map((d, i) => (
                   <Pressable
@@ -312,12 +319,17 @@ export function ProfileSheet({
                 onPress={() => setPremiumOpen((v) => !v)}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: premiumOpen }}
-                accessibilityLabel="Premium plans and pricing"
+                accessibilityLabel="HealthGraph Premium"
                 style={({ pressed }) => [styles.premiumHead, pressed && { opacity: 0.7 }]}
               >
+                <View style={styles.premiumGlyph}>
+                  <Text style={styles.premiumGlyphText}>✦</Text>
+                </View>
                 <View style={styles.rowText}>
-                  <Text style={styles.rowTitle}>Go Premium</Text>
-                  <Text style={styles.rowSub}>3 days free, then from €11 a month</Text>
+                  <Text style={styles.premiumTitle}>Unlock everything</Text>
+                  <Text style={styles.premiumSub}>
+                    Every engine, unlimited AI — free for 3 days.
+                  </Text>
                 </View>
                 <Text style={styles.chev}>{premiumOpen ? '▾' : '›'}</Text>
               </Pressable>
@@ -338,29 +350,34 @@ export function ProfileSheet({
                       <Text style={styles.tierName}>General</Text>
                       <Text style={styles.tierPrice}>€11<Text style={styles.tierPer}>/mo</Text></Text>
                     </View>
-                    <Text style={styles.tierFeat}>Everything in Free, unlimited{'\n'}Camera pulse (PPG){'\n'}Health graph & correlations{'\n'}Priority engines{'\n'}4 document scans a month{'\n'}Unlimited food scans</Text>
+                    <Text style={styles.tierFeat}>Everything in Free, plus{'\n'}Unlimited camera pulse{'\n'}Health graph & correlations{'\n'}Priority engines{'\n'}Unlimited food & 4 document scans</Text>
                     <Pressable
                       onPress={() => toast.info('Subscriptions open soon.')}
                       accessibilityRole="button"
-                      accessibilityLabel="Choose General plan"
+                      accessibilityLabel="Start 3 days free on General"
                       style={({ pressed }) => [styles.tierBtn, pressed && { opacity: 0.8 }]}
                     >
-                      <Text style={styles.tierBtnText}>Choose General</Text>
+                      <Text style={styles.tierBtnText}>Start 3 days free</Text>
                     </Pressable>
                   </View>
                   <View style={[styles.tier, styles.tierBest]}>
                     <View style={styles.tierHead}>
-                      <Text style={styles.tierName}>All-in</Text>
+                      <View style={styles.tierNameRow}>
+                        <Text style={styles.tierName}>All-in</Text>
+                        <View style={styles.tierBadge}>
+                          <Text style={styles.tierBadgeText}>Most complete</Text>
+                        </View>
+                      </View>
                       <Text style={styles.tierPrice}>€18<Text style={styles.tierPer}>/mo</Text></Text>
                     </View>
-                    <Text style={styles.tierFeat}>Everything in General{'\n'}Face pulse (rPPG){'\n'}3D body included{'\n'}Voice alarms & call reminders{'\n'}Unlimited AI chat{'\n'}Unlimited document scans</Text>
+                    <Text style={styles.tierFeat}>Everything in General, plus{'\n'}Face pulse — no touch needed{'\n'}3D body view{'\n'}Voice alarms & call reminders{'\n'}Unlimited AI chat & scans</Text>
                     <Pressable
                       onPress={() => toast.info('Subscriptions open soon.')}
                       accessibilityRole="button"
-                      accessibilityLabel="Choose All-in plan"
-                      style={({ pressed }) => [styles.tierBtn, pressed && { opacity: 0.8 }]}
+                      accessibilityLabel="Start 3 days free on All-in"
+                      style={({ pressed }) => [styles.tierBtn, styles.tierBtnPrimary, pressed && { opacity: 0.8 }]}
                     >
-                      <Text style={styles.tierBtnText}>Choose All-in</Text>
+                      <Text style={styles.tierBtnTextPrimary}>Start 3 days free</Text>
                     </Pressable>
                   </View>
                   <Text style={styles.compareTitle}>Compare every feature</Text>
@@ -387,7 +404,7 @@ export function ProfileSheet({
                       <Text style={[styles.compareCell, styles.compareBest, allIn === '–' && styles.compareNo]}>{allIn}</Text>
                     </View>
                   ))}
-                  <Text style={styles.renewNote}>Start with 3 days free. Then your plan auto-renews every month. Cancel anytime and keep access until the period ends.</Text>
+                  <Text style={styles.renewNote}>3 days free, then monthly. Cancel anytime — you keep access until the period ends.</Text>
                 </View>
               ) : null}
             </View>
@@ -536,25 +553,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarInitials: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 22,
     lineHeight: 26,
     color: '#FFFFFF',
   },
   title: {
-    ...TYPE.display,
+    fontWeight: '600',
     fontSize: 22,
     lineHeight: 28,
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
     color: '#FFFFFF',
     textAlign: 'left',
   },
   sectionLabel: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 12,
     lineHeight: 16,
-    letterSpacing: 1.5,
-    color: GV.fog,
+    letterSpacing: 1.2,
+    color: 'rgba(233, 240, 255, 0.5)',
     marginTop: 16,
     marginBottom: 8,
     paddingHorizontal: 4,
@@ -581,14 +598,16 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 255, 255, 0.12)',
   },
   rowTitle: {
-    fontFamily: FONT.medium,
+    fontWeight: '500',
     fontSize: 17,
     lineHeight: 22,
     color: '#FFFFFF',
   },
   rowSub: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233, 240, 255, 0.6)',
   },
   chev: {
     fontSize: 20,
@@ -596,12 +615,17 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   emptyText: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(233, 240, 255, 0.6)',
     paddingVertical: 12,
   },
   premiumCardWrap: {
     paddingVertical: 8,
+    backgroundColor: 'rgba(92, 232, 184, 0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 232, 184, 0.30)',
   },
   premiumHead: {
     flexDirection: 'row',
@@ -609,6 +633,35 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 8,
     minHeight: 56,
+  },
+  // The one sparkle on the drawer: mint star marks the premium moment.
+  premiumGlyph: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(92, 232, 184, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 232, 184, 0.4)',
+  },
+  premiumGlyphText: {
+    color: LG.card.mint,
+    fontSize: 15,
+    lineHeight: 18,
+  },
+  premiumTitle: {
+    fontWeight: '600',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.2,
+    color: '#FFFFFF',
+  },
+  premiumSub: {
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233, 240, 255, 0.66)',
   },
   tiers: {
     gap: 12,
@@ -623,7 +676,29 @@ const styles = StyleSheet.create({
   },
   tierBest: {
     borderWidth: 1.5,
-    borderColor: GV.teal,
+    borderColor: 'rgba(92, 232, 184, 0.55)',
+    backgroundColor: 'rgba(92, 232, 184, 0.06)',
+  },
+  tierNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tierBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(92, 232, 184, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 232, 184, 0.4)',
+  },
+  tierBadgeText: {
+    fontWeight: '600',
+    fontSize: 10,
+    lineHeight: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: LG.card.mint,
   },
   tierHead: {
     flexDirection: 'row',
@@ -631,38 +706,53 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   tierName: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 16,
+    lineHeight: 21,
     color: '#FFFFFF',
   },
   tierPrice: {
-    fontFamily: FONT.bold,
+    fontWeight: '700',
     fontSize: 20,
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
   tierPer: {
-    fontFamily: FONT.regular,
+    fontWeight: '400',
     fontSize: 13,
-    color: GV.fog,
+    color: 'rgba(233, 240, 255, 0.6)',
   },
   tierFeat: {
-    ...TYPE.body,
+    fontWeight: '400',
     fontSize: 13.5,
     lineHeight: 21,
-    color: GV.fog,
+    color: 'rgba(233, 240, 255, 0.66)',
   },
   tierBtn: {
-    backgroundColor: GV.cta,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 9999,
     alignItems: 'center',
     paddingVertical: 11,
     marginTop: 4,
   },
+  // The recommended tier carries the single white pill — the eye lands here.
+  tierBtnPrimary: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+  },
   tierBtnText: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 14,
+    lineHeight: 18,
     color: '#FFFFFF',
+  },
+  tierBtnTextPrimary: {
+    fontWeight: '600',
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#0B0F1A',
   },
   tierCurrent: {
     borderRadius: 9999,
@@ -673,19 +763,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tierCurrentText: {
-    ...TYPE.chip,
-    color: GV.fog,
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233, 240, 255, 0.6)',
   },
   renewNote: {
-    ...TYPE.caption,
-    color: GV.fog,
-    lineHeight: 18,
+    fontWeight: '400',
+    fontSize: 12,
+    lineHeight: 17,
+    color: 'rgba(233, 240, 255, 0.5)',
     paddingHorizontal: 4,
   },
   // Full feature-comparison matrix (Free / General / All-in).
   compareTitle: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 15,
+    lineHeight: 20,
     color: '#FFFFFF',
     marginTop: 16,
     marginBottom: 4,
@@ -699,30 +793,31 @@ const styles = StyleSheet.create({
   },
   compareFeature: {
     flex: 1.4,
+    fontWeight: '400',
     fontSize: 13,
     lineHeight: 17,
-    color: GV.fog,
+    color: 'rgba(233, 240, 255, 0.66)',
   },
   compareCell: {
     flex: 1,
     fontSize: 12,
     lineHeight: 16,
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     color: '#FFFFFF',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
   compareNo: {
-    color: 'rgba(255, 255, 255, 0.45)',
-    fontFamily: FONT.regular,
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontWeight: '400',
   },
   compareBest: {
-    color: GV.teal,
+    color: LG.card.mint,
   },
   legalCopy: {
-    ...TYPE.body,
+    fontWeight: '400',
     fontSize: 14,
-    color: GV.fog,
+    color: 'rgba(233, 240, 255, 0.6)',
     lineHeight: 21,
     paddingBottom: 12,
     paddingRight: 8,

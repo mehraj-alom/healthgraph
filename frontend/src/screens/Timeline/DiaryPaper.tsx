@@ -1,9 +1,16 @@
 /**
- * DiaryPaper — scoped paper skeuomorphism for the health journal.
+ * DiaryPaper — frosted glass journal pages, Apple Liquid Glass psychology.
  *
- * Physical report sheets: paper surface, spine edge, stacked-page depth,
- * engraved headers. Used ONLY by the timeline journal; the app-wide guava
- * flat system is untouched. All content is caller-provided real data.
+ * Two-layer architecture:
+ *  - Functional layer (DiaryReportSheet): real backdrop blur, hairline highlight,
+ *    the "pulled page" sits on this layer. Uses BlurView.
+ *  - Content layer (DiarySheet in the wheel): opaque frosted material fill only,
+ *    NO blur — the wheel renders many pages; BlurView per page kills perf.
+ *    Frosted look via LG.card.fillStrong + hairline top edge.
+ *
+ * Typography: lgType scale, system font (SF Pro on iOS). Monochrome on glass:
+ *   LG.card.label, LG.card.labelSecondary, LG.card.mint for one accent.
+ * No paper palette — LG.card tokens only.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,26 +23,29 @@ import {
   Text,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import type { DiaryDay } from './diary';
 import { stripSummary } from './diary';
-import { PAPER } from './paperTheme';
-import { FONT } from '@/theme/guava';
+import { LG, lgType } from '@/theme/liquidGlass';
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { ReportDocumentView } from './ReportDocumentView';
 
 /** Fixed page height: the wheel sizes every sheet and its stage from this. */
 export const DIARY_PAGE_HEIGHT = 336;
 
-/** One journal page, laid out like the wireframe: date + report header,
- *  primary content box beside a narrow side box, and a full-width bottom
- *  box for the rest. Every box shows real day data — never filler. */
+/**
+ * One journal page in the wheel — frosted content card, no blur.
+ * The wheel renders ~8 of these simultaneously; BlurView would tank FPS.
+ * Frosted appearance comes from translucent fill + bright hairline top edge.
+ */
 export function DiarySheet({ day, patientName }: { day: DiaryDay; patientName: string | null }) {
   const strip = stripSummary(day);
   const primary = day.primary;
   const secondary = day.secondary;
   return (
     <View style={styles.page}>
-      <View style={styles.spine} />
+      {/* Top hairline catch — simulates glass catching light */}
+      <View style={styles.rim} />
       <View style={styles.pageBody}>
         <View style={styles.dateRow}>
           <Text style={styles.dateTitle}>{day.title}</Text>
@@ -60,7 +70,7 @@ export function DiarySheet({ day, patientName }: { day: DiaryDay; patientName: s
                 <Text style={styles.primaryTime}>{primary.time}</Text>
               </>
             ) : (
-              <Text style={styles.primaryDetail}>No entries recorded.</Text>
+              <Text style={styles.primaryDetail}>Nothing logged yet.</Text>
             )}
           </View>
           <View style={styles.sideBox}>
@@ -87,7 +97,7 @@ export function DiarySheet({ day, patientName }: { day: DiaryDay; patientName: s
           <Text style={styles.bottomText} numberOfLines={1}>
             {strip.length > 0 ? strip.join('   ') : '—'}
           </Text>
-          <Text style={styles.bottomTap}>tap to open ›</Text>
+          <Text style={styles.bottomTap}>Read the full report ›</Text>
         </View>
       </View>
     </View>
@@ -115,6 +125,7 @@ interface SheetProps {
  * the wheel brings the tapped page to the front. Behind pages stay dimly
  * visible through the translucent scrim.
  *
+ * Functional layer: real BlurView + LG.fill + hairline highlight + border.
  * The timeline (and its scroll position, filters, and wheel order) stays
  * mounted behind, so dismissing returns to the exact prior state.
  * Adjacent-day ‹ › steps swap the document in place.
@@ -243,6 +254,15 @@ export function DiaryReportSheet({
             { transform: [{ translateY: sheetTranslateY }, { scale: sheetScale }] },
           ]}
         >
+          {/* Functional-layer glass: real backdrop blur under a translucent
+              fill, hairline top edge above. Content sits over both. */}
+          {reduced ? (
+            <View style={styles.sheetSolid} />
+          ) : (
+            <BlurView tint="dark" intensity={LG.blurIntensity} style={styles.sheetBlur} />
+          )}
+          <View style={styles.sheetTint} />
+          <View style={styles.sheetContent}>
           <View style={styles.sheetGrab} />
           <View style={styles.sheetHead}>
             <Pressable
@@ -288,6 +308,7 @@ export function DiaryReportSheet({
             highlightKey={highlightKey}
             onDocumentPress={(id) => closeThen(() => onDocumentPress(id))}
           />
+          </View>
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -296,81 +317,108 @@ export function DiaryReportSheet({
 
 
 const styles = StyleSheet.create({
+  // ---- Wheel page (content layer) ----
   page: {
     flex: 1,
-    flexDirection: 'row',
-    backgroundColor: PAPER.sheet,
-    borderRadius: 4,
+    backgroundColor: LG.card.fillStrong,   // frosted content material
+    borderRadius: LG.card.radius,           // 24
     borderWidth: 1,
-    borderColor: PAPER.sheetEdge,
-    shadowColor: '#1a1408',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 5,
+    borderColor: LG.card.border,
+    // Soft shadow for depth on dark stage
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 8,
   },
-  spine: { width: 10, backgroundColor: PAPER.spine, borderTopLeftRadius: 4, borderBottomLeftRadius: 4 },
-  pageBody: { flex: 1, paddingHorizontal: 14, paddingVertical: 12, gap: 6 },
-  dateRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
+  // Bright top hairline — glass catching light
+  rim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: LG.card.hairlineTop,
+  },
+  pageBody: { flex: 1, paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
+  dateRow: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
   dateTitle: {
-    fontFamily: FONT.semi, fontSize: 22, letterSpacing: 2, color: PAPER.ink,
+    ...lgType.title,                        // 20/26, semibold
+    letterSpacing: 0.5,
+    color: LG.card.label,
     fontVariant: ['tabular-nums'],
   },
-  dateContext: { fontFamily: FONT.semi, fontSize: 13, color: PAPER.muted },
+  dateContext: { ...lgType.caption, color: LG.card.labelSecondary },
   reportHeadRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  reportHead: { fontFamily: FONT.semi, fontSize: 13, letterSpacing: 1.5, color: PAPER.ink },
-  reportDate: { fontSize: 11, color: PAPER.muted },
-  patient: { fontSize: 12, color: PAPER.muted },
-  rule: { height: 1, backgroundColor: PAPER.rule },
-  mainRow: { flexDirection: 'row', gap: 8, minHeight: 128 },
+  reportHead: { ...lgType.overline, color: LG.card.label },     // tracked uppercase
+  reportDate: { ...lgType.caption, color: LG.card.labelSecondary },
+  patient: { ...lgType.caption, color: LG.card.labelSecondary },
+  rule: { height: 1, backgroundColor: LG.card.border },
+  mainRow: { flexDirection: 'row', gap: 10, minHeight: 120 },
   primaryWell: {
     flex: 1,
-    backgroundColor: PAPER.well, borderRadius: 3, paddingHorizontal: 10, paddingVertical: 8, gap: 2,
-    borderLeftWidth: 3, borderLeftColor: PAPER.accent,
+    backgroundColor: LG.card.fill,           // lighter frosted well
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: LG.card.mint,
   },
-  primaryTitle: { fontFamily: FONT.semi, fontSize: 16, lineHeight: 22, color: PAPER.ink },
-  primaryDetail: { fontSize: 12, lineHeight: 17, color: PAPER.muted },
-  primaryTime: { fontSize: 11, color: PAPER.muted, fontVariant: ['tabular-nums'] },
+  primaryTitle: { ...lgType.headline, color: LG.card.label },
+  primaryDetail: { ...lgType.bodySmall, color: LG.card.labelSecondary },
+  primaryTime: { ...lgType.caption, color: LG.card.labelTertiary, fontVariant: ['tabular-nums'] },
   sideBox: {
-    width: 96,
-    backgroundColor: PAPER.well, borderRadius: 3, paddingHorizontal: 8, paddingVertical: 8, gap: 3,
-    borderWidth: 1, borderColor: PAPER.rule, alignItems: 'center', justifyContent: 'center',
+    width: 100,
+    backgroundColor: LG.card.fill,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: LG.card.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sideLabel: { fontFamily: FONT.semi, fontSize: 11, lineHeight: 14, letterSpacing: 2, color: PAPER.muted },
-  sideIcon: { fontSize: 22, color: PAPER.ink },
-  sideTitle: { fontFamily: FONT.semi, fontSize: 11, lineHeight: 14, color: PAPER.ink, textAlign: 'center' },
-  sideDetail: { fontSize: 11, lineHeight: 15, color: PAPER.muted, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  sideLabel: { ...lgType.overline, color: LG.card.labelTertiary },
+  sideIcon: { fontSize: 24, color: LG.card.label },
+  sideTitle: { ...lgType.caption, color: LG.card.label, textAlign: 'center', lineHeight: 16 },
+  sideDetail: { ...lgType.caption, color: LG.card.labelSecondary, textAlign: 'center', fontVariant: ['tabular-nums'] },
   bottomBox: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: PAPER.well, borderRadius: 3, paddingHorizontal: 10, paddingVertical: 9,
-    borderWidth: 1, borderColor: PAPER.rule,
+    backgroundColor: LG.card.fill, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderColor: LG.card.border,
   },
-  bottomText: { flex: 1, fontSize: 11, color: PAPER.muted },
-  bottomTap: { fontFamily: FONT.semi, fontSize: 11, color: PAPER.accent },
-  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(13, 20, 26, 0.72)' },
+  bottomText: { flex: 1, ...lgType.caption, color: LG.card.labelSecondary },
+  bottomTap: { ...lgType.overline, color: LG.card.mint },
+
+  // ---- Opened sheet (functional layer) ----
+  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: LG.edgeFade },
   sheetBackdropTap: { flex: 1 },
   sheet: {
-    height: '70%',
-    backgroundColor: PAPER.sheet,
-    borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
-    borderTopWidth: 3,
-    borderTopColor: PAPER.spine,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 20,
+    height: '72%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    borderTopColor: LG.hairlineTop,
+    overflow: 'hidden',
   },
-  sheetGrab: { alignSelf: 'center', width: 48, height: 4, borderRadius: 2, backgroundColor: PAPER.sheetEdge, marginBottom: 8 },
-  sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  dayStep: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  dayStepText: { fontSize: 30, lineHeight: 32, color: PAPER.ink },
-  dayStepDisabled: { color: PAPER.sheetEdge },
+  sheetBlur: { ...StyleSheet.absoluteFill },
+  sheetTint: { ...StyleSheet.absoluteFill, backgroundColor: LG.fill },
+  // Reduce Transparency fallback: opaque fill instead of blur.
+  sheetSolid: { ...StyleSheet.absoluteFill, backgroundColor: LG.fillOpaque },
+  sheetContent: { flex: 1, paddingBottom: 12 },
+  sheetGrab: { alignSelf: 'center', width: 48, height: 4, borderRadius: 2, backgroundColor: LG.border, marginBottom: 10 },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 8 },
+  dayStep: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  dayStepText: { fontSize: 32, lineHeight: 36, color: LG.card.label },
+  dayStepDisabled: { color: LG.card.labelTertiary },
   sheetTitleWrap: { flex: 1, alignItems: 'center' },
-  sheetTitle: { fontFamily: FONT.semi, fontSize: 14, lineHeight: 19, letterSpacing: 1, color: PAPER.ink },
+  sheetTitle: { ...lgType.title, letterSpacing: 0.2, color: LG.card.label },
   sheetCloseInline: {
     minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: 12,
   },
-  sheetCloseText: { fontFamily: FONT.semi, fontSize: 13, color: PAPER.accent },
+  sheetCloseText: { ...lgType.overline, color: LG.card.mint },
 });

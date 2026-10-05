@@ -41,21 +41,21 @@ export function dayOneItems(s: DayOneSignals): DayOneItem[] {
       id: 'checkin-call',
       done: s.callEnabled,
       status:
-        s.callEnabled && s.callTime ? `On · ${s.callTime}` : 'Set a daily call time',
+        s.callEnabled && s.callTime ? `On · ${s.callTime}` : 'Pick a time for your daily call',
     },
     {
       id: 'med-reminders',
       done: hasMeds && s.remindersOn,
       status: !hasMeds
-        ? 'Add a medication to begin'
+        ? 'Add your first medication'
         : s.remindersOn
           ? 'Reminders on'
-          : 'Reminders off — set them in Medications',
+          : 'Reminders are off',
     },
     {
       id: 'voice-journal',
       done: journalDone,
-      status: journalDone ? 'Today reflected' : 'Talk through your day, kept on this device',
+      status: journalDone ? 'Today is reflected' : 'Talk through your day, kept on this device',
     },
   ];
 }

@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   },
   hero: {
     gap: 6,
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   title: {
     fontFamily: FONT.semi,
@@ -288,12 +288,12 @@ const styles = StyleSheet.create({
     lineHeight: 38,
     letterSpacing: -0.3,
     color: '#FFFFFF',
-    textAlign: 'center',
+    textAlign: 'left',
   },
   sub: {
     ...TYPE.body,
     color: GV.fog,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   section: {
     gap: 8,

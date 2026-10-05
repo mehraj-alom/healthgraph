@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Circle } from 'react-native-svg';
 import Animated, {
@@ -12,7 +13,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useReducedMotion } from '@/theme';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { GV, SPACE, FONT } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { PressScale } from './PressScale';
 import {
   isTabBarHidden,
@@ -20,13 +22,34 @@ import {
   subscribeTabBarVisibility,
 } from './tabBarVisibility';
 
-// Guava-flat dock — one floating white bar on the dark stage, dark-ink
-// vector glyphs for the side tabs, one CTA-green pulse button. Flat fills
-// only; the pulse button's resting heartbeat is the only loop.
-const BAR_H = 62;
-const BTN = 72;
-const BTN_TOP = -26;
-const CENTER_W = 128;
+// Guava-flat dock, rebuilt as Apple Liquid Glass (regular variant):
+// floating functional layer only — BlurView + translucent dark fill +
+// hairline highlight over the scrolling content. Content cards stay opaque.
+// iOS tab contract: glyph over label; the red pulse is the center action
+// INSIDE the capsule, tinted glass like the rest of the bar.
+const BAR_H = 64;
+const PULSE_W = 76;
+const PULSE_H = 46;
+
+/** Opaque fallback when the OS asks for reduced transparency. */
+function useReduceTransparency(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    const api = AccessibilityInfo as unknown as {
+      isReduceTransparencyEnabled?: () => Promise<boolean>;
+    };
+    if (typeof api.isReduceTransparencyEnabled === 'function') {
+      api.isReduceTransparencyEnabled().then((v) => {
+        if (mounted) setReduced(v);
+      }).catch(() => undefined);
+    }
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  return reduced;
+}
 
 const TABS = [
   { name: 'Dashboard', label: 'Home' },
@@ -64,27 +87,24 @@ function ChatGlyph({ color }: { color: string }) {
   );
 }
 
-// Keep FONT referenced for the Guava contract import shape.
+// Keep the Guava contract import shape honest — FONT styles the tab labels.
 void FONT;
 
 /**
- * UmbrellaTabBar — Guava-style floating dock.
+ * UmbrellaTabBar — Liquid Glass floating dock (regular variant).
  *
- * A white pill bar (GV.card, radius 28) with dark-ink Home / Chat tabs and
- * a red pulse button riding half above center — white ECG trace,
- * resting double-thump heartbeat, press-scale feedback. No orbit ring, no
- * halos: the button stays one clean flat circle. The whole pulse assembly
- * mounts ONLY on Home; every other tab gets a quiet two-tab dock. Static
- * (no loops) under reduced motion.
+ * Blur + translucent dark fill + hairline highlight over scrolling content;
+ * opaque fallback under Reduce Transparency. Side tabs are monochrome
+ * (white / 72% white); the red pulse button is the single tinted primary
+ * action. 44pt targets, press-scale feedback, heartbeat gated by
+ * reduced motion.
  *
  * Standard tab contract: emits tabPress, navigates only when not focused.
  */
 export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { width: W } = useWindowDimensions();
   const reduced = useReducedMotion();
-
-  const cx = W / 2;
+  const reduceTransparency = useReduceTransparency();
 
   const focusedName = state.routes[state.index]?.name;
   const isHome = focusedName === 'Dashboard';
@@ -144,7 +164,9 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
     const route = state.routes.find((r) => r.name === name);
     if (!route) return <View style={styles.side} />;
     const isFocused = state.routes[state.index]?.key === route.key;
-    const color = isFocused ? GV.cta : GV.ink;
+    // Monochrome labels on glass (Apple color-on-glass rule): white when
+    // focused, 72% white otherwise. White-on-dark-glass stays ≥ 4.5:1.
+    const color = isFocused ? LG.label : LG.labelSecondary;
     const Glyph = name === 'Dashboard' ? HomeGlyph : ChatGlyph;
     return (
       <PressScale
@@ -153,10 +175,12 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
         accessibilityState={{ selected: isFocused }}
         scaleTo={0.9}
         style={styles.side}
+        hitSlop={8}
       >
-        <View style={[styles.sidePill, isFocused && styles.sidePillFocused]}>
+        {/* iOS tab contract: glyph on top, label underneath. */}
+        <View style={[styles.sideItem, isFocused && styles.sideItemFocused]}>
           <Glyph color={color} />
-          <Text style={[styles.sideLabel, { color }]}>{label}</Text>
+          <Text style={[styles.sideLabel, { color }]} maxFontSizeMultiplier={1.3}>{label}</Text>
         </View>
       </PressScale>
     );
@@ -168,56 +192,103 @@ export function UmbrellaTabBar({ state, navigation }: BottomTabBarProps) {
   const showPulse = isHome && ppgRoute != null;
 
   return (
-    <View style={[styles.bar, { height: BAR_H, bottom: insets.bottom + 8 }]}>
-      <Animated.View
-        style={[styles.row, sidesStyle]}
-        pointerEvents={sidesHidden ? 'none' : 'auto'}
-      >
+    <Animated.View
+      style={[styles.bar, { height: BAR_H, bottom: insets.bottom + 8 }, sidesStyle]}
+      pointerEvents={sidesHidden ? 'none' : 'auto'}
+    >
+      {/* Liquid Glass regular variant: system blur + translucent fill +
+          hairline highlight. Opaque fallback under Reduce Transparency.
+          The whole capsule minimizes on scroll down (iOS tab-bar behavior)
+          and returns on scroll up. */}
+      {reduceTransparency ? null : (
+        <BlurView tint="dark" intensity={LG.blurIntensity} style={StyleSheet.absoluteFill} />
+      )}
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          styles.glassFill,
+          reduceTransparency && styles.glassFillOpaque,
+        ]}
+      />
+      <View pointerEvents="none" style={styles.glassTopEdge} />
+      <View style={styles.row}>
         {sideTab('Dashboard', 'Home')}
-        <View style={styles.centerSpacer} />
+        {/* Pulse lives INSIDE the capsule as the center action: a tinted
+            glass pill between the two tabs, same material language. */}
+        {showPulse && ppgRoute ? (
+          <View style={styles.centerWrap} pointerEvents="box-none">
+            <PressScale
+              onPress={() => onTabPress(ppgRoute.name, ppgRoute.key, ppgFocused)}
+              accessibilityLabel="Measure pulse"
+              accessibilityState={{ selected: ppgFocused }}
+              scaleTo={0.92}
+              style={styles.ppgBtn}
+            >
+              {reduceTransparency ? null : (
+                <BlurView tint="dark" intensity={LG.blurIntensity + 8} style={StyleSheet.absoluteFill} />
+              )}
+              <View
+                pointerEvents="none"
+                style={[
+                  StyleSheet.absoluteFill,
+                  styles.ppgTint,
+                  ppgFocused && styles.ppgTintFocused,
+                  reduceTransparency && styles.ppgTintOpaque,
+                ]}
+              />
+              <View pointerEvents="none" style={styles.ppgTopEdge} />
+              <Animated.View style={[styles.ppgInner, popStyle]}>
+                <Svg width={38} height={26} viewBox="0 0 40 32">
+                  <Path
+                    d="M2 18 H10 L14 18 L17 7 L21 27 L24 13 L26 18 H38"
+                    fill="none"
+                    stroke="#FFFFFF"
+                    strokeWidth={4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+              </Animated.View>
+            </PressScale>
+          </View>
+        ) : (
+          <View style={styles.centerWrap} />
+        )}
         {sideTab('Chat', 'Chat')}
-      </Animated.View>
-
-      {showPulse && ppgRoute ? (
-        <View style={[styles.centerWrap, { left: cx - SPACE.screenH - BTN / 2, top: BTN_TOP }]} pointerEvents="box-none">
-          <PressScale
-            onPress={() => onTabPress(ppgRoute.name, ppgRoute.key, ppgFocused)}
-            accessibilityLabel="Measure pulse"
-            accessibilityState={{ selected: ppgFocused }}
-            scaleTo={0.88}
-            style={[
-              styles.ppgBtn,
-              ppgFocused && styles.ppgBtnFocused,
-            ]}
-          >
-            <Animated.View style={[styles.ppgInner, popStyle]}>
-              <Svg width={46} height={36} viewBox="0 0 40 32">
-                <Path
-                  d="M2 18 H10 L14 18 L17 7 L21 27 L24 13 L26 18 H38"
-                  fill="none"
-                  stroke="#FFFFFF"
-                  strokeWidth={3.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-              <View style={styles.coreDot} />
-            </Animated.View>
-          </PressScale>
-        </View>
-      ) : null}
-    </View>
+      </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Floating white dock on the stage — flat fill, no border, no shadow.
+  // Floating Liquid Glass dock — blur + translucent dark fill, hairline
+  // highlight, no solid white. 62pt tall so every tab keeps a 44pt target.
   bar: {
     position: 'absolute',
     left: SPACE.screenH,
     right: SPACE.screenH,
-    backgroundColor: GV.card,
-    borderRadius: 28,
+    backgroundColor: 'transparent',
+    borderRadius: LG.dockRadius,
+    borderWidth: 1,
+    borderColor: LG.border,
+    overflow: 'hidden',
+  },
+  glassFill: {
+    backgroundColor: LG.fill,
+    borderRadius: LG.dockRadius,
+  },
+  glassFillOpaque: {
+    backgroundColor: LG.fillOpaque,
+  },
+  glassTopEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 20,
+    right: 20,
+    height: 1,
+    backgroundColor: LG.hairlineTop,
+    borderRadius: 1,
   },
   row: {
     flex: 1,
@@ -229,56 +300,72 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Quiet tab pill — transparent at rest, soft wash when focused.
-  // Focus carries CTA green: glyph + label shift together.
-  sidePill: {
-    flexDirection: 'row',
+  // iOS tab contract: glyph on top, label underneath. Quiet item —
+  // transparent at rest, white wash when focused.
+  sideItem: {
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: SPACE.rPill,
+    justifyContent: 'center',
+    gap: 4,
+    minWidth: 88,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: LG.targetDefault,
+    borderRadius: 18,
     backgroundColor: 'transparent',
   },
-  sidePillFocused: {
-    backgroundColor: GV.wash,
+  sideItemFocused: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
   sideLabel: {
-    ...TYPE.chip,
+    fontFamily: FONT.medium,
+    fontSize: 11,
+    lineHeight: 13,
   },
-  centerSpacer: {
-    width: CENTER_W,
-  },
+  // Center lane inside the capsule: hosts the pulse (or empty on non-Home).
   centerWrap: {
-    position: 'absolute',
-    width: BTN,
-    height: BTN,
+    width: PULSE_W + 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // One clean red circle, white ECG trace. No ring, no halos.
+  // Pulse — tinted Liquid Glass pill INSIDE the capsule: same blur + fill +
+  // hairline recipe as the dock, accent laid on the glass background
+  // (Apple's "color the background" rule), soft red glow. ECG stays white.
   ppgBtn: {
-    width: BTN,
-    height: BTN,
-    borderRadius: BTN / 2,
-    backgroundColor: GV.pulse,
+    width: PULSE_W,
+    height: PULSE_H,
+    borderRadius: PULSE_H / 2,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(30,16,22,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#D7263D',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    elevation: 8,
   },
-  ppgBtnFocused: {
+  ppgTint: {
+    backgroundColor: 'rgba(215,38,61,0.42)',
+  },
+  ppgTintFocused: {
+    backgroundColor: 'rgba(168,22,43,0.55)',
+  },
+  ppgTintOpaque: {
     backgroundColor: GV.pulsePressed,
+  },
+  ppgTopEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 16,
+    right: 16,
+    height: 1,
+    borderRadius: 1,
+    backgroundColor: 'rgba(255,255,255,0.38)',
   },
   ppgInner: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  // Lit core under the trace — the one white point on the dock.
-  coreDot: {
-    position: 'absolute',
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    bottom: 1,
-    backgroundColor: '#FFFFFF',
   },
 });

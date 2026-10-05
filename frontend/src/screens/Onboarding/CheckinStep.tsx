@@ -80,19 +80,16 @@ export function CheckinStep() {
   return (
     <View style={styles.wrap}>
       <Reveal>
-        <Text style={styles.overline}>Step 4 of 4 · Check-in</Text>
-      </Reveal>
-      <Reveal>
-        <Text style={styles.headline}>A daily call</Text>
+        <Text style={styles.headline}>Two minutes, every day.</Text>
       </Reveal>
       <Reveal>
         <Text style={styles.sub}>
-          At your chosen time the app calls and asks five short questions. Your answers become the daily check-in.
+          A short call at your chosen time — five questions, and your day is logged.
         </Text>
       </Reveal>
 
       <View style={styles.card}>
-        <Text style={styles.cardTag}>Sample — not your data</Text>
+        <Text style={styles.cardTag}>Preview</Text>
         {INTERVIEW_SCRIPT.map((q, i) => (
           <View key={q.field} style={styles.sampleRow}>
             <Text style={styles.sampleQ}>{q.prompt}</Text>
@@ -102,7 +99,7 @@ export function CheckinStep() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTag}>Setup</Text>
+        <Text style={styles.cardTag}>Daily time</Text>
         {!loaded ? (
           <ActivityIndicator color={GV.teal} style={styles.loader} />
         ) : (
@@ -174,28 +171,27 @@ export function CheckinStep() {
 
 const styles = StyleSheet.create({
   wrap: { gap: 12 },
-  overline: { ...TYPE.chip, color: GV.teal, letterSpacing: 1 },
-  headline: { fontFamily: FONT.semi, fontSize: 30, lineHeight: 36, letterSpacing: -0.3, color: '#FFFFFF' },
-  sub: { ...TYPE.body, color: GV.fog },
+  headline: { fontWeight: '600', fontSize: 32, lineHeight: 38, letterSpacing: -0.6, color: '#FFFFFF' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: 'rgba(233, 240, 255, 0.66)' },
   card: {
-    backgroundColor: '#10141F',
+    backgroundColor: 'rgba(23, 29, 44, 0.6)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: 'rgba(255,255,255,0.12)',
     borderRadius: 20,
     padding: 16,
     gap: 8,
   },
-  cardTag: { ...TYPE.chip, color: GV.teal, letterSpacing: 1 },
+  cardTag: { fontWeight: '600', fontSize: 11, lineHeight: 14, letterSpacing: 2, textTransform: 'uppercase', color: 'rgba(233,240,255,0.5)' },
   sampleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingVertical: 4 },
-  sampleQ: { ...TYPE.body, color: '#FFFFFF', flexShrink: 1 },
-  sampleA: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
+  sampleQ: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', flexShrink: 1 },
+  sampleA: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: 'rgba(233, 240, 255, 0.6)', fontVariant: ['tabular-nums'] },
   loader: { paddingVertical: 12 },
   timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   stepper: { alignItems: 'center', gap: 2 },
   stepBtn: { minWidth: 56, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
-  stepText: { fontSize: 22, color: '#FFFFFF', fontFamily: FONT.semi },
-  timeValue: { fontSize: 36, lineHeight: 42, color: '#FFFFFF', fontFamily: FONT.semi, fontVariant: ['tabular-nums'] },
-  stepSub: { ...TYPE.caption, color: GV.fog },
+  stepText: { fontSize: 22, color: '#FFFFFF', fontWeight: '600' },
+  timeValue: { fontSize: 36, lineHeight: 42, color: '#FFFFFF', fontWeight: '600', fontVariant: ['tabular-nums'] },
+  stepSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: 'rgba(233, 240, 255, 0.6)' },
   toggle: {
     borderRadius: 9999,
     borderWidth: 1.5,
@@ -205,8 +201,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  toggleOn: { backgroundColor: '#4FD1C5', borderColor: '#4FD1C5' },
-  toggleText: { ...TYPE.chip, color: GV.fog },
+  toggleOn: { backgroundColor: '#5CE8B8', borderColor: '#5CE8B8' },
+  toggleText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: 'rgba(233, 240, 255, 0.66)' },
   toggleTextOn: { color: '#062A26' },
-  msg: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  msg: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: 'rgba(233, 240, 255, 0.6)', textAlign: 'center' },
 });

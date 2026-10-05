@@ -44,16 +44,17 @@ import {
 import {
   EngravedLabel,
   INST,
-  Panel,
   QualityDial,
   TactileButton,
   Well,
 } from '@/components/pulse/Instrument';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { LG } from '@/theme/liquidGlass';
 import FaceGuideOverlay, { type FaceGuideVisual } from '@/components/pulse/FaceGuideOverlay';
 import FingertipGuideOverlay, { type FingertipGuideVisual } from '@/components/pulse/FingertipGuideOverlay';
 import PulseTraceView from '@/components/pulse/PulseTraceView';
 import BpmTrendView, { type BpmPoint } from '@/components/pulse/BpmTrendView';
-import { FONT } from '@/theme/guava';
 
 const FINGERTIP_DURATION_S = 60;
 
@@ -410,13 +411,15 @@ export default function PulseInstrumentScreen() {
   }, [machine.phase, ppg.liveBpm, rppg.liveStability]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <View style={styles.screen}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} scrollEventThrottle={16}>
         {machine.phase === 'IDLE' && (
-          <Panel>
-            <Text style={styles.title}>Pulse.</Text>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
+            <Text style={styles.title}>Pulse</Text>
             <Text style={styles.body}>
-              Face first, fingertip as backup. All on this device.
+              Face first, fingertip backup.
             </Text>
             {(recentRppg || recentPpg) && (
               <View style={styles.recents}>
@@ -438,13 +441,13 @@ export default function PulseInstrumentScreen() {
             <View style={styles.protoCard}>
               <Text style={styles.protoTitle}>Morning read</Text>
               <Text style={styles.protoLine}>On waking · lying still · breathe normally</Text>
-              <Text style={styles.protoLine}>60 seconds of stillness · same time daily builds the baseline</Text>
+              <Text style={styles.protoLine}>60 seconds of stillness.</Text>
             </View>
-          </Panel>
+          </GlassSurface>
         )}
 
         {(machine.phase === 'CHECKING' || machine.phase === 'FACE_RUN') && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>{machine.phase === 'CHECKING' ? 'Checking face signal' : 'Face measurement'}</EngravedLabel>
             <Well style={styles.previewWell}>
               {faceActive && (
@@ -468,11 +471,11 @@ export default function PulseInstrumentScreen() {
             )}
             <Text style={styles.hint}>{rppg.hint}</Text>
             <TactileButton title="Cancel" onPress={cancelRun} variant="danger" />
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'FACE_UNAVAILABLE' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Face path · standby</EngravedLabel>
             <Text style={styles.titleSm}>
               {isFaceBuildFailure(machine.reason) ? FACE_BUILD_TITLE : FACE_UNAVAILABLE_TITLE}
@@ -493,11 +496,11 @@ export default function PulseInstrumentScreen() {
             {isFaceBuildFailure(machine.reason) ? null : (
               <TactileButton title="Retry face scan" onPress={retryFace} variant="secondary" />
             )}
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'FINGERTIP_READY' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Fingertip path · ready</EngravedLabel>
             <Text style={styles.titleSm}>Fingertip measurement</Text>
             <View style={styles.tips}>
@@ -507,11 +510,11 @@ export default function PulseInstrumentScreen() {
             </View>
             <TactileButton title="Begin fingertip" onPress={beginFingertip} accessibilityLabel="Begin fingertip measurement" />
             <TactileButton title="Back" onPress={cancelRun} variant="secondary" />
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'FINGERTIP_RUN' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Fingertip measurement</EngravedLabel>
             <Well style={styles.previewWell}>
               {fingertipActive && <PpgCameraPreview style={styles.preview} />}
@@ -533,11 +536,11 @@ export default function PulseInstrumentScreen() {
             </View>
             <Text style={styles.hint}>{ppg.hint}</Text>
             <TactileButton title="Cancel" onPress={cancelRun} variant="danger" />
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'COMPLETE' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Measurement complete</EngravedLabel>
             {machine.completedMode === 'face' && rppg.result?.heartRateBpm != null && (
               <View style={styles.resultBlock}>
@@ -615,40 +618,51 @@ export default function PulseInstrumentScreen() {
               </View>
             )}
             <TactileButton title="Measure again" onPress={measureAgain} />
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'ERROR' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Instrument fault</EngravedLabel>
             <Text style={styles.titleSm}>Measurement could not finish</Text>
             <Text style={styles.body}>{machine.reason ?? 'An unexpected error stopped the measurement. Try again.'}</Text>
             <TactileButton title="Back to start" onPress={measureAgain} />
-          </Panel>
+          </GlassSurface>
         )}
 
         <Text style={styles.disclaimer}>Wellness measurements only. Not a medical device — not for diagnosis or treatment.</Text>
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: INST.face },
-  content: { paddingHorizontal: 26, paddingBottom: 32, paddingTop: 8, gap: 12 },
+  screen: {
+    flex: 1,
+    backgroundColor: LG.stage.bottom,
+  },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: 26, paddingBottom: 32, paddingTop: 20, gap: 16 },
+  // Frosted panel pad (GlassSurface carries the material + rim).
+  panelPad: {
+    padding: 20,
+    gap: 12,
+  },
   title: {
-    fontFamily: FONT.semi,
-    fontSize: 32,
-    lineHeight: 38,
-    letterSpacing: -0.3,
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
     color: '#FFFFFF',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
   titleSm: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 20,
     lineHeight: 26,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
     textAlign: 'center',
   },
@@ -660,7 +674,7 @@ const styles = StyleSheet.create({
   meta: { fontSize: 12, lineHeight: 17, color: INST.dim, textAlign: 'center', fontVariant: ['tabular-nums'] },
   disclaimer: { fontSize: 11, lineHeight: 15, color: INST.engraved, textAlign: 'center', marginTop: 4 },
   simBadge: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 12,
     letterSpacing: 1,
     color: INST.red,
@@ -681,7 +695,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  recentBpm: { fontFamily: FONT.semi, fontSize: 16, color: INST.steel, fontVariant: ['tabular-nums'] },
+  recentBpm: { fontWeight: '600', fontSize: 16, color: INST.steel, fontVariant: ['tabular-nums'] },
   recentMeta: { fontSize: 12, color: INST.dim },
   protoCard: {
     borderWidth: 1,
@@ -692,7 +706,7 @@ const styles = StyleSheet.create({
     gap: 2,
     marginTop: 4,
   },
-  protoTitle: { fontFamily: FONT.semi, fontSize: 14, color: INST.steel },
+  protoTitle: { fontWeight: '600', fontSize: 14, color: INST.steel },
   protoLine: { fontSize: 12, color: INST.dim },
   previewWell: { minHeight: 300, justifyContent: 'center' },
   preview: { width: '100%', height: 300 },
@@ -708,13 +722,13 @@ const styles = StyleSheet.create({
   },
   readout: { alignItems: 'center', paddingVertical: 4 },
   readoutValue: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 64,
     lineHeight: 70,
     color: INST.steel,
     fontVariant: ['tabular-nums'],
   },
-  readoutUnit: { fontFamily: FONT.semi, fontSize: 12, letterSpacing: 1.5, color: INST.engraved },
+  readoutUnit: { fontWeight: '600', fontSize: 12, letterSpacing: 1.5, color: INST.engraved },
   dialRow: { alignItems: 'center' },
   resultBlock: { gap: 12 },
 });

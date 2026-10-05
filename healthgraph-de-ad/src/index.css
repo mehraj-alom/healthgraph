@@ -1,0 +1,13 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0b0b0c;
+  color: #f4f4f5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}

@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as Sharing from 'expo-sharing';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
-import { Button, Card } from '@/components';
+import { Button } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { useDocuments, type DocumentsContextValue } from '@/context/DocumentsContext';
 import {
@@ -336,12 +336,12 @@ export default function DocumentDetailScreen() {
               </Text>
             </View>
             <View
-              style={[
-                styles.statusBadge,
-                {
-                  backgroundColor: GV.wash,
-                },
-              ]}
+                style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                  },
+                ]}
             >
               <Text
                 style={[
@@ -349,10 +349,10 @@ export default function DocumentDetailScreen() {
                   {
                     color:
                       document.status === 'COMPLETED'
-                        ? GV.cta
+                        ? GV.teal
                         : document.status === 'FAILED'
                           ? GV.danger
-                          : GV.body,
+                          : '#FFFFFF',
                   },
                 ]}
               >
@@ -380,7 +380,7 @@ export default function DocumentDetailScreen() {
 
         {/* Reading verification — confirms before the reading counts */}
         {extraction && !isProcessing ? (
-          <Card padding="md" style={styles.verifyCard}>
+          <View style={[styles.tile, styles.verifyCard]}>
             {verified ? (
               <View style={styles.verifyDoneRow}>
                 <Text style={styles.verifyDone}>Verified ✓</Text>
@@ -425,7 +425,7 @@ export default function DocumentDetailScreen() {
                   value={note}
                   onChangeText={setNote}
                   placeholder="Correction note (optional)"
-                  placeholderTextColor={GV.muted}
+                  placeholderTextColor={GV.fog}
                   multiline
                   numberOfLines={2}
                   style={styles.verifyInput}
@@ -438,19 +438,19 @@ export default function DocumentDetailScreen() {
                 />
               </>
             ) : null}
-          </Card>
+          </View>
         ) : null}
 
         {/* Processing spinner */}
         {isProcessing && (
-          <Card padding="md">
+          <View style={styles.tile}>
             <View style={styles.processingRow}>
               <ActivityIndicator size="small" color={GV.cta} />
               <Text style={styles.processingText}>
                 Still processing. Check back shortly.
               </Text>
             </View>
-          </Card>
+          </View>
         )}
 
         {/* Alerts */}
@@ -458,7 +458,7 @@ export default function DocumentDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Clinical Alerts</Text>
             {alerts.map((alert, i) => (
-              <Card key={i} padding="md" style={styles.alertCard}>
+              <View key={i} style={[styles.tile, styles.alertCard]}>
                 <Text style={styles.alertSeverity}>
                   {alert.severity ?? 'Alert'}
                 </Text>
@@ -466,7 +466,7 @@ export default function DocumentDetailScreen() {
                 {alert.page_number != null && (
                   <Text style={styles.alertPage}>Page {alert.page_number}</Text>
                 )}
-              </Card>
+              </View>
             ))}
           </View>
         )}
@@ -475,7 +475,7 @@ export default function DocumentDetailScreen() {
         {patient && (patient.name || patient.age || patient.sex) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Patient Information</Text>
-            <Card padding="md">
+            <View style={styles.tile}>
               {patient.name && (
                 <InfoRow label="Name" value={patient.name} />
               )}
@@ -488,7 +488,7 @@ export default function DocumentDetailScreen() {
               {patient.date_of_birth && (
                 <InfoRow label="DOB" value={patient.date_of_birth} />
               )}
-            </Card>
+            </View>
           </View>
         )}
 
@@ -496,9 +496,9 @@ export default function DocumentDetailScreen() {
         {docData?.clinical_information && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Clinical Information</Text>
-            <Card padding="md">
+            <View style={styles.tile}>
               <Text style={styles.bodyText}>{docData.clinical_information}</Text>
-            </Card>
+            </View>
           </View>
         )}
 
@@ -508,7 +508,7 @@ export default function DocumentDetailScreen() {
             <Text style={styles.sectionTitle}>
               {section.section_title || `Section ${i + 1}`}
             </Text>
-            <Card padding="md">
+            <View style={styles.tile}>
               {section.results && section.results.length > 0 ? (
                 section.results.map((result, j) => (
                   <View key={j} style={styles.resultRow}>
@@ -564,7 +564,7 @@ export default function DocumentDetailScreen() {
                   <Text style={styles.findingText}>{section.comments}</Text>
                 </View>
               )}
-            </Card>
+            </View>
           </View>
         ))}
 
@@ -577,7 +577,7 @@ export default function DocumentDetailScreen() {
         {extraction?.gateway_json && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Classification</Text>
-            <Card padding="md">
+            <View style={styles.tile}>
               <InfoRow
                 label="Medical"
                 value={extraction.gateway_json.is_medical ? 'Yes' : 'No'}
@@ -596,7 +596,7 @@ export default function DocumentDetailScreen() {
                   value={extraction.gateway_json.type_text}
                 />
               )}
-            </Card>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -651,16 +651,16 @@ const infoStyles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: GV.line,
+    borderBottomColor: 'rgba(255, 255, 255, 0.12)',
   },
   label: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
   },
   value: {
     ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    color: '#FFFFFF',
     flex: 1,
     textAlign: 'right',
     marginLeft: 16,
@@ -674,7 +674,7 @@ function MarkdownPreview({ markdown }: { markdown: string }) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Extracted Text</Text>
-      <Card padding="md">
+      <View style={styles.tile}>
         <Text style={styles.markdownText} numberOfLines={expanded ? undefined : 8}>
           {expanded ? markdown : preview}
           {!expanded && markdown.length > 500 ? '...' : ''}
@@ -686,7 +686,7 @@ function MarkdownPreview({ markdown }: { markdown: string }) {
             </Text>
           </Pressable>
         )}
-      </Card>
+      </View>
     </View>
   );
 }
@@ -698,7 +698,7 @@ function MarkdownPreview({ markdown }: { markdown: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: '#080A11',
   },
   content: {
     paddingHorizontal: SPACE.screenH,
@@ -757,6 +757,14 @@ const styles = StyleSheet.create({
     color: GV.danger,
     marginTop: 8,
   },
+  tile: {
+    backgroundColor: '#2A3049',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 8,
+    padding: 16,
+    gap: 10,
+  },
   verifyCard: {
     gap: 10,
   },
@@ -783,29 +791,30 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: GV.cta,
+    borderColor: GV.teal,
     alignItems: 'center',
     justifyContent: 'center',
   },
   verifyBoxOn: {
-    backgroundColor: GV.cta,
+    backgroundColor: GV.teal,
   },
   verifyGlyph: {
-    color: '#FFFFFF',
+    color: '#062A26',
     fontSize: 13,
     fontWeight: '700',
   },
   verifyLabel: {
     ...TYPE.body,
     fontSize: 14,
-    color: GV.ink,
+    color: '#FFFFFF',
     flex: 1,
   },
   verifyInput: {
     ...TYPE.body,
-    color: GV.ink,
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
-    borderColor: GV.line,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -820,7 +829,7 @@ const styles = StyleSheet.create({
   verifyDone: {
     ...TYPE.title,
     fontSize: 16,
-    color: GV.cta,
+    color: GV.teal,
   },
   reopenBtn: {
     minHeight: 44,
@@ -829,15 +838,15 @@ const styles = StyleSheet.create({
   },
   reopenText: {
     ...TYPE.chip,
-    color: GV.cta,
+    color: GV.teal,
   },
   verifyNote: {
     ...TYPE.body,
-    color: GV.body,
+    color: '#FFFFFF',
   },
   viewerContainer: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: '#10141F',
   },
   viewerHeader: {
     flexDirection: 'row',
@@ -849,7 +858,7 @@ const styles = StyleSheet.create({
   viewerClose: {
     ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.cta,
+    color: GV.teal,
   },
   viewerTitle: {
     ...TYPE.body,
@@ -863,7 +872,7 @@ const styles = StyleSheet.create({
   },
   viewer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#10141F',
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -888,27 +897,27 @@ const styles = StyleSheet.create({
   },
   processingText: {
     ...TYPE.body,
-    color: GV.body,
+    color: '#FFFFFF',
   },
   alertCard: {},
   alertSeverity: {
     ...TYPE.caption,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   alertMessage: {
     ...TYPE.body,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   alertPage: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     marginTop: 8,
   },
   bodyText: {
     ...TYPE.body,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   resultRow: {
     flexDirection: 'row',
@@ -916,7 +925,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: GV.line,
+    borderBottomColor: 'rgba(255, 255, 255, 0.12)',
     gap: 8,
   },
   resultInfo: {
@@ -925,11 +934,11 @@ const styles = StyleSheet.create({
   resultName: {
     ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   resultRange: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     marginTop: 2,
   },
   resultValue: {
@@ -938,7 +947,7 @@ const styles = StyleSheet.create({
   resultValueText: {
     ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   resultAbnormal: {
     color: GV.danger,
@@ -946,7 +955,7 @@ const styles = StyleSheet.create({
   resultFlag: {
     ...TYPE.caption,
     fontFamily: FONT.semi,
-    color: GV.body,
+    color: '#FFFFFF',
     fontSize: 10,
     marginTop: 2,
   },
@@ -957,25 +966,25 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: GV.line,
+    borderTopColor: 'rgba(255, 255, 255, 0.12)',
   },
   findingLabel: {
     ...TYPE.caption,
-    color: GV.muted,
+    color: GV.fog,
     marginBottom: 8,
   },
   findingText: {
     ...TYPE.body,
-    color: GV.ink,
+    color: '#FFFFFF',
   },
   markdownText: {
     ...TYPE.caption,
-    color: GV.body,
+    color: '#FFFFFF',
   },
   expandToggle: {
     ...TYPE.caption,
     fontFamily: FONT.semi,
-    color: GV.cta,
+    color: GV.teal,
     marginTop: 8,
   },
 });

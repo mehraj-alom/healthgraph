@@ -84,10 +84,10 @@ export function FocusStep({
   return (
     <View style={styles.wrap}>
       <Reveal>
-        <Text style={styles.headline}>How can we help you?</Text>
+        <Text style={styles.headline}>Where should we focus?</Text>
       </Reveal>
       <Reveal>
-        <Text style={styles.sub}>Choose as many as you like</Text>
+        <Text style={styles.sub}>Pick as many as you like.</Text>
       </Reveal>
       <View style={styles.grid} accessibilityRole="list">
         {rows.map((row, r) => (
@@ -117,17 +117,18 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   headline: {
-    fontFamily: FONT.semi,
-    fontSize: 27,
-    lineHeight: 34,
+    fontWeight: '600',
+    fontSize: 32,
+    lineHeight: 38,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -0.3,
+    letterSpacing: -0.6,
   },
   sub: {
-    ...TYPE.body,
-    fontSize: 14,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(233, 240, 255, 0.66)',
     textAlign: 'center',
     alignSelf: 'center',
   },
@@ -142,20 +143,20 @@ const styles = StyleSheet.create({
   tile: {
     flex: 1,
     aspectRatio: 1.5,
-    borderRadius: 8,
+    borderRadius: 16,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: 'transparent',
-    backgroundColor: '#2A3049',
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    backgroundColor: 'rgba(23, 29, 44, 0.64)',
   },
   tileFull: {
     aspectRatio: undefined,
     height: 112,
   },
   tileOn: {
-    borderColor: GV.teal,
+    borderColor: '#FFFFFF',
   },
   tileArt: {
     position: 'absolute',
@@ -165,7 +166,7 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   tileLabel: {
-    fontFamily: FONT.medium,
+    fontWeight: '500',
     fontSize: 15,
     lineHeight: 20,
     color: '#FFFFFF',
@@ -182,12 +183,12 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: GV.teal,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkGlyph: {
-    color: '#06231B',
+    color: '#0B0F1A',
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 16,

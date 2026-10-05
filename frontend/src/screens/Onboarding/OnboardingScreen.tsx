@@ -14,16 +14,17 @@ import {
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { VideoView, useVideoPlayer } from 'expo-video';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAuth } from '@/context/AuthContext';
-import { BrandLogo, Button, Card, Input } from '@/components';
+import { BrandLogo, Button, Input } from '@/components';
 import { Reveal } from '@/components/home/Reveal';
-import { FONT, GV, SPACE, TYPE } from '@/theme/guava';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { GV, SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { useReducedMotion } from '@/theme/useReducedMotion';
-import { StageGradient } from '@/components/StageGradient';
 
 import { MEDICAL_DISCLAIMER } from '@/constants';
 
@@ -31,31 +32,17 @@ import { IntroVisual } from './IntroVisual';
 import { ProgressGraphVisual } from './ProgressGraphVisual';
 import { clearPricingNeeded, markPricingNeeded } from './PricingScreen';
 
-/* Showcase hero films (same sources as aurora-onboarding-showcase.html).
- * Remote streams: fail silent to the flat stage (never block, never error). */
-const HERO_VIDEO_URL =
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260710_114906_ad7cee37-9e56-434f-99bc-92d5bdc4f9fe.mp4';
-const SYSTEM_VIDEO_URL =
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260710_115050_a1ba47d0-aedf-413c-9dea-14509599d3dd.mp4';
-
-// Bundled fallback film (same asset as the boot splash — always playable
-// offline). Metro literal require so the file is bundled (see
-// assetBundlePatterns).
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const LOCAL_FILM = require('../../../assets/app-load.mp4');
-
 /**
- * Onboarding — two premium value screens, then the existing sign-in.
+ * Onboarding — two value screens, then sign-in. All three pages share the
+ * Home redesign's Liquid Glass schema: the aurora stage behind everything,
+ * the instrument visuals inside frosted panels, system (SF-style)
+ * typography, one glass CTA per page. Apple psychology: few words, one
+ * job per screen, quiet confidence.
  *
  * Pages (horizontal pager):
  *  0. Introduction — "Your health, connected." (connected-hub visual)
- *  1. Bigger picture — "See the bigger picture." (illustrative 7-day
- *     progress graph; fixed artwork, never patient data)
- *  2. Authentication — the existing email/password form, unchanged logic.
- *
- * Visuals are pure code (Views + react-native-svg + Reanimated): no image
- * assets, no new dependencies. Copy, typography and the CTA reuse the
- * Guava system (Poppins, stage, CTA green).
+ *  1. Bigger picture — "See the bigger picture." (7-day progress visual)
+ *  2. Authentication — email/password form, unchanged logic.
  */
 
 const PAGES = [0, 1, 2] as const;
@@ -196,121 +183,18 @@ export default function OnboardingScreen() {
     return () => clearTimeout(timer);
   }, [authView, resendIn]);
 
-  // Fullscreen story films: one root layer behind the top bar, pager,
-  // and footer — edge to edge, no stage bands. The active page's film
-  // plays; both pause on the auth page (readability + battery).
-  // Reduced motion or any error falls back to the flat stage.
   const reducedMotion = useReducedMotion();
-  const [heroFailed, setHeroFailed] = useState(false);
-  const [systemFailed, setSystemFailed] = useState(false);
-  const [heroReady, setHeroReady] = useState(false);
-  const [systemReady, setSystemReady] = useState(false);
-  const heroPlayer = useVideoPlayer(HERO_VIDEO_URL, p => {
-    p.loop = true;
-    p.muted = true;
-  });
-  const systemPlayer = useVideoPlayer(SYSTEM_VIDEO_URL, p => {
-    p.loop = true;
-    p.muted = true;
-  });
-
-  // Remote streams can fail on-device (no network, blocked CDN ranges):
-  // instead of dropping to the stage wash, each player swaps to the
-  // bundled local film and keeps going. Only if the local asset also
-  // errors does that side fall back to the stage. Refs (not state) track
-  // the swap so the status listener never reads a stale closure.
-  const heroLocalRef = useRef(false);
-  const systemLocalRef = useRef(false);
-
-  useEffect(() => {
-    const heroSub = heroPlayer.addListener('statusChange', ({ status }) => {
-      if (status === 'error') {
-        if (!heroLocalRef.current) {
-          heroLocalRef.current = true;
-          try {
-            heroPlayer.replace(LOCAL_FILM);
-            setHeroReady(false);
-          } catch {
-            setHeroFailed(true);
-          }
-        } else {
-          setHeroFailed(true);
-        }
-      } else if (status === 'readyToPlay') {
-        setHeroReady(true);
-      }
-    });
-    const systemSub = systemPlayer.addListener('statusChange', ({ status }) => {
-      if (status === 'error') {
-        if (!systemLocalRef.current) {
-          systemLocalRef.current = true;
-          try {
-            systemPlayer.replace(LOCAL_FILM);
-            setSystemReady(false);
-          } catch {
-            setSystemFailed(true);
-          }
-        } else {
-          setSystemFailed(true);
-        }
-      } else if (status === 'readyToPlay') {
-        setSystemReady(true);
-      }
-    });
-    return () => {
-      heroSub.remove();
-      systemSub.remove();
-    };
-  }, [heroPlayer, systemPlayer]);
-
-  // Play only what is ready: a play() attempt on a loading remote stream
-  // throws, and that must never unmount the film — only a real 'error'
-  // status falls back to the stage. Pause everything on the auth page.
-  useEffect(() => {
-    if (reducedMotion || step >= STORY_PAGES) {
-      try {
-        heroPlayer.pause();
-      } catch {
-        // Best-effort.
-      }
-      try {
-        systemPlayer.pause();
-      } catch {
-        // Best-effort.
-      }
-      return;
-    }
-    try {
-      if (step === 0 && heroReady && !heroFailed) heroPlayer.play();
-      else heroPlayer.pause();
-    } catch {
-      // Not ready yet — keep the layer mounted and try again later.
-    }
-    try {
-      if (step === 1 && systemReady && !systemFailed) systemPlayer.play();
-      else systemPlayer.pause();
-    } catch {
-      // Not ready yet — keep the layer mounted and try again later.
-    }
-  }, [step, reducedMotion, heroReady, systemReady, heroFailed, systemFailed, heroPlayer, systemPlayer]);
-
-  useEffect(() => {
-    return () => {
-      try {
-        heroPlayer.pause();
-        systemPlayer.pause();
-      } catch {
-        // Best-effort teardown.
-      }
-    };
-  }, [heroPlayer, systemPlayer]);
 
   // Visual size adapts to both axes so small (360×640) and large phones
   // fit visual + copy + CTA without scrolling in practice.
+  // Visual size adapts to both axes so small (360×640) and large phones
+  // fit visual + copy + CTA without scrolling in practice. The extra 28
+  // is the glass panel's own padding (14×2) — the visual must fit INSIDE
+  // the panel, never clip against its rim.
   const visualSize = Math.min(
-    width - 48,
-    340,
-    Math.max(220, height * 0.36),
+    width - 48 - 28,
+    320,
+    Math.max(200, height * 0.34),
   );
 
   // ---------------------------------------------------------------------------
@@ -534,7 +418,10 @@ export default function OnboardingScreen() {
       showsVerticalScrollIndicator={false}
       bounces={false}
     >
-      <IntroVisual size={visualSize} active={active} />
+      {/* The instrument in its glass case — one material language with Home. */}
+      <GlassSurface radius={28} style={styles.visualPanel}>
+        <IntroVisual size={visualSize} active={active} />
+      </GlassSurface>
         {/* Remount on activation so the copy entrance replays each visit. */}
         <View key={active ? 'intro-copy-on' : 'intro-copy-off'} style={styles.copy}>
           <Reveal delay={450}>
@@ -551,27 +438,10 @@ export default function OnboardingScreen() {
           </Reveal>
           <Reveal delay={780}>
             <Text style={styles.subShowcase}>
-              Track what matters and see how everything connects in one
-              place.
+              All of your health, in one place.
             </Text>
           </Reveal>
-        <Reveal delay={860}>
-          <View style={styles.phases} accessibilityRole="progressbar" accessibilityLabel="3 quick phases">
-            <View style={[styles.phase, styles.phaseOn]}>
-              <Text style={[styles.phaseNum, styles.phaseNumOn]}>1</Text>
-              <Text style={[styles.phaseText, styles.phaseTextOn]}>Register your identity</Text>
-            </View>
-            <View style={styles.phase}>
-              <Text style={styles.phaseNum}>2</Text>
-              <Text style={styles.phaseText}>Configure your studio</Text>
-            </View>
-            <View style={styles.phase}>
-              <Text style={styles.phaseNum}>3</Text>
-              <Text style={styles.phaseText}>Finalize your profile</Text>
-            </View>
-          </View>
-        </Reveal>
-      </View>
+        </View>
     </ScrollView>
   );
 
@@ -581,11 +451,10 @@ export default function OnboardingScreen() {
       showsVerticalScrollIndicator={false}
       bounces={false}
     >
-      <ProgressGraphVisual size={visualSize} active={active} />
+      <GlassSurface radius={28} style={styles.visualPanel}>
+        <ProgressGraphVisual size={visualSize} active={active} />
+      </GlassSurface>
       <View key={active ? 'system-copy-on' : 'system-copy-off'} style={styles.copy}>
-        <Reveal delay={580}>
-          <Text style={styles.overline}>ONE HEALTH SYSTEM</Text>
-        </Reveal>
         <Reveal delay={720}>
           <Text
             style={styles.headlineShowcase}
@@ -597,24 +466,8 @@ export default function OnboardingScreen() {
         </Reveal>
         <Reveal delay={800}>
           <Text style={styles.subShowcase}>
-            Connect your health data and understand how everything changes over time.
+            Watch your patterns emerge, day after day.
           </Text>
-        </Reveal>
-        <Reveal delay={880}>
-          <View style={styles.phases} accessibilityRole="progressbar" accessibilityLabel="3 quick phases">
-            <View style={[styles.phase, styles.phaseOn]}>
-              <Text style={[styles.phaseNum, styles.phaseNumOn]}>1</Text>
-              <Text style={[styles.phaseText, styles.phaseTextOn]}>Register your identity</Text>
-            </View>
-            <View style={styles.phase}>
-              <Text style={styles.phaseNum}>2</Text>
-              <Text style={styles.phaseText}>Configure your studio</Text>
-            </View>
-            <View style={styles.phase}>
-              <Text style={styles.phaseNum}>3</Text>
-              <Text style={styles.phaseText}>Finalize your profile</Text>
-            </View>
-          </View>
         </Reveal>
       </View>
     </ScrollView>
@@ -671,11 +524,7 @@ export default function OnboardingScreen() {
     <>
       <GlassCard>
         <Text style={styles.formTitle}>
-          Sign In
-        </Text>
-
-        <Text style={styles.formSubtitle}>
-          Sign in to open your dashboard
+          Welcome back
         </Text>
 
         {renderAuthErrors()}
@@ -729,12 +578,13 @@ export default function OnboardingScreen() {
             accessibilityLabel="Forgot password"
             style={styles.linkHit}
           >
-            <Text style={styles.linkText}>Forgot Password?</Text>
+            <Text style={styles.linkText}>Forgot password?</Text>
           </Pressable>
         </View>
 
         <Button
           title="Sign In"
+          variant="secondary"
           onPress={() => {
             void handleSubmit();
           }}
@@ -749,13 +599,13 @@ export default function OnboardingScreen() {
           style={styles.toggleContainer}
       >
         <Text style={styles.toggleText}>
-          {"Don't have an account? "}
+          {"New here? "}
 
           <Text
             style={styles.toggleLink}
             onPress={() => goAuth('signup')}
           >
-            Sign Up
+            Create an account
           </Text>
         </Text>
       </View>
@@ -764,16 +614,9 @@ export default function OnboardingScreen() {
 
   const renderSignupView = (): React.ReactNode => (
     <>
-      <View style={styles.authPhase}>
-        <Text style={styles.authPhaseText}>Step 3 of 3 · Create New Profile</Text>
-      </View>
       <GlassCard>
         <Text style={styles.formTitle}>
-          Create Account
-        </Text>
-
-        <Text style={styles.formSubtitle}>
-          Takes less than a minute.
+          Create your account
         </Text>
 
         {renderAuthErrors()}
@@ -876,6 +719,7 @@ export default function OnboardingScreen() {
 
         <Button
           title="Create Account"
+          variant="secondary"
           onPress={() => {
             void handleSubmit();
           }}
@@ -907,11 +751,11 @@ export default function OnboardingScreen() {
     <>
       <GlassCard>
         <Text style={styles.formTitle}>
-          Forgot Password?
+          Reset password
         </Text>
 
         <Text style={styles.formSubtitle}>
-          Enter your account email and we will send a reset link.
+          We'll email you a secure reset link.
         </Text>
 
         {renderAuthErrors()}
@@ -935,6 +779,7 @@ export default function OnboardingScreen() {
 
         <Button
           title="Send Reset Link"
+          variant="secondary"
           onPress={() => {
             void handleForgot();
           }}
@@ -968,13 +813,14 @@ export default function OnboardingScreen() {
         </Text>
 
         <Text style={styles.formSubtitle}>
-          {`A reset link is on its way to ${email.trim()}. Didn't get it? Check spam, then resend below.`}
+          {`A reset link is on its way to ${email.trim()}.`}
         </Text>
 
         {renderAuthErrors()}
 
         <Button
           title={resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend Link'}
+          variant="secondary"
           onPress={() => {
             void handleResend();
           }}
@@ -1017,22 +863,19 @@ export default function OnboardingScreen() {
           {authView === 'login' ? renderLoginView() : authView === 'signup' ? renderSignupView() : authView === 'forgot' ? renderForgotView() : renderResetSentView()}
         </View>
 
-        <Card
-          style={styles.disclaimerCard}
-          padding="sm"
-        >
+        <View style={styles.disclaimerCard}>
           <Pressable
             onPress={() => setLegalOpen(previous => !previous)}
             accessibilityRole="button"
             accessibilityState={{ expanded: legalOpen }}
-            accessibilityLabel="Important disclaimer"
+            accessibilityLabel="Medical disclaimer"
             style={({ pressed }) => [
               styles.disclaimerHead,
               pressed && { opacity: 0.6 },
             ]}
           >
             <Text style={styles.disclaimerTitle}>
-              Important Disclaimer
+              Medical disclaimer
             </Text>
             <Text style={styles.disclaimerChev}>{legalOpen ? '▾' : '›'}</Text>
           </Pressable>
@@ -1042,7 +885,7 @@ export default function OnboardingScreen() {
               {MEDICAL_DISCLAIMER}
             </Text>
           ) : null}
-        </Card>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -1063,30 +906,9 @@ export default function OnboardingScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Stage wash at the very bottom (auth page + any film fallback). */}
-      <StageGradient />
-      {/* Fullscreen story film above the wash, below the content. */}
-      {!reducedMotion && step < STORY_PAGES && (!heroFailed || !systemFailed) ? (
-        <View style={styles.filmLayer} pointerEvents="none">
-          {!heroFailed ? (
-            <VideoView
-              player={heroPlayer}
-              style={[styles.film, step === 0 && heroReady && styles.filmOn]}
-              contentFit="cover"
-              nativeControls={false}
-            />
-          ) : null}
-          {!systemFailed ? (
-            <VideoView
-              player={systemPlayer}
-              style={[styles.film, step === 1 && systemReady && styles.filmOn]}
-              contentFit="cover"
-              nativeControls={false}
-            />
-          ) : null}
-          <View style={styles.filmScrim} />
-        </View>
-      ) : null}
+      {/* The same aurora stage the Home screen sits on — one brand world
+          from the first frame. Rich color for the glass panels to sample. */}
+      <HomeStageBackdrop />
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Top bar: progress on story pages, back on auth. */}
       <View style={styles.topBar}>
@@ -1194,32 +1016,12 @@ const styles = StyleSheet.create({
   // story pages (including behind the top bar, footer, and safe insets).
   root: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: '#05070F',
   },
 
   container: {
     flex: 1,
     backgroundColor: 'transparent',
-  },
-
-  // Fullscreen film: both features mounted, active one opaque.
-  filmLayer: {
-    ...StyleSheet.absoluteFill,
-  },
-
-  film: {
-    ...StyleSheet.absoluteFill,
-    opacity: 0,
-  },
-
-  filmOn: {
-    opacity: 1,
-  },
-
-  // Readability scrim over the film (heavier at the bottom, like a fade).
-  filmScrim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(2, 4, 12, 0.42)',
   },
 
   // --------------------------------------------------------------------------
@@ -1262,10 +1064,10 @@ const styles = StyleSheet.create({
   },
 
   skipText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 14,
     lineHeight: 20,
-    color: GV.fog,
+    color: 'rgba(233, 240, 255, 0.72)',
   },
 
   backHit: {
@@ -1275,7 +1077,7 @@ const styles = StyleSheet.create({
   },
 
   backText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 15,
     lineHeight: 22,
     color: '#FFFFFF',
@@ -1299,12 +1101,14 @@ const styles = StyleSheet.create({
   // --------------------------------------------------------------------------
 
   headlineShowcase: {
-    fontFamily: FONT.semi,
+    // Apple typography: system face (SF Pro on iOS), Display-weight
+    // tracking at large sizes — no custom family.
+    fontWeight: '600',
     fontSize: 40,
     lineHeight: 46,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -0.3,
+    letterSpacing: -0.8,
     textShadowColor: 'rgba(255, 255, 255, 0.22)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 34,
@@ -1318,7 +1122,9 @@ const styles = StyleSheet.create({
   },
 
   subShowcase: {
-    ...TYPE.body,
+    fontWeight: '400',
+    fontSize: 17,
+    lineHeight: 23,
     color: 'rgba(255, 255, 255, 0.72)',
     textAlign: 'center',
     maxWidth: 330,
@@ -1337,37 +1143,17 @@ const styles = StyleSheet.create({
 
   copy: {
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     paddingBottom: 4,
+  },
+
+  visualPanel: {
+    alignSelf: 'center',
+    padding: 14,
   },
 
   wordmark: {
     marginBottom: 2,
-  },
-
-  overline: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 3,
-    color: GV.teal,
-    textAlign: 'center',
-  },
-
-  headline: {
-    fontFamily: FONT.semi,
-    fontSize: 32,
-    lineHeight: 38,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-
-  sub: {
-    ...TYPE.body,
-    color: GV.fog,
-    textAlign: 'center',
-    maxWidth: 330,
   },
 
   footer: {
@@ -1395,7 +1181,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 22,
     lineHeight: 26,
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     marginTop: -2,
   },
 
@@ -1414,26 +1200,15 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.sectionGap,
   },
 
-  header: {
-    alignItems: 'center',
-    marginBottom: SPACE.sectionGap,
-  },
-
-  tagline: {
-    ...TYPE.body,
-    color: GV.fog,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-
-  // Liquid-glass form panel (sidebar material): frosted blur, brand
-  // tint, hairline light edge. Content stays white-on-glass.
+  // Liquid-glass form panel: real backdrop blur + neutral dark wash over
+  // the film — the same material language as Home's functional layer, no
+  // brand-green tint fighting the story film behind it.
   glassCard: {
     width: '100%',
     borderRadius: 24,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.22)',
+    borderColor: 'rgba(255, 255, 255, 0.18)',
   },
 
   glassFill: {
@@ -1442,7 +1217,7 @@ const styles = StyleSheet.create({
 
   glassTint: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(11, 74, 63, 0.62)',
+    backgroundColor: 'rgba(14, 19, 31, 0.55)',
   },
 
   glassSolid: {
@@ -1455,15 +1230,21 @@ const styles = StyleSheet.create({
   },
 
   formTitle: {
-    ...TYPE.title,
+    fontWeight: '600',
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: -0.4,
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginBottom: 16,
   },
 
   formSubtitle: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(233, 240, 255, 0.66)',
     marginBottom: 16,
+    marginTop: -10,
   },
 
   // One connected group: the fields read as a single form, not loose rows.
@@ -1492,10 +1273,10 @@ const styles = StyleSheet.create({
   },
 
   linkText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 13,
     lineHeight: 18,
-    color: GV.cta,
+    color: LG.card.mint,
   },
 
   checkRow: {
@@ -1518,8 +1299,8 @@ const styles = StyleSheet.create({
   },
 
   boxOn: {
-    backgroundColor: GV.teal,
-    borderColor: GV.teal,
+    backgroundColor: LG.card.mint,
+    borderColor: LG.card.mint,
   },
 
   tick: {
@@ -1530,7 +1311,7 @@ const styles = StyleSheet.create({
   },
 
   checkLabel: {
-    fontFamily: FONT.medium,
+    fontWeight: '500',
     fontSize: 13,
     lineHeight: 18,
     color: '#FFFFFF',
@@ -1561,22 +1342,28 @@ const styles = StyleSheet.create({
   },
 
   errorBanner: {
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(214, 69, 69, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(214, 69, 69, 0.35)',
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
   },
 
   formErrorBanner: {
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(214, 69, 69, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(214, 69, 69, 0.35)',
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
   },
 
   errorText: {
-    ...TYPE.caption,
-    color: GV.danger,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.danger,
   },
 
   submitButton: {
@@ -1590,79 +1377,10 @@ const styles = StyleSheet.create({
   },
 
   passwordToggleText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 13,
     lineHeight: 18,
-    color: GV.cta,
-  },
-
-  phases: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 8,
-    flexWrap: 'wrap',
-  },
-
-  phase: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingLeft: 6,
-    paddingRight: 10,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-  },
-
-  phaseOn: {
-    backgroundColor: '#FFFFFF',
-  },
-
-  phaseNum: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    fontFamily: FONT.semi,
-    fontSize: 11,
-    lineHeight: 20,
-    color: 'rgba(255, 255, 255, 0.6)',
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
-  },
-
-  phaseNumOn: {
-    color: '#FFFFFF',
-    backgroundColor: GV.stage,
-  },
-
-  phaseText: {
-    fontFamily: FONT.semi,
-    fontSize: 11,
-    lineHeight: 16,
-    color: 'rgba(255, 255, 255, 0.75)',
-  },
-
-  phaseTextOn: {
-    color: GV.stage,
-  },
-
-  authPhase: {
-    alignSelf: 'center',
-    marginBottom: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-  },
-
-  authPhaseText: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#FFFFFF',
-    textAlign: 'center',
+    color: LG.card.mint,
   },
 
   nameRow: {
@@ -1680,18 +1398,26 @@ const styles = StyleSheet.create({
   },
 
   toggleText: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(233, 240, 255, 0.66)',
     textAlign: 'center',
   },
 
   toggleLink: {
-    color: GV.teal,
-    fontFamily: FONT.semi,
+    color: LG.card.mint,
+    fontWeight: '600',
   },
 
   disclaimerCard: {
     marginTop: SPACE.sectionGap,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
   },
 
   disclaimerHead: {
@@ -1704,18 +1430,21 @@ const styles = StyleSheet.create({
 
   disclaimerChev: {
     fontSize: 20,
-    color: GV.body,
+    color: 'rgba(233, 240, 255, 0.5)',
   },
 
   disclaimerTitle: {
-    ...TYPE.caption,
-    fontFamily: FONT.semi,
-    color: GV.ink,
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233, 240, 255, 0.72)',
   },
 
   disclaimerText: {
-    ...TYPE.caption,
-    color: GV.body,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233, 240, 255, 0.6)',
     marginTop: 8,
   },
 });

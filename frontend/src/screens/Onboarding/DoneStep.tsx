@@ -46,21 +46,18 @@ export function DoneStep({
             </View>
           </Reveal>
           <Reveal>
-            <Text style={styles.overline}>Done</Text>
-          </Reveal>
-          <Reveal>
-            <Text style={styles.headline}>Setup complete.</Text>
+            <Text style={styles.headline}>You're all set.</Text>
           </Reveal>
           <Reveal>
             <Text style={styles.sub}>
               {picked.length > 0
-                ? `Selected: ${picked.slice(0, 4).join(' · ')}${picked.length > 4 ? ' · …' : ''}`
+                ? `${picked.slice(0, 4).join(' · ')}${picked.length > 4 ? ' · …' : ''}`
                 : 'You can set goals anytime.'}
             </Text>
           </Reveal>
           <Reveal>
             <Text style={styles.note}>
-              Your dashboard, measurements, and timeline are ready.
+              Your dashboard is ready.
             </Text>
           </Reveal>
         </View>
@@ -87,7 +84,7 @@ const styles = StyleSheet.create({
   },
   glassTint: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(11, 74, 63, 0.55)',
+    backgroundColor: 'rgba(14, 19, 31, 0.5)',
   },
   glassSolid: {
     ...StyleSheet.absoluteFill,
@@ -102,42 +99,38 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: GV.teal,
+    backgroundColor: '#5CE8B8',
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkGlyph: {
-    color: '#06231B',
+    color: '#07301F',
     fontSize: 28,
     fontWeight: '700',
     lineHeight: 32,
   },
-  overline: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 3,
-    color: GV.teal,
-    textAlign: 'center',
-  },
   headline: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 32,
     lineHeight: 38,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -0.3,
+    letterSpacing: -0.6,
   },
   sub: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(233, 240, 255, 0.66)',
     textAlign: 'center',
     maxWidth: 330,
     alignSelf: 'center',
   },
   note: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233, 240, 255, 0.55)',
     textAlign: 'center',
     alignSelf: 'center',
   },

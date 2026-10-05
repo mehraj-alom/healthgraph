@@ -23,8 +23,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
-import { Button, Card } from '@/components';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { Button } from '@/components';
+import { LG } from '@/theme/liquidGlass';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import Entrance from '@/components/home/Entrance';
 import {
   useDocuments,
   type ProcessingStage,
@@ -57,26 +60,23 @@ const STAGE_ORDER: Record<string, number> = {
   failed_triage: 5,
 };
 
-function stageInfo(stage: string): { label: string; color: string } {
+function stageInfo(stage: string): { label: string } {
   switch (stage) {
     case 'uploading':
-      return { label: 'Uploading', color: GV.fx.sky };
+      return { label: 'Uploading' };
     case 'uploaded':
-      return { label: 'Uploaded', color: GV.fx.green };
+      return { label: 'Uploaded' };
     case 'processing':
-      return {
-        label: 'Processing',
-        color: GV.fx.amber,
-      };
+      return { label: 'Processing' };
     case 'extracted':
-      return { label: 'Extracted', color: GV.fx.green };
+      return { label: 'Extracted' };
     case 'completed':
-      return { label: 'Complete', color: GV.cta };
+      return { label: 'Complete' };
     case 'failed':
     case 'failed_triage':
-      return { label: 'Failed', color: GV.danger };
+      return { label: 'Failed' };
     default:
-      return { label: stage, color: GV.muted };
+      return { label: stage };
   }
 }
 
@@ -152,14 +152,12 @@ export default function DocumentUploadScreen() {
         !ACCEPTED_EXTENSIONS.includes(`.${ext}`) &&
         !isAcceptedType(asset.mimeType ?? '')
       ) {
-        setValidationError(
-          'Unsupported file type. Please upload a PDF, PNG, JPG, or JPEG file.',
-        );
+        setValidationError('PDF, PNG or JPG only.');
         return;
       }
       if (asset.size && asset.size > MAX_FILE_SIZE) {
         setValidationError(
-          `File is too large (${formatFileSize(asset.size)}). Maximum size is ${formatFileSize(MAX_FILE_SIZE)}.`,
+          `Too large · max ${formatFileSize(MAX_FILE_SIZE)}.`,
         );
         return;
       }
@@ -171,7 +169,7 @@ export default function DocumentUploadScreen() {
       });
     } catch (err) {
       console.error('[DocumentUpload] Pick error:', err);
-      setValidationError('Failed to select file. Please try again.');
+      setValidationError('Could not open that file.');
     }
   }, []);
 
@@ -215,16 +213,21 @@ export default function DocumentUploadScreen() {
     ] as const;
 
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.screen}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.title}>
-              {terminal ? 'Status' : 'Processing'}
-            </Text>
-            <Text style={styles.subtitle}>{selectedFile?.name ?? ''}</Text>
-          </View>
+          <Entrance index={0}>
+            <View style={styles.header}>
+              <Text style={styles.title}>
+                {terminal ? 'Status' : 'Processing'}
+              </Text>
+              <Text style={styles.subtitle} numberOfLines={1}>{selectedFile?.name ?? ''}</Text>
+            </View>
+          </Entrance>
 
-          <Card padding="lg" style={styles.processingCard}>
+          <Entrance index={1}>
+          <GlassSurface strong style={styles.processingCard}>
             {stages.map((s, i) => {
               const sInfo = stageInfo(s);
               const pastOrCurrent =
@@ -239,10 +242,9 @@ export default function DocumentUploadScreen() {
                       styles.stageDot,
                       {
                         backgroundColor: pastOrCurrent
-                          ? sInfo.color
-                          : GV.line,
+                          ? LG.card.mint
+                          : 'rgba(255,255,255,0.12)',
                       },
-                      isCurrent && styles.stageDotActive,
                     ]}
                   >
                     {pastOrCurrent &&
@@ -265,7 +267,7 @@ export default function DocumentUploadScreen() {
                     {isCurrent && !terminal && (
                       <ActivityIndicator
                         size="small"
-                        color={GV.cta}
+                        color="#FFFFFF"
                         style={styles.stageSpinner}
                       />
                     )}
@@ -276,8 +278,8 @@ export default function DocumentUploadScreen() {
                         styles.stageLine,
                         {
                           backgroundColor: pastOrCurrent
-                            ? GV.cta
-                            : GV.line,
+                            ? LG.card.mint
+                            : 'rgba(255,255,255,0.12)',
                         },
                       ]}
                     />
@@ -291,7 +293,7 @@ export default function DocumentUploadScreen() {
                 <Text style={styles.errorIcon}>!</Text>
                 <Text style={styles.errorText}>
                   {uploadError ||
-                    'Processing failed. Your original document is still safe.'}
+                    'Failed. Your file is safe.'}
                 </Text>
               </View>
             )}
@@ -300,40 +302,42 @@ export default function DocumentUploadScreen() {
               <View style={styles.errorBox}>
                 <Text style={styles.errorIcon}>i</Text>
                 <Text style={styles.errorInfo}>
-                  This document was not recognized as a medical record.
+                  Not a medical record.
                 </Text>
               </View>
             )}
 
             {pausedNote && !terminal && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorIcon}>⏸</Text>
+                <Text style={styles.errorIcon}>…</Text>
                 <Text style={styles.errorInfo}>{pausedNote}</Text>
               </View>
             )}
-          </Card>
+          </GlassSurface>
+          </Entrance>
 
           {terminal ? (
+            <Entrance index={2}>
             <View style={styles.actions}>
               <Button title="Done" onPress={handleDone} fullWidth />
               {currentStage === 'completed' && (
                 <Button
                   title="View in Timeline"
-                  variant="outline"
+                  variant="secondary"
                   onPress={handleDone}
                   fullWidth
-                  style={styles.outlineBtn}
-                  textStyle={styles.outlineBtnText}
                 />
               )}
             </View>
+            </Entrance>
           ) : (
             <Text style={styles.hint}>
-              You can navigate away. Processing continues automatically.
+              Keeps going in background.
             </Text>
           )}
         </ScrollView>
-      </SafeAreaView>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -341,13 +345,19 @@ export default function DocumentUploadScreen() {
   // RENDER — File selection / preview
   // =====================================================================
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.screen}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Records</Text>
-        </View>
+        <Entrance index={0}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Records</Text>
+            <Text style={styles.subtitle}>PDF, PNG, JPG · max {formatFileSize(MAX_FILE_SIZE)}</Text>
+          </View>
+        </Entrance>
 
         {!selectedFile ? (
+          <Entrance index={1}>
           <View style={styles.choiceWrap}>
             <Pressable
               onPress={pickFile}
@@ -365,12 +375,11 @@ export default function DocumentUploadScreen() {
             >
               <Text style={styles.choiceSecondaryText}>Past uploads</Text>
             </Pressable>
-            <Text style={styles.choiceHint}>
-              PDF, PNG, JPG · max {formatFileSize(MAX_FILE_SIZE)}
-            </Text>
           </View>
+          </Entrance>
         ) : (
-          <Card padding="md" style={styles.previewCard}>
+          <Entrance index={1}>
+          <GlassSurface strong style={styles.previewCard}>
             <View style={styles.previewRow}>
               <View style={styles.previewIcon}>
                 <Text style={styles.previewIconText}>
@@ -396,7 +405,8 @@ export default function DocumentUploadScreen() {
             >
               <Text style={styles.changeFileText}>Change file</Text>
             </Pressable>
-          </Card>
+          </GlassSurface>
+          </Entrance>
         )}
 
         {validationError ? (
@@ -406,6 +416,7 @@ export default function DocumentUploadScreen() {
           </View>
         ) : null}
 
+        <Entrance index={2}>
         <View style={styles.actions}>
           <Button
             title="Upload"
@@ -414,13 +425,15 @@ export default function DocumentUploadScreen() {
             fullWidth
           />
         </View>
+        </Entrance>
         {anotherUploadRunning ? (
           <Text style={styles.hint}>
-            An upload is already in progress. It will finish automatically.
+            One upload at a time.
           </Text>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -428,38 +441,38 @@ export default function DocumentUploadScreen() {
 // Styles
 // ---------------------------------------------------------------------------
 
-const NAVY = '#080A11';
-const TILE_BG = '#2A3049';
-const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: NAVY },
+  screen: {
+    flex: 1,
+    backgroundColor: LG.stage.bottom,
+  },
+  safe: {
+    flex: 1,
+  },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 32,
-    gap: 12,
+    paddingHorizontal: 26,
+    paddingTop: 20,
+    paddingBottom: 48,
+    gap: 16,
   },
-  header: { paddingVertical: 16, alignItems: 'center' },
+  header: { paddingTop: 16, paddingBottom: 4, gap: 3 },
   title: {
-    fontFamily: FONT.semi,
-    fontSize: 32,
-    lineHeight: 38,
-    letterSpacing: -0.3,
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
     color: '#FFFFFF',
-    textAlign: 'center',
+    textAlign: 'left',
   },
   subtitle: {
-    ...TYPE.body,
-    color: GV.fog,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  outlineBtn: {
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  outlineBtnText: {
-    color: '#FFFFFF',
+    fontWeight: '400',
+    fontSize: 17,
+    lineHeight: 22,
+    color: 'rgba(233,240,255,0.66)',
+    textAlign: 'left',
+    marginTop: 0,
+    fontVariant: ['tabular-nums'],
   },
 
   // Two choices, middle of the screen
@@ -477,9 +490,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   choicePrimaryText: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 16,
-    color: NAVY,
+    lineHeight: 22,
+    color: '#0B0F1A',
   },
   choiceSecondary: {
     minHeight: 56,
@@ -491,70 +505,65 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   choiceSecondaryText: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 16,
+    lineHeight: 22,
     color: '#FFFFFF',
-  },
-  choiceHint: {
-    ...TYPE.caption,
-    color: GV.fog,
-    textAlign: 'center',
-    fontVariant: ['tabular-nums'],
   },
 
   // Preview
   previewCard: {
-    marginTop: 8,
-    backgroundColor: TILE_BG,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderWidth: 1,
-    borderRadius: 8,
+    marginTop: 0,
+    padding: 16,
   },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   previewIcon: {
     width: 52,
     height: 52,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  previewIconText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.teal },
+  previewIconText: { fontWeight: '700', fontSize: 13, lineHeight: 18, color: '#FFFFFF' },
   previewInfo: { flex: 1, gap: 2 },
-  previewName: { ...TYPE.body, fontFamily: FONT.semi, color: '#FFFFFF' },
-  previewMeta: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
+  previewName: { fontWeight: '600', fontSize: 17, lineHeight: 22, letterSpacing: -0.1, color: '#FFFFFF' },
+  previewMeta: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: 'rgba(233,240,255,0.66)', fontVariant: ['tabular-nums'] },
   changeFile: {
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: HAIRLINE_ON_NAVY,
+    borderTopColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
   },
-  changeFileText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.teal },
+  changeFileText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: LG.card.mint },
 
-  // Errors — dark well
+  // Errors — danger-tinted glass
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: 'rgba(255,142,142,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,142,142,0.35)',
+    padding: 14,
+    borderRadius: 16,
   },
-  errorIcon: { ...TYPE.title, color: GV.danger },
-  errorText: { ...TYPE.caption, color: GV.danger, flex: 1 },
-  errorInfo: { ...TYPE.caption, color: GV.fog, flex: 1 },
+  errorIcon: { fontWeight: '700', fontSize: 17, lineHeight: 22, color: LG.card.danger },
+  errorText: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: LG.card.danger, flex: 1 },
+  errorInfo: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: 'rgba(233,240,255,0.66)', flex: 1 },
 
   // Actions
-  actions: { gap: 8, marginTop: 8 },
+  actions: { gap: 8, marginTop: 0 },
 
   // Processing
   processingCard: {
     gap: 16,
-    backgroundColor: TILE_BG,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderWidth: 1,
-    borderRadius: 8,
+    padding: 20,
   },
   stageRow: {
     flexDirection: 'row',
@@ -569,17 +578,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stageDotActive: {},
-  stageCheck: { color: '#FFFFFF', fontSize: 14, fontFamily: FONT.semi },
+  stageCheck: { color: '#0B0F1A', fontSize: 14, fontWeight: '700' },
   stageContent: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  stageLabel: { ...TYPE.body },
-  stageLabelActive: { color: '#FFFFFF', fontFamily: FONT.semi },
-  stageLabelInactive: { color: GV.fog },
+  stageLabel: { fontWeight: '400', fontSize: 15, lineHeight: 22 },
+  stageLabelActive: { color: '#FFFFFF', fontWeight: '600' },
+  stageLabelInactive: { color: 'rgba(233,240,255,0.45)' },
   stageSpinner: { marginLeft: 8 },
   stageLine: {
     position: 'absolute',
@@ -590,9 +598,11 @@ const styles = StyleSheet.create({
   },
 
   hint: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 0,
   },
 });

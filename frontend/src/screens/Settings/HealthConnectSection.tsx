@@ -8,8 +8,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button, Card } from '@/components';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { Button } from '@/components';
+import { LG } from '@/theme/liquidGlass';
+import { GlassSurface } from '@/components/home/GlassSurface';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { DISCLOSURE_BODY, DISCLOSURE_TITLE } from '@/services/healthConnect/disclosure';
 import {
@@ -133,23 +134,23 @@ export function HealthConnectSection() {
   return (
     <View>
       <Text style={styles.sectionTitle}>Health Connect</Text>
-      <Card padding="lg" level={1} style={styles.card}>
+      <GlassSurface strong style={styles.card}>
         {status === null ? (
-          <ActivityIndicator accessibilityLabel="Loading Health Connect status" />
+          <ActivityIndicator accessibilityLabel="Loading Health Connect status" color="#FFFFFF" />
         ) : status === 'unavailable' ? (
           <>
-            <Text style={styles.status}>Not available on this device or build.</Text>
-            <Text style={styles.sub}>Health Connect sync needs the Android app build with Health Connect installed.</Text>
+            <Text style={styles.status}>Not here.</Text>
+            <Text style={styles.sub}>Needs the Android build with Health Connect installed.</Text>
           </>
         ) : status === 'off' ? (
           <>
             <Text style={styles.status}>Not connected.</Text>
-            <Text style={styles.sub}>Fill Fitness, Sleep, and Weight automatically from Health Connect. Sleep, workouts, weight, and steps import.</Text>
-            <Button title="Connect Health Connect" fullWidth onPress={onConnectPress} disabled={busy} style={styles.btn} />
+            <Text style={styles.sub}>Sleep, workouts, weight, and steps — automatically.</Text>
+            <Button title="Connect" fullWidth onPress={onConnectPress} disabled={busy} style={styles.btn} />
           </>
         ) : (
           <>
-            <Text style={styles.status}>Connected · sleep, workouts, weight, steps.</Text>
+            <Text style={styles.status}>Connected.</Text>
             <Text style={styles.sub}>
               {last
                 ? `Last import ${fmtDate(last.at)} · ${last.sleepImported} ${last.sleepImported === 1 ? 'night' : 'nights'} · ${last.activitiesImported} ${last.activitiesImported === 1 ? 'workout' : 'workouts'}`
@@ -166,23 +167,30 @@ export function HealthConnectSection() {
             </View>
           </>
         )}
-        {busy ? <ActivityIndicator style={styles.spinner} accessibilityLabel="Working" /> : null}
+        {busy ? <ActivityIndicator style={styles.spinner} accessibilityLabel="Working" color="#FFFFFF" /> : null}
         <Text style={styles.disclaimer}>Wellness tracking only — not medical advice.</Text>
-      </Card>
+      </GlassSurface>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionTitle: { fontFamily: FONT.semi, fontSize: 17, lineHeight: 22, color: '#FFFFFF', marginBottom: 10, marginTop: SPACE.sectionGap },
-  card: { gap: 8 },
-  status: { ...TYPE.body, fontFamily: FONT.semi, color: '#FFFFFF' },
-  sub: { ...TYPE.caption, color: GV.fog },
+  sectionTitle: {
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 24,
+    letterSpacing: -0.3,
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  card: { gap: 8, padding: 20 },
+  status: { fontWeight: '600', fontSize: 17, lineHeight: 22, letterSpacing: -0.1, color: '#FFFFFF' },
+  sub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: 'rgba(233,240,255,0.66)' },
   btn: { marginTop: 8 },
   rowBtns: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  linkHit: { paddingVertical: 8, paddingHorizontal: 4 },
-  link: { ...TYPE.body, fontFamily: FONT.semi, color: '#4FD1C5' },
-  linkDanger: { ...TYPE.body, fontFamily: FONT.semi, color: GV.danger },
+  linkHit: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  link: { fontWeight: '600', fontSize: 15, lineHeight: 22, color: LG.card.mint },
+  linkDanger: { fontWeight: '600', fontSize: 15, lineHeight: 22, color: LG.card.danger },
   spinner: { marginTop: 8 },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 6 },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: 'rgba(233,240,255,0.45)', textAlign: 'center', marginTop: 6 },
 });

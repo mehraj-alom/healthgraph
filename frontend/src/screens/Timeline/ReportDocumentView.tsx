@@ -1,10 +1,13 @@
 /**
  * ReportDocumentView — the opened daily report as a formal health document.
  *
- * Editorial paper document, not a dashboard: engraved header, hairline
- * sections, restrained tables, small metadata, document margins, and a
- * subordinate footer with the visualization disclaimer. No glassmorphism,
- * no SaaS cards.
+ * Rendered ON the functional-layer glass sheet (DiaryReportSheet paints the
+ * blur), so this view is transparent — content only: monochrome type on
+ * glass, hairline section rules, restrained tables, small metadata, and a
+ * subordinate footer with the visualization disclaimer. One tinted status
+ * color (LG.card.mint) for links; no SaaS cards, no paper palette.
+ *
+ * Typography: lgType scale (system face — SF Pro on iOS).
  *
  * Every row traces to a real DiaryItemInput (titles, times, values). The
  * medication section additionally joins the on-device medication
@@ -27,8 +30,7 @@ import {
   type ReportRow,
   type ReportSection,
 } from './reportDocument';
-import { PAPER } from './paperTheme';
-import { FONT } from '@/theme/guava';
+import { LG, lgType } from '@/theme/liquidGlass';
 import { getMedications } from '@/db/queries/medications';
 import {
   getMedicationTakenEventsForDate,
@@ -336,7 +338,8 @@ export function ReportDocumentView({
       contentContainerStyle={styles.body}
       showsVerticalScrollIndicator={false}
     >
-      {/* Masthead — document identity, never a SaaS hero. */}
+      {/* Masthead — document identity on glass: brand overline, big title,
+          date line, prepared-for. No SaaS hero. */}
       <Text style={styles.brand}>HealthGraph</Text>
       <Text style={styles.docTitleBig} accessibilityRole="header">
         Daily Health Report
@@ -377,14 +380,14 @@ export function ReportDocumentView({
       )}
 
       {doc.total === 0 ? (
-        <Text style={styles.emptyNote}>No health activity recorded for this section.</Text>
+        <Text style={styles.emptyNote}>Nothing recorded for this section yet.</Text>
       ) : null}
 
       {/* Footer — brand wordmark + visualization disclaimer. */}
       <View style={styles.footer}>
         <View style={styles.rule} />
         <Text style={styles.footerBrand}>HealthGraph</Text>
-        <Text style={styles.footerSub}>Digital Health Record Visualization</Text>
+        <Text style={styles.footerSub}>Health record visualization</Text>
         <Text style={styles.disclaimer}>
           For visualization purposes only. Not a medical prescription, medical record, or medical
           report.
@@ -401,71 +404,63 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
   },
   brand: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    letterSpacing: 3,
-    color: PAPER.muted,
+    ...lgType.overline,
+    letterSpacing: 2.4,
+    color: LG.card.labelTertiary,
   },
   docTitleBig: {
-    fontFamily: FONT.semi,
-    fontSize: 22,
-    lineHeight: 28,
-    color: PAPER.ink,
-    marginTop: 2,
-  },
-  docDate: {
-    fontFamily: FONT.semi,
-    fontSize: 15,
-    lineHeight: 21,
-    color: PAPER.ink,
+    ...lgType.title,
+    fontSize: 24,
+    lineHeight: 30,
+    color: LG.card.label,
     marginTop: 4,
   },
+  docDate: {
+    ...lgType.headline,
+    color: LG.card.label,
+    marginTop: 6,
+  },
   docPatient: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: PAPER.muted,
+    ...lgType.caption,
+    color: LG.card.labelSecondary,
     marginTop: 2,
   },
   ruleHeavy: {
-    height: 2,
-    backgroundColor: PAPER.ink,
-    marginTop: 12,
-    marginBottom: 10,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.30)',
+    marginTop: 14,
+    marginBottom: 12,
   },
   summary: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: PAPER.muted,
-    marginBottom: 6,
+    ...lgType.bodySmall,
+    color: LG.card.labelSecondary,
+    marginBottom: 8,
     fontVariant: ['tabular-nums'],
   },
   sectionHead: {
-    fontFamily: FONT.semi,
-    fontSize: 13,
-    lineHeight: 18,
-    letterSpacing: 1.5,
-    color: PAPER.ink,
-    marginTop: 18,
+    ...lgType.overline,
+    color: LG.card.label,
+    marginTop: 20,
   },
   rule: {
     height: 1,
-    backgroundColor: PAPER.rule,
-    marginTop: 6,
+    backgroundColor: LG.card.border,
+    marginTop: 8,
     marginBottom: 2,
   },
   // Generic document row: title + time, detail, meta, hairline.
   docRow: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: PAPER.rule,
+    borderBottomColor: LG.card.border,
   },
   docRowHighlight: {
-    borderWidth: 2,
-    borderColor: PAPER.highlight,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    marginHorizontal: -8,
-    backgroundColor: '#f8ecc9',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 232, 184, 0.55)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    marginHorizontal: -10,
+    backgroundColor: 'rgba(92, 232, 184, 0.10)',
   },
   docTop: {
     flexDirection: 'row',
@@ -474,28 +469,23 @@ const styles = StyleSheet.create({
   },
   docTitle: {
     flex: 1,
-    fontFamily: FONT.semi,
-    fontSize: 15,
-    lineHeight: 21,
-    color: PAPER.ink,
+    ...lgType.headline,
+    color: LG.card.label,
   },
   docTime: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: PAPER.muted,
+    ...lgType.caption,
+    color: LG.card.labelSecondary,
     fontVariant: ['tabular-nums'],
   },
   docDetail: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: PAPER.ink,
-    marginTop: 2,
+    ...lgType.bodySmall,
+    color: LG.card.label,
+    marginTop: 3,
   },
   docMeta: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: PAPER.muted,
-    marginTop: 2,
+    ...lgType.caption,
+    color: LG.card.labelSecondary,
+    marginTop: 3,
     fontVariant: ['tabular-nums'],
   },
   docLink: {
@@ -504,22 +494,20 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   docLinkText: {
-    fontFamily: FONT.semi,
-    fontSize: 13,
-    lineHeight: 18,
-    color: PAPER.accent,
+    ...lgType.bodySmall,
+    fontWeight: '600',
+    color: LG.card.mint,
   },
   emptyNote: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: PAPER.muted,
-    marginTop: 14,
+    ...lgType.bodySmall,
+    color: LG.card.labelSecondary,
+    marginTop: 16,
   },
   // Medication regimen rows: label/value table treatment.
   medBlock: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: PAPER.rule,
+    borderBottomColor: LG.card.border,
   },
   kvRow: {
     flexDirection: 'row',
@@ -528,73 +516,63 @@ const styles = StyleSheet.create({
   },
   medName: {
     flex: 1,
-    fontFamily: FONT.semi,
-    fontSize: 15,
-    lineHeight: 21,
-    color: PAPER.ink,
+    ...lgType.headline,
+    color: LG.card.label,
   },
   medDose: {
-    fontFamily: FONT.semi,
-    fontSize: 14,
-    lineHeight: 19,
-    color: PAPER.ink,
+    ...lgType.headline,
+    color: LG.card.label,
     fontVariant: ['tabular-nums'],
   },
   meta: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: PAPER.muted,
-    marginTop: 2,
+    ...lgType.caption,
+    color: LG.card.labelSecondary,
+    marginTop: 3,
   },
   statusLine: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 10,
-    marginTop: 4,
+    marginTop: 5,
   },
   statusText: {
     flex: 1,
-    fontFamily: FONT.semi,
-    fontSize: 13,
-    lineHeight: 18,
-    color: PAPER.ink,
+    ...lgType.bodySmall,
+    fontWeight: '600',
+    color: LG.card.label,
   },
   statusTime: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: PAPER.muted,
+    ...lgType.caption,
+    color: LG.card.labelSecondary,
     fontVariant: ['tabular-nums'],
   },
   noRecord: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: PAPER.muted,
-    marginTop: 4,
+    ...lgType.bodySmall,
+    color: LG.card.labelSecondary,
+    marginTop: 5,
   },
   footer: {
     alignItems: 'center',
-    marginTop: 26,
+    marginTop: 28,
   },
   footerBrand: {
-    fontFamily: FONT.semi,
-    fontSize: 15,
-    lineHeight: 21,
-    letterSpacing: 1,
-    color: PAPER.ink,
-    marginTop: 12,
+    ...lgType.headline,
+    letterSpacing: 0.6,
+    color: LG.card.label,
+    marginTop: 14,
   },
   footerSub: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: PAPER.muted,
-    marginTop: 2,
+    ...lgType.caption,
+    color: LG.card.labelSecondary,
+    marginTop: 3,
   },
   disclaimer: {
+    ...lgType.caption,
     fontSize: 11,
     lineHeight: 16,
-    color: PAPER.muted,
+    color: LG.card.labelTertiary,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 10,
     paddingHorizontal: 12,
   },
 });

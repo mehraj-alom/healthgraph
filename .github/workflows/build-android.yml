@@ -43,9 +43,22 @@ jobs:
         run: npx expo export --platform android --output-dir /tmp/hg-export
 
   build:
-    name: Assemble debug APK
+    name: Assemble release APK (self-contained preview)
     needs: checks
     runs-on: ubuntu-latest
+    env:
+      # Same public runtime config as the release workflow — without these
+      # the bundled JS boots against empty API/Firebase/CDN URLs and dies
+      # on launch. Values live in GitHub Actions Variables (no secrets).
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+      EXPO_PUBLIC_ASSET_CDN_URL: ${{ vars.EXPO_PUBLIC_ASSET_CDN_URL }}
+      EXPO_PUBLIC_ANATOMY_CDN_URL: ${{ vars.EXPO_PUBLIC_ANATOMY_CDN_URL }}
+      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+      EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
     defaults:
       run:
         working-directory: frontend
@@ -80,13 +93,17 @@ jobs:
       - name: Prebuild Android project
         run: npx expo prebuild --platform android --no-install
 
-      - name: Assemble debug APK
+      # Release (not debug): the APK carries its own bundled JS + Hermes
+      # bytecode, so testers install and run it with no dev server.
+      # Signed with the Expo template debug key — for testers only,
+      # never for the Play Console.
+      - name: Assemble release APK
         working-directory: frontend/android
-        run: ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: healthgraph-debug-apk
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          name: healthgraph-preview-apk
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error

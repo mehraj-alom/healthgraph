@@ -52,10 +52,11 @@ describe('marker wiring', () => {
     assert.ok(header.includes('MarkerHighlight'), 'title wrapped');
     assert.ok(header.includes('marked = true'), 'on by default');
     assert.ok(header.includes('accent ?? (dark ? MARK_DARK : undefined)'), 'accent hue, slate on dark glass, highlighter otherwise');
-  });  test('graph card titles carry the shade (slate on dark glass)', () => {
+  });  test('graph card titles wear their curve color (no marker shade)', () => {
     const card = src('src/components/home/CorrelationGraphCard.tsx');
-    assert.ok(card.includes('MarkerHighlight'), 'title wrapped');
-    assert.ok(card.includes('color={MARK_DARK}'), 'slate shade keeps white titles readable');
+    assert.ok(!card.includes('MarkerHighlight'), 'marker shade removed with the redesign');
+    assert.ok(card.includes('titleColor'), 'title tinted by its own stream color');
+    assert.ok(card.includes('windowDate'), 'window date sits right of the title');
   });
 
   test('dial rim labels carry the shade behind the tagline', () => {

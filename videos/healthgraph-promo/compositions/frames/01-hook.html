@@ -1,0 +1,252 @@
+<template>
+<style>
+@font-face {
+  font-family: "Poppins-SemiBold";
+  src: local("DejaVu Serif"), local("Georgia"), local("Times New Roman");
+  font-weight: 500;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: local("DejaVu Sans Mono"), local("Menlo"), local("monospace");
+  font-weight: 500;
+}
+#root {
+  container-type: size;
+  width: 1920px;
+  height: 1080px;
+  position: relative;
+  overflow: hidden;
+  background: #FFF9F1;
+}
+#root .clip { position: absolute; }
+#root .bg-ground {
+  inset: 0;
+  width: 1920px;
+  height: 1080px;
+  background: #FFF9F1;
+}
+#root .topbar {
+  top: 44px; left: 96px; right: 96px;
+  width: 1728px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#root .chrome-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #2A175D;
+}
+#root .chrome-mark {
+  width: 64px; height: 64px;
+  border: 2px solid #7C5CD6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #2A175D;
+}
+#root .rule-top {
+  top: 128px; left: 96px;
+  width: 1728px; height: 2px;
+  background: #2A175D;
+}
+#root .hero-stack {
+  top: 150px; left: 96px;
+  width: 1728px; height: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#root .token {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: "Poppins-SemiBold", serif;
+  font-weight: 500;
+  font-size: 9.2cqw;
+  line-height: 1.0;
+  letter-spacing: -0.02em;
+  color: #2A175D;
+  opacity: 0;
+}
+#root .token .accent { color: #7C5CD6; }
+#root .kicker {
+  top: 180px; left: 0;
+  width: 1920px;
+  text-align: center;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #7C5CD6;
+}
+#root .grid-wrap {
+  top: 250px; left: 0;
+  width: 1920px; height: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  opacity: 0;
+}
+#root .grid-row {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+  justify-content: center;
+}
+#root .grid-row.row-b { margin-left: 120px; }
+#root .mini {
+  min-width: 220px;
+  padding: 26px 34px;
+  text-align: center;
+  font-family: "Poppins-SemiBold", serif;
+  font-weight: 500;
+  font-size: 2.9cqw;
+  line-height: 1.0;
+  letter-spacing: -0.01em;
+  border-radius: 6px;
+  border: 2px solid #2A175D;
+}
+#root .mini.q {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  border-radius: 6px;
+}
+#root .tile-wrap {
+  top: 200px; left: 0;
+  width: 1920px; height: 640px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+#root .tile {
+  width: 760px;
+  height: 560px;
+  background: #211249;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+#root .tile-word {
+  font-family: "Poppins-SemiBold", serif;
+  font-weight: 500;
+  font-size: 11.5cqw;
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+  color: #FFF9F1;
+}
+#root .tile-sub {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #7C5CD6;
+}
+#root .pulse-ring {
+  position: absolute;
+  width: 420px; height: 420px;
+  border: 2px solid #4FD1C5;
+  border-radius: 50%;
+  opacity: 0;
+}
+</style>
+<script src="./gsap.min.js"></script>
+<div id="root" data-composition-id="01-hook" data-width="1920" data-height="1080" data-duration="12.916">
+  <div class="clip bg-ground" data-start="0" data-duration="12.916" data-track-index="0"></div>
+  <div class="clip topbar" data-start="0" data-duration="12.916" data-track-index="1">
+    <span class="chrome-label">Healthgraph — 01 · Hook</span>
+    <span class="chrome-mark">01</span>
+  </div>
+  <div class="clip rule-top" data-start="0" data-duration="12.916" data-track-index="2"></div>
+  <div class="clip kicker" data-start="0" data-duration="10" data-track-index="3" id="f01-hook-kicker">How many apps?</div>
+  <div class="clip hero-stack" data-start="0" data-duration="10" data-track-index="4" id="f01-hook-hero">
+    <div class="token" id="f01-hook-t0">Sleep <span class="accent">&nbsp;app.</span></div>
+    <div class="token" id="f01-hook-t1">Step <span class="accent">&nbsp;counter.</span></div>
+    <div class="token" id="f01-hook-t2">Calorie <span class="accent">&nbsp;tracker.</span></div>
+    <div class="token" id="f01-hook-t3">Heart <span class="accent">&nbsp;monitor.</span></div>
+    <div class="token" id="f01-hook-t4">Mood <span class="accent">&nbsp;journal.</span></div>
+    <div class="token" id="f01-hook-t5">Medication <span class="accent">&nbsp;reminders.</span></div>
+  </div>
+  <div class="clip grid-wrap" data-start="6" data-duration="4.4" data-track-index="5" id="f01-hook-grid">
+    <div class="grid-row row-a">
+      <div class="mini" style="background:#2A175D;color:#7C5CD6;border-color:#2A175D">Sleep</div>
+      <div class="mini" style="background:#7C5CD6;color:#211249;border-color:#7C5CD6">Steps</div>
+      <div class="mini" style="background:#C9BCEE;color:#2A175D">Calories</div>
+      <div class="mini" style="background:#2A175D;color:#7C5CD6;border-color:#2A175D">Heart</div>
+      <div class="mini" style="background:#341D73;color:#7C5CD6;border-color:#341D73">Mood</div>
+    </div>
+    <div class="grid-row row-b">
+      <div class="mini" style="background:#C9BCEE;color:#2A175D">Meds</div>
+      <div class="mini" style="background:#7C5CD6;color:#211249;border-color:#7C5CD6">Water</div>
+      <div class="mini" style="background:#2A175D;color:#7C5CD6;border-color:#2A175D">Weight</div>
+      <div class="mini q" style="background:#FFF9F1;color:#2A175D" id="f01-hook-q6">Six?</div>
+      <div class="mini q" style="background:#2A175D;color:#FFF9F1;border-color:#2A175D" id="f01-hook-q10">Ten?</div>
+    </div>
+  </div>
+  <div class="clip tile-wrap" data-start="10" data-duration="2.916" data-track-index="6" id="f01-hook-tilewrap">
+    <div class="pulse-ring" id="f01-hook-ring"></div>
+    <div class="tile" id="f01-hook-tile">
+      <svg id="f01-hook-pulse" width="360" height="120" viewBox="0 0 360 120" fill="none">
+        <polyline id="f01-hook-pulseline" points="0,60 90,60 120,60 140,20 165,100 190,45 210,60 250,60 360,60" stroke="#4FD1C5" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="tile-word">ONE</div>
+      <div class="tile-sub">Every signal · one tile</div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  window.__timelines = window.__timelines || {};
+  var tl = gsap.timeline({ paused: true });
+  window.__timelines["01-hook"] = tl;
+  var tokens = ["#f01-hook-t0", "#f01-hook-t1", "#f01-hook-t2", "#f01-hook-t3", "#f01-hook-t4", "#f01-hook-t5"];
+  tl.fromTo("#f01-hook-kicker", { opacity: 0, y: -12 }, { opacity: 1, y: 0, duration: 0.4 }, 0);
+  tokens.forEach(function (sel, i) {
+    var t = i * 1.0;
+    tl.fromTo(sel, { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.18 }, t);
+    if (i < tokens.length - 1) {
+      tl.set(sel, { opacity: 0 }, t + 1.0);
+    } else {
+      tl.set(sel, { opacity: 0 }, 6.0);
+    }
+  });
+  tl.fromTo("#f01-hook-grid", { opacity: 0 }, { opacity: 1, duration: 0.2 }, 6.0);
+  tl.fromTo("#f01-hook-grid .mini",
+    { opacity: 0, scale: 0.6 },
+    { opacity: 1, scale: 1, duration: 0.28, stagger: 0.22 }, 6.1);
+  tl.fromTo("#f01-hook-grid", { scale: 1 }, { scale: 1.04, duration: 3.9 }, 6.1);
+  tl.set("#f01-hook-kicker", { opacity: 0 }, 9.9);
+  tl.to("#f01-hook-grid", { opacity: 0, scale: 0.15, duration: 0.5 }, 10.0);
+  tl.set("#f01-hook-grid", { opacity: 0 }, 10.5);
+  tl.set("#f01-hook-tilewrap", { opacity: 1 }, 10.3);
+  tl.fromTo("#f01-hook-tile", { opacity: 0, scale: 0.55 }, { opacity: 1, scale: 1, duration: 0.6 }, 10.3);
+  tl.fromTo("#f01-hook-ring", { opacity: 0.9, scale: 0.6 }, { opacity: 0, scale: 1.5, duration: 0.9 }, 10.4);
+  tl.fromTo("#f01-hook-pulseline", { strokeDasharray: 900, strokeDashoffset: 900 },
+    { strokeDashoffset: 0, duration: 0.8 }, 10.45);
+  tl.fromTo("#f01-hook-tile .tile-word", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.4 }, 10.6);
+  tl.fromTo("#f01-hook-tile .tile-sub", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4 }, 10.85);
+  tl.seek(0);
+})();
+</script>
+</template>

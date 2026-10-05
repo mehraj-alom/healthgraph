@@ -42,6 +42,7 @@ import { ThemeProvider, useReducedMotion } from '@/theme';
 import { BootSplash, ToastProvider } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
 import { UmbrellaTabBar } from '@/components';
+import LiquidTabFlow from '@/components/home/LiquidTabFlow';
 import Svg, { Circle } from 'react-native-svg';
 
 import OnboardingScreen from '@/screens/Onboarding/OnboardingScreen';
@@ -255,24 +256,44 @@ function ReminderBridge() {
  * ========================================================================== */
 
 function MainTabs() {
+  // Each tab's screen flows in like water from the direction of the tap
+  // (LiquidTabFlow), layered over the navigator cross-fade.
   return (
     <Tab.Navigator
       initialRouteName="Dashboard"
       tabBar={(props) => <UmbrellaTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        // Cross-fade tab swaps — the default hard cut reads as a glitch,
+        // especially into the full-screen Chat surface.
+        animation: 'fade',
       }}
     >
-      <Tab.Screen name="Dashboard" component={HealthDashboardScreen} />
+      <Tab.Screen name="Dashboard">
+        {() => (
+          <LiquidTabFlow name="Dashboard">
+            <HealthDashboardScreen />
+          </LiquidTabFlow>
+        )}
+      </Tab.Screen>
       {/* Pulse entry: method selector (fingertip PPG vs face rPPG). The
           red tab button lands here; each method pushes its own flow. */}
-      <Tab.Screen name="PpgMeasure" component={PulseInstrumentScreen} />
+      <Tab.Screen name="PpgMeasure">
+        {() => (
+          <LiquidTabFlow name="PpgMeasure">
+            <PulseInstrumentScreen />
+          </LiquidTabFlow>
+        )}
+      </Tab.Screen>
       {/* Chat is a full-screen surface: the dock never mounts there and
           the system back button handles exit. */}
-      <Tab.Screen
-        name="Chat"
-        component={ChatScreen}
-      />
+      <Tab.Screen name="Chat">
+        {() => (
+          <LiquidTabFlow name="Chat">
+            <ChatScreen />
+          </LiquidTabFlow>
+        )}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }

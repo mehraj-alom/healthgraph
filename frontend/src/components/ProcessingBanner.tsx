@@ -15,7 +15,9 @@ import {
   Text,
   View,
 } from 'react-native';
-import { GV, TYPE, FONT } from '@/theme/guava';
+import { FONT } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
+import { GlassSurface } from '@/components/home/GlassSurface';
 import {
   useDocuments,
   type ActiveProcessing,
@@ -101,14 +103,14 @@ export function ProcessingBanner() {
     (current.stage === 'failed' || current.stage === 'failed_triage');
 
   return (
-    <View style={styles.card}>
+    <GlassSurface strong style={styles.card}>
       {current !== undefined ? (
         <>
           <View style={styles.row}>
             {failed ? (
               <Text style={styles.failGlyph}>!</Text>
             ) : (
-              <ActivityIndicator size="small" color={GV.cta} />
+              <ActivityIndicator size="small" color={LG.card.mint} />
             )}
             <View style={styles.textCol}>
               <Text style={styles.title} numberOfLines={2}>
@@ -170,17 +172,18 @@ export function ProcessingBanner() {
           </Pressable>
         </View>
       )}
-    </View>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
+  // Frosted material card on the aurora stage — matches the Home cards.
   card: {
-    backgroundColor: GV.card,
     borderRadius: 20,
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 10,
+    marginBottom: 16,
   },
   row: {
     flexDirection: 'row',
@@ -192,27 +195,32 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    ...TYPE.body,
     fontFamily: FONT.semi,
-    color: GV.ink,
+    fontSize: 15,
+    lineHeight: 21,
+    color: '#FFFFFF',
   },
   count: {
-    ...TYPE.caption,
-    color: GV.muted,
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.labelSecondary,
   },
   note: {
-    ...TYPE.caption,
-    color: GV.body,
+    fontFamily: FONT.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.labelSecondary,
   },
   failGlyph: {
     fontSize: 18,
     fontFamily: FONT.bold,
-    color: GV.danger,
+    color: LG.card.danger,
   },
   doneGlyph: {
     fontSize: 18,
     fontFamily: FONT.bold,
-    color: GV.cta,
+    color: LG.card.mint,
   },
   dismissHit: {
     minHeight: 44,
@@ -222,7 +230,7 @@ const styles = StyleSheet.create({
   },
   dismissGlyph: {
     fontSize: 14,
-    color: GV.muted,
+    color: LG.card.labelTertiary,
   },
   dots: {
     flexDirection: 'row',
@@ -233,9 +241,9 @@ const styles = StyleSheet.create({
     width: 22,
     height: 5,
     borderRadius: 3,
-    backgroundColor: GV.line,
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   dotOn: {
-    backgroundColor: GV.cta,
+    backgroundColor: LG.card.mint,
   },
 });

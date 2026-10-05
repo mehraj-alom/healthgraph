@@ -62,10 +62,7 @@ export function MomentumStep() {
   return (
     <View style={styles.wrap}>
       <Reveal>
-        <Text style={styles.overline}>Step 3 of 4 · Momentum</Text>
-      </Reveal>
-      <Reveal>
-        <Text style={styles.headline}>Your week</Text>
+        <Text style={styles.headline}>Your first week</Text>
       </Reveal>
       {isLoading ? (
         <ActivityIndicator color={GV.teal} style={styles.loader} />
@@ -78,12 +75,12 @@ export function MomentumStep() {
           )}
           <View style={styles.glassTint} />
           <View style={styles.glassContent}>
-            <Text style={styles.previewPill}>Preview · illustration</Text>
+            <Text style={styles.previewPill}>Preview</Text>
             <PreviewGraph />
-            <Text style={styles.graphCaption}>Day vs overall health</Text>
+            <Text style={styles.graphCaption}>7 days of health</Text>
             <Text style={styles.tagline}>Small steps, steady climb.</Text>
             <Text style={styles.honestNote}>
-              No activity yet — log a day, scan pulse, or record a dose and your real week draws here.
+              Log a day and your real week draws itself here.
             </Text>
           </View>
         </View>
@@ -121,7 +118,7 @@ export function MomentumStep() {
             </View>
           </View>
           <Text style={styles.legend}>
-            Filled days carry a real log, pulse reading or dose.
+            A filled dot means a logged day.
           </Text>
         </>
       )}
@@ -284,25 +281,19 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingTop: 8,
   },
-  overline: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 3,
-    color: GV.teal,
-    textAlign: 'center',
-  },
   headline: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 32,
     lineHeight: 38,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -0.3,
+    letterSpacing: -0.6,
   },
   sub: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(233, 240, 255, 0.66)',
     textAlign: 'center',
     alignSelf: 'center',
   },
@@ -323,7 +314,7 @@ const styles = StyleSheet.create({
   },
   glassTint: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(11, 74, 63, 0.55)',
+    backgroundColor: 'rgba(14, 19, 31, 0.5)',
   },
   glassSolid: {
     ...StyleSheet.absoluteFill,
@@ -339,7 +330,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   tagline: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 14,
     lineHeight: 20,
     color: '#FFFFFF',
@@ -391,10 +382,10 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   weekday: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 12,
     lineHeight: 16,
-    color: GV.fog,
+    color: 'rgba(233, 240, 255, 0.6)',
   },
   weekdayActive: {
     color: '#FFFFFF',

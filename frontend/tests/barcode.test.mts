@@ -12,8 +12,11 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
+  BARCODE_CACHE_KEY,
+  BARCODE_CACHE_MAX,
   barcodeResultFor,
   normalizeBarcode,
+  normalizeCachedProduct,
 } from '../src/services/barcodePure.ts';
 
 declare const __dirname: string;
@@ -131,4 +134,41 @@ test('no new native dependencies for scanning', () => {
   assert.ok(!pkg.includes('expo-barcode-scanner'), 'expo-camera covers symbologies');
   const appJson = src('app.json');
   assert.ok(appJson.includes('expo-camera') || true, 'camera config unchanged');
+});
+
+describe('barcode device cache (offline repeats)', () => {
+  it('keeps cache constants stable', () => {
+    assert.equal(BARCODE_CACHE_KEY, 'hg:barcode-cache:v1');
+    assert.ok(BARCODE_CACHE_MAX >= 50);
+  });
+
+  it('accepts a well-formed cached product', () => {
+    const clean = normalizeCachedProduct(product());
+    assert.ok(clean !== null);
+    assert.equal(clean?.barcode, NUTELLA);
+    assert.equal(clean?.nutrients.kcal_per_100g, 539);
+  });
+
+  it('rejects junk cache rows', () => {
+    assert.equal(normalizeCachedProduct(null), null);
+    assert.equal(normalizeCachedProduct({ ...product(), barcode: '123' }), null);
+    assert.equal(normalizeCachedProduct({ ...product(), name: '' }), null);
+    assert.equal(
+      normalizeCachedProduct({ ...product(), nutrients: { ...product().nutrients, kcal_per_100g: -5 } }),
+      null,
+    );
+    assert.equal(normalizeCachedProduct({ ...product(), nutrients: null }), null);
+  });
+
+  it('lookup falls back to the device cache when the network fails', () => {
+    const svc = src('src/services/barcode.ts');
+    assert.ok(svc.includes('getCachedBarcode'), 'cache read on failure');
+    assert.ok(svc.includes('putCachedBarcode'), 'network wins cached on success');
+    assert.ok(svc.includes('cached: true'), 'cached results are labeled');
+  });
+
+  it('scanner labels cached (offline) products honestly', () => {
+    const screen = src('src/screens/FoodScan/FoodScanScreen.tsx');
+    assert.ok(screen.includes('cached'), 'offline provenance shown');
+  });
 });

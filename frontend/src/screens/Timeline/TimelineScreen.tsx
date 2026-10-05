@@ -14,10 +14,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigation, useFocusEffect, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '@/services/api';
-import { Button, Chip } from '@/components';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { toneForTimelineFilter } from '@/theme/tones';
-import { StageGradient } from '@/components/StageGradient';
+import { Button } from '@/components';
+import { SPACE } from '@/theme/guava';
+import { LG, lgType } from '@/theme/liquidGlass';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { perfStart } from '@/utils/perfLog';
 import {
@@ -90,11 +91,6 @@ interface TimelineObservation {
 }
 
 type TimelineItem = TimelineEvent | TimelineObservation;
-
-// ---------------------------------------------------------------------------
-// Guava-flat accents — every marker is a small flat GV.fx tile inside a
-// white card. Color is information; hues never touch text, fills, or rails.
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Event type classification
@@ -232,11 +228,34 @@ function localCategory(item: HomeStoryItem): EventCategory {
 }
 
 /**
- * Compact ledger row — one calm line per moment: title left, value right,
- * time + specs beneath. Expandable rows reveal their details inline
- * (progressive disclosure); terminal rows render everything up front.
+ * Glass filter chip — function, not identity: monochrome label on glass,
+ * one selected state (brighter fill + white label), 44pt hit target.
+ * Category hues stay out of the rail per the color law.
  */
-/** Append duration + fever temperature tokens to a symptom detail line. */
+function GlassChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [styles.chip, selected && styles.chipOn, pressed && { opacity: 0.75 }]}
+    >
+      <Text style={[styles.chipLabel, selected && styles.chipLabelOn]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Append duration + fever temperature tokens to a symptom detail line.
+ */
 function withSymptomExtras(detail: string, payload: Record<string, unknown>): string {
   const extras: string[] = [];
   const dur = payload['duration_minutes'];
@@ -560,10 +579,7 @@ export default function TimelineScreen() {
     return merged.filter((i) => i.category === filter);
   }, [merged, filter]);
 
-  // Each date is one white card: the section header caps the top, rows fill
-  // the middle, the section footer caps the bottom. SectionList pins each
-  // header natively (stickySectionHeadersEnabled). Section headers need no
-  // sticky indices by construction.
+  // Group by day for the diary projection.
   const sections = useMemo(() => {
     const grouped: { date: string; count: number; data: PreparedItem[] }[] = [];
     let current: { date: string; count: number; data: PreparedItem[] } | null = null;
@@ -703,7 +719,8 @@ export default function TimelineScreen() {
     observations: 'observation',
   };
 
-  const loggedCount = localItems.length;  const serverRecCount = useMemo(
+  const loggedCount = localItems.length;
+  const serverRecCount = useMemo(
     () => visibleServer.filter((i) => i.resource_type === 'event').length,
     [visibleServer],
   );
@@ -712,21 +729,26 @@ export default function TimelineScreen() {
     [visibleServer],
   );
 
-  // Header (tappable stats + filter rail). No back control: this stack
-  // route relies on the platform back path (swipe-back on iOS, system
-  // back on Android).
+  // Header (title + tappable stats + filter rail). No back control: this
+  // stack route relies on the platform back path (swipe-back on iOS,
+  // system back on Android). Everything scrolls away together.
   const listHeader = useMemo(
     () => (
       <View>
-        {/* Metrics band. Everything here scrolls away together. */}
+        {/* Apple large title: the screen's single job, one quiet line. */}
+        <Text style={styles.screenTitle}>Timeline</Text>
+        <Text style={styles.screenSubtitle}>Your health, day by day.</Text>
+
+        {/* Metrics band — frosted content material, monochrome numerals.
+            Tapping a stat isolates that view. */}
         {(() => {
           const stats = [
-            { key: 'logged', n: loggedCount, label: loggedCount === 1 ? 'entry logged' : 'entries logged', color: GV.ink },
-            { key: 'records', n: serverRecCount, label: serverRecCount === 1 ? 'record' : 'records', color: GV.ink },
-            { key: 'observations', n: serverObsCount, label: serverObsCount === 1 ? 'observation' : 'observations', color: GV.ink },
+            { key: 'logged', n: loggedCount, label: loggedCount === 1 ? 'entry logged' : 'entries logged' },
+            { key: 'records', n: serverRecCount, label: serverRecCount === 1 ? 'record' : 'records' },
+            { key: 'observations', n: serverObsCount, label: serverObsCount === 1 ? 'observation' : 'observations' },
           ];
           return (
-            <View style={styles.statStrip}>
+            <GlassSurface style={styles.statStrip} noSheen>
               {stats.map((s, i) => {
                 const target = STAT_FILTER[s.key]!;
                 const active = filter === target;
@@ -744,33 +766,29 @@ export default function TimelineScreen() {
                     accessibilityState={{ selected: active }}
                     accessibilityLabel={`Show only ${s.label}, ${s.n}`}
                   >
-                    <Text style={[styles.statNum, { color: s.color }]}>{s.n}</Text>
+                    <Text style={styles.statNum}>{s.n}</Text>
                     <Text style={[styles.statLabel, active && styles.statLabelActive]}>{s.label}</Text>
                   </Pressable>
                 );
               })}
-            </View>
+            </GlassSurface>
           );
         })()}
 
+        {/* Filter rail — function, not identity: monochrome glass chips. */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterRail}
         >
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <Chip
-                key={f.key}
-                label={f.label}
-                selected={active}
-                color={f.key === 'all' ? GV.cta : toneForTimelineFilter(f.key)[0]}
-                size="medium"
-                onPress={() => toggleFilter(f.key)}
-              />
-            );
-          })}
+          {FILTERS.map((f) => (
+            <GlassChip
+              key={f.key}
+              label={f.label}
+              selected={filter === f.key}
+              onPress={() => toggleFilter(f.key)}
+            />
+          ))}
         </ScrollView>
       </View>
     ),
@@ -784,26 +802,30 @@ export default function TimelineScreen() {
 
   if (query.isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StageGradient variant="navy" />
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={GV.teal} />
-          <Text style={styles.centerText}>Loading timeline…</Text>
-          <HealthFact style={styles.factText} />
-        </View>
-      </SafeAreaView>
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.container}>
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={LG.card.mint} />
+            <Text style={styles.centerText}>Loading your timeline…</Text>
+            <HealthFact style={styles.factText} />
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   if (query.isError) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StageGradient variant="navy" />
-        <View style={styles.center}>
-          <Text style={styles.centerText}>We couldn't load your timeline.</Text>
-          <Button title="Try again" onPress={() => void query.refetch()} />
-        </View>
-      </SafeAreaView>
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.container}>
+          <View style={styles.center}>
+            <Text style={styles.centerText}>We couldn't load your timeline.</Text>
+            <Button title="Try again" onPress={() => void query.refetch()} />
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -812,80 +834,84 @@ export default function TimelineScreen() {
   // -----------------------------------------------------------------------
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StageGradient variant="navy" />
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refresh}
-            tintColor={GV.fog}
-            colors={[GV.teal]}
-          />
-        }
-      >
-        {listHeader}
-        {/* Page position: month + "n of N" for the day in front. The wheel
-            snaps page-by-page, so this is its page control. */}
-        {indicator ? (
-          <View style={styles.pageIndicatorRow}>
-            <Text
-              style={styles.pageIndicator}
-              accessibilityRole="text"
-              accessibilityLabel={`Showing ${indicator.fullDate}, page ${indicator.idx + 1} of ${diaryDays.length}`}
-            >
-              {indicator.text}
-            </Text>
-          </View>
-        ) : null}
-        {/* The journal IS the wheel: ~fixed-height daily report pages stacked
-            on an invisible vertical wheel. Dragging up/down turns it; the
-            newest page sits in front and every older page fans out behind. */}
-        <View style={[styles.wheelBox, { height: Math.max(400, Math.min(560, windowH * 0.52)) }]}>
-          {diaryDays.length > 0 ? (
-            <TimelineWheel
-              days={diaryDays}
-              patientName={patientName}
-              focusDayKey={focusDayKey}
-              focusNonce={focusNonce}
-              onOpen={(key) => openDay(key)}
-              onActiveChange={(key) => setActiveDayKey(key)}
+    <View style={styles.root}>
+      {/* The same aurora stage every screen sits on — the wheel pages are
+          frosted material that picks its color up from these orbs. */}
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor={LG.card.labelSecondary}
+              colors={[LG.card.mint]}
             />
-          ) : (
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>
-                {filter === 'all'
-                  ? 'No events yet'
-                  : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase() ?? 'events'} yet`}
-              </Text>
-              <Text style={styles.emptyText}>
-                {filter === 'all'
-                  ? 'Saved daily logs, medical records, observations, and verified records will appear here.'
-                  : 'Try another filter, or log something today and come back.'}
+          }
+        >
+          {listHeader}
+          {/* Page position: month + "n of N" for the day in front. The wheel
+              snaps page-by-page, so this is its page control. */}
+          {indicator ? (
+            <View style={styles.pageIndicatorRow}>
+              <Text
+                style={styles.pageIndicator}
+                accessibilityRole="text"
+                accessibilityLabel={`Showing ${indicator.fullDate}, page ${indicator.idx + 1} of ${diaryDays.length}`}
+              >
+                {indicator.text}
               </Text>
             </View>
-          )}
-        </View>
-      </ScrollView>
-      {/* The opened page: 2/3 report over the untouched wheel. Full rows
-          reuse the existing card renderers (same components, same handlers). */}
-      <DiaryReportSheet
-        visible={openDayKey !== null}
-        day={openDayItem}
-        days={diaryDays}
-        patientName={patientName}
-        patientId={patientId}
-        highlightKey={highlightKey}
-        onClose={closeSheet}
-        onSelectDay={(dayKey) => {
-          setHighlightKey(null);
-          setOpenDayKey(dayKey);
-        }}
-        onDocumentPress={(docId) => goToDocument(docId)}
-      />
-    </SafeAreaView>
+          ) : null}
+          {/* The journal IS the wheel: ~fixed-height daily report pages stacked
+              on an invisible vertical wheel. Dragging up/down turns it; the
+              newest page sits in front and every older page fans out behind. */}
+          <View style={[styles.wheelBox, { height: Math.max(400, Math.min(560, windowH * 0.52)) }]}>
+            {diaryDays.length > 0 ? (
+              <TimelineWheel
+                days={diaryDays}
+                patientName={patientName}
+                focusDayKey={focusDayKey}
+                focusNonce={focusNonce}
+                onOpen={(key) => openDay(key)}
+                onActiveChange={(key) => setActiveDayKey(key)}
+              />
+            ) : (
+              <View style={styles.empty}>
+                <Text style={styles.emptyTitle}>
+                  {filter === 'all'
+                    ? 'No moments yet'
+                    : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase() ?? 'moments'} yet`}
+                </Text>
+                <Text style={styles.emptyText}>
+                  {filter === 'all'
+                    ? 'Log a day and your real week draws itself here.'
+                    : 'Try another filter, or log something today and come back.'}
+                </Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+        {/* The opened page: 2/3 report over the untouched wheel. Full rows
+            reuse the existing card renderers (same components, same handlers). */}
+        <DiaryReportSheet
+          visible={openDayKey !== null}
+          day={openDayItem}
+          days={diaryDays}
+          patientName={patientName}
+          patientId={patientId}
+          highlightKey={highlightKey}
+          onClose={closeSheet}
+          onSelectDay={(dayKey) => {
+            setHighlightKey(null);
+            setOpenDayKey(dayKey);
+          }}
+          onDocumentPress={(docId) => goToDocument(docId)}
+        />
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -894,9 +920,14 @@ export default function TimelineScreen() {
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  // Root owns the stage color; the aurora paints over it edge to edge.
+  root: {
+    flex: 1,
+    backgroundColor: LG.stage.bottom,
+  },
   container: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: 'transparent',
   },
   center: {
     flex: 1,
@@ -906,13 +937,13 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   centerText: {
-    ...TYPE.body,
-    color: GV.fog,
+    ...lgType.body,
+    color: LG.card.labelSecondary,
     textAlign: 'center',
   },
   factText: {
-    ...TYPE.caption,
-    color: GV.fog,
+    ...lgType.caption,
+    color: LG.card.labelTertiary,
     textAlign: 'center',
     maxWidth: 300,
   },
@@ -921,7 +952,19 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  // Header content lives in the list header (scrolls away together).
+  // Apple large title — the screen's one job, one quiet line under it.
+  screenTitle: {
+    ...lgType.largeTitle,
+    color: LG.card.label,
+    marginTop: 8,
+  },
+  screenSubtitle: {
+    ...lgType.bodySmall,
+    color: LG.card.labelSecondary,
+    marginTop: 2,
+    marginBottom: SPACE.cardGap,
+  },
+
   // Wheel stage: pages overlay absolutely; height is set inline from the
   // window so the deck breathes on tall phones and tablets.
   wheelBox: {
@@ -934,90 +977,94 @@ const styles = StyleSheet.create({
     marginTop: SPACE.cardGap,
   },
   pageIndicator: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 1.5,
-color: GV.fog,
+    ...lgType.caption,
+    fontWeight: '600',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: LG.card.labelTertiary,
     fontVariant: ['tabular-nums'],
   },
 
+  // Metrics band — one frosted surface, three tappable columns.
   statStrip: {
     flexDirection: 'row',
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginBottom: SPACE.cardGap,
   },
   stat: {
     flex: 1,
     alignItems: 'center',
     gap: 2,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
   },
   statActive: {
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255,255,255,0.10)',
   },
   statDivided: {
     borderLeftWidth: 1,
-    borderLeftColor: GV.line,
+    borderLeftColor: LG.card.border,
   },
   statNum: {
-    ...TYPE.title,
+    ...lgType.title,
     fontVariant: ['tabular-nums'],
-    color: GV.ink,
+    color: LG.card.label,
   },
   statLabel: {
-    ...TYPE.caption,
-    color: GV.body,
+    ...lgType.caption,
+    color: LG.card.labelSecondary,
   },
   statLabelActive: {
-    color: GV.ink,
-    fontFamily: FONT.semi,
+    color: LG.card.label,
+    fontWeight: '600',
   },
 
-  // Filters — horizontal rail of shared Chips.
+  // Filters — horizontal rail of monochrome glass chips.
   filterRail: {
     gap: 8,
     paddingRight: SPACE.screenH,
     paddingBottom: 8,
     paddingTop: 4,
   },
+  chip: {
+    minHeight: 36,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: LG.card.border,
+    backgroundColor: LG.card.fillStatic,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipOn: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  chipLabel: {
+    ...lgType.bodySmall,
+    fontWeight: '600',
+    color: LG.card.labelSecondary,
+  },
+  chipLabelOn: {
+    color: LG.card.label,
+  },
 
-  // Event row — ledger rows inside the white day card. The glyph tile is
-  // the only hue: a small flat fx square, white glyph, hairline rail.
-
-  // Timeline track (glyph tile + vertical line)
-
-  // Compact row body — title left, value right, specs beneath.
-
-  // Badges — quiet pills on white
-
-  // Data rows — hairline rules on white
-
-  // Severity bar (for observations)
-
-  // Note block
-
-  // Scanned-meal breakdown (nutrition rows, on-device estimates)
-
-  // Evidence — flat wash slip on white
-
-  // Empty state
+  // Empty state — honest, short, warm (Apple psychology, no exclamation).
   empty: {
     paddingVertical: 48,
     alignItems: 'center',
+    paddingHorizontal: SPACE.cardPad,
   },
   emptyTitle: {
-    ...TYPE.title,
-    color: '#FFFFFF',
+    ...lgType.title,
+    color: LG.card.label,
     textAlign: 'center',
   },
   emptyText: {
-    ...TYPE.body,
-    color: GV.fog,
+    ...lgType.bodySmall,
+    color: LG.card.labelSecondary,
     textAlign: 'center',
     marginTop: 8,
+    maxWidth: 320,
   },
 });

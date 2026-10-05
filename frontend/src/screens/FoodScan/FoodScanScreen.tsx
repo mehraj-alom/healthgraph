@@ -22,9 +22,12 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { TILE_TONES } from '@/theme/tones';
-import { CategoryTile } from '@/components/CategoryTile';
+import { GV, TYPE, SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import Entrance from '@/components/home/Entrance';
+import { ExploreGlyph, type GlyphName } from '@/components/home/ExploreGlyphs';
 import { HealthFact } from '@/components/HealthFact';
 import { useReducedMotion } from '@/theme';
 import { useFoodScan } from '@/hooks/useFoodScan';
@@ -34,7 +37,11 @@ import BarcodeScanner from './BarcodeScanner';
 import { barcodeResultFor, type BarcodeProduct } from '@/services/barcode';
 import type { FoodScanResult } from '@/services/nutritionService';
 
-void FONT;
+/** Scan-type pick tiles: monochrome glyph + label on frosted glass. */
+const PICK_TILES: { key: 'photo' | 'barcode'; label: string; glyph: GlyphName; hint: string }[] = [
+  { key: 'photo', label: 'Meal', glyph: 'camera', hint: 'Scan a meal by photo' },
+  { key: 'barcode', label: 'Barcode', glyph: 'scan', hint: 'Scan by barcode' },
+];
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'FoodScan'>;
 
@@ -76,9 +83,9 @@ function TypingDots() {
 
   return (
     <View style={styles.dots} accessibilityLabel="Loading">
-      <Animated.View style={[styles.dot, { backgroundColor: GV.cta }, s1]} />
-      <Animated.View style={[styles.dot, { backgroundColor: GV.cta }, s2]} />
-      <Animated.View style={[styles.dot, { backgroundColor: GV.cta }, s3]} />
+      <Animated.View style={[styles.dot, { backgroundColor: '#FFFFFF' }, s1]} />
+      <Animated.View style={[styles.dot, { backgroundColor: '#FFFFFF' }, s2]} />
+      <Animated.View style={[styles.dot, { backgroundColor: '#FFFFFF' }, s3]} />
     </View>
   );
 }
@@ -120,12 +127,14 @@ export default function FoodScanScreen() {
   const pick = (m: 'photo' | 'barcode') => {
     setBarcodeResult(null);
     setBarcodeImage(null);
+    setBarcodeCached(false);
     reset();
     setMode(m);
     setChosen(m);
   };
   const [barcodeResult, setBarcodeResult] = useState<FoodScanResult | null>(null);
   const [barcodeImage, setBarcodeImage] = useState<string | null>(null);
+  const [barcodeCached, setBarcodeCached] = useState(false);
 
   // Slow top-to-bottom teal sweep; static when reduced motion is requested.
   useEffect(() => {
@@ -156,30 +165,43 @@ export default function FoodScanScreen() {
   // ── Result ──────────────────────────────────────────────────────────────
   if ((stage === 'done' && result && photoUri) || barcodeResult) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <View style={styles.screen}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <ScrollView
           contentContainerStyle={styles.resultContent}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.header}>
-            <Text style={styles.title}>Scan food</Text>
-          </View>
-          <ScanResultSheet
+          <Entrance index={0}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Scan food</Text>
+            </View>
+          </Entrance>
+          {barcodeCached ? (
+            <Text style={styles.cachedNote}>
+              Saved product · check the label.
+            </Text>
+          ) : null}
+          <Entrance index={1}>
+            <ScanResultSheet
             photoUri={barcodeResult ? barcodeImage : photoUri}
             photoLabel={barcodeResult ? 'Product image' : undefined}
             result={(barcodeResult ?? result)!}
             onRetake={() => {
               setBarcodeResult(null);
               setBarcodeImage(null);
+              setBarcodeCached(false);
               reset();
             }}
             onLogged={goBack}
           />
+          </Entrance>
           <Text style={styles.disclaimer}>
             Estimates only. Not exact nutrition advice.
           </Text>
         </ScrollView>
-      </SafeAreaView>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -189,45 +211,55 @@ export default function FoodScanScreen() {
   const busy = stage === 'capturing' || stage === 'analyzing';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Scan food</Text>
-      </View>
+    <View style={styles.screen}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <Entrance index={0}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Scan food</Text>
+          <Text style={styles.heroSub}>
+            {chosen == null ? 'Meal or barcode.' : chosen === 'photo' ? 'Fit the meal in the frame.' : 'Point at the barcode.'}
+          </Text>
+        </View>
+      </Entrance>
 
+      {/* Content stage: everything below the title lives here, so the
+          analyzing overlay can never cover the hero. */}
+      <View style={styles.body}>
       {chosen == null ? (
+      <Entrance index={1}>
       <View style={styles.modeRow} accessibilityRole="tablist">
-        {([
-          { key: 'photo', label: 'Meal', tone: TILE_TONES.nutrition },
-          { key: 'barcode', label: 'Barcode', tone: TILE_TONES.weight },
-        ] as const).map((m) => (
-          <View key={m.key} style={styles.pickWrap}>
-            <CategoryTile
-              tone={m.tone}
-              label={m.label}
-              center
-              large
-              active={mode === m.key && chosen != null}
-              accessibilityLabel={m.key === 'photo' ? 'Scan a meal by photo' : 'Scan by barcode'}
-              onPress={() => pick(m.key)}
-            />
-          </View>
+        {PICK_TILES.map((m) => (
+          <GlassSurface
+            key={m.key}
+            radius={20}
+            style={styles.pickTile}
+            onPress={() => pick(m.key)}
+            accessibilityRole="button"
+            accessibilityLabel={m.hint}
+          >
+            <ExploreGlyph name={m.glyph} size={28} color="rgba(255,255,255,0.92)" />
+            <Text style={styles.pickLabel} maxFontSizeMultiplier={1.2}>
+              {m.label}
+            </Text>
+          </GlassSurface>
         ))}
       </View>
+      </Entrance>
       ) : null}
 
       {chosen == null ? null : resolving ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={GV.teal} />
+          <ActivityIndicator size="large" color="#FFFFFF" />
           <Text style={styles.hint}>Preparing camera…</Text>
           <HealthFact style={styles.factText} />
         </View>
       ) : !granted ? (
         <View style={styles.center}>
-          <View style={styles.card}>
+          <GlassSurface strong style={styles.card}>
             <Text style={styles.cardTitle}>Camera is off</Text>
             <Text style={styles.cardBody}>
-              HealthGraph needs camera access to scan your meal. Your photos
-              stay on this device except for the estimation request.
+              Needs camera access. Photos stay on this device.
             </Text>
             {canAskAgain ? (
               <Pressable
@@ -236,7 +268,7 @@ export default function FoodScanScreen() {
                 accessibilityLabel="Enable camera"
                 style={({ pressed }) => [
                   styles.cta,
-                  pressed && { backgroundColor: GV.ctaPressed },
+                  pressed && { opacity: 0.85 },
                 ]}
               >
                 <Text style={styles.ctaText}>Enable camera</Text>
@@ -253,7 +285,7 @@ export default function FoodScanScreen() {
             >
               <Text style={styles.secondaryCtaText}>Open Settings</Text>
             </Pressable>
-          </View>
+          </GlassSurface>
         </View>
       ) : (
       <>
@@ -263,6 +295,7 @@ export default function FoodScanScreen() {
             onProduct={(product: BarcodeProduct, barcode: string) => {
               setBarcodeResult(barcodeResultFor(product, 100, barcode));
               setBarcodeImage(product.image_url || null);
+              setBarcodeCached(product.cached === true);
             }}
             onCancel={() => setChosen(null)}
           />
@@ -312,10 +345,10 @@ export default function FoodScanScreen() {
 
           {stage === 'error' ? (
             <View style={styles.errorWrap}>
-              <View style={styles.card}>
+              <GlassSurface strong style={styles.card}>
                 <Text style={styles.cardTitle}>Scan did not complete</Text>
                 <Text style={styles.cardBody}>
-                  {error ?? 'The photo could not be analyzed. Please try again.'}
+                  {error ?? 'Could not read that photo.'}
                 </Text>
                 <Pressable
                   onPress={reset}
@@ -323,12 +356,12 @@ export default function FoodScanScreen() {
                   accessibilityLabel="Try again"
                   style={({ pressed }) => [
                     styles.cta,
-                    pressed && { backgroundColor: GV.ctaPressed },
+                    pressed && { opacity: 0.85 },
                   ]}
                 >
                   <Text style={styles.ctaText}>Try again</Text>
                 </Pressable>
-              </View>
+              </GlassSurface>
             </View>
           ) : null}
 
@@ -343,41 +376,51 @@ export default function FoodScanScreen() {
       {/* Analyzing overlay: typing dots + honest status copy. */}
       {busy ? (
         <View style={styles.overlay} pointerEvents="auto">
-          <View style={styles.card}>
+          <GlassSurface strong style={styles.card}>
             <TypingDots />
-            <Text style={styles.cardTitle}>Estimating portions…</Text>
-            <Text style={styles.cardBody}>
-              Reading dishes and portion sizes from your photo.
-            </Text>
-          </View>
+            <Text style={styles.cardTitle}>Reading your photo…</Text>
+          </GlassSurface>
         </View>
       ) : null}
-    </SafeAreaView>
+      </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
-const NAVY = '#080A11';
-const TILE_BG = '#2A3049';
-const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
-
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: LG.stage.bottom,
+  },
   safe: {
     flex: 1,
-    backgroundColor: NAVY,
+  },
+  // Content stage below the hero: owns the overlay bounds.
+  body: {
+    flex: 1,
+    position: 'relative',
   },
   header: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingHorizontal: 26,
+    paddingTop: 20,
     paddingBottom: 4,
-    alignItems: 'center',
+    gap: 3,
   },
   title: {
-    fontFamily: FONT.semi,
-    fontSize: 32,
-    lineHeight: 38,
-    letterSpacing: -0.3,
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
     color: '#FFFFFF',
-    textAlign: 'center',
+    textAlign: 'left',
+  },
+  heroSub: {
+    fontWeight: '400',
+    fontSize: 17,
+    lineHeight: 22,
+    color: 'rgba(233,240,255,0.66)',
+    textAlign: 'left',
   },
   center: {
     flex: 1,
@@ -400,12 +443,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 26,
     paddingBottom: 24,
   },
-  pickWrap: {
+  // Pick tiles: frosted glass, glyph over label, ≥44pt by construction.
+  pickTile: {
     flex: 1,
-    height: 150,
+    minHeight: 150,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+  },
+  pickLabel: {
+    fontWeight: '600',
+    fontSize: 19,
+    lineHeight: 24,
+    letterSpacing: -0.2,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   changeHit: {
     alignSelf: 'flex-end',
@@ -415,8 +471,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   changeText: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.mint,
   },
   frame: {
     flex: 1,
@@ -442,7 +500,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 28,
     height: 28,
-    borderColor: GV.teal,
+    borderColor: 'rgba(255,255,255,0.85)',
   },
   cornerTL: {
     left: 16,
@@ -477,7 +535,7 @@ const styles = StyleSheet.create({
     left: 24,
     right: 24,
     height: 2,
-    backgroundColor: GV.teal,
+    backgroundColor: LG.card.mint,
   },
   hint: {
     ...TYPE.body,
@@ -525,34 +583,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   card: {
-    backgroundColor: TILE_BG,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderRadius: 8,
-    padding: 16,
+    padding: 20,
     gap: 12,
     alignItems: 'stretch',
   },
   cardTitle: {
-    ...TYPE.title,
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
     textAlign: 'center',
   },
   cardBody: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(233,240,255,0.66)',
     textAlign: 'center',
   },
+  // The one prominent action on dark: a white pill.
   cta: {
-    backgroundColor: GV.cta,
+    backgroundColor: '#FFFFFF',
     borderRadius: SPACE.rPill,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 52,
   },
   ctaText: {
-    ...TYPE.button,
-    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.1,
+    color: '#0B0F1A',
   },
   secondaryCta: {
     backgroundColor: 'transparent',
@@ -564,13 +627,27 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   secondaryCtaText: {
-    ...TYPE.button,
+    fontWeight: '600',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.1,
     color: '#FFFFFF',
   },
   disclaimer: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.45)',
     textAlign: 'center',
+  },
+  cachedNote: {
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
+    textAlign: 'center',
+    paddingHorizontal: 26,
+    marginBottom: 8,
   },
   overlay: {
     position: 'absolute',
