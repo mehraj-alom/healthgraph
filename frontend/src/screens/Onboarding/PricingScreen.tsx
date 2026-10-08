@@ -8,13 +8,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BlurView } from 'expo-blur';
 
 import { Reveal } from '@/components/home/Reveal';
-import { FONT, GV, SPACE, TYPE } from '@/theme/guava';
-import { TILE_TONES } from '@/theme/tones';
-import { useReducedMotion } from '@/theme/useReducedMotion';
-import { StageGradient } from '@/components/StageGradient';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { LG } from '@/theme/liquidGlass';
 
 /**
  * PricingScreen — shown once, right after signup (never after login).
@@ -27,6 +25,9 @@ import { StageGradient } from '@/components/StageGradient';
 
 const NEEDED_KEY = 'hg:pricingNeeded:v1';
 const PLAN_KEY = 'hg:selectedPlan:v1';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 export type PricingPlan = 'free' | 'general' | 'allin';
 
@@ -92,16 +93,9 @@ const TIERS: TierDef[] = [
     per: '/mo',
     trial: '3 days free',
     feats: 'Everything in General\nFace pulse, 3D body, voice alarms\nUnlimited AI chat and scans',
-    badge: 'Recommended',
+    badge: 'Most complete',
   },
 ];
-
-/** Tier bands: Free wellbeing, General heart, All-in fitness. */
-const TIER_TONES: Record<PricingPlan, string> = {
-  free: TILE_TONES.wellbeing[0],
-  general: TILE_TONES.heart[0],
-  allin: TILE_TONES.fitness[0],
-};
 
 const VALUE_ROWS = [
   '3 days free before paid plans start',
@@ -112,9 +106,6 @@ const VALUE_ROWS = [
 export default function PricingScreen({ onDone }: { onDone: () => void }) {
   const [selected, setSelected] = useState<PricingPlan>('free');
   const [busy, setBusy] = useState(false);
-  // Same frosted material as the profile sidebar: live blur over the
-  // stage, brand tint for depth, solid stage under reduced motion.
-  const glassOff = useReducedMotion();
 
   const finish = async (plan: PricingPlan): Promise<void> => {
     if (busy) return;
@@ -130,135 +121,131 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
   };
 
   const picked = TIERS.find(t => t.id === selected) ?? TIERS[0];
+  const paidPick = picked?.id !== 'free';
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StageGradient />
-      {glassOff ? (
-        <View style={styles.glassSolid} />
-      ) : (
-        <BlurView tint="dark" intensity={84} style={[styles.glass, styles.glassTint]} />
-      )}
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        bounces={false}
-      >
-        <Reveal>
-          <Text style={styles.overline}>3 days free on paid plans</Text>
-        </Reveal>
-        <Reveal delay={120}>
-          <Text style={styles.title}>Start free. Stay because it works.</Text>
-        </Reveal>
-        <Reveal delay={200}>
-          <Text style={styles.sub}>Paid plans renew monthly. Cancel anytime.</Text>
-        </Reveal>
-
-        <View style={styles.rows}>
-          {VALUE_ROWS.map((row, i) => (
-            <Reveal key={row} delay={260 + i * 80}>
-              <View style={styles.row}>
-                <View style={styles.check}>
-                  <Text style={styles.checkGlyph}>✓</Text>
-                </View>
-                <Text style={styles.rowText}>{row}</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <Reveal>
+            <View style={styles.ornamentWrap}>
+              <View style={styles.ornament}>
+                <Text style={styles.ornamentGlyph}>✦</Text>
               </View>
-            </Reveal>
-          ))}
-        </View>
+            </View>
+          </Reveal>
+          <Reveal delay={120}>
+            <Text style={styles.title}>Unlock everything</Text>
+          </Reveal>
+          <Reveal delay={200}>
+            <Text style={styles.sub}>Every engine, unlimited AI — free for 3 days.</Text>
+          </Reveal>
 
-        <View style={styles.tiers}>
-          {TIERS.map((tier, i) => {
-            const on = tier.id === selected;
-            return (
-              <Reveal key={tier.id} delay={480 + i * 90}>
-                <Pressable
-                  onPress={() => setSelected(tier.id)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}
-                  accessibilityLabel={`${tier.name}, ${tier.price}${tier.per}, ${tier.trial}`}
-                  style={({ pressed }) => [
-                    styles.tier,
-                    on && styles.tierOn,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <View style={[styles.tierBand, { backgroundColor: TIER_TONES[tier.id] }]} />
-                  <View style={styles.tierHead}>
-                    <View style={styles.tierNameRow}>
-                      <Text style={styles.tierName}>{tier.name}</Text>
-                      {tier.badge ? (
-                        <View style={styles.badge}>
-                          <Text style={styles.badgeText}>{tier.badge}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text style={styles.tierPrice}>
-                      {tier.price}
-                      {tier.per ? <Text style={styles.tierPer}>{tier.per}</Text> : null}
-                    </Text>
+          <Reveal delay={260}>
+            <GlassSurface strong style={styles.rowsCard}>
+              {VALUE_ROWS.map((row, i) => (
+                <View key={row} style={[styles.row, i > 0 && styles.rowDivider]}>
+                  <View style={styles.check}>
+                    <Text style={styles.checkGlyph}>✓</Text>
                   </View>
-                  <Text style={styles.tierTrial}>{tier.trial}</Text>
-                  <Text style={styles.tierFeats}>{tier.feats}</Text>
-                </Pressable>
-              </Reveal>
-            );
-          })}
-        </View>
+                  <Text style={styles.rowText}>{row}</Text>
+                </View>
+              ))}
+            </GlassSurface>
+          </Reveal>
 
-        <Text style={styles.renewNote}>
-          Start with 3 days free. Then your plan auto-renews every month. Cancel anytime and keep access until the period ends.
-        </Text>
-      </ScrollView>
+          <View style={styles.tiers}>
+            {TIERS.map((tier, i) => {
+              const on = tier.id === selected;
+              return (
+                <Reveal key={tier.id} delay={480 + i * 90}>
+                  <Pressable
+                    onPress={() => setSelected(tier.id)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: on }}
+                    accessibilityLabel={`${tier.name}, ${tier.price}${tier.per}, ${tier.trial}`}
+                    style={({ pressed }) => [pressed && { opacity: 0.85 }]}
+                  >
+                    <GlassSurface
+                      strong
+                      noSheen
+                      style={[styles.tier, on && styles.tierOn]}
+                    >
+                      <View style={styles.tierHead}>
+                        <View style={styles.tierNameRow}>
+                          <Text style={styles.tierName}>{tier.name}</Text>
+                          {tier.badge ? (
+                            <View style={styles.badge}>
+                              <Text style={styles.badgeText}>{tier.badge}</Text>
+                            </View>
+                          ) : null}
+                          {tier.id === 'free' ? (
+                            <View style={styles.currentChip}>
+                              <Text style={styles.currentChipText}>Your current plan</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={styles.tierPrice}>
+                          {tier.price}
+                          {tier.per ? <Text style={styles.tierPer}>{tier.per}</Text> : null}
+                        </Text>
+                      </View>
+                      <Text style={styles.tierTrial}>{tier.trial}</Text>
+                      <Text style={styles.tierFeats}>{tier.feats}</Text>
+                    </GlassSurface>
+                  </Pressable>
+                </Reveal>
+              );
+            })}
+          </View>
+        </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable
-          onPress={() => void finish(selected)}
-          disabled={busy}
-          accessibilityRole="button"
-          accessibilityLabel={`Continue with ${picked.name}`}
-          style={({ pressed }) => [
-            styles.cta,
-            pressed && { opacity: 0.9 },
-            busy && { opacity: 0.7 },
-          ]}
-        >
-          <Text style={styles.ctaText}>
-            {busy ? 'Continuing…' : `Continue with ${picked.name}`}
+        <View style={styles.footer}>
+          <Pressable
+            onPress={() => void finish(selected)}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel={paidPick ? 'Start 3 days free' : 'Continue with Free'}
+            style={({ pressed }) => [
+              styles.cta,
+              pressed && !busy && { opacity: 0.9 },
+              busy && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={styles.ctaText}>
+              {busy ? 'Continuing…' : paidPick ? 'Start 3 days free' : 'Continue with Free'}
+            </Text>
+          </Pressable>
+          <Text style={styles.trustNote}>
+            {paidPick
+              ? '3 days free, then monthly. Cancel anytime — you keep access until the period ends.'
+              : 'Free forever — upgrade anytime.'}
           </Text>
-          <Text style={styles.ctaChev}>›</Text>
-        </Pressable>
-        <Text style={styles.honestNote}>Subscriptions open soon. Nothing is charged today.</Text>
-        <Pressable
-          onPress={() => void finish('free')}
-          disabled={busy}
-          accessibilityRole="button"
-          accessibilityLabel="Skip for now, continue with Free"
-          hitSlop={12}
-          style={styles.skipHit}
-        >
-          <Text style={styles.skipText}>Not now</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
+          <Text style={styles.honestNote}>Subscriptions open soon. Nothing is charged today.</Text>
+          <Pressable
+            onPress={() => void finish('free')}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Skip for now, continue with Free"
+            hitSlop={12}
+            style={styles.skipHit}
+          >
+            <Text style={styles.skipText}>Not now</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: GV.stage,
-  },
-  glassSolid: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: GV.stage,
-  },
-  glass: {
-    ...StyleSheet.absoluteFill,
-  },
-  glassTint: {
-    backgroundColor: 'rgba(11, 74, 63, 0.62)',
-  },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 24,
@@ -266,40 +253,45 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 12,
   },
-  overline: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 3,
-    color: GV.teal,
-    textAlign: 'center',
+  // The one sparkle: mint star marks the premium moment.
+  ornamentWrap: { alignItems: 'center', marginTop: 4 },
+  ornament: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(92, 232, 184, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 232, 184, 0.4)',
   },
+  ornamentGlyph: { color: LG.card.mint, fontSize: 18, lineHeight: 22 },
   title: {
-    fontFamily: FONT.semi,
-    fontSize: 32,
-    lineHeight: 38,
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -0.3,
   },
   sub: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: SECONDARY,
     textAlign: 'center',
   },
-  rows: {
-    gap: 8,
-    marginTop: 4,
-  },
+  rowsCard: { paddingHorizontal: 16, paddingVertical: 6 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 14,
     paddingVertical: 10,
-    paddingHorizontal: 14,
     minHeight: 48,
+  },
+  rowDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255, 255, 255, 0.12)',
   },
   check: {
     width: 22,
@@ -307,40 +299,23 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    backgroundColor: 'rgba(92, 232, 184, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 232, 184, 0.4)',
     flexShrink: 0,
   },
-  checkGlyph: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  checkGlyph: { color: LG.card.mint, fontSize: 13, fontWeight: '600' },
   rowText: {
-    ...TYPE.body,
+    fontWeight: '400',
     fontSize: 13.5,
+    lineHeight: 19,
     color: '#FFFFFF',
     flex: 1,
   },
-  tiers: {
-    gap: 12,
-    marginTop: 4,
-  },
-  tier: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.11)',
-    padding: 16,
-    gap: 6,
-  },
-  tierBand: {
-    height: 4,
-    borderRadius: 2,
-    marginBottom: 6,
-  },
+  tiers: { gap: 12, marginTop: 4 },
+  tier: { padding: 16, gap: 6, borderWidth: 1.5, borderColor: 'transparent' },
   tierOn: {
-    borderColor: GV.teal,
-    backgroundColor: 'rgba(255, 255, 255, 0.09)',
+    borderColor: 'rgba(92, 232, 184, 0.55)',
   },
   tierHead: {
     flexDirection: 'row',
@@ -352,52 +327,68 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    flexWrap: 'wrap',
   },
   tierName: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 16,
+    lineHeight: 21,
+    letterSpacing: -0.2,
     color: '#FFFFFF',
   },
+  // One recommendation: the eye lands here.
   badge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
-    borderRadius: 11,
-    paddingVertical: 5,
+    backgroundColor: 'rgba(92, 232, 184, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 232, 184, 0.4)',
+    borderRadius: 999,
+    paddingVertical: 4,
     paddingHorizontal: 8,
   },
   badgeText: {
-    fontFamily: FONT.semi,
-    fontSize: 10.5,
-    lineHeight: 14,
-    letterSpacing: 0.2,
-    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: '600',
+    fontSize: 10,
+    lineHeight: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: LG.card.mint,
+  },
+  // Free tier is respected, never a taunt.
+  currentChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  currentChipText: {
+    fontWeight: '600',
+    fontSize: 10,
+    lineHeight: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: SECONDARY,
   },
   tierPrice: {
-    fontFamily: FONT.bold,
+    fontWeight: '700',
     fontSize: 20,
+    lineHeight: 24,
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
-  tierPer: {
-    fontFamily: FONT.regular,
-    fontSize: 13,
-    color: GV.fog,
-  },
+  tierPer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY },
   tierTrial: {
-    ...TYPE.caption,
-    fontFamily: FONT.semi,
-    color: GV.teal,
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.mint,
   },
   tierFeats: {
-    ...TYPE.body,
+    fontWeight: '400',
     fontSize: 13.5,
     lineHeight: 21,
-    color: GV.fog,
-  },
-  renewNote: {
-    ...TYPE.caption,
-    color: GV.fog,
-    lineHeight: 18,
-    paddingHorizontal: 4,
+    color: SECONDARY,
   },
   footer: {
     paddingHorizontal: 24,
@@ -405,29 +396,33 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 8,
   },
+  // Single white pill: the prominent action on dark.
   cta: {
     backgroundColor: '#FFFFFF',
     borderRadius: 9999,
     minHeight: 56,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
   ctaText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 16,
     lineHeight: 22,
-    color: '#0C0C0E',
+    letterSpacing: -0.2,
+    color: '#0B0F1A',
   },
-  ctaChev: {
-    fontSize: 22,
-    lineHeight: 22,
-    color: '#0C0C0E',
+  trustNote: {
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
+    textAlign: 'center',
   },
   honestNote: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 12,
+    lineHeight: 17,
+    color: TERTIARY,
     textAlign: 'center',
   },
   skipHit: {
@@ -436,9 +431,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   skipText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 14,
     lineHeight: 20,
-    color: GV.fog,
+    color: SECONDARY,
   },
 });

@@ -11,19 +11,25 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { requestRecordingPermissionsAsync, useAudioRecorder } from 'expo-audio';
+import { Button } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
 import { api } from '@/services/api';
 import { createPakeetProvider } from '@/services/voice/stt';
 import { createPakeetTransport } from '@/services/voice/transport';
 import { logVoiceTurn } from '@/services/voice/log';
 import { stripMarkdown } from '@/utils/stripMarkdown';
 import { VoiceError } from '@/services/voice/errors';
-import { FONT } from '@/theme/guava';
 
 const MAX_TURN_S = 30;
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 type TurnPhase = 'IDLE' | 'RECORDING' | 'UPLOADING' | 'THINKING' | 'DONE' | 'ERROR';
 
@@ -157,69 +163,94 @@ export default function VoiceTurnScreen() {
   }, [navigation]);
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.kicker}>VOICE TURN · ISOLATED · DEV ONLY</Text>
-        <Text style={styles.title}>Turn-based voice</Text>
-        <Text style={styles.status}>{status}</Text>
-        {phase === 'RECORDING' ? <Text style={styles.timer}>{elapsed.toFixed(0)}s / {MAX_TURN_S}s</Text> : null}
-        {transcript !== null ? (
-          <View style={styles.bubble}>
-            <Text style={styles.bubbleLabel}>YOU (PAKEET)</Text>
-            <Text style={styles.bubbleText}>{transcript || '(empty transcription)'}</Text>
-          </View>
-        ) : null}
-        {reply !== null ? (
-          <View style={styles.bubble}>
-            <Text style={styles.bubbleLabel}>HEALTHGRAPH (LANGGRAPH)</Text>
-            <Text style={styles.bubbleText}>{reply}</Text>
-          </View>
-        ) : null}
-        {phase === 'IDLE' || phase === 'DONE' || phase === 'ERROR' ? (
-          <Pressable onPress={() => void startTurn()} accessibilityRole="button" accessibilityLabel="Record voice turn" style={styles.btn}>
-            <Text style={styles.btnText}>● RECORD TURN</Text>
-          </Pressable>
-        ) : null}
-        {phase === 'RECORDING' ? (
-          <>
-            <Pressable onPress={() => void finishTurn()} accessibilityRole="button" accessibilityLabel="Stop and send turn" style={styles.btn}>
-              <Text style={styles.btnText}>■ STOP + SEND</Text>
-            </Pressable>
-            <Pressable onPress={() => void cancelTurn()} accessibilityRole="button" accessibilityLabel="Cancel turn" style={styles.ghostBtn}>
-              <Text style={styles.ghostText}>Cancel</Text>
-            </Pressable>
-          </>
-        ) : null}
-        {(phase === 'UPLOADING' || phase === 'THINKING') && (
-          <Pressable onPress={() => void cancelTurn()} accessibilityRole="button" accessibilityLabel="Cancel turn" style={styles.ghostBtn}>
-            <Text style={styles.ghostText}>Cancel</Text>
-          </Pressable>
-        )}
-        <Pressable onPress={exit} accessibilityRole="button" accessibilityLabel="Close voice turn test" style={styles.ghostBtn}>
-          <Text style={styles.ghostText}>Close</Text>
-        </Pressable>
-        <Text style={styles.fineprint}>
-          Short-lived turn only: no streaming, no session state, no medication-call contact. Response audio waits on on-device g2p.
-          Completed turns are saved to today's journal as notes.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.kicker}>Voice turn · isolated · dev only</Text>
+          <Text style={styles.title}>Turn-based voice</Text>
+          <Text style={styles.status}>{status}</Text>
+          {phase === 'RECORDING' ? <Text style={styles.timer}>{elapsed.toFixed(0)}s / {MAX_TURN_S}s</Text> : null}
+          {transcript !== null ? (
+            <GlassSurface strong style={styles.card}>
+              <Text style={styles.bubbleLabel}>You (Pakeet)</Text>
+              <Text style={styles.bubbleText}>{transcript || '(empty transcription)'}</Text>
+            </GlassSurface>
+          ) : null}
+          {reply !== null ? (
+            <GlassSurface strong style={styles.card}>
+              <Text style={styles.bubbleLabel}>HealthGraph (LangGraph)</Text>
+              <Text style={styles.bubbleText}>{reply}</Text>
+            </GlassSurface>
+          ) : null}
+          {phase === 'IDLE' || phase === 'DONE' || phase === 'ERROR' ? (
+            <Button
+              title="Record turn"
+              variant="secondary"
+              onPress={() => void startTurn()}
+              accessibilityLabel="Record voice turn"
+              fullWidth
+              size="large"
+              style={styles.measureBtn}
+              textStyle={styles.measureBtnText}
+            />
+          ) : null}
+          {phase === 'RECORDING' ? (
+            <>
+              <Button
+                title="Stop + send"
+                variant="secondary"
+                onPress={() => void finishTurn()}
+                accessibilityLabel="Stop and send turn"
+                fullWidth
+                size="large"
+                style={styles.measureBtn}
+                textStyle={styles.measureBtnText}
+              />
+              <Button
+                title="Cancel"
+                variant="ghost"
+                onPress={() => void cancelTurn()}
+                accessibilityLabel="Cancel turn"
+                fullWidth
+                textStyle={styles.ghostText}
+              />
+            </>
+          ) : null}
+          {(phase === 'UPLOADING' || phase === 'THINKING') && (
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={() => void cancelTurn()}
+              accessibilityLabel="Cancel turn"
+              fullWidth
+              textStyle={styles.ghostText}
+            />
+          )}
+          <Button title="Close" variant="ghost" onPress={exit} accessibilityLabel="Close voice turn test" fullWidth textStyle={styles.ghostText} />
+          <Text style={styles.fineprint}>
+            Short-lived turn only: no streaming, no session state, no medication-call contact. Response audio waits on on-device g2p.
+            Completed turns are saved to today's journal as notes.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a0f0d' },
-  content: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 40, gap: 12 },
-  kicker: { fontFamily: FONT.semi, fontSize: 11, letterSpacing: 3, color: '#7d8f96', textAlign: 'center' },
-  title: { fontFamily: FONT.semi, fontSize: 24, color: '#e8f0ec', textAlign: 'center' },
-  status: { fontSize: 13, lineHeight: 19, color: '#c9d5da', textAlign: 'center', minHeight: 38 },
-  timer: { fontSize: 28, color: '#ffb454', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  bubble: { backgroundColor: '#141c19', borderRadius: 14, padding: 14, gap: 6, borderWidth: 1, borderColor: '#223028' },
-  bubbleLabel: { fontFamily: FONT.semi, fontSize: 10, letterSpacing: 2, color: '#7d8f96' },
-  bubbleText: { fontSize: 15, lineHeight: 22, color: '#e8f0ec' },
-  btn: { backgroundColor: '#0e5c40', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
-  btnText: { fontFamily: FONT.semi, fontSize: 15, letterSpacing: 1, color: '#eafff3' },
-  ghostBtn: { borderRadius: 14, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#2c3a34' },
-  ghostText: { fontFamily: FONT.semi, fontSize: 14, color: '#c9d5da' },
-  fineprint: { fontSize: 11, lineHeight: 15, color: '#5b6b72', textAlign: 'center', marginTop: 8 },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  kicker: { fontWeight: '600', fontSize: 11, lineHeight: 14, letterSpacing: 0.5, textTransform: 'uppercase', color: TERTIARY, textAlign: 'center' },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  status: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  timer: { fontWeight: '600', fontSize: 28, lineHeight: 34, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  card: { padding: 16, gap: 6 },
+  bubbleLabel: { fontWeight: '600', fontSize: 11, lineHeight: 14, letterSpacing: 0.5, textTransform: 'uppercase', color: TERTIARY },
+  bubbleText: { fontWeight: '400', fontSize: 15, lineHeight: 22, color: '#FFFFFF' },
+  measureBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  measureBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  fineprint: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center', marginTop: 8 },
 });

@@ -51,7 +51,12 @@ import {
   tapTick,
 } from '@/services/medicationCall/ringtone';
 import type { RootStackParamList } from '@/types';
-import { FONT } from '@/theme/guava';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { LG } from '@/theme/liquidGlass';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'MedicationCall'>;
@@ -106,7 +111,7 @@ function RingRipple({ active }: { active: boolean }) {
 
 const rippleStyles = StyleSheet.create({
   host: { position: 'absolute', width: 220, height: 220, alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', width: 170, height: 170, borderRadius: 85, borderWidth: 2, borderColor: '#3ddc84' },
+  ring: { position: 'absolute', width: 170, height: 170, borderRadius: 85, borderWidth: 2, borderColor: LG.card.mint },
 });
 
 export default function MedicationCallScreen() {
@@ -295,210 +300,314 @@ export default function MedicationCallScreen() {
 
   if (!loaded) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <Text style={styles.dim}>Preparing your reminder…</Text>
-        </View>
-      </SafeAreaView>
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.center}>
+            <Text style={styles.dim}>Preparing your reminder…</Text>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   if (gone || machine.phase === 'STALE') {
     return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <Text style={styles.h1}>Already handled</Text>
-          <Text style={styles.dim}>This reminder was taken, delayed, or dismissed elsewhere.</Text>
-          <Pressable onPress={exit} accessibilityRole="button" accessibilityLabel="Close" style={styles.primaryBtn}>
-            <Text style={styles.primaryText}>CLOSE</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.center}>
+            <Text style={styles.h1}>Already handled</Text>
+            <Text style={styles.dim}>This reminder was taken, delayed, or dismissed elsewhere.</Text>
+            <Pressable onPress={exit} accessibilityRole="button" accessibilityLabel="Close" style={styles.primaryBtn}>
+              <Text style={styles.primaryText}>Close</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {ringing && RUNTIME_SUPPORTED ? <RingAudio /> : null}
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.brand}>HealthGraph</Text>
-        <Text style={styles.incoming}>
-          {machine.phase === 'RINGING' ? '● incoming reminder' : 'Medication Reminder'}
-        </Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe}>
+        {ringing && RUNTIME_SUPPORTED ? <RingAudio /> : null}
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.incoming}>
+            {machine.phase === 'RINGING' ? 'Incoming reminder' : 'Medication reminder'}
+          </Text>
 
-        <View style={styles.emblemWrap}>
-          <RingRipple active={ringing} />
-          <View style={styles.emblem}>
-            <Text style={styles.emblemGlyph}>✚</Text>
-          </View>
-        </View>
-
-        <Text style={styles.title}>{title}</Text>
-        {members.map((m) => (
-          <View key={m.occurrenceId} style={styles.medRow}>
-            <View style={styles.medInfo}>
-              <Text style={styles.medName}>{m.medName}</Text>
-              <Text style={styles.medMeta}>
-                {[m.doseText, m.scheduledTime ? `due ${m.scheduledTime}` : null].filter(Boolean).join(' · ') || 'Scheduled dose'}
-              </Text>
+          <View style={styles.emblemWrap}>
+            <RingRipple active={ringing} />
+            <View style={styles.emblem}>
+              <Text style={styles.emblemGlyph}>✚</Text>
             </View>
-            {machine.taken[m.occurrenceId] ? <Text style={styles.takenTick}>✓</Text> : null}
           </View>
-        ))}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+          <Text style={styles.title}>{title}</Text>
+          {members.map((m) => (
+            <GlassSurface noBlur noSheen key={m.occurrenceId} style={styles.medRow}>
+              <View style={styles.medInfo}>
+                <Text style={styles.medName}>{m.medName}</Text>
+                <Text style={styles.medMeta}>
+                  {[m.doseText, m.scheduledTime ? `due ${m.scheduledTime}` : null].filter(Boolean).join(' · ') || 'Scheduled dose'}
+                </Text>
+              </View>
+              {machine.taken[m.occurrenceId] ? <Text style={styles.takenTick}>✓</Text> : null}
+            </GlassSurface>
+          ))}
 
-        {machine.phase === 'RINGING' && (
-          <View style={styles.callRow}>
-            <Pressable
-              onPress={decline}
-              accessibilityRole="button"
-              accessibilityLabel="Decline reminder"
-              style={({ pressed }) => [styles.declineBtn, pressed && styles.pressed]}
-            >
-              <Text style={styles.declineGlyph}>✕</Text>
-              <Text style={styles.callLabel}>Decline</Text>
-            </Pressable>
-            <Pressable
-              onPress={answer}
-              accessibilityRole="button"
-              accessibilityLabel="Answer reminder"
-              style={({ pressed }) => [styles.answerBtn, pressed && styles.pressed]}
-            >
-              <Text style={styles.answerGlyph}>✓</Text>
-              <Text style={styles.callLabel}>Answer</Text>
-            </Pressable>
-          </View>
-        )}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {machine.phase === 'CONFIRMING' && (
-          <View style={styles.confirmBlock}>
-            <Text style={styles.confirmQ}>Did you take it?</Text>
-            {members
-              .filter((m) => !machine.taken[m.occurrenceId])
-              .map((m) => (
+          {machine.phase === 'RINGING' && (
+            <View style={styles.callRow}>
+              <Pressable
+                onPress={decline}
+                accessibilityRole="button"
+                accessibilityLabel="Decline reminder"
+                style={({ pressed }) => [styles.ringBtn, styles.declineBtn, pressed && styles.pressed]}
+              >
+                <Text style={styles.declineGlyph}>✕</Text>
+                <Text style={styles.callLabel}>Decline</Text>
+              </Pressable>
+              <Pressable
+                onPress={answer}
+                accessibilityRole="button"
+                accessibilityLabel="Answer reminder"
+                style={({ pressed }) => [styles.ringBtn, styles.answerBtn, pressed && styles.pressed]}
+              >
+                <Text style={styles.answerGlyph}>✓</Text>
+                <Text style={styles.callLabelDark}>Answer</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {machine.phase === 'CONFIRMING' && (
+            <View style={styles.confirmBlock}>
+              <Text style={styles.confirmQ}>Did you take it?</Text>
+              {members
+                .filter((m) => !machine.taken[m.occurrenceId])
+                .map((m) => (
+                  <Pressable
+                    key={m.occurrenceId}
+                    onPress={() => void confirmTaken(m.occurrenceId)}
+                    disabled={busyMed !== null}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Yes, took ${m.medName}`}
+                    style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed, busyMed !== null && styles.disabledBtn]}
+                  >
+                    <Text style={styles.primaryText}>
+                      {busyMed === m.occurrenceId ? 'Recording…' : members.length > 1 ? `Yes — took ${m.medName}` : 'Yes, taken'}
+                    </Text>
+                  </Pressable>
+                ))}
+              <Pressable
+                onPress={() => setSheetOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Remind me later"
+                style={styles.secondaryBtn}
+              >
+                <Text style={styles.secondaryText}>Remind me later</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {(machine.phase === 'COMPLETED' || machine.phase === 'REMIND_LATER') && (
+            <View style={styles.confirmBlock}>
+              <Text style={styles.doneTick}>✓</Text>
+              <Text style={styles.doneText}>
+                {doneMessage ?? (machine.phase === 'COMPLETED' ? 'Medication recorded.' : 'Reminder delayed.')}
+              </Text>
+              <Pressable onPress={exit} accessibilityRole="button" accessibilityLabel="Done" style={styles.primaryBtn}>
+                <Text style={styles.primaryText}>Done</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {isCallTerminal(machine.phase) && machine.phase !== 'COMPLETED' && machine.phase !== 'REMIND_LATER' && (
+            <View style={styles.confirmBlock}>
+              <Text style={styles.doneText}>{machine.reason ?? 'This call has ended.'}</Text>
+              <Pressable onPress={exit} accessibilityRole="button" accessibilityLabel="Close" style={styles.primaryBtn}>
+                <Text style={styles.primaryText}>Close</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {sheetOpen && (machine.phase === 'DECLINED' || machine.phase === 'CONFIRMING') && (
+            <GlassSurface strong style={styles.sheet}>
+              <Text style={styles.sheetTitle}>Remind me</Text>
+              {options.map((o) => (
                 <Pressable
-                  key={m.occurrenceId}
-                  onPress={() => void confirmTaken(m.occurrenceId)}
-                  disabled={busyMed !== null}
+                  key={o.key}
+                  onPress={() => void applySnooze(o.minutes)}
+                  disabled={snoozeBusy}
                   accessibilityRole="button"
-                  accessibilityLabel={`Yes, took ${m.medName}`}
-                  style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed, busyMed !== null && styles.disabledBtn]}
+                  accessibilityLabel={o.label}
+                  style={({ pressed }) => [styles.sheetRow, pressed && styles.pressed]}
                 >
-                  <Text style={styles.primaryText}>
-                    {busyMed === m.occurrenceId ? 'RECORDING…' : members.length > 1 ? `YES — TOOK ${m.medName.toUpperCase()}` : 'YES, TAKEN'}
-                  </Text>
+                  <Text style={styles.sheetLabel}>{o.label}</Text>
                 </Pressable>
               ))}
-            <Pressable
-              onPress={() => setSheetOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Remind me later"
-              style={styles.secondaryBtn}
-            >
-              <Text style={styles.secondaryText}>Remind me later</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {(machine.phase === 'COMPLETED' || machine.phase === 'REMIND_LATER') && (
-          <View style={styles.confirmBlock}>
-            <Text style={styles.doneTick}>✓</Text>
-            <Text style={styles.doneText}>
-              {doneMessage ?? (machine.phase === 'COMPLETED' ? 'Medication recorded.' : 'Reminder delayed.')}
-            </Text>
-            <Pressable onPress={exit} accessibilityRole="button" accessibilityLabel="Done" style={styles.primaryBtn}>
-              <Text style={styles.primaryText}>DONE</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {isCallTerminal(machine.phase) && machine.phase !== 'COMPLETED' && machine.phase !== 'REMIND_LATER' && (
-          <View style={styles.confirmBlock}>
-            <Text style={styles.doneText}>{machine.reason ?? 'This call has ended.'}</Text>
-            <Pressable onPress={exit} accessibilityRole="button" accessibilityLabel="Close" style={styles.primaryBtn}>
-              <Text style={styles.primaryText}>CLOSE</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {sheetOpen && (machine.phase === 'DECLINED' || machine.phase === 'CONFIRMING') && (
-          <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>Remind me</Text>
-            {options.map((o) => (
               <Pressable
-                key={o.key}
-                onPress={() => void applySnooze(o.minutes)}
-                disabled={snoozeBusy}
+                onPress={() => setSheetOpen(false)}
                 accessibilityRole="button"
-                accessibilityLabel={o.label}
-                style={({ pressed }) => [styles.sheetRow, pressed && styles.pressed]}
+                accessibilityLabel="Keep this reminder"
+                style={styles.secondaryBtn}
               >
-                <Text style={styles.sheetLabel}>{o.label}</Text>
+                <Text style={styles.secondaryText}>Cancel — keep this reminder</Text>
               </Pressable>
-            ))}
-            <Pressable
-              onPress={() => setSheetOpen(false)}
-              accessibilityRole="button"
-              accessibilityLabel="Keep this reminder"
-              style={styles.secondaryBtn}
-            >
-              <Text style={styles.secondaryText}>Cancel — keep this reminder</Text>
-            </Pressable>
-          </View>
-        )}
+            </GlassSurface>
+          )}
 
-        <Text style={styles.fineprint}>App reminder — not a phone call. Sound and vibration stop when you answer, decline, or leave.</Text>
-      </ScrollView>
-    </SafeAreaView>
+          <Text style={styles.fineprint}>App reminder — not a phone call. Sound and vibration stop when you answer, decline, or leave.</Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a0f0d' },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   content: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 40, gap: 14, alignItems: 'stretch' },
-  brand: { fontFamily: FONT.semi, fontSize: 13, letterSpacing: 4, color: '#7d8f96', textAlign: 'center' },
-  incoming: { fontFamily: FONT.semi, fontSize: 12, letterSpacing: 2, color: '#3ddc84', textAlign: 'center' },
-  emblemWrap: { alignItems: 'center', justifyContent: 'center', height: 220, marginVertical: 4 },
-  emblem: {
-    width: 120, height: 120, borderRadius: 60, backgroundColor: '#122019',
-    borderWidth: 2, borderColor: '#3ddc84', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#3ddc84', shadowOpacity: 0.35, shadowRadius: 18, elevation: 8,
+  incoming: {
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: LG.card.mint,
+    textAlign: 'center',
   },
-  emblemGlyph: { fontSize: 52, color: '#3ddc84' },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, color: '#e8f0ec', textAlign: 'center' },
+  emblemWrap: { alignItems: 'center', justifyContent: 'center', height: 220, marginVertical: 4 },
+  // Call emblem as glass instrument: teal-tinted rim + outer glow.
+  emblem: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: LG.card.fillStrong,
+    borderWidth: 2,
+    borderColor: 'rgba(92, 232, 184, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: LG.card.mint,
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  emblemGlyph: { fontSize: 52, lineHeight: 56, color: LG.card.mint },
+  title: {
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
   medRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#141c19', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
-    borderWidth: 1, borderColor: '#223028',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   medInfo: { flex: 1, gap: 2 },
-  medName: { fontFamily: FONT.semi, fontSize: 17, color: '#e8f0ec' },
-  medMeta: { fontSize: 13, color: '#93a5a0', fontVariant: ['tabular-nums'] },
-  takenTick: { fontSize: 22, color: '#3ddc84' },
-  h1: { fontFamily: FONT.semi, fontSize: 22, color: '#e8f0ec', textAlign: 'center' },
-  dim: { fontSize: 14, color: '#93a5a0', textAlign: 'center' },
-  error: { fontSize: 13, color: '#ff5d5d', textAlign: 'center' },
+  medName: { fontWeight: '600', fontSize: 17, lineHeight: 22, letterSpacing: -0.2, color: '#FFFFFF' },
+  medMeta: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  takenTick: { fontSize: 22, lineHeight: 26, color: LG.card.mint },
+  h1: {
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  dim: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  error: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: LG.card.danger, textAlign: 'center' },
   callRow: { flexDirection: 'row', justifyContent: 'space-evenly', marginTop: 12 },
-  answerBtn: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#0e5c40', alignItems: 'center', justifyContent: 'center', gap: 2 },
-  declineBtn: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#4a1a1a', alignItems: 'center', justifyContent: 'center', gap: 2 },
-  answerGlyph: { fontSize: 30, color: '#eafff3' },
-  declineGlyph: { fontSize: 26, color: '#ffd9d9' },
-  callLabel: { fontFamily: FONT.semi, fontSize: 11, letterSpacing: 1, color: '#e8f0ec' },
+  ringBtn: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    borderWidth: 1,
+  },
+  // Answer is the prominent action: white.
+  answerBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  // Decline is status: tinted danger glass.
+  declineBtn: {
+    backgroundColor: 'rgba(255, 142, 142, 0.16)',
+    borderColor: 'rgba(255, 142, 142, 0.45)',
+  },
+  answerGlyph: { fontSize: 30, lineHeight: 34, color: '#0B0F1A' },
+  declineGlyph: { fontSize: 26, lineHeight: 30, color: LG.card.danger },
+  callLabel: { fontWeight: '600', fontSize: 11, lineHeight: 14, letterSpacing: 0.5, color: '#FFFFFF' },
+  callLabelDark: { fontWeight: '600', fontSize: 11, lineHeight: 14, letterSpacing: 0.5, color: '#0B0F1A' },
   pressed: { opacity: 0.75 },
   confirmBlock: { gap: 10, marginTop: 4 },
-  confirmQ: { fontFamily: FONT.semi, fontSize: 18, color: '#e8f0ec', textAlign: 'center' },
-  primaryBtn: { backgroundColor: '#0e5c40', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  confirmQ: {
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.4,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  // Primary on dark: single white pill.
+  primaryBtn: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
+  },
   disabledBtn: { opacity: 0.5 },
-  primaryText: { fontFamily: FONT.semi, fontSize: 15, letterSpacing: 1, color: '#eafff3' },
-  secondaryBtn: { borderRadius: 14, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#2c3a34' },
-  secondaryText: { fontFamily: FONT.semi, fontSize: 14, color: '#c9d5da' },
-  doneTick: { fontSize: 44, color: '#3ddc84', textAlign: 'center' },
-  doneText: { fontSize: 15, lineHeight: 21, color: '#e8f0ec', textAlign: 'center' },
-  sheet: { backgroundColor: '#141c19', borderRadius: 16, padding: 14, gap: 6, borderWidth: 1, borderColor: '#223028' },
-  sheetTitle: { fontFamily: FONT.semi, fontSize: 15, letterSpacing: 1, color: '#c9d5da', textAlign: 'center', marginBottom: 4 },
-  sheetRow: { paddingVertical: 12, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#223028' },
-  sheetLabel: { fontSize: 15, color: '#e8f0ec' },
-  fineprint: { fontSize: 11, lineHeight: 15, color: '#5b6b72', textAlign: 'center', marginTop: 8 },
+  primaryText: { fontWeight: '600', fontSize: 15, lineHeight: 20, letterSpacing: -0.1, color: '#0B0F1A' },
+  secondaryBtn: {
+    borderRadius: 9999,
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  secondaryText: { fontWeight: '600', fontSize: 14, lineHeight: 20, color: '#FFFFFF' },
+  doneTick: { fontSize: 44, lineHeight: 48, color: LG.card.mint, textAlign: 'center' },
+  doneText: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', textAlign: 'center' },
+  sheet: { padding: 16, gap: 6 },
+  sheetTitle: {
+    fontWeight: '600',
+    fontSize: 15,
+    lineHeight: 20,
+    color: SECONDARY,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  sheetRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    minHeight: 48,
+    justifyContent: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  sheetLabel: { fontWeight: '400', fontSize: 15, lineHeight: 20, color: '#FFFFFF' },
+  fineprint: {
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: TERTIARY,
+    textAlign: 'center',
+    marginTop: 8,
+  },
 });

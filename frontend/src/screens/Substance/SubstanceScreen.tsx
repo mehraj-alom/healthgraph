@@ -20,9 +20,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Button, Card, Chip, EmptyState, Input, Modal, SectionHeader } from '@/components';
-import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { Button, Chip, EmptyState, Input, Modal } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { EXTRA_TONES } from '@/theme/tones';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import {
@@ -74,6 +76,9 @@ import {
   type CravingOutcome,
   type CravingTrigger,
 } from '@/db/queries/cravings';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 const CATEGORY_COPY: Record<SubstanceCategory, { label: string; hint: string }> = {
   alcohol: { label: 'Alcohol', hint: 'Drinks and occasions' },
@@ -157,12 +162,10 @@ function GoalsSection({ entries, today }: { entries: SubstanceEntry[]; today: st
         const miles = milestonesReached(streak);
         return (
           <View key={category}>
-            <SectionHeader
-              dark
-              title={category === 'alcohol' ? 'Alcohol goal' : 'Tobacco goal'}
-              titleStyle={styles.histTitle}
-            />
-            <Card style={styles.darkCard}>
+            <Text style={styles.sectionTitle}>
+              {category === 'alcohol' ? 'Alcohol goal' : 'Tobacco goal'}
+            </Text>
+            <GlassSurface strong style={styles.card}>
               <View style={styles.chipRow}>
                 {GOAL_MODES.map((m) => (
                   <Chip
@@ -184,6 +187,7 @@ function GoalsSection({ entries, today }: { entries: SubstanceEntry[]; today: st
                   />
                   <Button
                     title="Set"
+                    variant="secondary"
                     onPress={() => void save(category, 'reduce')}
                     disabled={saving === category}
                     style={styles.capBtn}
@@ -204,7 +208,7 @@ function GoalsSection({ entries, today }: { entries: SubstanceEntry[]; today: st
                     : 'No milestones set'}
               </Text>
               <Text style={styles.provenance}>Counts logged days on this device only.</Text>
-            </Card>
+            </GlassSurface>
           </View>
         );
       })}
@@ -296,12 +300,10 @@ function PledgeSection({ today }: { today: string }) {
         const summary = savingsSince(quitDates[category] ?? firstPledge ?? null, plan?.amountPerDay ?? null, today);
         return (
           <View key={category}>
-            <SectionHeader
-              dark
-              title={category === 'alcohol' ? 'Alcohol pledge' : 'Tobacco pledge'}
-              titleStyle={styles.histTitle}
-            />
-            <Card style={styles.darkCard}>
+            <Text style={styles.sectionTitle}>
+              {category === 'alcohol' ? 'Alcohol pledge' : 'Tobacco pledge'}
+            </Text>
+            <GlassSurface strong style={styles.card}>
               <Text style={styles.bigValue}>{streak}</Text>
               <Text style={styles.avgSub}>
                 {streak === 1 ? 'day in a row pledged' : 'days in a row pledged'}
@@ -316,9 +318,12 @@ function PledgeSection({ today }: { today: string }) {
                   />
                   <Button
                     title={saving === category ? 'Saving…' : 'Pledge today'}
+                    variant="secondary"
                     onPress={() => void pledge(category)}
                     disabled={saving === category}
                     fullWidth
+                    style={styles.capBtn}
+                    textStyle={styles.capBtnText}
                   />
                 </>
               ) : (
@@ -335,6 +340,7 @@ function PledgeSection({ today }: { today: string }) {
                 />
                 <Button
                   title="Set"
+                  variant="secondary"
                   onPress={() => void saveSpend(category)}
                   disabled={saving === category}
                   style={styles.capBtn}
@@ -345,7 +351,7 @@ function PledgeSection({ today }: { today: string }) {
                 {savingsStatusLine(summary, plan?.currency ?? '$')}
               </Text>
               <Text style={styles.provenance}>Pledges and spend stay on this device only.</Text>
-            </Card>
+            </GlassSurface>
           </View>
         );
       })}
@@ -587,350 +593,355 @@ export default function SubstanceScreen() {  const [entries, setEntries] = useSt
   const cravingLine = cravingStatusLine(cravingWeek);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Substance use.</Text>
-        <Text style={styles.sub}>A private log. Not advice, not a diagnosis.</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Substance use</Text>
+          <Text style={styles.sub}>A private log. Not advice, not a diagnosis.</Text>
 
-        <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
-        <Card style={styles.darkCard}>
-          <View style={styles.strip}>
-            {week.map((d) => (
-              <View key={d.date} style={styles.cell}>
-                <View style={[styles.dot, d.count > 0 ? styles.dotOn : styles.dotOff]}>
-                  {d.count > 1 ? <Text style={styles.dotCount}>{d.count}</Text> : null}
+          <Text style={styles.sectionTitle}>This week</Text>
+          <GlassSurface strong style={styles.card}>
+            <View style={styles.strip}>
+              {week.map((d) => (
+                <View key={d.date} style={styles.cell}>
+                  <View style={[styles.dot, d.count > 0 ? styles.dotOn : styles.dotOff]}>
+                    {d.count > 1 ? <Text style={styles.dotCount}>{d.count}</Text> : null}
+                  </View>
+                  <Text style={styles.cellDay}>{d.date.slice(8)}</Text>
                 </View>
-                <Text style={styles.cellDay}>{d.date.slice(8)}</Text>
-              </View>
-            ))}
-          </View>
-          <Text style={styles.weekTotal}>
-            {weekTotal === 0 ? 'Nothing recorded this week.' : `${weekTotal} ${weekTotal === 1 ? 'entry' : 'entries'} this week.`}
-          </Text>
-        </Card>
-
-        <GoalsSection entries={entries} today={todayKey()} />
-
-        <PledgeSection today={todayKey()} />
-
-        <SectionHeader dark title="Cravings" titleStyle={styles.histTitle} />
-        <Card style={styles.darkCard}>
-          <Text style={styles.weekTotal}>{cravingLine}</Text>
-          {cravingWeek.topTrigger !== null ? (
-            <Text style={styles.avgSub}>
-              Most logged setting: {triggerLabel(cravingWeek.topTrigger)} ({cravingWeek.byTrigger[cravingWeek.topTrigger] ?? 0} of {cravingWeek.total})
+              ))}
+            </View>
+            <Text style={styles.weekTotal}>
+              {weekTotal === 0 ? 'Nothing recorded this week.' : `${weekTotal} ${weekTotal === 1 ? 'entry' : 'entries'} this week.`}
             </Text>
+          </GlassSurface>
+
+          <GoalsSection entries={entries} today={todayKey()} />
+
+          <PledgeSection today={todayKey()} />
+
+          <Text style={styles.sectionTitle}>Cravings</Text>
+          <GlassSurface strong style={styles.card}>
+            <Text style={styles.weekTotal}>{cravingLine}</Text>
+            {cravingWeek.topTrigger !== null ? (
+              <Text style={styles.avgSub}>
+                Most logged setting: {triggerLabel(cravingWeek.topTrigger)} ({cravingWeek.byTrigger[cravingWeek.topTrigger] ?? 0} of {cravingWeek.total})
+              </Text>
+            ) : null}
+            <Text style={styles.provenance}>
+              Logged moments with their setting · last 7 days.
+            </Text>
+          </GlassSurface>
+          {cravings.length > 0 ? (
+            <View style={styles.list}>
+              {cravings.slice(0, 10).map((entry) => (
+                <GlassSurface key={entry.entry_id} strong style={styles.card}>
+                  <View style={styles.rowTop}>
+                    <View style={styles.rowMain}>
+                      <View style={styles.kindRow}>
+                        <View style={[styles.kindDot, { backgroundColor: SUBSTANCE_TONES[entry.category] }]} />
+                        <Text style={styles.rowTitle}>
+                          {CATEGORY_COPY[entry.category].label}
+                          {entry.trigger ? ` · ${triggerLabel(entry.trigger)}` : ''}
+                          {entry.intensity != null ? ` · ${entry.intensity}/5` : ''}
+                        </Text>
+                      </View>
+                      <Text style={styles.rowSub}>
+                        {formatWhen(entry.occurred_at)}
+                        {entry.outcome === 'passed' ? ' · Passed' : entry.outcome === 'used' ? ' · Used after' : ''}
+                      </Text>
+                      {entry.notes ? <Text style={styles.rowNotes}>{entry.notes}</Text> : null}
+                    </View>
+                    <View style={styles.rowActions}>
+                      <Pressable
+                        onPress={() => openEditCraving(entry)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Edit craving entry"
+                        style={styles.rowBtn}
+                      >
+                        <Text style={styles.rowBtnText}>Edit</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => confirmDeleteCraving(entry)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete craving entry"
+                        style={styles.rowBtn}
+                      >
+                        <Text style={[styles.rowBtnText, styles.deleteText]}>Delete</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </GlassSurface>
+              ))}
+            </View>
           ) : null}
-          <Text style={styles.provenance}>
-            Logged moments with their setting · last 7 days.
+
+          <Text style={styles.sectionTitle}>History</Text>
+          {loading ? (
+            <View style={styles.center}>
+              <Text style={styles.loading}>Loading…</Text>
+            </View>
+          ) : entries.length === 0 ? (
+            <EmptyState
+              title="No entries yet"
+              message="Record alcohol, tobacco, or anything else you track."
+            />
+          ) : (
+            <View style={styles.list}>
+              {entries.map((entry) => (
+                <GlassSurface key={entry.entry_id} strong style={styles.card}>
+                  <View style={styles.rowTop}>
+                    <View style={styles.rowMain}>
+                      <View style={styles.kindRow}>
+                        <View style={[styles.kindDot, { backgroundColor: SUBSTANCE_TONES[entry.category] }]} />
+                        <Text style={styles.rowTitle}>
+                          {CATEGORY_COPY[entry.category].label}
+                          {entry.label ? ` · ${entry.label}` : ''}
+                        </Text>
+                      </View>
+                      <Text style={styles.rowSub}>
+                        {formatWhen(entry.occurred_at)}
+                        {formatAmount(entry) ? ` · ${formatAmount(entry)}` : ''}
+                      </Text>
+                      {entry.notes ? <Text style={styles.rowNotes}>{entry.notes}</Text> : null}
+                    </View>
+                    <View style={styles.rowActions}>
+                      <Pressable
+                        onPress={() => openEdit(entry)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Edit entry"
+                        style={styles.rowBtn}
+                      >
+                        <Text style={styles.rowBtnText}>Edit</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => confirmDelete(entry)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete entry"
+                        style={styles.rowBtn}
+                      >
+                        <Text style={[styles.rowBtnText, styles.deleteText]}>Delete</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </GlassSurface>
+              ))}
+            </View>
+          )}
+
+          <Button
+            title="Log entry"
+            variant="secondary"
+            onPress={openAdd}
+            fullWidth
+            size="large"
+            style={styles.logBtn}
+            textStyle={styles.logBtnText}
+          />
+          <Button
+            title="Log craving"
+            variant="secondary"
+            onPress={openAddCraving}
+            fullWidth
+            size="large"
+            style={styles.logBtn}
+            textStyle={styles.logBtnText}
+          />
+          <Text style={styles.disclaimer}>
+            Tracking only. Not medical advice, diagnosis, or treatment.
           </Text>
-        </Card>
-        {cravings.length > 0 ? (
-          <View style={styles.list}>
-            {cravings.slice(0, 10).map((entry) => (
-              <Card key={entry.entry_id} style={styles.darkCard}>
-                <View style={styles.rowTop}>
-                  <View style={styles.rowMain}>
-                    <View style={styles.kindRow}>
-                      <View style={[styles.kindDot, { backgroundColor: SUBSTANCE_TONES[entry.category] }]} />
-                      <Text style={styles.rowTitle}>
-                        {CATEGORY_COPY[entry.category].label}
-                        {entry.trigger ? ` · ${triggerLabel(entry.trigger)}` : ''}
-                        {entry.intensity != null ? ` · ${entry.intensity}/5` : ''}
-                      </Text>
-                    </View>
-                    <Text style={styles.rowSub}>
-                      {formatWhen(entry.occurred_at)}
-                      {entry.outcome === 'passed' ? ' · Passed' : entry.outcome === 'used' ? ' · Used after' : ''}
-                    </Text>
-                    {entry.notes ? <Text style={styles.rowNotes}>{entry.notes}</Text> : null}
-                  </View>
-                  <View style={styles.rowActions}>
-                    <Pressable
-                      onPress={() => openEditCraving(entry)}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Edit craving entry"
-                      style={styles.rowBtn}
-                    >
-                      <Text style={styles.rowBtnText}>Edit</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => confirmDeleteCraving(entry)}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Delete craving entry"
-                      style={styles.rowBtn}
-                    >
-                      <Text style={[styles.rowBtnText, styles.deleteText]}>Delete</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </Card>
-            ))}
-          </View>
-        ) : null}
+        </ScrollView>
 
-        <SectionHeader dark title="History" titleStyle={styles.histTitle} />
-        {loading ? (
-          <>
-            <Text style={styles.loading}>Loading…</Text>
-            <HealthFact style={styles.fact} />
-          </>
-        ) : entries.length === 0 ? (
-          <EmptyState
-            title="No entries yet"
-            message="Record alcohol, tobacco, or anything else you track."
-          />
-        ) : (
-          <View style={styles.list}>
-            {entries.map((entry) => (
-              <Card key={entry.entry_id} style={styles.darkCard}>
-                <View style={styles.rowTop}>
-                  <View style={styles.rowMain}>
-                    <View style={styles.kindRow}>
-                      <View style={[styles.kindDot, { backgroundColor: SUBSTANCE_TONES[entry.category] }]} />
-                      <Text style={styles.rowTitle}>
-                        {CATEGORY_COPY[entry.category].label}
-                        {entry.label ? ` · ${entry.label}` : ''}
-                      </Text>
-                    </View>
-                    <Text style={styles.rowSub}>
-                      {formatWhen(entry.occurred_at)}
-                      {formatAmount(entry) ? ` · ${formatAmount(entry)}` : ''}
-                    </Text>
-                    {entry.notes ? <Text style={styles.rowNotes}>{entry.notes}</Text> : null}
-                  </View>
-                  <View style={styles.rowActions}>
-                    <Pressable
-                      onPress={() => openEdit(entry)}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Edit entry"
-                      style={styles.rowBtn}
-                    >
-                      <Text style={styles.rowBtnText}>Edit</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => confirmDelete(entry)}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Delete entry"
-                      style={styles.rowBtn}
-                    >
-                      <Text style={[styles.rowBtnText, styles.deleteText]}>Delete</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </Card>
-            ))}
-          </View>
-        )}
-
-        <Button
-          title="Log entry"
-          onPress={openAdd}
-          fullWidth
-          size="large"
-          style={styles.logBtn}
-          textStyle={styles.logBtnText}
-        />
-        <Button
-          title="Log craving"
-          variant="secondary"
-          onPress={openAddCraving}
-          fullWidth
-          size="large"
-        />
-        <Text style={styles.disclaimer}>
-          Tracking only. Not medical advice, diagnosis, or treatment.
-        </Text>
-      </ScrollView>
-
-      <Modal
-        visible={showForm}
-        onClose={() => setShowForm(false)}
-        title={editing ? 'Edit entry' : 'Log entry'}
-        subtitle="Stored on this device only."
-      >
-        <View style={styles.form}>
-          <Text style={styles.fieldLabel}>Category</Text>
-          <View style={styles.chips}>
-            {SUBSTANCE_CATEGORIES.map((c) => (
-              <Chip
-                key={c}
-                label={CATEGORY_COPY[c].label}
-                selected={category === c}
-                onPress={() => setCategory(c)}
-                size="medium"
-                color={SUBSTANCE_TONES[c]}
-              />
-            ))}
-          </View>
-          <Input label="Occasion / label (optional)" value={label} onChangeText={setLabel} placeholder="e.g. dinner with friends" />
-          <View style={styles.fieldRow}>
-            <View style={styles.fieldHalf}>
-              <Input label="Date (YYYY-MM-DD)" value={date} onChangeText={setDate} placeholder="2026-09-21" />
+        <Modal
+          visible={showForm}
+          onClose={() => setShowForm(false)}
+          title={editing ? 'Edit entry' : 'Log entry'}
+          subtitle="Stored on this device only."
+        >
+          <View style={styles.form}>
+            <Text style={styles.fieldLabel}>Category</Text>
+            <View style={styles.chips}>
+              {SUBSTANCE_CATEGORIES.map((c) => (
+                <Chip
+                  key={c}
+                  label={CATEGORY_COPY[c].label}
+                  selected={category === c}
+                  onPress={() => setCategory(c)}
+                  size="medium"
+                  color={SUBSTANCE_TONES[c]}
+                />
+              ))}
             </View>
-            <View style={styles.fieldHalf}>
-              <Input label="Time (HH:MM)" value={time} onChangeText={setTime} placeholder="19:30" />
+            <Input label="Occasion / label (optional)" value={label} onChangeText={setLabel} placeholder="e.g. dinner with friends" />
+            <View style={styles.fieldRow}>
+              <View style={styles.fieldHalf}>
+                <Input label="Date (YYYY-MM-DD)" value={date} onChangeText={setDate} placeholder="2026-09-21" />
+              </View>
+              <View style={styles.fieldHalf}>
+                <Input label="Time (HH:MM)" value={time} onChangeText={setTime} placeholder="19:30" />
+              </View>
             </View>
-          </View>
-          <View style={styles.fieldRow}>
-            <View style={styles.fieldHalf}>
-              <Input label="Amount (optional)" value={amount} onChangeText={setAmount} placeholder="e.g. 2" keyboardType="numeric" />
+            <View style={styles.fieldRow}>
+              <View style={styles.fieldHalf}>
+                <Input label="Amount (optional)" value={amount} onChangeText={setAmount} placeholder="e.g. 2" keyboardType="numeric" />
+              </View>
+              <View style={styles.fieldHalf}>
+                <Input label="Unit (optional)" value={unit} onChangeText={setUnit} placeholder="e.g. drinks" />
+              </View>
             </View>
-            <View style={styles.fieldHalf}>
-              <Input label="Unit (optional)" value={unit} onChangeText={setUnit} placeholder="e.g. drinks" />
-            </View>
-          </View>
-          <Input label="Notes (optional)" value={notes} onChangeText={setNotes} placeholder="Anything worth remembering" multiline numberOfLines={3} />
-          {formError ? <Text style={styles.error}>{formError}</Text> : null}
-          <Button
-            title={saving ? 'Saving…' : editing ? 'Save changes' : 'Save entry'}
-            onPress={() => void handleSave()}
-            disabled={saving}
-            loading={saving}
-            fullWidth
-          />
-          <Button title="Cancel" variant="ghost" onPress={() => setShowForm(false)} fullWidth />
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showCravingForm}
-        onClose={() => setShowCravingForm(false)}
-        title={editingCraving ? 'Edit craving' : 'Log craving'}
-        subtitle="Stored on this device only."
-      >
-        <View style={styles.form}>
-          <Text style={styles.fieldLabel}>Category</Text>
-          <View style={styles.chips}>
-            {SUBSTANCE_CATEGORIES.map((c) => (
-              <Chip
-                key={c}
-                label={CATEGORY_COPY[c].label}
-                selected={cravingCategory === c}
-                onPress={() => setCravingCategory(c)}
-                size="medium"
-                color={SUBSTANCE_TONES[c]}
-              />
-            ))}
-          </View>
-          <Text style={styles.fieldLabel}>What was happening (optional)</Text>
-          <View style={styles.chips}>
-            {CRAVING_TRIGGERS.map((t) => (
-              <Chip
-                key={t}
-                label={triggerLabel(t)}
-                selected={cravingTrigger === t}
-                onPress={() => setCravingTrigger(cravingTrigger === t ? null : t)}
-                size="medium"
-              />
-            ))}
-          </View>
-          <View style={styles.fieldRow}>
-            <View style={styles.fieldHalf}>
-              <Input label="Date (YYYY-MM-DD)" value={cravingDate} onChangeText={setCravingDate} placeholder="2026-09-21" />
-            </View>
-            <View style={styles.fieldHalf}>
-              <Input label="Time (HH:MM)" value={cravingTime} onChangeText={setCravingTime} placeholder="19:30" />
-            </View>
-          </View>
-          <Text style={styles.fieldLabel}>How strong, 1–5 (optional)</Text>
-          <View style={styles.chips}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Chip
-                key={n}
-                label={String(n)}
-                selected={cravingIntensity === String(n)}
-                onPress={() => setCravingIntensity(cravingIntensity === String(n) ? '' : String(n))}
-                size="medium"
-              />
-            ))}
-          </View>
-          <Text style={styles.fieldLabel}>What followed (optional)</Text>
-          <View style={styles.chips}>
-            <Chip
-              label="Passed"
-              selected={cravingOutcome === 'passed'}
-              onPress={() => setCravingOutcome(cravingOutcome === 'passed' ? null : 'passed')}
-              size="medium"
+            <Input label="Notes (optional)" value={notes} onChangeText={setNotes} placeholder="Anything worth remembering" multiline numberOfLines={3} />
+            {formError ? <Text style={styles.error}>{formError}</Text> : null}
+            <Button
+              title={saving ? 'Saving…' : editing ? 'Save changes' : 'Save entry'}
+              variant="secondary"
+              onPress={() => void handleSave()}
+              disabled={saving}
+              loading={saving}
+              fullWidth
+              style={styles.logBtn}
+              textStyle={styles.logBtnText}
             />
-            <Chip
-              label="Used after"
-              selected={cravingOutcome === 'used'}
-              onPress={() => setCravingOutcome(cravingOutcome === 'used' ? null : 'used')}
-              size="medium"
-            />
+            <Button title="Cancel" variant="ghost" onPress={() => setShowForm(false)} fullWidth textStyle={styles.ghostText} />
           </View>
-          <Input label="Notes (optional)" value={cravingNotes} onChangeText={setCravingNotes} placeholder="Anything worth remembering" multiline numberOfLines={3} />
-          {cravingError ? <Text style={styles.error}>{cravingError}</Text> : null}
-          <Button
-            title={savingCraving ? 'Saving…' : editingCraving ? 'Save changes' : 'Save craving'}
-            onPress={() => void handleSaveCraving()}
-            disabled={savingCraving}
-            loading={savingCraving}
-            fullWidth
-          />
-          <Button title="Cancel" variant="ghost" onPress={() => setShowCravingForm(false)} fullWidth />
-        </View>
-      </Modal>
-    </SafeAreaView>
+        </Modal>
+
+        <Modal
+          visible={showCravingForm}
+          onClose={() => setShowCravingForm(false)}
+          title={editingCraving ? 'Edit craving' : 'Log craving'}
+          subtitle="Stored on this device only."
+        >
+          <View style={styles.form}>
+            <Text style={styles.fieldLabel}>Category</Text>
+            <View style={styles.chips}>
+              {SUBSTANCE_CATEGORIES.map((c) => (
+                <Chip
+                  key={c}
+                  label={CATEGORY_COPY[c].label}
+                  selected={cravingCategory === c}
+                  onPress={() => setCravingCategory(c)}
+                  size="medium"
+                  color={SUBSTANCE_TONES[c]}
+                />
+              ))}
+            </View>
+            <Text style={styles.fieldLabel}>What was happening (optional)</Text>
+            <View style={styles.chips}>
+              {CRAVING_TRIGGERS.map((t) => (
+                <Chip
+                  key={t}
+                  label={triggerLabel(t)}
+                  selected={cravingTrigger === t}
+                  onPress={() => setCravingTrigger(cravingTrigger === t ? null : t)}
+                  size="medium"
+                />
+              ))}
+            </View>
+            <View style={styles.fieldRow}>
+              <View style={styles.fieldHalf}>
+                <Input label="Date (YYYY-MM-DD)" value={cravingDate} onChangeText={setCravingDate} placeholder="2026-09-21" />
+              </View>
+              <View style={styles.fieldHalf}>
+                <Input label="Time (HH:MM)" value={cravingTime} onChangeText={setCravingTime} placeholder="19:30" />
+              </View>
+            </View>
+            <Text style={styles.fieldLabel}>How strong, 1–5 (optional)</Text>
+            <View style={styles.chips}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Chip
+                  key={n}
+                  label={String(n)}
+                  selected={cravingIntensity === String(n)}
+                  onPress={() => setCravingIntensity(cravingIntensity === String(n) ? '' : String(n))}
+                  size="medium"
+                />
+              ))}
+            </View>
+            <Text style={styles.fieldLabel}>What followed (optional)</Text>
+            <View style={styles.chips}>
+              <Chip
+                label="Passed"
+                selected={cravingOutcome === 'passed'}
+                onPress={() => setCravingOutcome(cravingOutcome === 'passed' ? null : 'passed')}
+                size="medium"
+              />
+              <Chip
+                label="Used after"
+                selected={cravingOutcome === 'used'}
+                onPress={() => setCravingOutcome(cravingOutcome === 'used' ? null : 'used')}
+                size="medium"
+              />
+            </View>
+            <Input label="Notes (optional)" value={cravingNotes} onChangeText={setCravingNotes} placeholder="Anything worth remembering" multiline numberOfLines={3} />
+            {cravingError ? <Text style={styles.error}>{cravingError}</Text> : null}
+            <Button
+              title={savingCraving ? 'Saving…' : editingCraving ? 'Save changes' : 'Save craving'}
+              variant="secondary"
+              onPress={() => void handleSaveCraving()}
+              disabled={savingCraving}
+              loading={savingCraving}
+              fullWidth
+              style={styles.logBtn}
+              textStyle={styles.logBtnText}
+            />
+            <Button title="Cancel" variant="ghost" onPress={() => setShowCravingForm(false)} fullWidth textStyle={styles.ghostText} />
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
-  fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginTop: 16 },
+  center: { alignItems: 'center', paddingVertical: 24 },
+  card: { padding: 16 },
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   dot: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   dotOn: { backgroundColor: '#7CF5D3' },
   dotOff: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
-  dotCount: { fontSize: 10, fontWeight: '700', color: '#062A26' },
-  cellDay: { ...TYPE.caption, fontSize: 12, color: GV.fog, fontVariant: ['tabular-nums'] },
-  weekTotal: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  bigValue: { ...TYPE.display, fontSize: 40, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
-  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
+  dotCount: { fontWeight: '700', fontSize: 10, lineHeight: 12, color: '#062A26' },
+  cellDay: { fontWeight: '400', fontSize: 12, lineHeight: 16, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  weekTotal: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 8 },
+  bigValue: { fontWeight: '600', fontSize: 40, lineHeight: 48, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  avgSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
+  provenance: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center', marginTop: 8 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   capRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: 8 },
-  capBtn: { backgroundColor: '#4FD1C5', paddingHorizontal: 18 },
-  capBtnText: { color: '#062A26' },
-  list: { gap: SPACE.cardGap },
+  capBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF', paddingHorizontal: 18 },
+  capBtnText: { color: '#0B0F1A' },
+  list: { gap: 12 },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   rowMain: { flex: 1, gap: 4 },
   kindRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   kindDot: { width: 8, height: 8, borderRadius: 4 },
-  rowTitle: { ...TYPE.button, fontSize: 15, color: '#FFFFFF' },
-  rowSub: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
-  rowNotes: { ...TYPE.caption, color: '#8B95A7' },
+  rowTitle: { fontWeight: '600', fontSize: 15, lineHeight: 20, color: '#FFFFFF' },
+  rowSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  rowNotes: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY },
   rowActions: { flexDirection: 'row', gap: 4 },
   rowBtn: { minWidth: 44, minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  rowBtnText: { ...TYPE.chip, color: '#3DDC84' },
-  deleteText: { color: GV.danger },
-  logBtn: { backgroundColor: '#4FD1C5' },
-  logBtnText: { color: '#062A26' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  rowBtnText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: '#FFFFFF' },
+  deleteText: { color: LG.card.danger },
+  logBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  logBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
   form: { gap: 12 },
-  fieldLabel: { ...TYPE.caption, color: GV.muted },
+  fieldLabel: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   fieldRow: { flexDirection: 'row', gap: 12 },
   fieldHalf: { flex: 1 },
-  error: { ...TYPE.caption, color: GV.danger },
+  error: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: LG.card.danger },
 });

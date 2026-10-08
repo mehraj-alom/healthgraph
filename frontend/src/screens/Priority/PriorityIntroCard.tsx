@@ -24,11 +24,16 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { Button, Card } from '@/components';
+import { SPACE } from '@/theme/guava';
+import { Button } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { LG } from '@/theme/liquidGlass';
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { usePriority } from '@/hooks/usePriority';
 import { formatPriorityNames, introCopy } from '@/screens/Priority/priorityLayer';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 const ENTER_MS = 240;
 const EXIT_MS = 220;
@@ -109,7 +114,7 @@ export function PriorityIntroCard({
           accessibilityLabel="Dismiss priorities introduction"
         />
         <Animated.View style={[styles.cardWrap, cardStyle]}>
-          <Card>
+          <GlassSurface strong style={styles.card}>
             <View style={styles.head}>
               <Text style={styles.overline}>Priority</Text>
               <Pressable
@@ -129,8 +134,14 @@ export function PriorityIntroCard({
               <Text style={styles.names}>No priorities selected yet</Text>
             )}
             <Text style={styles.body}>{copy.body}</Text>
-            <Button title={`${copy.cta} →`} onPress={handleCta} fullWidth />
-          </Card>
+            <Button
+              title={`${copy.cta} →`}
+              variant="secondary"
+              onPress={handleCta}
+              fullWidth
+              size="large"
+            />
+          </GlassSurface>
         </Animated.View>
       </View>
     </RNModal>
@@ -146,19 +157,41 @@ const styles = StyleSheet.create({
   },
   scrimPress: { ...StyleSheet.absoluteFill },
   cardWrap: { width: '100%' },
+  card: { padding: 16, gap: 0 },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   overline: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 3,
-    color: GV.teal,
+    fontWeight: '600',
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: LG.card.mint,
   },
   closeHit: { minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'flex-end' },
-  closeText: { fontSize: 18, color: GV.fog },
-  headline: { ...TYPE.display, fontSize: 24, color: GV.card, marginTop: 8 },
-  names: { ...TYPE.button, fontSize: 16, color: GV.ink, marginTop: 8 },
-  body: { ...TYPE.body, color: GV.fog, marginTop: 8, marginBottom: 12 },
+  closeText: { fontSize: 18, color: TERTIARY },
+  headline: {
+    fontWeight: '600',
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: -0.4,
+    color: '#FFFFFF',
+    marginTop: 8,
+  },
+  names: {
+    fontWeight: '600',
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#FFFFFF',
+    marginTop: 8,
+  },
+  body: {
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: SECONDARY,
+    marginTop: 8,
+    marginBottom: 12,
+  },
 });
 
 export default PriorityIntroCard;

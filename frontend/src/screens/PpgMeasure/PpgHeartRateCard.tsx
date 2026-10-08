@@ -3,19 +3,23 @@
  *
  * Shows the most recent ON-DEVICE camera-PPG measurement (real stored data
  * only — never invented) or an empty state, and navigates to the
- * measurement screen. Guava-flat white card, Poppins numerals.
+ * measurement screen. Glass instrument panel with a teal-tinted rim and
+ * outer glow; the reading itself is never painted over.
  * No medical claims.
  */
 
 import React, { useCallback, useState } from 'react';
-import { Pressable, Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation, type CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getRecentPpgMeasurements } from '@/db/queries/ppg';
 import { getCachedPatientId } from '@/services/patientIdentity';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { LG } from '@/theme/liquidGlass';
 import type { MainTabParamList, RootStackParamList } from '@/types';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Dashboard'>,
@@ -84,14 +88,13 @@ export default function PpgHeartRateCard() {
 
   return (
     <View style={styles.section}>
-      <Pressable
+      <GlassSurface
+        strong
+        noSheen
         onPress={goToMeasure}
         accessibilityRole="button"
         accessibilityLabel={recent ? `Heart rate, ${recent.bpm} beats per minute. Measure again.` : 'Heart rate. No recent measurement. Measure now.'}
-        style={({ pressed }) => [
-          styles.card,
-          pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
-        ]}
+        style={styles.card}
       >
         <View style={styles.top}>
           <View style={styles.eyebrowRow}>
@@ -113,21 +116,26 @@ export default function PpgHeartRateCard() {
         <Text style={styles.sub} numberOfLines={1} accessibilityLabel={label}>
           {recent ? `${relativeTime(recent.measuredAt)} · fingertip camera` : 'Fingertip camera · about a minute'}
         </Text>
-      </Pressable>
+      </GlassSurface>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   section: {
-    paddingHorizontal: SPACE.screenH,
+    paddingHorizontal: 16,
     paddingTop: 8,
   },
+  // Instrument panel: teal-tinted rim + outer glow, sheen off so nothing
+  // paints over the reading.
   card: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    padding: 16,
     gap: 8,
+    borderColor: 'rgba(92, 232, 184, 0.35)',
+    shadowColor: LG.card.mint,
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 8,
   },
   top: {
     flexDirection: 'row',
@@ -143,36 +151,45 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 12,
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(92, 232, 184, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 232, 184, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconGlyph: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 16,
     lineHeight: 20,
-    color: GV.fx.pink,
+    color: LG.card.mint,
   },
   eyebrow: {
-    ...TYPE.caption,
-    color: GV.muted,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
     letterSpacing: 1.1,
   },
   cta: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 14,
-    color: GV.cta,
+    lineHeight: 20,
+    color: LG.card.mint,
+    minHeight: 44,
+    textAlignVertical: 'center',
   },
   value: {
-    fontFamily: FONT.semi,
-    fontSize: 24,
-    lineHeight: 30,
-    letterSpacing: -0.3,
-    color: GV.ink,
+    fontWeight: '600',
+    fontSize: 30,
+    lineHeight: 36,
+    letterSpacing: -0.5,
+    color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
   sub: {
-    ...TYPE.caption,
-    color: GV.muted,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
   },
 });

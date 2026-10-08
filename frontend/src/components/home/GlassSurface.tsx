@@ -78,7 +78,7 @@ export function GlassSurface({
   onLongPress,
   accessibilityLabel,
   accessibilityRole,
-  pressScale = 0.972,
+  pressScale = 0.97,
   noSheen = false,
   noBlur = false,
 }: GlassSurfaceProps) {
@@ -112,7 +112,19 @@ export function GlassSurface({
         isPressable
           ? ({ pressed }: { pressed: boolean }) => [
               ...baseStyle,
-              { transform: [{ scale: pressed ? pressScale : 1 }], opacity: pressed ? 0.92 : 1 },
+              // Press feedback must read instantly on glass: the sheet
+              // presses DOWN (scale + dim) and its fill brightens, like
+              // light concentrating under a fingertip. The background
+              // override lands after baseStyle, so it wins.
+              pressed
+                ? {
+                    transform: [{ scale: pressScale }],
+                    opacity: 0.82,
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    shadowOpacity: 0.18,
+                    elevation: 4,
+                  }
+                : null,
             ]
           : baseStyle
       }

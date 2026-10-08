@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Asset } from 'expo-asset';
@@ -19,12 +19,18 @@ import {
   getSattsModule,
   isSattsAvailable,
 } from 'healthgraph-satts';
+import { Button } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
 import { createSanoTTSProvider, type TtsResult } from '@/services/voice/tts';
 import { VoiceError } from '@/services/voice/errors';
-import { FONT } from '@/theme/guava';
 
 const FRONT_ASSET = require('../../../assets/voices/heartnano/front_q8.bin');
 const MODEL_ASSET = require('../../../assets/voices/heartnano/model_q8.bin');
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 interface RunStats {
   loadMs: number | null;
@@ -133,73 +139,91 @@ export default function SattsTestScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {playing && playUri ? <Player uri={playUri} onDone={stopPlayback} /> : null}
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.kicker}>VOICE TEST · ISOLATED · DEV ONLY</Text>
-        <Text style={styles.title}>sanoTTS synthesis</Text>
-        <Text style={styles.phrase}>“{SATTS_TEST_PHRASE}”</Text>
-        <Text style={styles.status}>{status}</Text>
-        <View style={styles.meterRow}>
-          <Text style={styles.meter}>load: {stats.loadMs === null ? '—' : `${stats.loadMs} ms`}</Text>
-          <Text style={styles.meter}>synth: {stats.synthMs === null ? '—' : `${stats.synthMs} ms`}</Text>
-        </View>
-        <View style={styles.meterRow}>
-          <Text style={styles.meter}>bytes: {stats.bytes < 0 ? '—' : stats.bytes}</Text>
-          <Text style={styles.meter}>rate: {stats.sampleRateHz || '—'} Hz</Text>
-          <Text style={styles.meter}>plays: {stats.plays}</Text>
-        </View>
-        <Pressable onPress={() => void loadVoices()} accessibilityRole="button" accessibilityLabel="Load voice" style={styles.btn}>
-          <Text style={styles.btnText}>1 · LOAD VOICE</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => void synthesize()}
-          disabled={busy}
-          accessibilityRole="button"
-          accessibilityLabel="Synthesize test phrase"
-          style={[styles.btn, busy && styles.btnDisabled]}
-        >
-          <Text style={styles.btnText}>2 · SYNTHESIZE</Text>
-        </Pressable>
-        <Pressable
-          onPress={play}
-          disabled={!stats.uri}
-          accessibilityRole="button"
-          accessibilityLabel="Play synthesized audio"
-          style={[styles.btn, !stats.uri && styles.btnDisabled]}
-        >
-          <Text style={styles.btnText}>3 · PLAY</Text>
-        </Pressable>
-        {playing ? (
-          <Pressable onPress={stopPlayback} accessibilityRole="button" accessibilityLabel="Stop playback" style={styles.stopBtn}>
-            <Text style={styles.btnText}>STOP</Text>
-          </Pressable>
-        ) : null}
-        <Pressable onPress={exit} accessibilityRole="button" accessibilityLabel="Close voice test" style={styles.ghostBtn}>
-          <Text style={styles.ghostText}>Close</Text>
-        </Pressable>
-        <Text style={styles.fineprint}>
-          Disconnected from medication reminders and production flows. Precomputed phoneme IDs only — no on-device text phonemization yet.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        {playing && playUri ? <Player uri={playUri} onDone={stopPlayback} /> : null}
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.kicker}>Voice test · isolated · dev only</Text>
+          <Text style={styles.title}>sanoTTS synthesis</Text>
+          <Text style={styles.phrase}>“{SATTS_TEST_PHRASE}”</Text>
+          <Text style={styles.status}>{status}</Text>
+          <GlassSurface strong style={styles.card}>
+            <View style={styles.meterRow}>
+              <Text style={styles.meter}>load: {stats.loadMs === null ? '—' : `${stats.loadMs} ms`}</Text>
+              <Text style={styles.meter}>synth: {stats.synthMs === null ? '—' : `${stats.synthMs} ms`}</Text>
+            </View>
+            <View style={styles.meterRow}>
+              <Text style={styles.meter}>bytes: {stats.bytes < 0 ? '—' : stats.bytes}</Text>
+              <Text style={styles.meter}>rate: {stats.sampleRateHz || '—'} Hz</Text>
+              <Text style={styles.meter}>plays: {stats.plays}</Text>
+            </View>
+          </GlassSurface>
+          <Button
+            title="1 · Load voice"
+            variant="secondary"
+            onPress={() => void loadVoices()}
+            accessibilityLabel="Load voice"
+            fullWidth
+            size="large"
+            style={styles.measureBtn}
+            textStyle={styles.measureBtnText}
+          />
+          <Button
+            title="2 · Synthesize"
+            variant="secondary"
+            onPress={() => void synthesize()}
+            disabled={busy}
+            accessibilityLabel="Synthesize test phrase"
+            fullWidth
+            size="large"
+            style={styles.measureBtn}
+            textStyle={styles.measureBtnText}
+          />
+          <Button
+            title="3 · Play"
+            variant="secondary"
+            onPress={play}
+            disabled={!stats.uri}
+            accessibilityLabel="Play synthesized audio"
+            fullWidth
+            size="large"
+            style={styles.measureBtn}
+            textStyle={styles.measureBtnText}
+          />
+          {playing ? (
+            <Button
+              title="Stop"
+              variant="danger"
+              onPress={stopPlayback}
+              accessibilityLabel="Stop playback"
+              fullWidth
+              size="large"
+            />
+          ) : null}
+          <Button title="Close" variant="ghost" onPress={exit} accessibilityLabel="Close voice test" fullWidth textStyle={styles.ghostText} />
+          <Text style={styles.fineprint}>
+            Disconnected from medication reminders and production flows. Precomputed phoneme IDs only — no on-device text phonemization yet.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a0f0d' },
-  content: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 40, gap: 12 },
-  kicker: { fontFamily: FONT.semi, fontSize: 11, letterSpacing: 3, color: '#7d8f96', textAlign: 'center' },
-  title: { fontFamily: FONT.semi, fontSize: 24, color: '#e8f0ec', textAlign: 'center' },
-  phrase: { fontSize: 14, fontStyle: 'italic', color: '#93a5a0', textAlign: 'center' },
-  status: { fontSize: 13, lineHeight: 19, color: '#c9d5da', textAlign: 'center', minHeight: 38 },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  kicker: { fontWeight: '600', fontSize: 11, lineHeight: 14, letterSpacing: 0.5, textTransform: 'uppercase', color: TERTIARY, textAlign: 'center' },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  phrase: { fontWeight: '400', fontSize: 14, lineHeight: 20, fontStyle: 'italic', color: SECONDARY, textAlign: 'center' },
+  status: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  card: { padding: 16, gap: 8 },
   meterRow: { flexDirection: 'row', justifyContent: 'space-evenly' },
-  meter: { fontSize: 12, color: '#7d8f96', fontVariant: ['tabular-nums'] },
-  btn: { backgroundColor: '#0e5c40', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
-  btnDisabled: { opacity: 0.45 },
-  btnText: { fontFamily: FONT.semi, fontSize: 15, letterSpacing: 1, color: '#eafff3' },
-  stopBtn: { backgroundColor: '#4a1a1a', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
-  ghostBtn: { borderRadius: 14, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#2c3a34' },
-  ghostText: { fontFamily: FONT.semi, fontSize: 14, color: '#c9d5da' },
-  fineprint: { fontSize: 11, lineHeight: 15, color: '#5b6b72', textAlign: 'center', marginTop: 8 },
+  meter: { fontWeight: '400', fontSize: 12, lineHeight: 17, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  measureBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  measureBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  fineprint: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center', marginTop: 8 },
 });

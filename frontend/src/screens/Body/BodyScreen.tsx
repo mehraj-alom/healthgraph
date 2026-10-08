@@ -29,6 +29,12 @@ import { useAnatomy } from '@/context/AnatomyContext';
 import AnatomyDownloadOverlay, { NotInstalledPrompt } from '@/components/AnatomyDownloadOverlay';
 import { HealthFact } from '@/components/HealthFact';
 import { getLocalModelUri, type Gender } from '@/services/anatomyDownload';
+import {
+  proceduralFemaleAsset,
+  proceduralHighlightNodes,
+  proceduralMaleAsset,
+  proceduralNodeEntries,
+} from '@/services/proceduralBody';
 
 // ── Filament conditional import ──
 // react-native-filament requires a native build (EAS/Expo Dev Client).
@@ -842,6 +848,14 @@ class AnatomySceneManager {
 
     // Build node→structure map
     this.nodeToStructure = buildNodeToStructureMap(gender);
+    // Procedural shells (the universal base layer) name their nodes directly
+    // by structure id — merge the reverse entries so tap-select works on the
+    // shell too, exactly as FilamentBody does.
+    for (const [nodeName, structureId] of proceduralNodeEntries()) {
+      if (!this.nodeToStructure.has(nodeName)) {
+        this.nodeToStructure.set(nodeName, structureId);
+      }
+    }
   }
 
   private defaultMaterial: THREE.MeshStandardMaterial;
@@ -1139,13 +1153,25 @@ class AnatomySceneManager {
     }
   }
 
-  /** Raycast to find clicked mesh at screen coordinates. */
-  handleTap(x: number, y: number) {
+  /**
+   * Raycast to find clicked mesh at canvas-local coordinates.
+   *
+   * (x, y) are pixels inside the canvas viewport (origin top-left);
+   * viewportWidth/viewportHeight are the rendered viewport dimensions so the
+   * NDC math matches what is on screen regardless of where the canvas sits
+   * in the layout.
+   */
+  handleTap(
+    x: number,
+    y: number,
+    viewportWidth: number = SCREEN_WIDTH,
+    viewportHeight: number = CANVAS_HEIGHT,
+  ) {
     if (!this.renderer) return;
 
     const mouse = new THREE.Vector2(
-      (x / SCREEN_WIDTH) * 2 - 1,
-      -((y - (SCREEN_HEIGHT - CANVAS_HEIGHT)) / CANVAS_HEIGHT) * 2 + 1
+      (x / viewportWidth) * 2 - 1,
+      -(y / viewportHeight) * 2 + 1,
     );
 
     const raycaster = new THREE.Raycaster();
@@ -1174,44 +1200,52 @@ class AnatomySceneManager {
     this.selectStructure(null);
   }
 
+  /**
+   * All node names that represent a structure: anatomy-map GLB node names
+   * plus the procedural shell's zone/organ ids (the universal base layer).
+   */
+  private highlightNodeNames(structureId: string): Set<string> {
+    const names = new Set<string>();
+    const mapping = getMapping(structureId);
+    if (mapping) {
+      for (const r of [...mapping.male, ...mapping.female]) names.add(r.nodeName);
+    }
+    for (const zone of proceduralHighlightNodes(structureId)) names.add(zone);
+    return names;
+  }
+
   /** Select a structure and highlight its meshes. */
   selectStructure(structureId: string | null) {
     if (this.selectedStructureId === structureId) return;
 
     // Unhighlight previous
     if (this.selectedStructureId) {
-      const prevMapping = getMapping(this.selectedStructureId);
-      if (prevMapping) {
-        const nodeNames = new Set([...prevMapping.male, ...prevMapping.female].map((r) => r.nodeName));
-        this.loadedGroups.forEach((group) => {
-          group.traverse((child) => {
-            if (child instanceof THREE.Mesh && nodeNames.has(child.name)) {
-              const orig = this.originalMaterials.get(child);
-              if (orig) child.material = orig;
-            }
-          });
+      const prevNames = this.highlightNodeNames(this.selectedStructureId);
+      this.loadedGroups.forEach((group) => {
+        group.traverse((child) => {
+          if (child instanceof THREE.Mesh && prevNames.has(child.name)) {
+            const orig = this.originalMaterials.get(child);
+            if (orig) child.material = orig;
+          }
         });
-      }
+      });
     }
 
     this.selectedStructureId = structureId;
 
     // Highlight new
     if (structureId) {
-      const mapping = getMapping(structureId);
-      if (mapping) {
-        const nodeNames = new Set([...mapping.male, ...mapping.female].map((r) => r.nodeName));
-        this.loadedGroups.forEach((group) => {
-          group.traverse((child) => {
-            if (child instanceof THREE.Mesh && nodeNames.has(child.name)) {
-              if (!this.originalMaterials.has(child)) {
-                this.originalMaterials.set(child, child.material);
-              }
-              child.material = this.highlightMaterial;
+      const nodeNames = this.highlightNodeNames(structureId);
+      this.loadedGroups.forEach((group) => {
+        group.traverse((child) => {
+          if (child instanceof THREE.Mesh && nodeNames.has(child.name)) {
+            if (!this.originalMaterials.has(child)) {
+              this.originalMaterials.set(child, child.material);
             }
-          });
+            child.material = this.highlightMaterial;
+          }
         });
-      }
+      });
     }
 
     this.onStructureSelected?.(structureId);
@@ -1299,14 +1333,24 @@ async function setupScene(
 
       await scene.loadGlbFromBuffer(regionalFile, buffer);
     }
-  } else if (Platform.OS === 'web') {
-    const uri = await resolveGlbUri(regionalFile);
-    await scene.loadGlbFromUri(regionalFile, uri);
   } else {
-    // No downloaded file and no bundled fallback (by design): the overlay
-    // above owns this state. Log loudly so a silent empty canvas is never
-    // mistaken for a successful load.
-    console.warn(`[Body] STARTUP: ${regionalFile} has no local file — download required`);
+    // Universal base layer: the bundled procedural shell. No download, no
+    // network — the body always renders, in Expo Go, dev/preview builds,
+    // and web, fully offline. It loads under the regional filename so every
+    // layer/visibility code path treats it as the base layer.
+    const shellAsset = gender === 'male' ? proceduralMaleAsset() : proceduralFemaleAsset();
+    if (Platform.OS === 'web') {
+      const [shell] = await Asset.loadAsync([shellAsset]);
+      await shell.downloadAsync().catch(() => {});
+      await scene.loadGlbFromUri(regionalFile, shell.localUri ?? shell.uri);
+    } else {
+      const buffer = await loadGlbArrayBuffer(regionalFile, shellAsset);
+      if (buffer) {
+        await scene.loadGlbFromBuffer(regionalFile, buffer);
+      } else {
+        console.warn(`[Body] STARTUP: procedural shell for ${gender} could not be read`);
+      }
+    }
   }
 
   const elapsed = (performance.now() - t0).toFixed(0);
@@ -1335,6 +1379,9 @@ function NativeCanvas({ gender, onStructureSelected, sceneRef, localFiles }: Nat
   const animFrameRef = useRef<number>(0);
   const lastTapRef = useRef<number>(0);
   const gestureState = useRef({ lastX: 0, lastY: 0, lastDist: 0, isPinching: false });
+  // Actual canvas surface size (equals the styled constants once laid out).
+  // Taps convert to NDC through THIS, never through screen coordinates.
+  const viewportRef = useRef({ width: SCREEN_WIDTH, height: CANVAS_HEIGHT });
   const [loading, setLoading] = useState(true);
   const [renderError, setRenderError] = useState<string | null>(null);
 
@@ -1471,8 +1518,11 @@ function NativeCanvas({ gender, onStructureSelected, sceneRef, localFiles }: Nat
     if (timeSinceLastTap < 300) {
       sceneRef.current?.resetView();
     } else {
-      const touch = e.nativeEvent;
-      sceneRef.current?.handleTap(touch.pageX, touch.pageY);
+      // locationX/locationY are canvas-local (this View is the responder),
+      // so the raycast NDC math is independent of where the canvas sits.
+      const { locationX, locationY } = e.nativeEvent;
+      const vp = viewportRef.current;
+      sceneRef.current?.handleTap(locationX, locationY, vp.width, vp.height);
     }
     lastTapRef.current = now;
   };
@@ -1485,6 +1535,10 @@ function NativeCanvas({ gender, onStructureSelected, sceneRef, localFiles }: Nat
       onTouchEnd={handleTouchEnd}
       onResponderRelease={handleResponderRelease}
       onStartShouldSetResponder={() => true}
+      onLayout={(e) => {
+        const { width, height } = e.nativeEvent.layout;
+        if (width > 0 && height > 0) viewportRef.current = { width, height };
+      }}
     >
       <GLView
         style={{ width: SCREEN_WIDTH, height: CANVAS_HEIGHT }}
@@ -1612,10 +1666,31 @@ function WebCanvas({ gender, onStructureSelected, sceneRef, localFiles }: WebCan
 
   const handleResponderRelease = (e: GestureResponderEvent) => {
     const now = Date.now();
-    if (now - lastTapRef.current < 300) {
+    const timeSinceLastTap = now - lastTapRef.current;
+
+    if (timeSinceLastTap < 300) {
       sceneRef.current?.resetView();
     } else {
-      sceneRef.current?.handleTap(e.nativeEvent.pageX, e.nativeEvent.pageY);
+      // Canvas-local coordinates via the canvas element's own rect — the
+      // raycast NDC math is independent of page/scroll position.
+      const canvasEl = canvasRef.current;
+      if (canvasEl) {
+        const rect = canvasEl.getBoundingClientRect();
+        const ne = e.nativeEvent as unknown as {
+          clientX?: number; clientY?: number;
+          pageX?: number; pageY?: number;
+          touches?: Array<{ clientX: number; clientY: number }>;
+        };
+        const t0 = ne.touches?.[0];
+        const cx = ne.clientX ?? t0?.clientX ?? ne.pageX ?? 0;
+        const cy = ne.clientY ?? t0?.clientY ?? ne.pageY ?? 0;
+        sceneRef.current?.handleTap(
+          cx - rect.left,
+          cy - rect.top,
+          rect.width,
+          rect.height,
+        );
+      }
     }
     lastTapRef.current = now;
   };
@@ -1640,30 +1715,6 @@ function WebCanvas({ gender, onStructureSelected, sceneRef, localFiles }: WebCan
 }
 
 // ---------------------------------------------------------------------------
-// Expo Go native-safe fallback (NO browser <canvas>)
-// ---------------------------------------------------------------------------
-
-interface NativePlaceholderProps {
-  gender: Gender;
-  onStructureSelected: (structureId: string | null) => void;
-}
-
-function NativePlaceholder({ gender, onStructureSelected }: NativePlaceholderProps) {
-  return (
-    <View style={styles.nativePlaceholder}>
-      <Text style={styles.nativePlaceholderIcon}>3D</Text>
-      <Text style={styles.nativePlaceholderTitle}>3D Body View</Text>
-      <Text style={styles.nativePlaceholderText}>
-        The 3D anatomy viewer requires a development build with native modules.
-      </Text>
-      <Text style={styles.nativePlaceholderHint}>
-        Use EAS Build or Expo Dev Client for the full 3D experience.
-      </Text>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Platform-switching canvas wrapper
 // ---------------------------------------------------------------------------
 
@@ -1679,9 +1730,11 @@ function ThreeCanvas(props: ThreeCanvasProps) {
     return <WebCanvas {...props} />;
   }
   // Filament is only available in native builds (EAS / Expo Dev Client).
-  // In Expo Go the conditional require above will have left it null.
+  // Everywhere else on native — Expo Go included — the GLView + three.js
+  // canvas below renders the same scene: the body is universal, never a
+  // "requires a development build" placeholder.
   if (!FilamentBody) {
-    return <NativePlaceholder gender={props.gender} onStructureSelected={props.onStructureSelected} />;
+    return <NativeCanvas {...props} />;
   }
   return <FilamentBody {...props as any} />;
 }
@@ -2198,37 +2251,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 300,
     marginTop: 8,
-  },
-  nativePlaceholder: {
-    width: SCREEN_WIDTH,
-    height: CANVAS_HEIGHT,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: TILE_BG,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderRadius: 8,
-    padding: 20,
-    gap: 12,
-  },
-  nativePlaceholderIcon: {
-    ...TYPE.display,
-    color: GV.fog,
-    marginBottom: 8,
-  },
-  nativePlaceholderTitle: {
-    ...TYPE.title,
-    color: '#FFFFFF',
-  },
-  nativePlaceholderText: {
-    ...TYPE.body,
-    color: GV.fog,
-    textAlign: 'center',
-  },
-  nativePlaceholderHint: {
-    ...TYPE.caption,
-    color: GV.fog,
-    textAlign: 'center',
   },
   infoPanel: {
     backgroundColor: TILE_BG,

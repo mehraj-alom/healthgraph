@@ -28,7 +28,13 @@ import {
   type ExtractedMed,
 } from '@/services/prescriptionMeds';
 import { setScanStatus } from '@/db/queries/scanSessions';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { LG } from '@/theme/liquidGlass';
 import { AddMedicationModal, type ExtractInitial } from './MedicationsScreen';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'PrescriptionReview'>;
@@ -152,129 +158,157 @@ export default function PrescriptionReviewScreen() {
   const editingMed = editingIndex != null ? meds[editingIndex] : null;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Review prescription</Text>
-        {(header.prescriber || header.prescriptionDate) && (
-          <Text style={styles.sub}>
-            {[header.prescriber, header.prescriptionDate].filter(Boolean).join(' · ')}
-          </Text>
-        )}
-
-        {phase === 'loading' && (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color="#4FD1C5" />
-            <Text style={styles.body}>Reading medicines from your scan…</Text>
-          </View>
-        )}
-
-        {phase === 'not-ready' && (
-          <View style={styles.center}>
-            <Text style={styles.title2}>Still reading your scan</Text>
-            <Text style={styles.body}>The extraction is not finished yet. Wait a moment and retry.</Text>
-            <Pressable style={styles.primaryBtn} onPress={() => void load()}>
-              <Text style={styles.primaryTxt}>Retry</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {phase === 'error' && (
-          <View style={styles.center}>
-            <Text style={styles.title2}>Something went wrong</Text>
-            <Text style={styles.body}>{errorMsg}</Text>
-            <Pressable style={styles.primaryBtn} onPress={() => void load()}>
-              <Text style={styles.primaryTxt}>Retry</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {phase === 'empty' && (
-          <View style={styles.center}>
-            <Text style={styles.title2}>No medicines found</Text>
-            <Text style={styles.body}>The scan did not contain readable medicines. Try a clearer photo.</Text>
-          </View>
-        )}
-
-        {phase === 'ready' && (
-          <>
-            <Text style={styles.countLine}>
-              {doneIds.size} of {meds.length} added
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Review prescription</Text>
+          {(header.prescriber || header.prescriptionDate) && (
+            <Text style={styles.sub}>
+              {[header.prescriber, header.prescriptionDate].filter(Boolean).join(' · ')}
             </Text>
-            {meds.map((med, i) => {
-              const done = doneIds.has(`${i}`);
-              return (
-                <View key={`${med.source_document_id}-${i}`} style={[styles.card, done && styles.cardDone]}>
-                  <View style={styles.cardHead}>
-                    <Text style={styles.medName}>{med.name || '(unnamed medicine)'}</Text>
-                    {done ? (
-                      <Text style={styles.doneBadge}>Added ✓</Text>
-                    ) : med.needs_review ? (
-                      <Text style={styles.reviewBadge}>Check</Text>
-                    ) : (
-                      <Text style={styles.confBadge}>{Math.round(med.confidence * 100)}%</Text>
-                    )}
-                  </View>
-                  {!!medSubtitle(med) && <Text style={styles.medSub}>{medSubtitle(med)}</Text>}
-                  {med.needs_review && med.review_reasons.length > 0 && (
-                    <Text style={styles.reviewReasons}>{med.review_reasons.join(' · ')}</Text>
-                  )}
-                  {med.warnings.length > 0 && (
-                    <Text style={styles.warnings}>⚠ {med.warnings.join('; ')}</Text>
-                  )}
-                  {!done && (
-                    <View style={styles.cardActions}>
-                      <Pressable
-                        style={styles.editBtn}
-                        onPress={() => setEditingIndex(i)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit ${med.name}`}
-                      >
-                        <Text style={styles.editTxt}>Edit</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.confirmBtn, confirming && styles.btnDisabled]}
-                        disabled={confirming}
-                        onPress={() => void confirmOne(i)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Confirm ${med.name}`}
-                      >
-                        <Text style={styles.confirmTxt}>Confirm</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-            {doneIds.size < meds.length && (
-              <Pressable
-                style={[styles.primaryBtn, confirmAllBusy && styles.btnDisabled]}
-                disabled={confirmAllBusy}
-                onPress={() => void confirmAll()}
-              >
-                <Text style={styles.primaryTxt}>
-                  {confirmAllBusy ? 'Adding…' : `Confirm all (${meds.length - doneIds.size} left)`}
-                </Text>
-              </Pressable>
-            )}
-          </>
-        )}
-      </ScrollView>
+          )}
 
-      {editingMed && (
-        <AddMedicationModal
-          key={`rx-edit-${editingIndex}`}
-          visible
-          medication={null}
-          sourceDocumentIds={editingMed.source_document_id ? [editingMed.source_document_id] : docIds.slice(0, 1)}
-          initialExtract={toFormShape(editingMed, header.prescriber)}
-          onClose={() => setEditingIndex(null)}
-          onSave={() => {
-            if (editingIndex != null) setDoneIds((prev) => new Set(prev).add(`${editingIndex}`));
-            setEditingIndex(null);
-          }}
-        />
-      )}
-    </SafeAreaView>
+          {phase === 'loading' && (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color={LG.card.mint} />
+              <Text style={styles.body}>Reading medicines from your scan…</Text>
+            </View>
+          )}
+
+          {phase === 'not-ready' && (
+            <GlassSurface strong style={styles.stateCard}>
+              <Text style={styles.title2}>Still reading your scan</Text>
+              <Text style={styles.body}>The extraction is not finished yet. Wait a moment and retry.</Text>
+              <Pressable
+                style={styles.primaryBtn}
+                onPress={() => void load()}
+                accessibilityRole="button"
+                accessibilityLabel="Retry reading the scan"
+              >
+                <Text style={styles.primaryTxt}>Retry</Text>
+              </Pressable>
+            </GlassSurface>
+          )}
+
+          {phase === 'error' && (
+            <GlassSurface strong style={styles.stateCard}>
+              <Text style={styles.title2}>Something went wrong</Text>
+              <Text style={styles.body}>{errorMsg}</Text>
+              <Pressable
+                style={styles.primaryBtn}
+                onPress={() => void load()}
+                accessibilityRole="button"
+                accessibilityLabel="Retry reading the scan"
+              >
+                <Text style={styles.primaryTxt}>Retry</Text>
+              </Pressable>
+            </GlassSurface>
+          )}
+
+          {phase === 'empty' && (
+            <GlassSurface strong style={styles.stateCard}>
+              <Text style={styles.title2}>No medicines found</Text>
+              <Text style={styles.body}>The scan did not contain readable medicines. Try a clearer photo.</Text>
+            </GlassSurface>
+          )}
+
+          {phase === 'ready' && (
+            <>
+              <Text style={styles.countLine}>
+                {doneIds.size} of {meds.length} added
+              </Text>
+              {meds.map((med, i) => {
+                const done = doneIds.has(`${i}`);
+                return (
+                  <GlassSurface
+                    strong
+                    noSheen
+                    key={`${med.source_document_id}-${i}`}
+                    style={[styles.card, done && styles.cardDone]}
+                  >
+                    <View style={styles.cardHead}>
+                      <Text style={styles.medName}>{med.name || '(unnamed medicine)'}</Text>
+                      {done ? (
+                        <Text style={styles.doneBadge}>Added ✓</Text>
+                      ) : med.needs_review ? (
+                        <Text style={styles.reviewBadge}>Check</Text>
+                      ) : (
+                        <Text style={styles.confBadge}>{Math.round(med.confidence * 100)}%</Text>
+                      )}
+                    </View>
+                    {!!medSubtitle(med) && <Text style={styles.medSub}>{medSubtitle(med)}</Text>}
+                    {med.needs_review && med.review_reasons.length > 0 && (
+                      <Text style={styles.reviewReasons}>{med.review_reasons.join(' · ')}</Text>
+                    )}
+                    {med.warnings.length > 0 && (
+                      <Text style={styles.warnings}>⚠ {med.warnings.join('; ')}</Text>
+                    )}
+                    {!done && (
+                      <View style={styles.cardActions}>
+                        <Pressable
+                          style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.7 }]}
+                          onPress={() => setEditingIndex(i)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Edit ${med.name}`}
+                        >
+                          <Text style={styles.editTxt}>Edit</Text>
+                        </Pressable>
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.confirmBtn,
+                            confirming && styles.btnDisabled,
+                            pressed && !confirming && { opacity: 0.9 },
+                          ]}
+                          disabled={confirming}
+                          onPress={() => void confirmOne(i)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Confirm ${med.name}`}
+                        >
+                          <Text style={styles.confirmTxt}>Confirm</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                  </GlassSurface>
+                );
+              })}
+              {doneIds.size < meds.length && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    confirmAllBusy && styles.btnDisabled,
+                    pressed && !confirmAllBusy && { opacity: 0.9 },
+                  ]}
+                  disabled={confirmAllBusy}
+                  onPress={() => void confirmAll()}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Confirm all, ${meds.length - doneIds.size} left`}
+                >
+                  <Text style={styles.primaryTxt}>
+                    {confirmAllBusy ? 'Adding…' : `Confirm all (${meds.length - doneIds.size} left)`}
+                  </Text>
+                </Pressable>
+              )}
+            </>
+          )}
+        </ScrollView>
+
+        {editingMed && (
+          <AddMedicationModal
+            key={`rx-edit-${editingIndex}`}
+            visible
+            medication={null}
+            sourceDocumentIds={editingMed.source_document_id ? [editingMed.source_document_id] : docIds.slice(0, 1)}
+            initialExtract={toFormShape(editingMed, header.prescriber)}
+            onClose={() => setEditingIndex(null)}
+            onSave={() => {
+              if (editingIndex != null) setDoneIds((prev) => new Set(prev).add(`${editingIndex}`));
+              setEditingIndex(null);
+            }}
+          />
+        )}
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -305,31 +339,71 @@ function toFormShape(med: ExtractedMed, prescriber: string | null): ExtractIniti
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0B1526' },
-  content: { padding: 20, paddingBottom: 40 },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { padding: 20, paddingBottom: 40, gap: 12 },
   center: { alignItems: 'center', paddingVertical: 40, gap: 12 },
-  title: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', marginBottom: 4 },
-  title2: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
-  sub: { color: '#8EA0B8', fontSize: 14, marginBottom: 12 },
-  body: { color: '#8EA0B8', fontSize: 14, textAlign: 'center' },
-  countLine: { color: '#4FD1C5', fontSize: 13, fontWeight: '600', marginBottom: 12 },
-  card: {
-    backgroundColor: '#12233B',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
+  stateCard: { padding: 20, gap: 12, alignItems: 'stretch' },
+  title: {
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
+  title2: {
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.4,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  sub: {
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: SECONDARY,
+    textAlign: 'center',
+  },
+  body: {
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: SECONDARY,
+    textAlign: 'center',
+  },
+  countLine: {
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.mint,
+    fontVariant: ['tabular-nums'],
+  },
+  card: { padding: 16, gap: 6 },
   cardDone: { opacity: 0.55 },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  medName: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', flex: 1 },
-  medSub: { color: '#8EA0B8', fontSize: 13, marginTop: 4 },
-  reviewReasons: { color: '#F5B453', fontSize: 12, marginTop: 6 },
-  warnings: { color: '#F27E7E', fontSize: 12, marginTop: 6 },
-  confBadge: { color: '#4FD1C5', fontSize: 13, fontWeight: '700' },
+  medName: {
+    fontWeight: '600',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.2,
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  medSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, marginTop: 4 },
+  reviewReasons: { fontWeight: '400', fontSize: 12, lineHeight: 16, color: '#F5B453', marginTop: 6 },
+  warnings: { fontWeight: '400', fontSize: 12, lineHeight: 16, color: LG.card.danger, marginTop: 6 },
+  confBadge: {
+    fontWeight: '700',
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.mint,
+    fontVariant: ['tabular-nums'],
+  },
   reviewBadge: {
-    color: '#0B1526',
+    color: '#0B0F1A',
     fontSize: 12,
     fontWeight: '700',
     backgroundColor: '#F5B453',
@@ -338,20 +412,40 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
   },
-  doneBadge: { color: '#4FD1C5', fontSize: 13, fontWeight: '700' },
+  doneBadge: { fontWeight: '700', fontSize: 13, lineHeight: 18, color: LG.card.mint },
   cardActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
   editBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#2A4A73',
-    borderRadius: 10,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 9999,
     paddingVertical: 10,
     alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
   },
-  editTxt: { color: '#8EA0B8', fontSize: 14, fontWeight: '600' },
-  confirmBtn: { flex: 2, backgroundColor: '#4FD1C5', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
-  confirmTxt: { color: '#0B1526', fontSize: 14, fontWeight: '700' },
-  primaryBtn: { backgroundColor: '#4FD1C5', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
-  primaryTxt: { color: '#0B1526', fontSize: 15, fontWeight: '700' },
+  editTxt: { fontWeight: '600', fontSize: 14, lineHeight: 20, color: SECONDARY },
+  // Confirm is the prominent action: white pill, never flat teal.
+  confirmBtn: {
+    flex: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
+    paddingVertical: 10,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  confirmTxt: { fontWeight: '600', fontSize: 14, lineHeight: 20, color: '#0B0F1A' },
+  primaryBtn: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 9999,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  primaryTxt: { fontWeight: '600', fontSize: 15, lineHeight: 20, color: '#0B0F1A' },
   btnDisabled: { opacity: 0.5 },
 });

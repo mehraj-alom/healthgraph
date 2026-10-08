@@ -10,10 +10,11 @@
  */
 
 import { StyleSheet, Text, View } from 'react-native';
-import { Card } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
 import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE } from '@/theme/guava';
 import type { HabitCell } from '@/screens/Settings/habitTracker';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
 
 const CELL = 11;
 const GAP = 3;
@@ -38,14 +39,7 @@ export function HabitGrid({
   isLoading: boolean;
 }): React.JSX.Element {
   return (
-    <Card
-      style={{
-        backgroundColor: '#2A3049',
-        borderColor: 'rgba(255, 255, 255, 0.12)',
-        borderWidth: 1,
-        borderRadius: 8,
-      }}
-    >
+    <GlassSurface noBlur style={styles.card}>
       {isLoading ? (
         <>
           <Text style={styles.loading}>Loading activity…</Text>
@@ -94,24 +88,49 @@ export function HabitGrid({
           </View>
         </>
       )}
-    </Card>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', paddingVertical: 16 },
-  fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
-  summary: { ...TYPE.button, fontSize: 15, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
-  provenance: { ...TYPE.caption, color: GV.fog, marginTop: 2, marginBottom: 12 },
+  card: { padding: 16 },
+  loading: {
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 22,
+    color: SECONDARY,
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  fact: {
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
+    textAlign: 'center',
+  },
+  summary: {
+    fontWeight: '600',
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
+  },
   gridRow: { flexDirection: 'row', gap: 6 },
   dayLabels: { gap: GAP, paddingTop: 1 },
-  dayLabel: { fontSize: 9, lineHeight: CELL, color: GV.fog, width: 10, textAlign: 'center' },
+  dayLabel: { fontSize: 9, lineHeight: CELL, color: SECONDARY, width: 10, textAlign: 'center' },
   weeks: { flex: 1, flexDirection: 'row', justifyContent: 'space-between' },
   week: { gap: GAP },
   cell: { width: CELL, height: CELL, borderRadius: 3 },
   legend: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 10, justifyContent: 'flex-end' },
   legendCell: { width: CELL, height: CELL, borderRadius: 3 },
-  legendText: { ...TYPE.caption, color: GV.fog, marginHorizontal: 2 },
+  legendText: {
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
+    marginHorizontal: 2,
+  },
 });
 
 export default HabitGrid;

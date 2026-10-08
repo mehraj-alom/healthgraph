@@ -17,8 +17,11 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAudioPlayer, setAudioModeAsync, requestRecordingPermissionsAsync, useAudioRecorder } from 'expo-audio';
 import * as Speech from 'expo-speech';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { SPACE } from '@/theme/guava';
 import { Button, Input } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { LG } from '@/theme/liquidGlass';
 import { api } from '@/services/api';
 import { todayKeyLocal } from '@/utils/dayKey';
 import { requestDataRefresh } from '@/services/dataRefresh';
@@ -56,6 +59,9 @@ type WholePhase = 'prompt' | 'recording' | 'working' | 'done';
 const LISTEN_SECONDS = 12;
 /** Whole-answer fallback cap: one continuous answer, two minutes. */
 const WHOLE_ANSWER_SECONDS = 120;
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 /** Bundled spoken prompt for the TTS-down path ("see on your screen…"). */
 const FALLBACK_PROMPT_ASSET = require('../../../assets/audio/checkin-fallback-prompt.wav');
@@ -109,7 +115,7 @@ function Ripple() {
 
 const ripple = StyleSheet.create({
   host: { position: 'absolute', width: 220, height: 220, alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', width: 170, height: 170, borderRadius: 85, borderWidth: 2, borderColor: '#4FD1C5' },
+  ring: { position: 'absolute', width: 170, height: 170, borderRadius: 85, borderWidth: 2, borderColor: LG.card.mint },
 });
 
 function stopSpeaking(): void {
@@ -717,97 +723,104 @@ export default function VoiceCheckinScreen() {
   // ================= setup =================
   if (mode === 'setup') {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.title}>Voice check-in.</Text>
-          <Text style={styles.sub}>A call every day. Answer five questions by voice.</Text>
-          <View style={styles.timeRow}>
-            <View style={styles.stepper}>
-              <Pressable onPress={() => adjust('hour', -1, 0, 23)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour down">
-                <Text style={styles.stepText}>−</Text>
-              </Pressable>
-              <Text style={styles.timeValue}>{String(time.hour).padStart(2, '0')}</Text>
-              <Pressable onPress={() => adjust('hour', 1, 0, 23)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour up">
-                <Text style={styles.stepText}>+</Text>
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <Text style={styles.title}>Voice check-in</Text>
+            <Text style={styles.sub}>A call every day. Answer five questions by voice.</Text>
+            <View style={styles.timeRow}>
+              <View style={styles.stepper}>
+                <Pressable onPress={() => adjust('hour', -1, 0, 23)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour down">
+                  <Text style={styles.stepText}>−</Text>
+                </Pressable>
+                <Text style={styles.timeValue}>{String(time.hour).padStart(2, '0')}</Text>
+                <Pressable onPress={() => adjust('hour', 1, 0, 23)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour up">
+                  <Text style={styles.stepText}>+</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.timeColon}>:</Text>
+              <View style={styles.stepper}>
+                <Pressable onPress={() => adjust('minute', -1, 0, 55, 5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute down">
+                  <Text style={styles.stepText}>−</Text>
+                </Pressable>
+                <Text style={styles.timeValue}>{String(time.minute).padStart(2, '0')}</Text>
+                <Pressable onPress={() => adjust('minute', 1, 0, 55, 5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute up">
+                  <Text style={styles.stepText}>+</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                onPress={() => setTime((t) => ({ ...t, enabled: !t.enabled }))}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: time.enabled }}
+                accessibilityLabel="Daily voice check-in on or off"
+                style={[styles.toggle, time.enabled && styles.toggleOn]}
+              >
+                <Text style={[styles.toggleText, time.enabled && styles.toggleTextOn]}>
+                  {time.enabled ? 'On' : 'Off'}
+                </Text>
               </Pressable>
             </View>
-            <Text style={styles.timeColon}>:</Text>
-            <View style={styles.stepper}>
-              <Pressable onPress={() => adjust('minute', -1, 0, 55, 5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute down">
-                <Text style={styles.stepText}>−</Text>
-              </Pressable>
-              <Text style={styles.timeValue}>{String(time.minute).padStart(2, '0')}</Text>
-              <Pressable onPress={() => adjust('minute', 1, 0, 55, 5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute up">
-                <Text style={styles.stepText}>+</Text>
-              </Pressable>
-            </View>
-            <Pressable
-              onPress={() => setTime((t) => ({ ...t, enabled: !t.enabled }))}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: time.enabled }}
-              accessibilityLabel="Daily voice check-in on or off"
-              style={[styles.toggle, time.enabled && styles.toggleOn]}
-            >
-              <Text style={[styles.toggleText, time.enabled && styles.toggleTextOn]}>
-                {time.enabled ? 'On' : 'Off'}
-              </Text>
-            </Pressable>
-          </View>
-          {timeMsg ? <Text style={styles.timeMsg}>{timeMsg}</Text> : null}
-          <Button
-            title={savingTime ? 'Saving…' : 'Save'}
-            onPress={() => void saveTime()}
-            disabled={savingTime}
-            fullWidth
-            size="large"
-            style={styles.goBtn}
-            textStyle={styles.goBtnText}
-          />
-          <Button
-            title="Test call now"
-            variant="ghost"
-            onPress={() => setMode('ringing')}
-            fullWidth
-            textStyle={styles.ghostText}
-          />
-          <Button
-            title="Speak freely instead"
-            variant="ghost"
-            onPress={() => navigation.navigate('VoiceJournal')}
-            fullWidth
-            textStyle={styles.ghostText}
-          />
-          <Text style={styles.disclaimer}>Answers save to your daily log. Tracking only.</Text>
-          <Text style={styles.disclaimer}>Rings exactly on time only if the system allows “Alarms & reminders” for this app — otherwise Android may delay the call by minutes.</Text>
-        </ScrollView>
-      </SafeAreaView>
+            {timeMsg ? <Text style={styles.timeMsg}>{timeMsg}</Text> : null}
+            <Button
+              title={savingTime ? 'Saving…' : 'Save'}
+              variant="secondary"
+              onPress={() => void saveTime()}
+              disabled={savingTime}
+              fullWidth
+              size="large"
+              style={styles.goBtn}
+              textStyle={styles.goBtnText}
+            />
+            <Button
+              title="Test call now"
+              variant="ghost"
+              onPress={() => setMode('ringing')}
+              fullWidth
+              textStyle={styles.ghostText}
+            />
+            <Button
+              title="Speak freely instead"
+              variant="ghost"
+              onPress={() => navigation.navigate('VoiceJournal')}
+              fullWidth
+              textStyle={styles.ghostText}
+            />
+            <Text style={styles.disclaimer}>Answers save to your daily log. Tracking only.</Text>
+            <Text style={styles.disclaimer}>Rings exactly on time only if the system allows “Alarms & reminders” for this app — otherwise Android may delay the call by minutes.</Text>
+          </ScrollView>
+        </SafeAreaView>
+      </View>
     );
   }
 
   // ================= ringing =================
   if (mode === 'ringing') {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <RingAudio />
-        <View style={styles.callWrap}>
-          <View style={styles.emblemWrap}>
-            <Ripple />
-            <View style={styles.emblem}>
-              <Text style={styles.emblemGlyph}>◉</Text>
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <RingAudio />
+          <View style={styles.callWrap}>
+            <View style={styles.emblemWrap}>
+              <Ripple />
+              <View style={styles.emblem}>
+                <Text style={styles.emblemGlyph}>◉</Text>
+              </View>
+            </View>
+            <Text style={styles.callTitle}>Health check-in</Text>
+            <Text style={styles.callSub}>Voice call · five questions</Text>
+            <View style={styles.callBtns}>
+              <Pressable onPress={declineCall} accessibilityRole="button" accessibilityLabel="Decline call" style={[styles.callBtn, styles.declineBtn]}>
+                <Text style={styles.callBtnText}>Decline</Text>
+              </Pressable>
+              <Pressable onPress={answerCall} accessibilityRole="button" accessibilityLabel="Answer call" style={[styles.callBtn, styles.answerBtn]}>
+                <Text style={[styles.callBtnText, styles.answerText]}>Answer</Text>
+              </Pressable>
             </View>
           </View>
-          <Text style={styles.callTitle}>Health check-in</Text>
-          <Text style={styles.callSub}>Voice call · five questions</Text>
-          <View style={styles.callBtns}>
-            <Pressable onPress={declineCall} accessibilityRole="button" accessibilityLabel="Decline call" style={[styles.callBtn, styles.declineBtn]}>
-              <Text style={styles.callBtnText}>Decline</Text>
-            </Pressable>
-            <Pressable onPress={answerCall} accessibilityRole="button" accessibilityLabel="Answer call" style={[styles.callBtn, styles.answerBtn]}>
-              <Text style={[styles.callBtnText, styles.answerText]}>Answer</Text>
-            </Pressable>
-          </View>
-        </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -815,40 +828,45 @@ export default function VoiceCheckinScreen() {
   if (mode === 'interview') {
     const q = INTERVIEW_SCRIPT[qIndex];
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.progress}>{`Question ${Math.min(qIndex + 1, INTERVIEW_SCRIPT.length)} of ${INTERVIEW_SCRIPT.length}`}</Text>
-          {q ? <Text style={styles.question}>{q.prompt}</Text> : null}
-          {q ? <Text style={styles.hint}>{q.hint}</Text> : null}
-          <View style={styles.statusBox}>
-            {phase === 'speaking' ? <Text style={styles.status}>Asking…</Text> : null}
-            {phase === 'listening' ? (
-              <>
-                <View style={styles.liveDot} />
-                <Text style={styles.status}>Listening… {Math.floor(elapsed)}s</Text>
-              </>
-            ) : null}
-            {phase === 'working' ? <Text style={styles.status}>Understanding…</Text> : null}
-            {phase === 'heard' && transcript ? <Text style={styles.transcript}>“{transcript}”</Text> : null}
-            {phase === 'heard' && parsed != null && q ? (
-              <Text style={styles.heardValue}>{`${FIELD_LABEL[q.field]}: ${q.format(parsed)}`}</Text>
-            ) : null}
-            {phase === 'heard' && parsed == null ? (
-              <Text style={styles.status}>Skipped — moving on.</Text>
-            ) : null}
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-          </View>
-          <View style={styles.rowBtns}>
-            {phase === 'listening' ? (
-              <Button title="Done answering" onPress={() => void stopNow()} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
-            ) : null}
-            {phase === 'heard' ? (
-              <Button title={qIndex + 1 >= INTERVIEW_SCRIPT.length ? 'Finish' : 'Next'} onPress={() => advance()} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
-            ) : null}
-          </View>
-          <Button title="End call" variant="ghost" onPress={declineCall} fullWidth textStyle={styles.ghostText} />
-        </ScrollView>
-      </SafeAreaView>
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <Text style={styles.progress}>{`Question ${Math.min(qIndex + 1, INTERVIEW_SCRIPT.length)} of ${INTERVIEW_SCRIPT.length}`}</Text>
+            {q ? <Text style={styles.question}>{q.prompt}</Text> : null}
+            {q ? <Text style={styles.hint}>{q.hint}</Text> : null}
+            <GlassSurface strong style={styles.card}>
+              <View style={styles.statusInner}>
+                {phase === 'speaking' ? <Text style={styles.status}>Asking…</Text> : null}
+                {phase === 'listening' ? (
+                  <>
+                    <View style={styles.liveDot} />
+                    <Text style={styles.status}>Listening… {Math.floor(elapsed)}s</Text>
+                  </>
+                ) : null}
+                {phase === 'working' ? <Text style={styles.status}>Understanding…</Text> : null}
+                {phase === 'heard' && transcript ? <Text style={styles.transcript}>“{transcript}”</Text> : null}
+                {phase === 'heard' && parsed != null && q ? (
+                  <Text style={styles.heardValue}>{`${FIELD_LABEL[q.field]}: ${q.format(parsed)}`}</Text>
+                ) : null}
+                {phase === 'heard' && parsed == null ? (
+                  <Text style={styles.status}>Skipped — moving on.</Text>
+                ) : null}
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+              </View>
+            </GlassSurface>
+            <View style={styles.rowBtns}>
+              {phase === 'listening' ? (
+                <Button title="Done answering" variant="secondary" onPress={() => void stopNow()} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
+              ) : null}
+              {phase === 'heard' ? (
+                <Button title={qIndex + 1 >= INTERVIEW_SCRIPT.length ? 'Finish' : 'Next'} variant="secondary" onPress={() => advance()} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
+              ) : null}
+            </View>
+            <Button title="End call" variant="ghost" onPress={declineCall} fullWidth textStyle={styles.ghostText} />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -858,173 +876,181 @@ export default function VoiceCheckinScreen() {
     const ss = Math.floor(Math.min(wholeElapsed, WHOLE_ANSWER_SECONDS) % 60);
     const clock = `${mm}:${String(ss).padStart(2, '0')} / 2:00`;
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.title}>One recording.</Text>
-          <Text style={styles.sub}>
-            Answer everything below in one go — say as much as you like. Stops at 2:00.
-          </Text>
-          <View style={styles.summaryCard}>
-            {INTERVIEW_SCRIPT.map((q) => (
-              <View key={q.field} style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>{FIELD_LABEL[q.field]}</Text>
-                <Text style={styles.wholeHint}>{q.hint}</Text>
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <Text style={styles.title}>One recording</Text>
+            <Text style={styles.sub}>
+              Answer everything below in one go — say as much as you like. Stops at 2:00.
+            </Text>
+            <GlassSurface strong style={styles.card}>
+              <View style={styles.summaryList}>
+                {INTERVIEW_SCRIPT.map((q) => (
+                  <View key={q.field} style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>{FIELD_LABEL[q.field]}</Text>
+                    <Text style={styles.wholeHint}>{q.hint}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-          <View style={styles.statusBox}>
-            {wholePhase === 'prompt' ? <Text style={styles.status}>Playing the prompt…</Text> : null}
+            </GlassSurface>
+            <GlassSurface strong style={styles.card}>
+              <View style={styles.statusInner}>
+                {wholePhase === 'prompt' ? <Text style={styles.status}>Playing the prompt…</Text> : null}
+                {wholePhase === 'recording' ? (
+                  <>
+                    <View style={styles.liveDot} />
+                    <Text style={styles.status}>Recording… {clock}</Text>
+                  </>
+                ) : null}
+                {wholePhase === 'working' ? <Text style={styles.status}>Understanding your answers…</Text> : null}
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+              </View>
+            </GlassSurface>
             {wholePhase === 'recording' ? (
-              <>
-                <View style={styles.liveDot} />
-                <Text style={styles.status}>Recording… {clock}</Text>
-              </>
+              <Button title="Stop recording" variant="secondary" onPress={() => void stopWholeRecording()} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
             ) : null}
-            {wholePhase === 'working' ? <Text style={styles.status}>Understanding your answers…</Text> : null}
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-          </View>
-          {wholePhase === 'recording' ? (
-            <Button title="Stop recording" onPress={() => void stopWholeRecording()} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
-          ) : null}
-          <Button title="End call" variant="ghost" onPress={declineCall} fullWidth textStyle={styles.ghostText} />
-        </ScrollView>
-      </SafeAreaView>
+            <Button title="End call" variant="ghost" onPress={declineCall} fullWidth textStyle={styles.ghostText} />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
     );
   }
 
   // ================= apology (STT down) =================
   if (mode === 'apology') {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.title}>Voice typing is down.</Text>
-          <Text style={styles.sub}>
-            Sorry — voice transcription isn&apos;t working right now. We&apos;re working on it. You can enter your answers below instead.
-          </Text>
-          {!saved ? (
-            <>
-              {INTERVIEW_SCRIPT.map((q) => (
-                <Input
-                  key={q.field}
-                  label={`${FIELD_LABEL[q.field]} (${q.hint.toLowerCase()})`}
-                  value={manual[q.field]}
-                  onChangeText={(v) => setManual((prev) => ({ ...prev, [q.field]: v }))}
-                  placeholder="Leave blank to skip"
-                  keyboardType="decimal-pad"
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <Text style={styles.title}>Voice typing is down</Text>
+            <Text style={styles.sub}>
+              Sorry — voice transcription isn&apos;t working right now. We&apos;re working on it. You can enter your answers below instead.
+            </Text>
+            {!saved ? (
+              <>
+                {INTERVIEW_SCRIPT.map((q) => (
+                  <Input
+                    key={q.field}
+                    label={`${FIELD_LABEL[q.field]} (${q.hint.toLowerCase()})`}
+                    value={manual[q.field]}
+                    onChangeText={(v) => setManual((prev) => ({ ...prev, [q.field]: v }))}
+                    placeholder="Leave blank to skip"
+                    keyboardType="decimal-pad"
+                  />
+                ))}
+                {manualError ? <Text style={styles.error}>{manualError}</Text> : null}
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <Button
+                  title={savingLog ? 'Saving…' : 'Save answers'}
+                  variant="secondary"
+                  onPress={() => void saveManual()}
+                  disabled={savingLog}
+                  loading={savingLog}
+                  fullWidth
+                  size="large"
+                  style={styles.goBtn}
+                  textStyle={styles.goBtnText}
                 />
-              ))}
-              {manualError ? <Text style={styles.error}>{manualError}</Text> : null}
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-              <Button
-                title={savingLog ? 'Saving…' : 'Save answers'}
-                onPress={() => void saveManual()}
-                disabled={savingLog}
-                loading={savingLog}
-                fullWidth
-                size="large"
-                style={styles.goBtn}
-                textStyle={styles.goBtnText}
-              />
-            </>
-          ) : (
-            <View style={styles.pulseCard}>
-              <Text style={styles.pulseTitle}>Saved.</Text>
-              <Text style={styles.pulseSub}>Check your pulse now while you are still.</Text>
-              <Button title="Open pulse check" onPress={goPulse} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
-            </View>
-          )}
-          <Button title="End call" variant="ghost" onPress={declineCall} fullWidth textStyle={styles.ghostText} />
-        </ScrollView>
-      </SafeAreaView>
+              </>
+            ) : (
+              <GlassSurface strong style={styles.card}>
+                <View style={styles.pulseInner}>
+                  <Text style={styles.pulseTitle}>Saved.</Text>
+                  <Text style={styles.pulseSub}>Check your pulse now while you are still.</Text>
+                  <Button title="Open pulse check" variant="secondary" onPress={goPulse} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
+                </View>
+              </GlassSurface>
+            )}
+            <Button title="End call" variant="ghost" onPress={declineCall} fullWidth textStyle={styles.ghostText} />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
     );
   }
 
   // ================= summary =================
   const answered = INTERVIEW_SCRIPT.filter((q) => answers[q.field] != null);
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Heard.</Text>
-        <Text style={styles.sub}>Check it, then save to your daily log.</Text>
-        <View style={styles.summaryCard}>
-          {INTERVIEW_SCRIPT.map((q) => {
-            const v = answers[q.field];
-            return (
-              <View key={q.field} style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>{FIELD_LABEL[q.field]}</Text>
-                <Text style={styles.summaryValue}>{v != null ? q.format(v) : 'Skipped'}</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Heard</Text>
+          <Text style={styles.sub}>Check it, then save to your daily log.</Text>
+          <GlassSurface strong style={styles.card}>
+            <View style={styles.summaryList}>
+              {INTERVIEW_SCRIPT.map((q) => {
+                const v = answers[q.field];
+                return (
+                  <View key={q.field} style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>{FIELD_LABEL[q.field]}</Text>
+                    <Text style={styles.summaryValue}>{v != null ? q.format(v) : 'Skipped'}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </GlassSurface>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {!saved ? (
+            <Button
+              title={savingLog ? 'Saving…' : `Save ${answered.length} answers`}
+              variant="secondary"
+              onPress={() => void saveLog()}
+              disabled={savingLog || answered.length === 0}
+              fullWidth
+              size="large"
+              style={styles.goBtn}
+              textStyle={styles.goBtnText}
+            />
+          ) : (
+            <GlassSurface strong style={styles.card}>
+              <View style={styles.pulseInner}>
+                <Text style={styles.pulseTitle}>One more thing.</Text>
+                <Text style={styles.pulseSub}>Check your pulse now while you are still.</Text>
+                <Button title="Open pulse check" variant="secondary" onPress={goPulse} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
               </View>
-            );
-          })}
-        </View>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        {!saved ? (
-          <Button
-            title={savingLog ? 'Saving…' : `Save ${answered.length} answers`}
-            onPress={() => void saveLog()}
-            disabled={savingLog || answered.length === 0}
-            fullWidth
-            size="large"
-            style={styles.goBtn}
-            textStyle={styles.goBtnText}
-          />
-        ) : (
-          <View style={styles.pulseCard}>
-            <Text style={styles.pulseTitle}>One more thing.</Text>
-            <Text style={styles.pulseSub}>Check your pulse now while you are still.</Text>
-            <Button title="Open pulse check" onPress={goPulse} fullWidth size="large" style={styles.goBtn} textStyle={styles.goBtnText} />
-          </View>
-        )}
-        <Button title="Done" variant="ghost" onPress={() => navigation.goBack()} fullWidth textStyle={styles.ghostText} />
-      </ScrollView>
-    </SafeAreaView>
+            </GlassSurface>
+          )}
+          <Button title="Done" variant="ghost" onPress={() => navigation.goBack()} fullWidth textStyle={styles.ghostText} />
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  progress: { ...TYPE.chip, color: GV.teal, textAlign: 'center', letterSpacing: 1 },
-  question: { fontFamily: FONT.semi, fontSize: 22, lineHeight: 28, letterSpacing: -0.2, color: '#FFFFFF', textAlign: 'center' },
-  hint: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  statusBox: {
-    backgroundColor: '#10141F',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    borderRadius: 20,
-    padding: 20,
-    gap: 8,
-    alignItems: 'center',
-  },
-  status: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF5D5D' },
-  transcript: { ...TYPE.body, color: '#FFFFFF', textAlign: 'center' },
-  heardValue: { fontFamily: FONT.semi, fontSize: 18, color: '#4FD1C5', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  error: { ...TYPE.caption, color: GV.danger, textAlign: 'center' },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  progress: { fontWeight: '600', fontSize: 13, lineHeight: 18, letterSpacing: 1, color: LG.card.mint, textAlign: 'center' },
+  question: { fontWeight: '600', fontSize: 22, lineHeight: 28, letterSpacing: -0.2, color: '#FFFFFF', textAlign: 'center' },
+  hint: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  card: { padding: 16 },
+  statusInner: { gap: 8, alignItems: 'center' },
+  summaryList: { gap: 4 },
+  status: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: LG.card.danger },
+  transcript: { fontWeight: '400', fontSize: 15, lineHeight: 22, color: '#FFFFFF', textAlign: 'center' },
+  heardValue: { fontWeight: '600', fontSize: 18, lineHeight: 24, color: LG.card.mint, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  error: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: LG.card.danger, textAlign: 'center' },
   rowBtns: { gap: 8 },
-  summaryCard: {
-    backgroundColor: '#10141F',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    borderRadius: 20,
-    padding: 16,
-    gap: 4,
-  },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
-  wholeHint: { ...TYPE.caption, color: GV.fog, textAlign: 'right', flexShrink: 1, marginLeft: 12 },
-  summaryLabel: { ...TYPE.body, color: GV.fog },
-  summaryValue: { ...TYPE.button, fontSize: 15, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
-  pulseCard: { gap: 8, alignItems: 'stretch' },
-  pulseTitle: { fontFamily: FONT.semi, fontSize: 18, color: '#FFFFFF', textAlign: 'center' },
-  pulseSub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  wholeHint: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'right', flexShrink: 1, marginLeft: 12 },
+  summaryLabel: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY },
+  summaryValue: { fontWeight: '600', fontSize: 15, lineHeight: 21, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  pulseInner: { gap: 8, alignItems: 'stretch' },
+  pulseTitle: { fontWeight: '600', fontSize: 18, lineHeight: 24, color: '#FFFFFF', textAlign: 'center' },
+  pulseSub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
   timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
   stepper: { alignItems: 'center', gap: 4 },
   stepBtn: { minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  stepText: { fontSize: 26, color: '#FFFFFF', fontFamily: FONT.semi },
-  timeValue: { fontSize: 44, lineHeight: 50, color: '#FFFFFF', fontFamily: FONT.semi, fontVariant: ['tabular-nums'] },
-  timeColon: { fontSize: 40, color: GV.fog, fontFamily: FONT.semi },
+  stepText: { fontWeight: '600', fontSize: 26, lineHeight: 32, color: '#FFFFFF' },
+  timeValue: { fontWeight: '600', fontSize: 44, lineHeight: 50, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  timeColon: { fontWeight: '600', fontSize: 40, lineHeight: 48, color: SECONDARY },
   toggle: {
     borderRadius: 9999,
     borderWidth: 1.5,
@@ -1033,33 +1059,33 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
   },
-  toggleOn: { backgroundColor: '#4FD1C5', borderColor: '#4FD1C5' },
-  toggleText: { ...TYPE.chip, color: GV.fog },
-  toggleTextOn: { color: '#062A26' },
-  timeMsg: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
-  goBtn: { backgroundColor: '#4FD1C5' },
-  goBtnText: { color: '#062A26' },
-  ghostText: { color: '#A7B8B2' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
-  callWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 26 },
+  toggleOn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  toggleText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: SECONDARY },
+  toggleTextOn: { color: '#0B0F1A' },
+  timeMsg: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center' },
+  goBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  goBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
+  callWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: SPACE.screenH },
   emblemWrap: { width: 220, height: 220, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   emblem: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#0E2A26',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 2,
-    borderColor: '#4FD1C5',
+    borderColor: LG.card.mint,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emblemGlyph: { fontSize: 44, color: '#4FD1C5' },
-  callTitle: { fontFamily: FONT.semi, fontSize: 26, color: '#FFFFFF', textAlign: 'center' },
-  callSub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  emblemGlyph: { fontSize: 44, lineHeight: 52, color: LG.card.mint },
+  callTitle: { fontWeight: '600', fontSize: 26, lineHeight: 32, color: '#FFFFFF', textAlign: 'center' },
+  callSub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
   callBtns: { flexDirection: 'row', gap: 16, marginTop: 16 },
   callBtn: { flex: 1, minHeight: 56, borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
-  declineBtn: { backgroundColor: 'rgba(255,93,93,0.14)', borderWidth: 1.5, borderColor: 'rgba(255,93,93,0.5)' },
-  answerBtn: { backgroundColor: '#4FD1C5' },
-  callBtnText: { ...TYPE.button, color: '#FF7A7A' },
-  answerText: { color: '#062A26' },
+  declineBtn: { backgroundColor: 'rgba(255,142,142,0.12)', borderWidth: 1.5, borderColor: 'rgba(255,142,142,0.45)' },
+  answerBtn: { backgroundColor: '#FFFFFF' },
+  callBtnText: { fontWeight: '600', fontSize: 16, lineHeight: 22, color: LG.card.danger },
+  answerText: { color: '#0B0F1A' },
 });

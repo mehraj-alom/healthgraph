@@ -2,10 +2,15 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymptomBodyMap } from '@/components/SymptomBodyMap';
-import { Card, Slider } from '@/components';
+import { Slider } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { LG } from '@/theme/liquidGlass';
 import { usePainHistory } from '@/hooks/usePainHistory';
 import { useAnatomy } from '@/context/AnatomyContext';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 const HISTORY_DAYS = 30;
 
@@ -31,96 +36,98 @@ export default function SymptomMapScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.title}>Symptom Map</Text>
-        <Text style={styles.subtitle}>
-          From your log.
-        </Text>
-
-        <Card style={styles.mapCard}>
-          <SymptomBodyMap
-            key={`day-${dayIndex}`}
-            data={activeDay?.marks ?? []}
-            gender={selectedGender}
-            tappable={false}
-            belowFigure={
-              <View style={styles.dayRow}>
-                <Pressable
-                  onPress={() => stepDay(-1)}
-                  disabled={dayIndex <= 0}
-                  style={[styles.stepBtn, dayIndex <= 0 && styles.stepBtnDisabled]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Previous day"
-                  hitSlop={8}
-                >
-                  <Text style={styles.stepGlyph}>‹</Text>
-                </Pressable>
-                <View style={styles.sliderWrap}>
-                  <Slider
-                    value={dayIndex}
-                    onValueChange={setDayIndex}
-                    min={0}
-                    max={todayIndex}
-                    step={1}
-                    displayValue={activeDay?.label ?? ''}
-                    showValue
-                    disabled={loading || history.length === 0}
-                    color={GV.cta}
-                  />
-                </View>
-                <Pressable
-                  onPress={() => stepDay(1)}
-                  disabled={dayIndex >= todayIndex}
-                  style={[styles.stepBtn, dayIndex >= todayIndex && styles.stepBtnDisabled]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Next day"
-                  hitSlop={8}
-                >
-                  <Text style={styles.stepGlyph}>›</Text>
-                </Pressable>
-              </View>
-            }
-          />
-          {dayIndex !== todayIndex ? (
-            <Pressable
-              onPress={() => setDayIndex(todayIndex)}
-              style={styles.todayBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Jump to today"
-              hitSlop={8}
-            >
-              <Text style={styles.todayText}>Jump to today</Text>
-            </Pressable>
-          ) : null}
-        </Card>
-        {dayIndex !== todayIndex ? (
-          <Text style={styles.sampleNote}>
-            {loading
-              ? 'Reading your logs…'
-              : isSample
-                ? 'Sample history. Log pain for a few days to see your own.'
-                : unmapped > 0
-                  ? `${unmapped} entr${unmapped === 1 ? 'y' : 'ies'} had no mappable location and ${unmapped === 1 ? 'was' : 'were'} skipped.`
-                  : 'From your logged pain entries.'}
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.title}>Symptom Map</Text>
+          <Text style={styles.subtitle}>
+            From your log.
           </Text>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+
+          <GlassSurface strong style={styles.mapCard}>
+            <SymptomBodyMap
+              key={`day-${dayIndex}`}
+              data={activeDay?.marks ?? []}
+              gender={selectedGender}
+              tappable={false}
+              belowFigure={
+                <View style={styles.dayRow}>
+                  <Pressable
+                    onPress={() => stepDay(-1)}
+                    disabled={dayIndex <= 0}
+                    style={[styles.stepBtn, dayIndex <= 0 && styles.stepBtnDisabled]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Previous day"
+                    hitSlop={8}
+                  >
+                    <Text style={styles.stepGlyph}>‹</Text>
+                  </Pressable>
+                  <View style={styles.sliderWrap}>
+                    <Slider
+                      value={dayIndex}
+                      onValueChange={setDayIndex}
+                      min={0}
+                      max={todayIndex}
+                      step={1}
+                      displayValue={activeDay?.label ?? ''}
+                      showValue
+                      disabled={loading || history.length === 0}
+                      color={LG.card.mint}
+                    />
+                  </View>
+                  <Pressable
+                    onPress={() => stepDay(1)}
+                    disabled={dayIndex >= todayIndex}
+                    style={[styles.stepBtn, dayIndex >= todayIndex && styles.stepBtnDisabled]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Next day"
+                    hitSlop={8}
+                  >
+                    <Text style={styles.stepGlyph}>›</Text>
+                  </Pressable>
+                </View>
+              }
+            />
+            {dayIndex !== todayIndex ? (
+              <Pressable
+                onPress={() => setDayIndex(todayIndex)}
+                style={styles.todayBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Jump to today"
+                hitSlop={8}
+              >
+                <Text style={styles.todayText}>Jump to today</Text>
+              </Pressable>
+            ) : null}
+          </GlassSurface>
+          {dayIndex !== todayIndex ? (
+            <Text style={styles.sampleNote}>
+              {loading
+                ? 'Reading your logs…'
+                : isSample
+                  ? 'Sample history. Log pain for a few days to see your own.'
+                  : unmapped > 0
+                    ? `${unmapped} entr${unmapped === 1 ? 'y' : 'ies'} had no mappable location and ${unmapped === 1 ? 'was' : 'were'} skipped.`
+                    : 'From your logged pain entries.'}
+            </Text>
+          ) : null}
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
-const NAVY = '#080A11';
-const TILE_BG = '#2A3049';
-const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
-
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: NAVY,
+    backgroundColor: '#05070F',
+  },
+  safe: {
+    flex: 1,
   },
   content: {
     paddingHorizontal: 24,
@@ -129,24 +136,22 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 32,
     lineHeight: 38,
-    letterSpacing: -0.3,
+    letterSpacing: -0.8,
     color: '#FFFFFF',
     textAlign: 'center',
   },
   subtitle: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: SECONDARY,
     textAlign: 'center',
     marginBottom: 12,
   },
   mapCard: {
-    backgroundColor: TILE_BG,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderRadius: 8,
     padding: 16,
     marginTop: 12,
   },
@@ -169,7 +174,9 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   stepGlyph: {
-    ...TYPE.title,
+    fontWeight: '600',
+    fontSize: 24,
+    lineHeight: 30,
     color: '#FFFFFF',
   },
   todayBtn: {
@@ -179,13 +186,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   todayText: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.mint,
     textDecorationLine: 'underline',
   },
   sampleNote: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
     textAlign: 'center',
     marginTop: 4,
   },

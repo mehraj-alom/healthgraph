@@ -654,6 +654,7 @@ function CorrelationHeading({ count }: { count: number }) {
     <View style={styles.patternsBlock}>
       <SectionHeader
         dark
+        marked={false}
         title="Your patterns"
         titleStyle={styles.patternsTitle}
       />
@@ -695,7 +696,7 @@ function ExploreSection() {
   return (
     <View>
       <View style={styles.exploreRule} />
-      <SectionHeader dark title="Explore" titleStyle={styles.patternsTitle} style={styles.exploreHead} />
+      <SectionHeader dark marked={false} title="Explore" titleStyle={styles.patternsTitle} style={styles.exploreHead} />
       <View style={styles.exploreGrid}>
         {items.map((item) => (
           <GlassSurface

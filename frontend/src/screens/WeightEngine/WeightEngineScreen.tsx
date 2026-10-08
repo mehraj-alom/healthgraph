@@ -9,7 +9,7 @@
  * medical, never a target or prediction.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -18,14 +18,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Button, Card, EmptyState, SectionHeader } from '@/components';
+import { Button, EmptyState } from '@/components';
 import { EngineGraph } from '@/components/EngineGraph';
-import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
 import { TILE_TONES } from '@/theme/tones';
 import { useWeightEngine } from '@/hooks/useWeightEngine';
 import { formatWeightKg } from '@/screens/WeightEngine/weightEngine';
 
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 export default function WeightEngineScreen() {
   const navigation = useNavigation();
@@ -51,115 +54,109 @@ export default function WeightEngineScreen() {
       : null;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Weight.</Text>
-        <Text style={styles.sub}>Recorded weight only.</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Weight</Text>
+          <Text style={styles.sub}>Recorded weight only.</Text>
 
-        {isLoading ? (
-          <>
-            <Text style={styles.loading}>Loading…</Text>
-            <HealthFact style={styles.fact} />
-          </>
-        ) : model.weightKg === null ? (
-          <EmptyState
-            title="No weight recorded yet"
-            message="Record your weight in your profile to begin."
+          {isLoading ? (
+            <View style={styles.center}>
+              <Text style={styles.loading}>Loading…</Text>
+            </View>
+          ) : model.weightKg === null ? (
+            <EmptyState
+              title="No weight recorded yet"
+              message="Record your weight in your profile to begin."
+            />
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>Current</Text>
+              <GlassSurface strong style={styles.card}>
+                <Text style={styles.value}>{formatWeightKg(model.weightKg)}</Text>
+                <Text style={styles.provenance}>{model.provenance}</Text>
+              </GlassSurface>
+
+              <Text style={styles.sectionTitle}>Tracking</Text>
+              <GlassSurface strong style={styles.card}>
+                <Text style={styles.trackingBody}>
+                  Trends appear here once weight logging exists.
+                </Text>
+              </GlassSurface>
+            </>
+          )}
+
+          {history.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Weight graph</Text>
+              <GlassSurface strong style={styles.card}>
+                <EngineGraph
+                  points={history.map((p) => ({ date: p.log_date, value: p.weight_kg }))}
+                  tone={TILE_TONES.weight[1]}
+                  decimals={1}
+                />
+                <Text style={styles.avgSub}>
+                  {`${history.length} ${history.length === 1 ? 'reading' : 'readings'}${avgKg != null ? ` · avg ${formatWeightKg(avgKg)}` : ''}`}
+                </Text>
+              </GlassSurface>
+            </>
+          ) : (
+            !isLoading && (
+              <GlassSurface strong style={styles.card}>
+                <Text style={styles.trackingBody}>
+                  Log weight in your daily check-in to grow this graph.
+                </Text>
+              </GlassSurface>
+            )
+          )}
+
+          <Button
+            title="Log weight"
+            onPress={goLog}
+            fullWidth
+            size="large"
+            variant="secondary"
+            style={styles.logBtn}
+            textStyle={styles.logBtnText}
           />
-        ) : (
-          <>
-            <SectionHeader dark title="Current" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <Text style={styles.value}>{formatWeightKg(model.weightKg)}</Text>
-              <Text style={styles.provenance}>{model.provenance}</Text>
-            </Card>
 
-            <SectionHeader dark title="Tracking" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <Text style={styles.trackingBody}>
-                Trends appear here once weight logging exists.
-              </Text>
-            </Card>
-          </>
-        )}
+          <Button
+            title="Open profile in Settings"
+            onPress={goSettings}
+            fullWidth
+            size="large"
+            variant="ghost"
+            textStyle={styles.ghostText}
+          />
+          <Text style={styles.disclaimer}>
+            From your profile on this device. Tracking only — not medical advice, diagnosis, or treatment.
+          </Text>
 
-        {history.length > 0 ? (
-          <>
-            <SectionHeader dark title="Weight graph" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <EngineGraph
-                points={history.map((p) => ({ date: p.log_date, value: p.weight_kg }))}
-                tone={TILE_TONES.weight[1]}
-                decimals={1}
-              />
-              <Text style={styles.avgSub}>
-                {`${history.length} ${history.length === 1 ? 'reading' : 'readings'}${avgKg != null ? ` · avg ${formatWeightKg(avgKg)}` : ''}`}
-              </Text>
-            </Card>
-          </>
-        ) : (
-          !isLoading && (
-            <Card style={styles.darkCard}>
-              <Text style={styles.trackingBody}>
-                Log weight in your daily check-in to grow this graph.
-              </Text>
-            </Card>
-          )
-        )}
-
-        <Button
-          title="Log weight"
-          onPress={goLog}
-          fullWidth
-          size="large"
-          variant="ghost"
-          style={styles.logBtn}
-          textStyle={styles.logBtnText}
-        />
-
-        <Button
-          title="Open profile in Settings"
-          onPress={goSettings}
-          fullWidth
-          size="large"
-          style={styles.goBtn}
-          textStyle={styles.goBtnText}
-        />
-        <Text style={styles.disclaimer}>
-          From your profile on this device. Tracking only — not medical advice, diagnosis, or treatment.
-        </Text>
-
-        <View style={styles.bottomPad} />
-      </ScrollView>
-    </SafeAreaView>
+          <View style={styles.bottomPad} />
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
-  fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  value: { ...TYPE.display, fontSize: 40, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4 },
-  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
-  trackingBody: { ...TYPE.body, color: '#E8ECF1', textAlign: 'center' },
-  goBtn: { backgroundColor: '#4FD1C5' },
-  goBtnText: { color: '#062A26' },
-  logBtn: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: '#4FD1C5' },
-  logBtnText: { color: '#4FD1C5' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginTop: 16 },
+  center: { alignItems: 'center', paddingVertical: 24 },
+  card: { padding: 16 },
+  value: { fontWeight: '600', fontSize: 40, lineHeight: 46, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  provenance: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 4 },
+  avgSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
+  trackingBody: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', textAlign: 'center' },
+  logBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  logBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
   bottomPad: { height: 8 },
 });

@@ -4,14 +4,16 @@
  * Renders the derived Priority entries (never hardcoded): selected
  * engine titles under a "YOUR PRIORITY" overline, or the honest empty
  * state when nothing is selected. Names only — engine metrics stay
- * inside their engines (composition, never duplication). Guava tokens,
- * 44pt+ press target.
+ * inside their engines (composition, never duplication). 44pt+ press target.
  */
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Card } from '@/components';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { LG } from '@/theme/liquidGlass';
 import type { PriorityEntry } from '@/screens/Priority/priorityLayer';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 export function PriorityCard({
   entries,
@@ -23,56 +25,56 @@ export function PriorityCard({
   accessibilityLabel?: string;
 }): React.JSX.Element {
   return (
-    <Pressable
+    <GlassSurface
+      noBlur
       onPress={onPress}
-      accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? 'Open your priorities'}
-      hitSlop={8}
+      style={styles.card}
     >
-      <Card>
-        <View style={styles.row}>
-          <View style={styles.main}>
-            <Text style={styles.overline}>Your priority</Text>
-            {entries.length === 0 ? (
-              <>
-                <Text style={styles.emptyTitle}>No priorities selected</Text>
-                <Text style={styles.emptyBody}>
-                  Choose the health areas you&apos;d like to focus on.
+      <View style={styles.row}>
+        <View style={styles.main}>
+          <Text style={styles.overline}>Your priority</Text>
+          {entries.length === 0 ? (
+            <>
+              <Text style={styles.emptyTitle}>No priorities selected</Text>
+              <Text style={styles.emptyBody}>
+                Choose the health areas you&apos;d like to focus on.
+              </Text>
+              <Text style={styles.cta}>Set priorities ›</Text>
+            </>
+          ) : (
+            <>
+              {entries.map((entry) => (
+                <Text key={entry.id} style={styles.name}>
+                  {entry.title}
                 </Text>
-                <Text style={styles.cta}>Set priorities ›</Text>
-              </>
-            ) : (
-              <>
-                {entries.map((entry) => (
-                  <Text key={entry.id} style={styles.name}>
-                    {entry.title}
-                  </Text>
-                ))}
-              </>
-            )}
-          </View>
-          <Text style={styles.chevron}>›</Text>
+              ))}
+            </>
+          )}
         </View>
-      </Card>
-    </Pressable>
+        <Text style={styles.chevron}>›</Text>
+      </View>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
+  card: { padding: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   main: { flex: 1, gap: 4 },
   overline: {
-    fontFamily: FONT.semi,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 3,
-    color: GV.teal,
+    fontWeight: '600',
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: LG.card.mint,
   },
-  name: { ...TYPE.button, fontSize: 16, color: GV.ink },
-  emptyTitle: { ...TYPE.button, fontSize: 16, color: GV.ink },
-  emptyBody: { ...TYPE.caption, color: GV.body },
-  cta: { ...TYPE.chip, color: GV.cta, marginTop: 4 },
-  chevron: { fontSize: 24, color: GV.fog },
+  name: { fontWeight: '600', fontSize: 16, lineHeight: 22, color: '#FFFFFF' },
+  emptyTitle: { fontWeight: '600', fontSize: 16, lineHeight: 22, color: '#FFFFFF' },
+  emptyBody: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY },
+  cta: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: LG.card.mint, marginTop: 4 },
+  chevron: { fontSize: 24, color: TERTIARY },
 });
 
 export default PriorityCard;

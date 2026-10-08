@@ -25,9 +25,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Button, Card, Chip, EmptyState, Input, Modal, SectionHeader } from '@/components';
-import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { Button, Chip, EmptyState, Input, Modal } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { todayKeyLocal } from '@/utils/dayKey';
 import { EXTRA_TONES, TILE_TONES } from '@/theme/tones';
 import { getCachedPatientId } from '@/services/patientIdentity';
@@ -69,6 +71,9 @@ import {
   type CycleEntry,
   type CycleKind,
 } from '@/db/queries/cycle';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 const KIND_COPY: Record<CycleKind, { label: string; hint: string }> = {
   'period-start': { label: 'Period start', hint: 'First day of bleeding' },
@@ -128,7 +133,7 @@ function CycleCalendar({
     byDate.set(e.date, list);
   }
   return (
-    <View style={styles.calCard}>
+    <GlassSurface strong style={styles.calCard}>
       <View style={styles.calHead}>
         <Pressable
           onPress={() => onOffset(-1)}
@@ -186,7 +191,7 @@ function CycleCalendar({
           })}
         </View>
       ))}
-    </View>
+    </GlassSurface>
   );
 }
 
@@ -368,354 +373,351 @@ export default function CycleScreen() {
   const patternLines = useCyclePatterns(entries);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Cycle.</Text>
-        <Text style={styles.sub}>Recorded days only.</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Cycle</Text>
+          <Text style={styles.sub}>Recorded days only.</Text>
 
-        <SectionHeader dark title="Mode" titleStyle={styles.histTitle} />
-        <View style={styles.chips}>
-          {(
-            [
-              ['standard', 'Standard'],
-              ['ttc', 'Trying to conceive'],
-              ['pregnant', 'Pregnant'],
-              ['perimenopause', 'Perimenopause'],
-            ] as [ReproductiveMode, string][]
-          ).map(([m, label]) => (
-            <Chip
-              key={m}
-              label={label}
-              selected={mode === m}
-              onPress={() => void switchMode(m)}
-              size="medium"
-              accessibilityLabel={`Cycle mode: ${label}`}
-            />
-          ))}
-        </View>
-        {modeMsg !== null ? <Text style={styles.avgSub}>{modeMsg}</Text> : null}
-
-        {mode === 'ttc' ? (
-          <>
-            <SectionHeader dark title="Trying to conceive" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              {(() => {
-                const card = ttcCard(starts);
-                if (card === null) {
-                  return (
-                    <Text style={styles.avgSub}>
-                      Log at least 3 period starts to see a fertile-window estimate.
-                    </Text>
-                  );
-                }
-                return (
-                  <>
-                    <Text style={styles.bigValue}>
-                      {`Fertile window roughly ${shortDay(card.fertileFrom)} – ${shortDay(card.fertileTo)}`}
-                    </Text>
-                    <Text style={styles.avgSub}>
-                      {`Ovulation around ${shortDay(card.ovulationAround)} · from ${card.basedOn} past cycles`}
-                    </Text>
-                  </>
-                );
-              })()}
-              <Text style={styles.provenance}>{TTC_DISCLAIMER}</Text>
-            </Card>
-            <SectionHeader dark title="Ovulation tests" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <View style={styles.chips}>
-                {(['positive', 'negative'] as OvulationResult[]).map((r) => (
-                  <Chip
-                    key={r}
-                    label={r === 'positive' ? 'Positive' : 'Negative'}
-                    selected={ovuResult === r}
-                    onPress={() => setOvuResult(r)}
-                    size="medium"
-                    accessibilityLabel={`Ovulation test result: ${r}`}
-                  />
-                ))}
-              </View>
-              <Button title="Log today's test" onPress={() => void logOvu()} size="medium" />
-              {(ovu?.tests ?? []).length > 0 ? (
-                <Text style={styles.avgSub}>
-                  {(ovu?.tests ?? [])
-                    .slice(-5)
-                    .reverse()
-                    .map((t) => `${shortDay(t.day)}: ${t.result}`)
-                    .join(' · ')}
-                </Text>
-              ) : (
-                <Text style={styles.avgSub}>No tests logged yet.</Text>
-              )}
-            </Card>
-          </>
-        ) : null}
-        {mode === 'pregnant' ? (
-          <>
-            <SectionHeader dark title="Pregnancy" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              {(() => {
-                const today = todayKeyLocal();
-                const week =
-                  anchor?.lmp !== null && anchor?.lmp !== undefined
-                    ? pregnancyWeekFromLmp(anchor.lmp, today)
-                    : anchor?.due
-                      ? pregnancyWeekFromDueDate(anchor.due, today)
-                      : null;
-                if (week === null) {
-                  return (
-                    <Text style={styles.avgSub}>
-                      Enter your last period start or your due date below to see the current week.
-                    </Text>
-                  );
-                }
-                return (
-                  <>
-                    <Text style={styles.bigValue}>{`Week ${week} of pregnancy`}</Text>
-                    <Text style={styles.avgSub}>
-                      From your recorded {anchor?.lmp ? 'last period start' : 'due date'} — an
-                      estimate, not medical advice. Discuss everything with your provider.
-                    </Text>
-                  </>
-                );
-              })()}
-              <Input
-                label="Last period start (YYYY-MM-DD)"
-                value={lmpInput}
-                onChangeText={setLmpInput}
-                placeholder="2026-08-01"
-              />
-              <Input
-                label="Due date (YYYY-MM-DD)"
-                value={dueInput}
-                onChangeText={setDueInput}
-                placeholder="2027-05-08"
-              />
-              <Button title="Save dates" onPress={() => void saveAnchor()} size="medium" />
-            </Card>
-            <SectionHeader dark title="Before your visit" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              {PRENATAL_CHECKLIST.map((item) => (
-                <Text key={item} style={styles.avgSub}>{`• ${item}`}</Text>
-              ))}
-              <Text style={styles.provenance}>
-                Logistics topics for your provider — not medical guidance.
-              </Text>
-            </Card>
-          </>
-        ) : null}
-        {mode === 'perimenopause' ? (
-          <>
-            <SectionHeader dark title="Perimenopause" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              {(() => {
-                const note = periNote(cycleStats(starts));
-                return (
-                  <Text style={styles.avgSub}>
-                    {note ?? 'Log period starts to see how your cycle timing varies over time.'}
-                  </Text>
-                );
-              })()}
-              <Text style={styles.provenance}>
-                Timing variability only — this screen does not assess symptoms or conditions.
-              </Text>
-            </Card>
-          </>
-        ) : null}
-
-        <SectionHeader dark title="History" titleStyle={styles.histTitle} />
-        {mode === 'standard' && !loading && (periodPred !== null || fertileEst !== null) ? (
-          <>
-            <SectionHeader dark title="Coming up" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              {periodPred !== null ? (
-                <>
-                  <Text style={styles.bigValue}>{describePrediction(periodPred)}</Text>
-                  <Text style={styles.avgSub}>Next period · estimated range</Text>
-                </>
-              ) : null}
-              {fertileEst !== null ? (
-                <Text style={styles.avgSub}>
-                  {`Fertile window roughly ${shortDay(fertileEst.fertileFrom)} – ${shortDay(fertileEst.fertileTo)}`}
-                </Text>
-              ) : null}
-              <Text style={styles.provenance}>
-                Estimates from recorded starts — not for contraception, not medical advice.
-              </Text>
-            </Card>
-          </>
-        ) : null}
-        {patternLines !== null && patternLines.length > 0 ? (
-          <>
-            <SectionHeader dark title="Patterns" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              {patternLines.map((line) => (
-                <Text key={line} style={styles.avgSub}>{line}</Text>
-              ))}
-              <Text style={styles.provenance}>
-                Logged symptoms placed in cycle phases · co-occurrence counts only.
-              </Text>
-            </Card>
-          </>
-        ) : null}
-        {!loading && (
-          <CycleCalendar
-            entries={entries}
-            monthOffset={monthOffset}
-            onOffset={(d) => setMonthOffset((m) => m + d)}
-            onPickDay={(key) => openAdd(key)}
-          />
-        )}
-        {loading ? (
-          <>
-            <Text style={styles.loading}>Loading…</Text>
-            <HealthFact style={styles.fact} />
-          </>
-        ) : spans.length === 0 ? (
-          <EmptyState
-            title="No cycle entries yet"
-            message="Record a period start to begin."
-          />
-        ) : (
-          <View style={styles.list}>
-            {spans.map((span, i) => (
-              <Card key={`${span.start ?? 'notes'}-${i}`} style={styles.spanCard}>
-                <Text style={styles.spanTitle}>{spanTitle(span.start, span.endExclusive)}</Text>
-                {span.entries.map((entry, j) => (
-                  <View
-                    key={entry.entry_id}
-                    style={[styles.entryRow, j > 0 && styles.entryRowDivided]}
-                  >
-                    <View style={styles.entryMain}>
-                      <View style={styles.kindRow}>
-                        <View style={[styles.kindDot, { backgroundColor: CYCLE_TONES[entry.kind] }]} />
-                        <Text style={styles.entryKind}>{KIND_COPY[entry.kind].label}</Text>
-                      </View>
-                      <Text style={styles.entryDate}>{shortDay(entry.date)}</Text>
-                      {entry.notes ? <Text style={styles.entryNotes}>{entry.notes}</Text> : null}
-                    </View>
-                    <View style={styles.entryActions}>
-                      <Pressable
-                        onPress={() => openEdit(entry)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel="Edit entry"
-                        style={styles.rowBtn}
-                      >
-                        <Text style={styles.rowBtnText}>Edit</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => confirmDelete(entry)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel="Delete entry"
-                        style={styles.rowBtn}
-                      >
-                        <Text style={[styles.rowBtnText, styles.deleteText]}>Delete</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ))}
-              </Card>
-            ))}
-          </View>
-        )}
-
-        <Text style={styles.disclaimer}>
-          Recorded history plus estimates. Estimates are not for contraception — not medical advice, diagnosis, or treatment.
-        </Text>
-        <Button
-          title="Add entry"
-          onPress={() => openAdd()}
-          fullWidth
-          size="large"
-          style={styles.addBtn}
-          textStyle={styles.addBtnText}
-        />
-      </ScrollView>
-
-      <Modal
-        visible={showForm}
-        onClose={() => setShowForm(false)}
-        title={editing ? 'Edit entry' : 'Add entry'}
-        subtitle="Stored on this device only."
-      >
-        <View style={styles.form}>
-          <Text style={styles.fieldLabel}>Type</Text>
+          <Text style={styles.sectionTitle}>Mode</Text>
           <View style={styles.chips}>
-            {CYCLE_KINDS.map((k) => (
+            {(
+              [
+                ['standard', 'Standard'],
+                ['ttc', 'Trying to conceive'],
+                ['pregnant', 'Pregnant'],
+                ['perimenopause', 'Perimenopause'],
+              ] as [ReproductiveMode, string][]
+            ).map(([m, label]) => (
               <Chip
-                key={k}
-                label={KIND_COPY[k].label}
-                selected={kind === k}
-                onPress={() => setKind(k)}
+                key={m}
+                label={label}
+                selected={mode === m}
+                onPress={() => void switchMode(m)}
                 size="medium"
-                color={CYCLE_TONES[k]}
-                accessibilityLabel={`${KIND_COPY[k].label}. ${KIND_COPY[k].hint}`}
+                accessibilityLabel={`Cycle mode: ${label}`}
               />
             ))}
           </View>
-          <Input label="Date (YYYY-MM-DD)" value={date} onChangeText={setDate} placeholder="2026-09-21" />
-          <Input
-            label="Notes (optional)"
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Symptoms or observations"
-            multiline
-            numberOfLines={3}
-          />
-          {formError ? <Text style={styles.error}>{formError}</Text> : null}
+          {modeMsg !== null ? <Text style={styles.avgSub}>{modeMsg}</Text> : null}
+
+          {mode === 'ttc' ? (
+            <>
+              <Text style={styles.sectionTitle}>Trying to conceive</Text>
+              <GlassSurface strong style={styles.card}>
+                {(() => {
+                  const card = ttcCard(starts);
+                  if (card === null) {
+                    return (
+                      <Text style={styles.avgSub}>
+                        Log at least 3 period starts to see a fertile-window estimate.
+                      </Text>
+                    );
+                  }
+                  return (
+                    <>
+                      <Text style={styles.bigValue}>
+                        {`Fertile window roughly ${shortDay(card.fertileFrom)} – ${shortDay(card.fertileTo)}`}
+                      </Text>
+                      <Text style={styles.avgSub}>
+                        {`Ovulation around ${shortDay(card.ovulationAround)} · from ${card.basedOn} past cycles`}
+                      </Text>
+                    </>
+                  );
+                })()}
+                <Text style={styles.provenance}>{TTC_DISCLAIMER}</Text>
+              </GlassSurface>
+              <Text style={styles.sectionTitle}>Ovulation tests</Text>
+              <GlassSurface strong style={styles.card}>
+                <View style={styles.chips}>
+                  {(['positive', 'negative'] as OvulationResult[]).map((r) => (
+                    <Chip
+                      key={r}
+                      label={r === 'positive' ? 'Positive' : 'Negative'}
+                      selected={ovuResult === r}
+                      onPress={() => setOvuResult(r)}
+                      size="medium"
+                      accessibilityLabel={`Ovulation test result: ${r}`}
+                    />
+                  ))}
+                </View>
+                <Button title="Log today's test" variant="secondary" onPress={() => void logOvu()} size="medium" style={styles.whiteBtn} textStyle={styles.whiteBtnText} />
+                {(ovu?.tests ?? []).length > 0 ? (
+                  <Text style={styles.avgSub}>
+                    {(ovu?.tests ?? [])
+                      .slice(-5)
+                      .reverse()
+                      .map((t) => `${shortDay(t.day)}: ${t.result}`)
+                      .join(' · ')}
+                  </Text>
+                ) : (
+                  <Text style={styles.avgSub}>No tests logged yet.</Text>
+                )}
+              </GlassSurface>
+            </>
+          ) : null}
+          {mode === 'pregnant' ? (
+            <>
+              <Text style={styles.sectionTitle}>Pregnancy</Text>
+              <GlassSurface strong style={styles.card}>
+                {(() => {
+                  const today = todayKeyLocal();
+                  const week =
+                    anchor?.lmp !== null && anchor?.lmp !== undefined
+                      ? pregnancyWeekFromLmp(anchor.lmp, today)
+                      : anchor?.due
+                        ? pregnancyWeekFromDueDate(anchor.due, today)
+                        : null;
+                  if (week === null) {
+                    return (
+                      <Text style={styles.avgSub}>
+                        Enter your last period start or your due date below to see the current week.
+                      </Text>
+                    );
+                  }
+                  return (
+                    <>
+                      <Text style={styles.bigValue}>{`Week ${week} of pregnancy`}</Text>
+                      <Text style={styles.avgSub}>
+                        From your recorded {anchor?.lmp ? 'last period start' : 'due date'} — an
+                        estimate, not medical advice. Discuss everything with your provider.
+                      </Text>
+                    </>
+                  );
+                })()}
+                <Input
+                  label="Last period start (YYYY-MM-DD)"
+                  value={lmpInput}
+                  onChangeText={setLmpInput}
+                  placeholder="2026-08-01"
+                />
+                <Input
+                  label="Due date (YYYY-MM-DD)"
+                  value={dueInput}
+                  onChangeText={setDueInput}
+                  placeholder="2027-05-08"
+                />
+                <Button title="Save dates" variant="secondary" onPress={() => void saveAnchor()} size="medium" style={styles.whiteBtn} textStyle={styles.whiteBtnText} />
+              </GlassSurface>
+              <Text style={styles.sectionTitle}>Before your visit</Text>
+              <GlassSurface strong style={styles.card}>
+                {PRENATAL_CHECKLIST.map((item) => (
+                  <Text key={item} style={styles.avgSub}>{`• ${item}`}</Text>
+                ))}
+                <Text style={styles.provenance}>
+                  Logistics topics for your provider — not medical guidance.
+                </Text>
+              </GlassSurface>
+            </>
+          ) : null}
+          {mode === 'perimenopause' ? (
+            <>
+              <Text style={styles.sectionTitle}>Perimenopause</Text>
+              <GlassSurface strong style={styles.card}>
+                {(() => {
+                  const note = periNote(cycleStats(starts));
+                  return (
+                    <Text style={styles.avgSub}>
+                      {note ?? 'Log period starts to see how your cycle timing varies over time.'}
+                    </Text>
+                  );
+                })()}
+                <Text style={styles.provenance}>
+                  Timing variability only — this screen does not assess symptoms or conditions.
+                </Text>
+              </GlassSurface>
+            </>
+          ) : null}
+
+          <Text style={styles.sectionTitle}>History</Text>
+          {mode === 'standard' && !loading && (periodPred !== null || fertileEst !== null) ? (
+            <>
+              <Text style={styles.sectionTitle}>Coming up</Text>
+              <GlassSurface strong style={styles.card}>
+                {periodPred !== null ? (
+                  <>
+                    <Text style={styles.bigValue}>{describePrediction(periodPred)}</Text>
+                    <Text style={styles.avgSub}>Next period · estimated range</Text>
+                  </>
+                ) : null}
+                {fertileEst !== null ? (
+                  <Text style={styles.avgSub}>
+                    {`Fertile window roughly ${shortDay(fertileEst.fertileFrom)} – ${shortDay(fertileEst.fertileTo)}`}
+                  </Text>
+                ) : null}
+                <Text style={styles.provenance}>
+                  Estimates from recorded starts — not for contraception, not medical advice.
+                </Text>
+              </GlassSurface>
+            </>
+          ) : null}
+          {patternLines !== null && patternLines.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Patterns</Text>
+              <GlassSurface strong style={styles.card}>
+                {patternLines.map((line) => (
+                  <Text key={line} style={styles.avgSub}>{line}</Text>
+                ))}
+                <Text style={styles.provenance}>
+                  Logged symptoms placed in cycle phases · co-occurrence counts only.
+                </Text>
+              </GlassSurface>
+            </>
+          ) : null}
+          {!loading && (
+            <CycleCalendar
+              entries={entries}
+              monthOffset={monthOffset}
+              onOffset={(d) => setMonthOffset((m) => m + d)}
+              onPickDay={(key) => openAdd(key)}
+            />
+          )}
+          {loading ? (
+            <View style={styles.center}>
+              <Text style={styles.loading}>Loading…</Text>
+            </View>
+          ) : spans.length === 0 ? (
+            <EmptyState
+              title="No cycle entries yet"
+              message="Record a period start to begin."
+            />
+          ) : (
+            <View style={styles.list}>
+              {spans.map((span, i) => (
+                <GlassSurface key={`${span.start ?? 'notes'}-${i}`} strong style={styles.card}>
+                  <Text style={styles.spanTitle}>{spanTitle(span.start, span.endExclusive)}</Text>
+                  {span.entries.map((entry, j) => (
+                    <View
+                      key={entry.entry_id}
+                      style={[styles.entryRow, j > 0 && styles.entryRowDivided]}
+                    >
+                      <View style={styles.entryMain}>
+                        <View style={styles.kindRow}>
+                          <View style={[styles.kindDot, { backgroundColor: CYCLE_TONES[entry.kind] }]} />
+                          <Text style={styles.entryKind}>{KIND_COPY[entry.kind].label}</Text>
+                        </View>
+                        <Text style={styles.entryDate}>{shortDay(entry.date)}</Text>
+                        {entry.notes ? <Text style={styles.entryNotes}>{entry.notes}</Text> : null}
+                      </View>
+                      <View style={styles.entryActions}>
+                        <Pressable
+                          onPress={() => openEdit(entry)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel="Edit entry"
+                          style={styles.rowBtn}
+                        >
+                          <Text style={styles.rowBtnText}>Edit</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => confirmDelete(entry)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel="Delete entry"
+                          style={styles.rowBtn}
+                        >
+                          <Text style={[styles.rowBtnText, styles.deleteText]}>Delete</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </GlassSurface>
+              ))}
+            </View>
+          )}
+
+          <Text style={styles.disclaimer}>
+            Recorded history plus estimates. Estimates are not for contraception — not medical advice, diagnosis, or treatment.
+          </Text>
           <Button
-            title={saving ? 'Saving…' : editing ? 'Save changes' : 'Save entry'}
-            onPress={() => void handleSave()}
-            disabled={saving}
-            loading={saving}
+            title="Add entry"
+            variant="secondary"
+            onPress={() => openAdd()}
             fullWidth
+            size="large"
+            style={styles.addBtn}
+            textStyle={styles.addBtnText}
           />
-          <Button title="Cancel" variant="ghost" onPress={() => setShowForm(false)} fullWidth />
-        </View>
-      </Modal>
-    </SafeAreaView>
+        </ScrollView>
+
+        <Modal
+          visible={showForm}
+          onClose={() => setShowForm(false)}
+          title={editing ? 'Edit entry' : 'Add entry'}
+          subtitle="Stored on this device only."
+        >
+          <View style={styles.form}>
+            <Text style={styles.fieldLabel}>Type</Text>
+            <View style={styles.chips}>
+              {CYCLE_KINDS.map((k) => (
+                <Chip
+                  key={k}
+                  label={KIND_COPY[k].label}
+                  selected={kind === k}
+                  onPress={() => setKind(k)}
+                  size="medium"
+                  color={CYCLE_TONES[k]}
+                  accessibilityLabel={`${KIND_COPY[k].label}. ${KIND_COPY[k].hint}`}
+                />
+              ))}
+            </View>
+            <Input label="Date (YYYY-MM-DD)" value={date} onChangeText={setDate} placeholder="2026-09-21" />
+            <Input
+              label="Notes (optional)"
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Symptoms or observations"
+              multiline
+              numberOfLines={3}
+            />
+            {formError ? <Text style={styles.error}>{formError}</Text> : null}
+            <Button
+              title={saving ? 'Saving…' : editing ? 'Save changes' : 'Save entry'}
+              variant="secondary"
+              onPress={() => void handleSave()}
+              disabled={saving}
+              loading={saving}
+              fullWidth
+              style={styles.whiteBtn}
+              textStyle={styles.whiteBtnText}
+            />
+            <Button title="Cancel" variant="ghost" onPress={() => setShowForm(false)} fullWidth textStyle={styles.ghostText} />
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: 26, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  backHit: { minHeight: 44, justifyContent: 'center' },
-  backText: { ...TYPE.button, fontSize: 16, color: GV.fog },
-  addBtn: { backgroundColor: '#4FD1C5' },
-  addBtnText: { color: '#062A26' },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
-  fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  list: { gap: SPACE.cardGap },
-  calCard: {
-    backgroundColor: '#10141F',
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  addBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  addBtnText: { color: '#0B0F1A' },
+  whiteBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  whiteBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginTop: 16 },
+  center: { alignItems: 'center', paddingVertical: 24 },
+  list: { gap: 12 },
+  calCard: { padding: 16 },
   calHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   calNav: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  calNavText: { fontSize: 22, fontFamily: FONT.semi, color: '#FFFFFF' },
-  calTitle: { fontFamily: FONT.semi, fontSize: 17, lineHeight: 22, color: '#FFFFFF' },
+  calNavText: { fontWeight: '600', fontSize: 22, lineHeight: 28, color: '#FFFFFF' },
+  calTitle: { fontWeight: '600', fontSize: 17, lineHeight: 22, color: '#FFFFFF' },
   calWeekRow: { flexDirection: 'row' },
   calWeekday: {
     flex: 1,
     textAlign: 'center',
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 11,
     lineHeight: 16,
-    color: GV.fog,
+    color: SECONDARY,
     paddingVertical: 4,
   },
   calCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
@@ -726,48 +728,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  calDayToday: { borderWidth: 1.5, borderColor: '#4FD1C5' },
-  calNum: { fontSize: 14, lineHeight: 18, fontFamily: FONT.regular, color: 'rgba(255,255,255,0.85)', fontVariant: ['tabular-nums'] },
-  calNumToday: { fontFamily: FONT.semi, color: '#FFFFFF' },
+  calDayToday: { borderWidth: 1.5, borderColor: LG.card.mint },
+  calNum: { fontSize: 14, lineHeight: 18, fontWeight: '400', color: 'rgba(255,255,255,0.85)', fontVariant: ['tabular-nums'] },
+  calNumToday: { fontWeight: '600', color: '#FFFFFF' },
   calDots: { flexDirection: 'row', gap: 3, height: 8, alignItems: 'center', justifyContent: 'center' },
   calDot: { width: 6, height: 6, borderRadius: 3 },
-  spanCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  spanTitle: { fontFamily: FONT.semi, fontSize: 17, lineHeight: 22, color: '#FFFFFF', marginBottom: 8, fontVariant: ['tabular-nums'] },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  bigValue: { fontFamily: FONT.semi, fontSize: 20, lineHeight: 26, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
-  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
+  spanTitle: { fontWeight: '600', fontSize: 17, lineHeight: 22, color: '#FFFFFF', marginBottom: 8, fontVariant: ['tabular-nums'] },
+  card: { padding: 16 },
+  bigValue: { fontWeight: '600', fontSize: 20, lineHeight: 26, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  avgSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
+  provenance: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center', marginTop: 8 },
   entryRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 8 },
   entryRowDivided: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
   entryMain: { flex: 1, gap: 2 },
   kindRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   kindDot: { width: 8, height: 8, borderRadius: 4 },
-  entryKind: { ...TYPE.button, fontSize: 15, color: '#FFFFFF' },
-  entryDate: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
-  entryNotes: { ...TYPE.caption, color: '#8B95A7' },
+  entryKind: { fontWeight: '600', fontSize: 15, lineHeight: 20, color: '#FFFFFF' },
+  entryDate: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  entryNotes: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY },
   entryActions: { flexDirection: 'row', gap: 4 },
   rowBtn: { minWidth: 44, minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  rowBtnText: { ...TYPE.chip, color: '#3DDC84' },
-  deleteText: { color: GV.danger },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  rowBtnText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: '#FFFFFF' },
+  deleteText: { color: LG.card.danger },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
   form: { gap: 12 },
-  fieldLabel: { ...TYPE.caption, color: GV.muted },
+  fieldLabel: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  error: { ...TYPE.caption, color: GV.danger },
+  error: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: LG.card.danger },
 });

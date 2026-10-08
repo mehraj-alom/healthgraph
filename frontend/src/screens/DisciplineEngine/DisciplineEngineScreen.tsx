@@ -19,14 +19,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Button, Card, EmptyState, SectionHeader } from '@/components';
+import { Button, EmptyState } from '@/components';
 import { EngineGraph } from '@/components/EngineGraph';
-import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { TILE_TONES } from '@/theme/tones';
 import { shiftDayKey } from '@/utils/dayKey';
 import { useDisciplineEngine } from '@/hooks/useDisciplineEngine';
 import { DISCIPLINE_HISTORY_DAYS } from '@/screens/DisciplineEngine/disciplineEngine';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 function stripDays(today: string): string[] {
   const days: string[] = [];
@@ -67,144 +72,140 @@ export default function DisciplineEngineScreen() {
     : [];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Discipline.</Text>
-        <Text style={styles.sub}>Tracked actions only.</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Discipline</Text>
+          <Text style={styles.sub}>Tracked actions only.</Text>
 
-        {isLoading ? (
-          <>
-            <Text style={styles.loading}>Loading…</Text>
-            <HealthFact style={styles.fact} />
-          </>
-        ) : !model.hasAnyActivity ? (
-          <EmptyState
-            title="No tracked actions yet"
-            message="Log a check-in or record a dose to begin."
+          {isLoading ? (
+            <View style={styles.center}>
+              <Text style={styles.loading}>Loading…</Text>
+            </View>
+          ) : !model.hasAnyActivity ? (
+            <EmptyState
+              title="No tracked actions yet"
+              message="Log a check-in or record a dose to begin."
+            />
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>Active days</Text>
+              <GlassSurface strong style={styles.card}>
+                <Text style={styles.bigValue}>
+                  {`${model.activeDays7} of 7 days`}
+                </Text>
+                <Text style={styles.change}>{model.changeLine}</Text>
+                <Text style={styles.provenance}>
+                  Days with a tracked action.
+                </Text>
+              </GlassSurface>
+
+              <Text style={styles.sectionTitle}>Streak</Text>
+              <GlassSurface strong style={styles.card}>
+                <Text style={styles.bigValue}>
+                  {model.streakDays === 1 ? '1 day' : `${model.streakDays} days`}
+                </Text>
+                <Text style={styles.provenance}>
+                  Consecutive active days through today.
+                </Text>
+              </GlassSurface>
+
+              {model.adherence ? (
+                <>
+                  <Text style={styles.sectionTitle}>Medication adherence</Text>
+                  <GlassSurface strong style={styles.card}>
+                    <Text style={styles.bigValue}>{`${model.adherence.percent}%`}</Text>
+                    <Text style={styles.provenance}>
+                      {`${model.adherence.taken} of ${model.adherence.total} recorded doses taken (14 days).`}
+                    </Text>
+                  </GlassSurface>
+                </>
+              ) : null}
+
+              <Text style={styles.sectionTitle}>This week</Text>
+              <GlassSurface strong style={styles.card}>
+                <View style={styles.strip}>
+                  {week.map((date) => (
+                    <View key={date} style={styles.cell}>
+                      <View style={[styles.dot, activeSet.has(date) ? styles.dotOn : styles.dotOff]} />
+                      <Text style={styles.cellDay}>{date.slice(8)}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.weekTotal}>
+                  {`${model.loggedDays7} ${model.loggedDays7 === 1 ? 'check-in day' : 'check-in days'} this week.`}
+                </Text>
+              </GlassSurface>
+
+              {activityPoints.length > 0 ? (
+                <>
+                  <Text style={styles.sectionTitle}>Activity</Text>
+                  <GlassSurface strong style={styles.card}>
+                    <EngineGraph
+                      points={activityPoints}
+                      tone={TILE_TONES.discipline[1]}
+                      decimals={0}
+                      domain={[0, 1]}
+                      ticks={[0, 1]}
+                    />
+                    <Text style={styles.avgSub}>
+                      {`${activeSet.size} active ${activeSet.size === 1 ? 'day' : 'days'} in ${DISCIPLINE_HISTORY_DAYS} days`}
+                    </Text>
+                  </GlassSurface>
+                </>
+              ) : null}
+            </>
+          )}
+
+          <Button
+            title="Log a check-in"
+            onPress={() => go('DailyLog')}
+            fullWidth
+            size="large"
+            variant="secondary"
+            style={styles.logBtn}
+            textStyle={styles.logBtnText}
           />
-        ) : (
-          <>
-            <SectionHeader dark title="Active days" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <Text style={styles.bigValue}>
-                {`${model.activeDays7} of 7 days`}
-              </Text>
-              <Text style={styles.change}>{model.changeLine}</Text>
-              <Text style={styles.provenance}>
-                Days with a tracked action.
-              </Text>
-            </Card>
-
-            <SectionHeader dark title="Streak" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <Text style={styles.bigValue}>
-                {model.streakDays === 1 ? '1 day' : `${model.streakDays} days`}
-              </Text>
-              <Text style={styles.provenance}>
-                Consecutive active days through today.
-              </Text>
-            </Card>
-
-            {model.adherence ? (
-              <>
-                <SectionHeader dark title="Medication adherence" titleStyle={styles.histTitle} />
-                <Card style={styles.darkCard}>
-                  <Text style={styles.bigValue}>{`${model.adherence.percent}%`}</Text>
-                  <Text style={styles.provenance}>
-                    {`${model.adherence.taken} of ${model.adherence.total} recorded doses taken (14 days).`}
-                  </Text>
-                </Card>
-              </>
-            ) : null}
-
-            <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <View style={styles.strip}>
-                {week.map((date) => (
-                  <View key={date} style={styles.cell}>
-                    <View style={[styles.dot, activeSet.has(date) ? styles.dotOn : styles.dotOff]} />
-                    <Text style={styles.cellDay}>{date.slice(8)}</Text>
-                  </View>
-                ))}
-              </View>
-              <Text style={styles.weekTotal}>
-                {`${model.loggedDays7} ${model.loggedDays7 === 1 ? 'check-in day' : 'check-in days'} this week.`}
-              </Text>
-            </Card>
-
-            {activityPoints.length > 0 ? (
-              <>
-                <SectionHeader dark title="Activity" titleStyle={styles.histTitle} />
-                <Card style={styles.darkCard}>
-                  <EngineGraph
-                    points={activityPoints}
-                    tone={TILE_TONES.discipline[1]}
-                    decimals={0}
-                    domain={[0, 1]}
-                    ticks={[0, 1]}
-                  />
-                  <Text style={styles.avgSub}>
-                    {`${activeSet.size} active ${activeSet.size === 1 ? 'day' : 'days'} in ${DISCIPLINE_HISTORY_DAYS} days`}
-                  </Text>
-                </Card>
-              </>
-            ) : null}
-          </>
-        )}
-
-        <Button
-          title="Log a check-in"
-          onPress={() => go('DailyLog')}
-          fullWidth
-          size="large"
-          style={styles.logBtn}
-          textStyle={styles.logBtnText}
-        />
-        <Button
-          title="Open medications"
-          variant="ghost"
-          onPress={() => go('Medications')}
-          fullWidth
-          textStyle={styles.ghostText}
-        />
-        <Text style={styles.disclaimer}>
-          Counts from records on this device. Tracking only — not medical advice, diagnosis, or treatment.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+          <Button
+            title="Open medications"
+            variant="ghost"
+            onPress={() => go('Medications')}
+            fullWidth
+            textStyle={styles.ghostText}
+          />
+          <Text style={styles.disclaimer}>
+            Counts from records on this device. Tracking only — not medical advice, diagnosis, or treatment.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
-  fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  bigValue: { ...TYPE.display, fontSize: 32, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  change: { ...TYPE.body, color: '#E8ECF1', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
-  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4 },
-  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginTop: 16 },
+  center: { alignItems: 'center', paddingVertical: 24 },
+  card: { padding: 16 },
+  bigValue: { fontWeight: '600', fontSize: 32, lineHeight: 38, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  change: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
+  provenance: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 4 },
+  avgSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   dot: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  dotOn: { backgroundColor: TILE_TONES.discipline[1] },
+  dotOn: { backgroundColor: LG.card.mint },
   dotOff: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
-  cellDay: { ...TYPE.caption, fontSize: 12, color: GV.fog, fontVariant: ['tabular-nums'] },
-  weekTotal: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  logBtn: { backgroundColor: '#4FD1C5' },
-  logBtnText: { color: '#062A26' },
-  ghostText: { color: '#A7B8B2' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  cellDay: { fontWeight: '400', fontSize: 12, lineHeight: 16, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  weekTotal: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 8 },
+  logBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  logBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
 });

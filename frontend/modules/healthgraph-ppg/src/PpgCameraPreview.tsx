@@ -18,12 +18,17 @@ type NativePreviewProps = {
 };
 
 let NativePreview: React.ComponentType<NativePreviewProps> | null = null;
-try {
-  // Single-view module: resolves the DEFAULT view (PpgCameraPreviewView).
-  // Throws in Expo Go / web where the native module does not exist.
-  NativePreview = requireNativeView('HealthGraphPPG');
-} catch {
-  NativePreview = null;
+// requireNativeView must ONLY run when the native module exists: in Expo Go /
+// web it returns a stub whose view config resolves lazily on first render with
+// the "Unable to get the view config" console warning. isPpgAvailable (module
+// probe) is the gate; the try/catch stays as a belt-and-suspenders guard.
+if (isPpgAvailable) {
+  try {
+    // Single-view module: resolves the DEFAULT view (PpgCameraPreviewView).
+    NativePreview = requireNativeView('HealthGraphPPG');
+  } catch {
+    NativePreview = null;
+  }
 }
 
 export function isPreviewAvailable(): boolean {
