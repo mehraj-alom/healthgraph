@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   AccessibilityInfo,
   Alert,
@@ -122,6 +122,43 @@ export function ProfileSheet({
   const toast = useToast();
   const [legalOpen, setLegalOpen] = useState<'terms' | 'privacy' | null>(null);
   const [premiumOpen, setPremiumOpen] = useState(false);
+  const [buying, setBuying] = useState(false);
+
+  // Drawer buy buttons run the same Play Billing flow as PricingScreen:
+  // hosted paywall first, direct product second. Tier changes propagate
+  // live via billing → notifyTierChanged, so the drawer needs no refresh.
+  const buyTier = useCallback(
+    async (tier: 'general' | 'allin') => {
+      if (buying) return;
+      setBuying(true);
+      try {
+        const { presentStorePaywall, purchaseTier } = await import('@/services/billing');
+        const hosted = await presentStorePaywall();
+        if (hosted.status === 'purchased') {
+          if (hosted.tier === 'free') {
+            toast.info('Payment went through — your plan is activating.');
+          } else {
+            toast.info(`${hosted.tier === 'allin' ? 'All-in' : 'General'} is active. Enjoy everything.`);
+          }
+          return;
+        }
+        if (hosted.status === 'cancelled') return;
+        const result = await purchaseTier(tier);
+        if (result.status === 'purchased' && result.tier !== 'free') {
+          toast.info(`${result.tier === 'allin' ? 'All-in' : 'General'} is active. Enjoy everything.`);
+        } else if (result.status === 'cancelled') {
+          return;
+        } else {
+          toast.info('Subscriptions open soon — nothing was charged.');
+        }
+      } catch {
+        toast.info('Purchase failed — nothing was charged. Please retry.');
+      } finally {
+        setBuying(false);
+      }
+    },
+    [buying, toast],
+  );
   const drawerW = Math.round(W * (2 / 3));
   // Frosted glass costs a blur pass: collapse to the solid stage when
   // reduced motion is requested (the transparency-reduction equivalent).
@@ -352,12 +389,13 @@ export function ProfileSheet({
                     </View>
                     <Text style={styles.tierFeat}>Everything in Free, plus{'\n'}Unlimited camera pulse{'\n'}Health graph & correlations{'\n'}Priority engines{'\n'}Unlimited food & 4 document scans</Text>
                     <Pressable
-                      onPress={() => toast.info('Subscriptions open soon.')}
+                      onPress={() => void buyTier('general')}
+                      disabled={buying}
                       accessibilityRole="button"
                       accessibilityLabel="Start 3 days free on General"
                       style={({ pressed }) => [styles.tierBtn, pressed && { opacity: 0.8 }]}
                     >
-                      <Text style={styles.tierBtnText}>Start 3 days free</Text>
+                      <Text style={styles.tierBtnText}>{buying ? 'Opening…' : 'Start 3 days free'}</Text>
                     </Pressable>
                   </View>
                   <View style={[styles.tier, styles.tierBest]}>
@@ -372,12 +410,13 @@ export function ProfileSheet({
                     </View>
                     <Text style={styles.tierFeat}>Everything in General, plus{'\n'}Face pulse — no touch needed{'\n'}3D body view{'\n'}Voice alarms & call reminders{'\n'}Unlimited AI chat & scans</Text>
                     <Pressable
-                      onPress={() => toast.info('Subscriptions open soon.')}
+                      onPress={() => void buyTier('allin')}
+                      disabled={buying}
                       accessibilityRole="button"
                       accessibilityLabel="Start 3 days free on All-in"
                       style={({ pressed }) => [styles.tierBtn, styles.tierBtnPrimary, pressed && { opacity: 0.8 }]}
                     >
-                      <Text style={styles.tierBtnTextPrimary}>Start 3 days free</Text>
+                      <Text style={styles.tierBtnTextPrimary}>{buying ? 'Opening…' : 'Start 3 days free'}</Text>
                     </Pressable>
                   </View>
                   <Text style={styles.compareTitle}>Compare every feature</Text>

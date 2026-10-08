@@ -15,6 +15,7 @@ import { Asset } from 'expo-asset';
 import { File as ExpoFile } from 'expo-file-system';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { PaywallGate } from '@/components/PaywallGate';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/types';
@@ -2019,59 +2020,65 @@ export default function BodyScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header — the download card owns the gender choice while it
-          is on screen, so the header toggle hides then and returns as
-          the switcher once the anatomy is installed. Never twice. */}
+      {/* Header stays visible for every tier — the 3D instrument below is
+          the All-in surface. Gender shells live inside the gate so only
+          entitled users can switch and render them. */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>3D Body</Text>
+      </View>
 
+      {/* 3D Canvas (All-in): locked tiers see the paywall card instead of the
+          canvas — the GL view never mounts locked, so no GPU/download work
+          starts before entitlement. Header + layer/structure controls below
+          stay visible outside the gate. */}
+      <PaywallGate feature="body3d" title="3D body" body="Your body in 3D.">
         {showGenderPrompt == null && !showOverlay ? (
-        <View style={styles.genderToggle}>
-          <TouchableOpacity
-            style={[styles.genderButton, gender === 'male' && styles.genderButtonActive]}
-            onPress={() => handleGenderSwitch('male')}
-          >
-            <Text style={[styles.genderButtonText, gender === 'male' && styles.genderButtonTextActive]}>
-              Male
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.genderButton, gender === 'female' && styles.genderButtonActive]}
-            onPress={() => handleGenderSwitch('female')}
-          >
-            <Text style={[styles.genderButtonText, gender === 'female' && styles.genderButtonTextActive]}>
-              Female
-            </Text>
-          </TouchableOpacity>
+        <View style={styles.gateToggleWrap}>
+          <View style={styles.genderToggle}>
+            <TouchableOpacity
+              style={[styles.genderButton, gender === 'male' && styles.genderButtonActive]}
+              onPress={() => handleGenderSwitch('male')}
+            >
+              <Text style={[styles.genderButtonText, gender === 'male' && styles.genderButtonTextActive]}>
+                Male
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.genderButton, gender === 'female' && styles.genderButtonActive]}
+              onPress={() => handleGenderSwitch('female')}
+            >
+              <Text style={[styles.genderButtonText, gender === 'female' && styles.genderButtonTextActive]}>
+                Female
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
         ) : null}
-      </View>
-
-      {/* 3D Canvas with download overlay behind */}
-      <View style={{ flex: 1 }}>
-        <ThreeCanvas
-          key={gender}
-          gender={gender}
-          onStructureSelected={handleStructureSelected}
-          sceneRef={sceneRef}
-          localFiles={isInstalled ? localFiles : undefined}
-        />
-
-        {/* Download overlay — always rendered during download/selection/error */}
-        {showOverlay && (
-          <AnatomyDownloadOverlay />
-        )}
-
-        {/* Gender switch download prompt */}
-        {showGenderPrompt && !isDownloading && (
-          <NotInstalledPrompt
-            gender={showGenderPrompt}
-            onDownload={handleGenderPromptDownload}
-            onCancel={() => setShowGenderPrompt(null)}
-            isDownloading={isDownloading}
+        <View style={{ flex: 1 }}>
+          <ThreeCanvas
+            key={gender}
+            gender={gender}
+            onStructureSelected={handleStructureSelected}
+            sceneRef={sceneRef}
+            localFiles={isInstalled ? localFiles : undefined}
           />
-        )}
-      </View>
+
+          {/* Download overlay — always rendered during download/selection/error */}
+          {showOverlay && (
+            <AnatomyDownloadOverlay />
+          )}
+
+          {/* Gender switch download prompt */}
+          {showGenderPrompt && !isDownloading && (
+            <NotInstalledPrompt
+              gender={showGenderPrompt}
+              onDownload={handleGenderPromptDownload}
+              onCancel={() => setShowGenderPrompt(null)}
+              isDownloading={isDownloading}
+            />
+          )}
+        </View>
+      </PaywallGate>
 
       {/* Layer Toggle Row — centered under the canvas */}
       <ScrollView
@@ -2194,6 +2201,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     color: '#FFFFFF',
     flex: 1,
+  },
+  gateToggleWrap: {
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   genderToggle: {
     flexDirection: 'row',

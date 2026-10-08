@@ -9,6 +9,12 @@
  * delays plus later-today and next-suitable-time; every choice creates
  * one temporary snooze instance and never mutates the recurring
  * schedule. No calls, no speech, no server.
+ *
+ * PREMIUM: intentionally NOT gated (stays free). This is plain on-device
+ * local-notification dose logging (Taken / snooze rows) — no voice alarms,
+ * no call-style ringing, no speech. Voice/call alarms (voiceAlarms,
+ * All-in) live in MedicationCallScreen and the VoiceCheckin scheduler,
+ * which are gated separately.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';

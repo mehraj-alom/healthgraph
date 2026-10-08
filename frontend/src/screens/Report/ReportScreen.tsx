@@ -39,6 +39,8 @@ import {
   type CaregiverReportMed,
   type ReportInput,
 } from '@/services/doctorReportHtml';
+import { PaywallGate } from '@/components/PaywallGate';
+import { tierUnlocks, usePremiumTier } from '@/services/premium';
 
 const WINDOW_DAYS = 30;
 const CAREGIVER_WINDOW_DAYS = 7;
@@ -67,6 +69,7 @@ export default function ReportScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const mounted = useRef(true);
+  const tier = usePremiumTier();
 
   const load = useCallback(async () => {
     try {
@@ -218,6 +221,79 @@ export default function ReportScreen() {
   const showingCaregiver = variant === 'caregiver';
   const hasContent = showingCaregiver ? caregiverMeds.length > 0 : input !== null;
 
+  // Element only — creating it runs no hooks; the gate decides whether it
+  // ever renders, so paid users see byte-identical UI.
+  const belowHeader = (
+    <>
+      <View style={styles.variantRow}>
+        <Button
+          title="Doctor"
+          variant={showingCaregiver ? 'ghost' : 'secondary'}
+          onPress={() => setVariant('doctor')}
+          style={{ ...styles.variantBtn, ...(!showingCaregiver ? styles.variantActive : null) }}
+          textStyle={!showingCaregiver ? styles.variantActiveText : styles.ghostText}
+        />
+        <Button
+          title="Caregiver"
+          variant={showingCaregiver ? 'secondary' : 'ghost'}
+          onPress={() => setVariant('caregiver')}
+          style={{ ...styles.variantBtn, ...(showingCaregiver ? styles.variantActive : null) }}
+          textStyle={showingCaregiver ? styles.variantActiveText : styles.ghostText}
+        />
+      </View>
+
+      {isLoading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={LG.card.mint} />
+          <Text style={styles.loading}>Gathering your data on this device…</Text>
+        </View>
+      ) : !hasContent ? (
+        <EmptyState
+          title="Nothing to report yet"
+          message="Log medications, sleep, or weight — then come back for your PDF."
+        />
+      ) : showingCaregiver ? (
+        <>
+          <Text style={styles.sectionTitle}>Included</Text>
+          <GlassSurface strong style={styles.card}>
+            <Text style={styles.line}>{`${caregiverMeds.length} ${caregiverMeds.length === 1 ? 'medicine' : 'medicines'} with recent taking`}</Text>
+            <Text style={styles.line}>Schedule and supply included</Text>
+          </GlassSurface>
+          <Button
+            title={generating ? 'Creating PDF…' : 'Generate caregiver PDF'}
+            variant="secondary"
+            onPress={() => void generate()}
+            disabled={generating}
+            fullWidth
+            size="large"
+            style={styles.genBtn}
+            textStyle={styles.genBtnText}
+          />
+        </>
+      ) : (
+        <>
+          <Text style={styles.sectionTitle}>Included</Text>
+          <GlassSurface strong style={styles.card}>
+            <Text style={styles.line}>{`${input!.meds.length} ${input!.meds.length === 1 ? 'medication' : 'medications'} with adherence`}</Text>
+            <Text style={styles.line}>{`${input!.observations.length} recorded ${input!.observations.length === 1 ? 'observation' : 'observations'}`}</Text>
+            <Text style={styles.line}>{input!.sleep ? `Sleep · ${input!.sleep.nights} nights` : 'Sleep · none logged'}</Text>
+            <Text style={styles.line}>{input!.weight ? `Weight · ${input!.weight.startKg} → ${input!.weight.endKg} kg` : 'Weight · none logged'}</Text>
+          </GlassSurface>
+          <Button
+            title={generating ? 'Creating PDF…' : 'Generate PDF'}
+            variant="secondary"
+            onPress={() => void generate()}
+            disabled={generating}
+            fullWidth
+            size="large"
+            style={styles.genBtn}
+            textStyle={styles.genBtnText}
+          />
+        </>
+      )}
+    </>
+  );
+
   return (
     <View style={styles.root}>
       <HomeStageBackdrop />
@@ -230,71 +306,12 @@ export default function ReportScreen() {
               : 'Last 30 days, one PDF for appointments.'}
           </Text>
 
-          <View style={styles.variantRow}>
-            <Button
-              title="Doctor"
-              variant={showingCaregiver ? 'ghost' : 'secondary'}
-              onPress={() => setVariant('doctor')}
-              style={{ ...styles.variantBtn, ...(!showingCaregiver ? styles.variantActive : null) }}
-              textStyle={!showingCaregiver ? styles.variantActiveText : styles.ghostText}
-            />
-            <Button
-              title="Caregiver"
-              variant={showingCaregiver ? 'secondary' : 'ghost'}
-              onPress={() => setVariant('caregiver')}
-              style={{ ...styles.variantBtn, ...(showingCaregiver ? styles.variantActive : null) }}
-              textStyle={showingCaregiver ? styles.variantActiveText : styles.ghostText}
-            />
-          </View>
-
-          {isLoading ? (
-            <View style={styles.center}>
-              <ActivityIndicator size="large" color={LG.card.mint} />
-              <Text style={styles.loading}>Gathering your data on this device…</Text>
+          {tierUnlocks(tier, 'reportExport') ? belowHeader : (
+            <View style={styles.gateWrap}>
+              <PaywallGate feature="reportExport" title="Reports">
+                {belowHeader}
+              </PaywallGate>
             </View>
-          ) : !hasContent ? (
-            <EmptyState
-              title="Nothing to report yet"
-              message="Log medications, sleep, or weight — then come back for your PDF."
-            />
-          ) : showingCaregiver ? (
-            <>
-              <Text style={styles.sectionTitle}>Included</Text>
-              <GlassSurface strong style={styles.card}>
-                <Text style={styles.line}>{`${caregiverMeds.length} ${caregiverMeds.length === 1 ? 'medicine' : 'medicines'} with recent taking`}</Text>
-                <Text style={styles.line}>Schedule and supply included</Text>
-              </GlassSurface>
-              <Button
-                title={generating ? 'Creating PDF…' : 'Generate caregiver PDF'}
-                variant="secondary"
-                onPress={() => void generate()}
-                disabled={generating}
-                fullWidth
-                size="large"
-                style={styles.genBtn}
-                textStyle={styles.genBtnText}
-              />
-            </>
-          ) : (
-            <>
-              <Text style={styles.sectionTitle}>Included</Text>
-              <GlassSurface strong style={styles.card}>
-                <Text style={styles.line}>{`${input!.meds.length} ${input!.meds.length === 1 ? 'medication' : 'medications'} with adherence`}</Text>
-                <Text style={styles.line}>{`${input!.observations.length} recorded ${input!.observations.length === 1 ? 'observation' : 'observations'}`}</Text>
-                <Text style={styles.line}>{input!.sleep ? `Sleep · ${input!.sleep.nights} nights` : 'Sleep · none logged'}</Text>
-                <Text style={styles.line}>{input!.weight ? `Weight · ${input!.weight.startKg} → ${input!.weight.endKg} kg` : 'Weight · none logged'}</Text>
-              </GlassSurface>
-              <Button
-                title={generating ? 'Creating PDF…' : 'Generate PDF'}
-                variant="secondary"
-                onPress={() => void generate()}
-                disabled={generating}
-                fullWidth
-                size="large"
-                style={styles.genBtn}
-                textStyle={styles.genBtnText}
-              />
-            </>
           )}
           <Text style={styles.disclaimer}>
             Generated on-device from your tracking data. Sharing sends it wherever you choose — nothing is uploaded to create it.
@@ -309,6 +326,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#05070F' },
   safe: { flex: 1 },
   content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  gateWrap: { paddingTop: 4 },
   title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
   sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
   sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },

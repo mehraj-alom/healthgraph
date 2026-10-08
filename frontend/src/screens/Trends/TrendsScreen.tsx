@@ -17,6 +17,8 @@ import { SPACE } from '@/theme/guava';
 import { LG } from '@/theme/liquidGlass';
 import { useTrends } from '@/hooks/useTrends';
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
+import { PaywallGate } from '@/components/PaywallGate';
+import { tierUnlocks, usePremiumTier } from '@/services/premium';
 import type {
   TrendsResponse,
   DailyWellbeingPoint,
@@ -396,6 +398,7 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
   const [selectedSymptom, setSelectedSymptom] = useState<string | null>(null);
 
   const { data: trend, isLoading, error } = useTrends(selectedDays);
+  const tier = usePremiumTier();
 
   const hasContent = trend != null && trend.logged_days > 0;
   const transitioning = isLoading && hasContent;
@@ -435,6 +438,26 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
     );
   }
 
+  // Element only — creating it runs no hooks; the gate decides whether it
+  // ever renders, so paid users see byte-identical UI.
+  const body = (
+    <TrendsBody
+      trend={trend}
+      isLoading={isLoading}
+      error={error}
+      hasContent={hasContent}
+      transitioning={transitioning}
+      range={range}
+      setRange={setRange}
+      setSelectedSymptom={setSelectedSymptom}
+      activeSymptomId={activeSymptomId}
+      activeSymptomSeries={activeSymptomSeries}
+      sleepEnergyScatter={sleepEnergyScatter}
+      sleepStressScatter={sleepStressScatter}
+      embedded={false}
+    />
+  );
+
   return (
     <View style={styles.root}>
       <HomeStageBackdrop />
@@ -442,21 +465,13 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Trends</Text>
         </View>
-        <TrendsBody
-          trend={trend}
-          isLoading={isLoading}
-          error={error}
-          hasContent={hasContent}
-          transitioning={transitioning}
-          range={range}
-          setRange={setRange}
-          setSelectedSymptom={setSelectedSymptom}
-          activeSymptomId={activeSymptomId}
-          activeSymptomSeries={activeSymptomSeries}
-          sleepEnergyScatter={sleepEnergyScatter}
-          sleepStressScatter={sleepStressScatter}
-          embedded={false}
-        />
+        {tierUnlocks(tier, 'trends') ? body : (
+          <View style={styles.gateWrap}>
+            <PaywallGate feature="trends" title="Trends">
+              {body}
+            </PaywallGate>
+          </View>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -776,6 +791,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   headerTitle: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  gateWrap: { flex: 1, paddingHorizontal: SPACE.screenH, paddingTop: 8 },
   embeddedHeader: { paddingTop: 24, paddingBottom: 8 },
   embeddedSubtitle: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, marginTop: 8 },
 

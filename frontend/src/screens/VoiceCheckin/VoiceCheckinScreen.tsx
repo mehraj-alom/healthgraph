@@ -21,6 +21,7 @@ import { SPACE } from '@/theme/guava';
 import { Button, Input } from '@/components';
 import { GlassSurface } from '@/components/home/GlassSurface';
 import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { PaywallGate } from '@/components/PaywallGate';
 import { LG } from '@/theme/liquidGlass';
 import { api } from '@/services/api';
 import { todayKeyLocal } from '@/utils/dayKey';
@@ -721,6 +722,10 @@ export default function VoiceCheckinScreen() {
   };
 
   // ================= setup =================
+  // Alarm/reminder scheduling (time + daily call) is All-in (voiceAlarms).
+  // Voice recording/interview itself is free logging and stays ungated —
+  // only this scheduling section is wrapped; ringing/interview/whole/
+  // apology/summary below render for every tier.
   if (mode === 'setup') {
     return (
       <View style={styles.root}>
@@ -729,56 +734,60 @@ export default function VoiceCheckinScreen() {
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             <Text style={styles.title}>Voice check-in</Text>
             <Text style={styles.sub}>A call every day. Answer five questions by voice.</Text>
-            <View style={styles.timeRow}>
-              <View style={styles.stepper}>
-                <Pressable onPress={() => adjust('hour', -1, 0, 23)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour down">
-                  <Text style={styles.stepText}>−</Text>
-                </Pressable>
-                <Text style={styles.timeValue}>{String(time.hour).padStart(2, '0')}</Text>
-                <Pressable onPress={() => adjust('hour', 1, 0, 23)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour up">
-                  <Text style={styles.stepText}>+</Text>
-                </Pressable>
+            <PaywallGate feature="voiceAlarms" title="Call reminders" body="A daily call on your schedule.">
+              <View style={styles.gatedSchedule}>
+                <View style={styles.timeRow}>
+                  <View style={styles.stepper}>
+                    <Pressable onPress={() => adjust('hour', -1, 0, 23)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour down">
+                      <Text style={styles.stepText}>−</Text>
+                    </Pressable>
+                    <Text style={styles.timeValue}>{String(time.hour).padStart(2, '0')}</Text>
+                    <Pressable onPress={() => adjust('hour', 1, 0, 23)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Hour up">
+                      <Text style={styles.stepText}>+</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.timeColon}>:</Text>
+                  <View style={styles.stepper}>
+                    <Pressable onPress={() => adjust('minute', -1, 0, 55, 5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute down">
+                      <Text style={styles.stepText}>−</Text>
+                    </Pressable>
+                    <Text style={styles.timeValue}>{String(time.minute).padStart(2, '0')}</Text>
+                    <Pressable onPress={() => adjust('minute', 1, 0, 55, 5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute up">
+                      <Text style={styles.stepText}>+</Text>
+                    </Pressable>
+                  </View>
+                  <Pressable
+                    onPress={() => setTime((t) => ({ ...t, enabled: !t.enabled }))}
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: time.enabled }}
+                    accessibilityLabel="Daily voice check-in on or off"
+                    style={[styles.toggle, time.enabled && styles.toggleOn]}
+                  >
+                    <Text style={[styles.toggleText, time.enabled && styles.toggleTextOn]}>
+                      {time.enabled ? 'On' : 'Off'}
+                    </Text>
+                  </Pressable>
+                </View>
+                {timeMsg ? <Text style={styles.timeMsg}>{timeMsg}</Text> : null}
+                <Button
+                  title={savingTime ? 'Saving…' : 'Save'}
+                  variant="secondary"
+                  onPress={() => void saveTime()}
+                  disabled={savingTime}
+                  fullWidth
+                  size="large"
+                  style={styles.goBtn}
+                  textStyle={styles.goBtnText}
+                />
+                <Button
+                  title="Test call now"
+                  variant="ghost"
+                  onPress={() => setMode('ringing')}
+                  fullWidth
+                  textStyle={styles.ghostText}
+                />
               </View>
-              <Text style={styles.timeColon}>:</Text>
-              <View style={styles.stepper}>
-                <Pressable onPress={() => adjust('minute', -1, 0, 55, 5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute down">
-                  <Text style={styles.stepText}>−</Text>
-                </Pressable>
-                <Text style={styles.timeValue}>{String(time.minute).padStart(2, '0')}</Text>
-                <Pressable onPress={() => adjust('minute', 1, 0, 55, 5)} hitSlop={12} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Minute up">
-                  <Text style={styles.stepText}>+</Text>
-                </Pressable>
-              </View>
-              <Pressable
-                onPress={() => setTime((t) => ({ ...t, enabled: !t.enabled }))}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: time.enabled }}
-                accessibilityLabel="Daily voice check-in on or off"
-                style={[styles.toggle, time.enabled && styles.toggleOn]}
-              >
-                <Text style={[styles.toggleText, time.enabled && styles.toggleTextOn]}>
-                  {time.enabled ? 'On' : 'Off'}
-                </Text>
-              </Pressable>
-            </View>
-            {timeMsg ? <Text style={styles.timeMsg}>{timeMsg}</Text> : null}
-            <Button
-              title={savingTime ? 'Saving…' : 'Save'}
-              variant="secondary"
-              onPress={() => void saveTime()}
-              disabled={savingTime}
-              fullWidth
-              size="large"
-              style={styles.goBtn}
-              textStyle={styles.goBtnText}
-            />
-            <Button
-              title="Test call now"
-              variant="ghost"
-              onPress={() => setMode('ringing')}
-              fullWidth
-              textStyle={styles.ghostText}
-            />
+            </PaywallGate>
             <Button
               title="Speak freely instead"
               variant="ghost"
@@ -1024,6 +1033,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#05070F' },
   safe: { flex: 1 },
   content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  gatedSchedule: { gap: 12 },
   title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
   sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
   progress: { fontWeight: '600', fontSize: 13, lineHeight: 18, letterSpacing: 1, color: LG.card.mint, textAlign: 'center' },

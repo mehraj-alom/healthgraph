@@ -32,6 +32,8 @@ import {
 import { useCuratedFeed } from '@/screens/Dashboard/useCuratedFeed';
 import { useBehaviorImpacts } from '@/hooks/useBehaviorImpacts';
 import type { Impact } from '@/services/behaviorImpacts';
+import { PaywallGate } from '@/components/PaywallGate';
+import { tierUnlocks, usePremiumTier } from '@/services/premium';
 
 const SECONDARY = 'rgba(233,240,255,0.66)';
 const TERTIARY = 'rgba(233,240,255,0.45)';
@@ -98,6 +100,7 @@ export default function InsightsScreen() {
   const { visibleFeed } = useCuratedFeed(feedQuery.items, feedQuery.streams, feedQuery.pairs);
   const { impacts } = useBehaviorImpacts();
   const [refreshing, setRefreshing] = useState(false);
+  const tier = usePremiumTier();
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -111,6 +114,35 @@ export default function InsightsScreen() {
 
   const loading = visibleFeed.length === 0 && (feedQuery.isLocalLoading || trends.data == null);
 
+  // Element only — creating it runs no hooks; the gate decides whether it
+  // ever renders, so paid users see byte-identical UI.
+  const feed = loading ? (
+    <View style={styles.center}>
+      <ActivityIndicator size="large" color="#5CE8B8" />
+      <Text style={styles.body}>Reading your patterns…</Text>
+    </View>
+  ) : (
+    <FlatList
+      data={visibleFeed}
+      keyExtractor={(item) => item.id}
+      renderItem={({ item }) => <InsightCard item={item} />}
+      contentContainerStyle={styles.list}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor="#FFFFFF" />
+      }
+      ListHeaderComponent={<ImpactRows impacts={impacts} />}
+      ListEmptyComponent={
+        <View style={styles.center}>
+          <Text style={styles.title2}>No insights yet</Text>
+          <Text style={styles.body}>
+            Log a few days — connections appear here.
+          </Text>
+        </View>
+      }
+    />
+  );
+
   return (
     <View style={styles.root}>
       <HomeStageBackdrop />
@@ -123,31 +155,12 @@ export default function InsightsScreen() {
               : 'How your engines move together.'}
           </Text>
         </View>
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color="#5CE8B8" />
-            <Text style={styles.body}>Reading your patterns…</Text>
+        {tierUnlocks(tier, 'correlations') ? feed : (
+          <View style={styles.gateWrap}>
+            <PaywallGate feature="correlations" title="Insights" body="How your engines move together.">
+              {feed}
+            </PaywallGate>
           </View>
-        ) : (
-          <FlatList
-            data={visibleFeed}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <InsightCard item={item} />}
-            contentContainerStyle={styles.list}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor="#FFFFFF" />
-            }
-            ListHeaderComponent={<ImpactRows impacts={impacts} />}
-            ListEmptyComponent={
-              <View style={styles.center}>
-                <Text style={styles.title2}>No insights yet</Text>
-                <Text style={styles.body}>
-                  Log a few days — connections appear here.
-                </Text>
-              </View>
-            }
-          />
         )}
         <Text style={styles.disclaimer}>
           Patterns from your data — not causes.
@@ -161,6 +174,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#05070F' },
   safe: { flex: 1 },
   header: { paddingHorizontal: SPACE.screenH, paddingTop: 8, paddingBottom: 4 },
+  gateWrap: { flex: 1, paddingHorizontal: SPACE.screenH, paddingTop: 8 },
   title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF' },
   sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, marginTop: 2 },
   list: { paddingHorizontal: SPACE.screenH, paddingBottom: 24, gap: 12 },

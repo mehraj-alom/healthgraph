@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Reveal } from '@/components/home/Reveal';
 import { GlassSurface } from '@/components/home/GlassSurface';
 import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { billingAvailable, presentStorePaywall, purchaseTier, restorePurchases } from '@/services/billing';
 import { LG } from '@/theme/liquidGlass';
 
 /**
@@ -106,17 +107,78 @@ const VALUE_ROWS = [
 export default function PricingScreen({ onDone }: { onDone: () => void }) {
   const [selected, setSelected] = useState<PricingPlan>('free');
   const [busy, setBusy] = useState(false);
+  const [payNote, setPayNote] = useState<string | null>(null);
 
   const finish = async (plan: PricingPlan): Promise<void> => {
     if (busy) return;
     setBusy(true);
+    setPayNote(null);
     try {
-      await markPricingSeen(plan);
+      if (plan === 'free') {
+        await markPricingSeen(plan);
+        onDone();
+        return;
+      }
+      // Paid pick goes through Google Play Billing. First the hosted
+      // RevenueCat paywall (localized price + terms, UPI/cards in India,
+      // cards/PayPal/SEPA in Germany); direct product purchase is the
+      // fallback. The screen never advances on a paid plan without a
+      // verified purchase — cancel or failure keeps the user here with an
+      // honest note, never trapped.
+      const hosted = await presentStorePaywall();
+      if (hosted.status === 'purchased') {
+        if (hosted.tier === 'free') {
+          setPayNote('Payment went through — your plan is activating. Reopen plans in a moment.');
+          return;
+        }
+        await markPricingSeen(hosted.tier);
+        onDone();
+        return;
+      }
+      if (hosted.status === 'cancelled') {
+        setPayNote('No charge made — pick a plan whenever you are ready.');
+        return;
+      }
+      const result = await purchaseTier(plan);
+      if (result.status === 'purchased') {
+        if (result.tier === 'free') {
+          setPayNote('Payment went through — your plan is activating. Reopen plans in a moment.');
+          return;
+        }
+        await markPricingSeen(result.tier);
+        onDone();
+      } else if (result.status === 'cancelled') {
+        setPayNote('No charge made — pick a plan whenever you are ready.');
+      } else {
+        setPayNote(
+          billingAvailable()
+            ? 'Purchase failed — check your connection and retry. Nothing was charged.'
+            : 'Subscriptions open soon. Nothing is charged today.',
+        );
+      }
     } catch {
-      // State below still moves forward — never trap anyone here.
+      setPayNote('Something went wrong — nothing was charged. Please retry.');
     } finally {
       setBusy(false);
-      onDone();
+    }
+  };
+
+  const onRestore = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setPayNote(null);
+    try {
+      const tier = await restorePurchases();
+      if (tier === 'free') {
+        setPayNote('No purchases found on this Play account.');
+      } else {
+        await markPricingSeen(tier);
+        onDone();
+      }
+    } catch {
+      setPayNote('Restore failed — check your connection and retry.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -226,7 +288,18 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
               ? '3 days free, then monthly. Cancel anytime — you keep access until the period ends.'
               : 'Free forever — upgrade anytime.'}
           </Text>
-          <Text style={styles.honestNote}>Subscriptions open soon. Nothing is charged today.</Text>
+          {payNote ? <Text style={styles.payNote}>{payNote}</Text> : null}
+          <Text style={styles.honestNote}>Billed through Google Play. Nothing is charged today.</Text>
+          <Pressable
+            onPress={() => void onRestore()}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Restore purchases"
+            hitSlop={12}
+            style={styles.skipHit}
+          >
+            <Text style={styles.skipText}>Restore purchases</Text>
+          </Pressable>
           <Pressable
             onPress={() => void finish('free')}
             disabled={busy}
@@ -423,6 +496,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: TERTIARY,
+    textAlign: 'center',
+  },
+  payNote: {
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   skipHit: {

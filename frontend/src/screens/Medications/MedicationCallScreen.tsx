@@ -53,6 +53,8 @@ import {
 import type { RootStackParamList } from '@/types';
 import { GlassSurface } from '@/components/home/GlassSurface';
 import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { PaywallGate } from '@/components/PaywallGate';
+import { tierUnlocks, usePremiumTier } from '@/services/premium';
 import { LG } from '@/theme/liquidGlass';
 
 const SECONDARY = 'rgba(233,240,255,0.66)';
@@ -130,6 +132,11 @@ export default function MedicationCallScreen() {
   const [doneMessage, setDoneMessage] = useState<string | null>(null);
   const machineRef = useRef(machine);
   machineRef.current = machine;
+  // Call-style reminders are All-in (voice alarms & call reminders). The
+  // gate below replaces the call surface when locked; dose/take/snooze
+  // logic underneath is untouched and runs normally once entitled.
+  const tier = usePremiumTier();
+  const callUnlocked = tierUnlocks(tier, 'voiceAlarms');
 
   const exit = useCallback(() => {
     stopCallVibration();
@@ -224,9 +231,14 @@ export default function MedicationCallScreen() {
   // every other phase. Unmount always stops (cleanup below).
   const ringing = machine.phase === 'RINGING';
   useEffect(() => {
+    // Never vibrate for a locked tier — the paywall replaces the call UI.
+    if (!callUnlocked) {
+      stopCallVibration();
+      return;
+    }
     if (ringing) startCallVibration();
     else stopCallVibration();
-  }, [ringing]);
+  }, [ringing, callUnlocked]);
   useEffect(() => () => stopCallVibration(), []);
 
   const answer = useCallback(() => {
@@ -323,6 +335,30 @@ export default function MedicationCallScreen() {
               <Text style={styles.primaryText}>Close</Text>
             </Pressable>
           </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
+  // Premium gate at the top of the call flow: locked tiers see the paywall
+  // instead of the call surface (no RingAudio mounts here, vibration is
+  // suppressed above). Entitled tiers fall through to the incoming-call
+  // rendering path below, untouched.
+  if (!callUnlocked) {
+    return (
+      <View style={styles.root}>
+        <HomeStageBackdrop />
+        <SafeAreaView style={styles.safe}>
+          <ScrollView contentContainerStyle={styles.content}>
+            <Text style={styles.incoming}>Medication reminder</Text>
+            <PaywallGate feature="voiceAlarms" title="Call reminders">
+              <View />
+            </PaywallGate>
+            <Pressable onPress={exit} accessibilityRole="button" accessibilityLabel="Close" style={styles.primaryBtn}>
+              <Text style={styles.primaryText}>Close</Text>
+            </Pressable>
+            <Text style={styles.fineprint}>App reminder — not a phone call. Sound and vibration stop when you answer, decline, or leave.</Text>
+          </ScrollView>
         </SafeAreaView>
       </View>
     );

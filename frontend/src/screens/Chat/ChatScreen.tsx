@@ -46,6 +46,14 @@ import {
   CRISIS_SLIM_LINE,
   CRISIS_TITLE,
 } from '@/services/crisisResources';
+import { useOpenPricing } from '@/components/PaywallGate';
+import {
+  consumeQuota,
+  getLocalTier,
+  getMonthlyUsage,
+  monthlyQuota,
+  usePremiumTier,
+} from '@/services/premium';
 
 const SECONDARY = 'rgba(233,240,255,0.66)';
 const TERTIARY = 'rgba(233,240,255,0.45)';
@@ -405,6 +413,7 @@ function Composer({
   keyboardOpen,
   planPill,
   planLine,
+  quotaNote,
   onSend,
   onStop,
 }: {
@@ -413,6 +422,7 @@ function Composer({
   keyboardOpen: boolean;
   planPill: string;
   planLine: string;
+  quotaNote?: string | null;
   onSend: (text: string) => void;
   onStop: () => void;
 }) {
@@ -449,6 +459,9 @@ function Composer({
             <Text style={styles.proText}>{planPill}</Text>
           </View>
         </View>
+        {quotaNote ? (
+          <Text style={styles.quotaHint} numberOfLines={1}>{quotaNote}</Text>
+        ) : null}
         <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
           <TextInput
             ref={inputRef}
@@ -577,10 +590,37 @@ export default function ChatScreen() {
   const [revealingId, setRevealingId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [planId, setPlanId] = useState<PricingPlan>('free');
+  const tier = usePremiumTier();
+  const openPricing = useOpenPricing();
+  const [quotaNote, setQuotaNote] = useState<string | null>(null);
 
   useEffect(() => {
     getSelectedPlan().then(setPlanId).catch(() => {});
   }, []);
+
+  // Remaining AI-chat quota for the composer line. Read-only hint: the
+  // enforcing check runs at send time, never blocking render.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const quota = monthlyQuota(tier, 'aiChat');
+      if (quota == null) {
+        if (live) setQuotaNote(null);
+        return;
+      }
+      const used = await getMonthlyUsage('aiChat');
+      if (!live) return;
+      const left = Math.max(0, quota - used);
+      setQuotaNote(
+        tier === 'free'
+          ? `${left} of ${quota} free messages left this month`
+          : `${left} of ${quota} messages left this month`,
+      );
+    })();
+    return () => {
+      live = false;
+    };
+  }, [tier, messages.length]);
   const planMeta =
     planId === 'allin'
       ? { pill: 'ALL-IN', line: 'Unlimited AI chat' }
@@ -645,6 +685,23 @@ export default function ChatScreen() {
   const sendMessage = async (text?: string) => {
     const trimmedMessage = (text ?? '').trim();
     if (!trimmedMessage || sending) return;
+
+    // Monthly AI-chat quota is enforced here, at action time. Handlers
+    // can't use hooks, so the tier is read fresh (free-safe default).
+    const tierNow = await getLocalTier();
+    const quotaOk = await consumeQuota(tierNow, 'aiChat');
+    if (!quotaOk) {
+      openPricing();
+      const quota = monthlyQuota(tierNow, 'aiChat') ?? 0;
+      const used = await getMonthlyUsage('aiChat');
+      const left = Math.max(0, quota - used);
+      setQuotaNote(
+        tierNow === 'free'
+          ? `${left} of ${quota} free messages left this month`
+          : `${left} of ${quota} messages left this month`,
+      );
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -958,6 +1015,7 @@ export default function ChatScreen() {
               keyboardOpen={keyboardOpen}
               planPill={planMeta.pill}
               planLine={planMeta.line}
+              quotaNote={quotaNote}
               onSend={(text) => void sendMessage(text)}
               onStop={stopAll}
             />
@@ -1189,6 +1247,12 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: SECONDARY,
     flex: 1,
+  },
+  quotaHint: {
+    fontWeight: '400',
+    fontSize: 12,
+    lineHeight: 16,
+    color: TERTIARY,
   },
   proPill: {
     backgroundColor: 'rgba(255,255,255,0.10)',

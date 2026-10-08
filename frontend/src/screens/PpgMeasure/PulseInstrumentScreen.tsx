@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { PpgCameraPreview } from 'healthgraph-ppg';
@@ -50,6 +50,8 @@ import {
 } from '@/components/pulse/Instrument';
 import { GlassSurface } from '@/components/home/GlassSurface';
 import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { PaywallGate } from '@/components/PaywallGate';
+import { tierUnlocks, usePremiumTier } from '@/services/premium';
 import { LG } from '@/theme/liquidGlass';
 import FaceGuideOverlay, { type FaceGuideVisual } from '@/components/pulse/FaceGuideOverlay';
 import FingertipGuideOverlay, { type FingertipGuideVisual } from '@/components/pulse/FingertipGuideOverlay';
@@ -137,6 +139,16 @@ export default function PulseInstrumentScreen() {
   const [hrvBase, setHrvBase] = useState<HrvBaseline | null>(null);
   const [trend, setTrend] = useState<BpmPoint[]>([]);
   const [elapsed, setElapsed] = useState(0);
+  // Premium gates only — measurement logic below is untouched. Camera
+  // (fingertip PPG) needs General+, face rPPG needs All-in. Starts
+  // free-safe, resolves live via usePremiumTier.
+  const tier = usePremiumTier();
+  const cameraUnlocked = tierUnlocks(tier, 'cameraPulse');
+  const faceUnlocked = tierUnlocks(tier, 'facePulse');
+  // Explicit camera vs face switcher. IDLE shows the selected mode's entry;
+  // mid-flow phases derive the active mode from the machine (single source
+  // of truth) so a locked camera can never mount while gated.
+  const [preferredMode, setPreferredMode] = useState<'face' | 'camera'>('face');
 
   // Mutable run mirrors (effects + timers must see current values).
   const machineRef = useRef(machine);
@@ -386,6 +398,42 @@ export default function PulseInstrumentScreen() {
     void loadRecent();
   }, [loadRecent]);
 
+  // Mode switching never touches the measurement pipeline: switching away
+  // from a non-IDLE phase resets to IDLE (same RESET as "Measure again"),
+  // and the camera entry below reaches FINGERTIP_READY via existing reducer
+  // events only — the face camera is never started for the camera path.
+  const runBusy =
+    machine.phase === 'CHECKING' || machine.phase === 'FACE_RUN' || machine.phase === 'FINGERTIP_RUN';
+  const switchMode = useCallback(
+    (next: 'face' | 'camera') => {
+      if (next === preferredMode || runBusy) return;
+      if (machine.phase !== 'IDLE') measureAgain();
+      setPreferredMode(next);
+    },
+    [preferredMode, runBusy, machine.phase, measureAgain],
+  );
+
+  const beginCameraReady = useCallback(() => {
+    dispatch({ type: 'BEGIN_CHECK' });
+    dispatch({ type: 'FACE_UNAVAILABLE', reason: FACE_UNAVAILABLE_BODY });
+    dispatch({ type: 'CHOOSE_FINGERTIP' });
+  }, []);
+
+  // Active instrument mode: live machine phases win; IDLE / terminal-entry
+  // states follow the user's switcher selection. COMPLETE stays gated by the
+  // modality that produced it (a downgrade mid-session keeps the result locked).
+  const activeModeKey: 'face' | 'fingertip' = (() => {
+    if (machine.mode === 'face') return 'face';
+    if (machine.mode === 'fingertip') return 'fingertip';
+    if (machine.phase === 'FINGERTIP_READY') return 'fingertip';
+    if (machine.phase === 'COMPLETE') {
+      if (machine.completedMode === 'face') return 'face';
+      if (machine.completedMode === 'fingertip') return 'fingertip';
+    }
+    return preferredMode === 'face' ? 'face' : 'fingertip';
+  })();
+  const activeFeature = activeModeKey === 'face' ? 'facePulse' : 'cameraPulse';
+
   const faceActive = machine.mode === 'face' && (machine.phase === 'CHECKING' || machine.phase === 'FACE_RUN');
   const fingertipActive = machine.mode === 'fingertip' && machine.phase === 'FINGERTIP_RUN';
 
@@ -415,6 +463,49 @@ export default function PulseInstrumentScreen() {
       <HomeStageBackdrop />
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} scrollEventThrottle={16}>
+        {/* Camera vs face switcher — always visible so a locked mode can be
+            left without entering the paywall. Locked modes carry ✦. */}
+        <View style={styles.modeSwitch} accessibilityRole="tablist" accessibilityLabel="Pulse mode">
+          <Pressable
+            onPress={() => switchMode('camera')}
+            disabled={runBusy}
+            accessibilityRole="button"
+            accessibilityLabel={cameraUnlocked ? 'Camera pulse mode' : 'Camera pulse mode, premium'}
+            accessibilityState={{ selected: preferredMode === 'camera', disabled: runBusy }}
+            style={({ pressed }) => [
+              styles.modeBtn,
+              preferredMode === 'camera' && styles.modeBtnActive,
+              runBusy && styles.modeBtnDisabled,
+              pressed && !runBusy && styles.modeBtnPressed,
+            ]}
+          >
+            <Text style={[styles.modeBtnText, preferredMode === 'camera' && styles.modeBtnTextActive]}>
+              {cameraUnlocked ? 'Camera' : 'Camera ✦'}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => switchMode('face')}
+            disabled={runBusy}
+            accessibilityRole="button"
+            accessibilityLabel={faceUnlocked ? 'Face pulse mode' : 'Face pulse mode, premium'}
+            accessibilityState={{ selected: preferredMode === 'face', disabled: runBusy }}
+            style={({ pressed }) => [
+              styles.modeBtn,
+              preferredMode === 'face' && styles.modeBtnActive,
+              runBusy && styles.modeBtnDisabled,
+              pressed && !runBusy && styles.modeBtnPressed,
+            ]}
+          >
+            <Text style={[styles.modeBtnText, preferredMode === 'face' && styles.modeBtnTextActive]}>
+              {faceUnlocked ? 'Face' : 'Face ✦'}
+            </Text>
+          </Pressable>
+        </View>
+        {/* Premium gate over the instrument area only: header/switcher above
+            stays visible. Locked tiers see the lock card; entitled tiers
+            render children untouched — cameras mount only when unlocked, so
+            a locked mode can never activate its camera. */}
+        <PaywallGate feature={activeFeature} title="Pulse">
         {machine.phase === 'IDLE' && (
           <GlassSurface strong radius={24} style={styles.panelPad}>
             <Text style={styles.title}>Pulse</Text>
@@ -437,7 +528,11 @@ export default function PulseInstrumentScreen() {
                 )}
               </View>
             )}
-            <TactileButton title="Begin check" onPress={beginCheck} accessibilityLabel="Begin automatic measurement check" />
+            {preferredMode === 'face' ? (
+              <TactileButton title="Begin check" onPress={beginCheck} accessibilityLabel="Begin automatic measurement check" />
+            ) : (
+              <TactileButton title="Begin fingertip check" onPress={beginCameraReady} accessibilityLabel="Begin fingertip measurement check" />
+            )}
             <View style={styles.protoCard}>
               <Text style={styles.protoTitle}>Morning read</Text>
               <Text style={styles.protoLine}>On waking · lying still · breathe normally</Text>
@@ -629,6 +724,7 @@ export default function PulseInstrumentScreen() {
             <TactileButton title="Back to start" onPress={measureAgain} />
           </GlassSurface>
         )}
+        </PaywallGate>
 
         <Text style={styles.disclaimer}>Wellness measurements only. Not a medical device — not for diagnosis or treatment.</Text>
       </ScrollView>
@@ -731,4 +827,21 @@ const styles = StyleSheet.create({
   readoutUnit: { fontWeight: '600', fontSize: 12, letterSpacing: 1.5, color: INST.engraved },
   dialRow: { alignItems: 'center' },
   resultBlock: { gap: 12 },
+  modeSwitch: { flexDirection: 'row', gap: 8 },
+  modeBtn: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  modeBtnActive: { backgroundColor: '#4FD1C5', borderColor: '#4FD1C5' },
+  modeBtnDisabled: { opacity: 0.5 },
+  modeBtnPressed: { opacity: 0.85 },
+  modeBtnText: { fontWeight: '600', fontSize: 15, lineHeight: 20, color: INST.steel },
+  modeBtnTextActive: { color: '#062A26' },
 });

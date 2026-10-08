@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CameraView } from 'expo-camera';
 import Animated, {
@@ -36,6 +36,13 @@ import ScanResultSheet from './ScanResultSheet';
 import BarcodeScanner from './BarcodeScanner';
 import { barcodeResultFor, type BarcodeProduct } from '@/services/barcode';
 import type { FoodScanResult } from '@/services/nutritionService';
+import { useOpenPricing } from '@/components/PaywallGate';
+import {
+  consumeQuota,
+  getLocalTier,
+  getMonthlyUsage,
+  monthlyQuota,
+} from '@/services/premium';
 
 /** Scan-type pick tiles: monochrome glyph + label on frosted glass. */
 const PICK_TILES: { key: 'photo' | 'barcode'; label: string; glyph: GlyphName; hint: string }[] = [
@@ -135,6 +142,40 @@ export default function FoodScanScreen() {
   const [barcodeResult, setBarcodeResult] = useState<FoodScanResult | null>(null);
   const [barcodeImage, setBarcodeImage] = useState<string | null>(null);
   const [barcodeCached, setBarcodeCached] = useState(false);
+  const openPricing = useOpenPricing();
+  const [scansLeft, setScansLeft] = useState<number | null>(null);
+  const [quotaNote, setQuotaNote] = useState<string | null>(null);
+
+  // Read-only hint refresh (focus time). The enforcing check runs at
+  // capture time, never blocking render. Paid tiers have no quota.
+  const refreshFoodQuota = useCallback(() => {
+    void (async () => {
+      const t = await getLocalTier();
+      const quota = monthlyQuota(t, 'foodScan');
+      if (quota == null) {
+        setScansLeft(null);
+        return;
+      }
+      const used = await getMonthlyUsage('foodScan');
+      setScansLeft(Math.max(0, quota - used));
+    })();
+  }, []);
+  useFocusEffect(refreshFoodQuota);
+
+  // Meal-scan quota gate: free 3/mo, paid unlimited. Handlers can't use
+  // hooks, so the tier is read fresh (free-safe default) at action time.
+  const handleCapture = useCallback(async () => {
+    const t = await getLocalTier();
+    const ok = await consumeQuota(t, 'foodScan');
+    if (!ok) {
+      setQuotaNote('3 free scans used up this month.');
+      openPricing();
+      return;
+    }
+    setQuotaNote(null);
+    refreshFoodQuota();
+    await capture();
+  }, [capture, openPricing, refreshFoodQuota]);
 
   // Slow top-to-bottom teal sweep; static when reduced motion is requested.
   useEffect(() => {
@@ -325,7 +366,7 @@ export default function FoodScanScreen() {
             {stage !== 'error' ? (
               <View style={styles.captureFloat} pointerEvents="box-none">
                 <Pressable
-                  onPress={() => void capture()}
+                  onPress={() => void handleCapture()}
                   disabled={!cameraReady || busy}
                   accessibilityRole="button"
                   accessibilityLabel="Capture meal photo"
@@ -339,6 +380,13 @@ export default function FoodScanScreen() {
                 >
                   <View style={styles.captureInner} />
                 </Pressable>
+                {quotaNote ? (
+                  <Text style={styles.quotaHint}>{quotaNote}</Text>
+                ) : scansLeft != null ? (
+                  <Text style={styles.quotaHint}>
+                    {scansLeft > 0 ? `${scansLeft} of 3 free scans left` : 'Free scans used up this month'}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -581,6 +629,14 @@ const styles = StyleSheet.create({
     height: 62,
     borderRadius: 31,
     backgroundColor: '#FFFFFF',
+  },
+  quotaHint: {
+    fontWeight: '600',
+    fontSize: 12,
+    lineHeight: 16,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
+    paddingHorizontal: 24,
   },
   card: {
     padding: 20,

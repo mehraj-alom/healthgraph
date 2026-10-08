@@ -953,6 +953,13 @@ export default function App() {
     [FONT.semi]: require('./assets/fonts/Poppins-SemiBold.ttf'),
     [FONT.bold]: require('./assets/fonts/Poppins-Bold.ttf'),
   });
+  // Billing sync at startup: paid entitlements restore from the Play
+  // account before any paywall renders. Never blocks paint or throws.
+  useEffect(() => {
+    void import('@/services/billing').then(({ configureBilling }) =>
+      configureBilling(),
+    );
+  }, []);
   return (
     <SafeAreaProvider>
       <QueryClientProvider

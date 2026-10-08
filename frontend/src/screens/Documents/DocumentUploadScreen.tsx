@@ -21,7 +21,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import { Button } from '@/components';
 import { LG } from '@/theme/liquidGlass';
@@ -33,6 +33,13 @@ import {
   type ProcessingStage,
 } from '@/context/DocumentsContext';
 import { formatFileSize } from '@/services/documents';
+import { PaywallGate } from '@/components/PaywallGate';
+import {
+  consumeQuota,
+  getLocalTier,
+  getMonthlyUsage,
+  monthlyQuota,
+} from '@/services/premium';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -113,6 +120,22 @@ export default function DocumentUploadScreen() {
   const [uploadedDocId, setUploadedDocId] = useState<string | null>(null);
   const [currentStage, setCurrentStage] = useState<ProcessingStage>('idle');
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // General-tier monthly document-scan quota, checked on focus (never
+  // blocking render). Free tier is always paywalled; All-in is unlimited.
+  const [quotaExhausted, setQuotaExhausted] = useState(false);
+  const checkDocQuota = useCallback(() => {
+    void (async () => {
+      const t = await getLocalTier();
+      if (t !== 'general') {
+        setQuotaExhausted(false);
+        return;
+      }
+      const quota = monthlyQuota(t, 'documentScan') ?? 4;
+      const used = await getMonthlyUsage('documentScan');
+      setQuotaExhausted(used >= quota);
+    })();
+  }, []);
+  useFocusEffect(checkDocQuota);
 
   // ---- Subscribe to stage updates for this document ----
   // The tick forces a re-render on every notify (even same-stage ones that
@@ -178,18 +201,30 @@ export default function DocumentUploadScreen() {
   // second start with a friendly message instead of a duplicate entry) ----
   const handleUpload = useCallback(() => {
     if (!selectedFile || anotherUploadRunning) return;
-    setUploadError(null);
-    uploadAndProcess(
-      selectedFile,
-      (docId) => {
-        setUploadedDocId(docId);
-        setCurrentStage('uploaded');
-      },
-      (error) => {
-        // Upload failed before we got a document ID — stay on file selection
-        setUploadError(error);
-      },
-    );
+    void (async () => {
+      // General-tier quota is consumed here, at upload time. Free tier
+      // never reaches this button (paywalled surface); All-in is unlimited.
+      const t = await getLocalTier();
+      if (t === 'general') {
+        const ok = await consumeQuota(t, 'documentScan');
+        if (!ok) {
+          setQuotaExhausted(true);
+          return;
+        }
+      }
+      setUploadError(null);
+      uploadAndProcess(
+        selectedFile,
+        (docId) => {
+          setUploadedDocId(docId);
+          setCurrentStage('uploaded');
+        },
+        (error) => {
+          // Upload failed before we got a document ID — stay on file selection
+          setUploadError(error);
+        },
+      );
+    });
   }, [selectedFile, anotherUploadRunning, uploadAndProcess]);
 
   // ---- Dismiss on completion ----
@@ -356,6 +391,13 @@ export default function DocumentUploadScreen() {
           </View>
         </Entrance>
 
+        {/* Free tier is always paywalled (0 scans); General shows a quota
+            card once its 4 monthly scans run out; All-in passes through. */}
+        <PaywallGate
+          feature="documentScan"
+          title="Document scans"
+          quotaNote={quotaExhausted ? '4 document scans included in General each month.' : undefined}
+        >
         {!selectedFile ? (
           <Entrance index={1}>
           <View style={styles.choiceWrap}>
@@ -431,6 +473,7 @@ export default function DocumentUploadScreen() {
             One upload at a time.
           </Text>
         ) : null}
+        </PaywallGate>
       </ScrollView>
       </SafeAreaView>
     </View>
