@@ -24,8 +24,18 @@ export type PremiumTier = 'free' | 'general' | 'allin';
 const TIER_KEY = 'premium-tier-v1';
 /** Legacy boolean flag (pre-tier). `1` maps to `general`. */
 const LEGACY_KEY = 'premium-entitled-v1';
+/**
+ * Redeemed-code grant (web-bought HG-XXXX-XXXX codes, support comps).
+ * `{tier, expiresAt}` — merged ABOVE the store tier so a code grant is
+ * never wiped by a store sync while it is still live.
+ */
+const GRANT_KEY = 'premium-code-grant-v1';
 
 const TIER_RANK: Record<PremiumTier, number> = { free: 0, general: 1, allin: 2 };
+
+function maxTier(a: PremiumTier, b: PremiumTier): PremiumTier {
+  return TIER_RANK[a] >= TIER_RANK[b] ? a : b;
+}
 
 export function normalizeTier(value: unknown): PremiumTier {
   return value === 'general' || value === 'allin' ? value : 'free';
@@ -34,18 +44,19 @@ export function normalizeTier(value: unknown): PremiumTier {
 /** Local tier read. RevenueCat sync (billing.ts) overwrites this on launch. */
 export async function getLocalTier(): Promise<PremiumTier> {
   if (__DEV__) return 'allin';
+  let stored: PremiumTier = 'free';
   try {
-    const stored = await AsyncStorage.getItem(TIER_KEY);
-    if (stored === 'general' || stored === 'allin') return stored;
+    const raw = await AsyncStorage.getItem(TIER_KEY);
+    if (raw === 'general' || raw === 'allin') stored = raw;
     // One-time legacy migration: entitled flag → general.
-    if ((await AsyncStorage.getItem(LEGACY_KEY)) === '1') {
+    else if ((await AsyncStorage.getItem(LEGACY_KEY)) === '1') {
       await AsyncStorage.setItem(TIER_KEY, 'general');
-      return 'general';
+      stored = 'general';
     }
   } catch {
     // Locked (safe) on storage failure.
   }
-  return 'free';
+  return withGrant(stored, await getCodeGrant());
 }
 
 /** Written by billing.ts after a verified purchase/restore. Nothing else writes tiers. */
@@ -55,6 +66,40 @@ export async function setLocalTier(tier: PremiumTier): Promise<void> {
   } catch {
     // Best-effort; a failed write keeps the previous (safer) tier.
   }
+}
+
+/** Live code grant, or null when absent/expired (expired grants purge). */
+export async function getCodeGrant(): Promise<{ tier: PremiumTier; expiresAt: string } | null> {
+  try {
+    const raw = await AsyncStorage.getItem(GRANT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { tier?: unknown; expiresAt?: unknown };
+    const tier = normalizeTier(parsed.tier);
+    if (tier === 'free' || typeof parsed.expiresAt !== 'string') return null;
+    if (new Date(parsed.expiresAt).getTime() <= Date.now()) {
+      await AsyncStorage.removeItem(GRANT_KEY);
+      return null;
+    }
+    return { tier, expiresAt: parsed.expiresAt };
+  } catch {
+    return null;
+  }
+}
+
+/** Persist a redeemed code grant. Overwrites any previous grant. */
+export async function setCodeGrant(tier: PremiumTier, expiresAt: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(GRANT_KEY, JSON.stringify({ tier, expiresAt }));
+  } catch {
+    // Best-effort; redeem already mirrored server-side, so access
+    // restores on next launch even if this write fails.
+  }
+}
+
+/** Effective tier: the higher of the store tier and any live code grant. */
+export function withGrant(storeTier: PremiumTier, grant: { tier: PremiumTier } | null): PremiumTier {
+  if (!grant) return normalizeTier(storeTier);
+  return maxTier(normalizeTier(storeTier), grant.tier);
 }
 
 // ─── Capabilities ────────────────────────────────────────────────────────────

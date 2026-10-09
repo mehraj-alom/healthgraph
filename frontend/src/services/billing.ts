@@ -18,7 +18,7 @@
  * nothing charges. `__DEV__` stays fully entitled via premium.ts.
  */
 
-import { getLocalTier, normalizeTier, notifyTierChanged, setLocalTier, type PremiumTier } from '@/services/premium';
+import { getCodeGrant, getLocalTier, normalizeTier, notifyTierChanged, setLocalTier, withGrant, type PremiumTier } from '@/services/premium';
 
 import type { CustomerInfo } from 'react-native-purchases';
 
@@ -76,10 +76,13 @@ async function syncTierFromCustomerInfo(active: Record<string, unknown>): Promis
   const resolved: PremiumTier =
     active[allinEnt] != null ? 'allin' : active[generalEnt] != null ? 'general' : 'free';
   if (__DEV__) return; // dev builds stay fully entitled via premium.ts
+  // Store state is authoritative for store purchases, but a live
+  // redeemed-code grant outranks it — never downgrade below the grant.
+  const effective = withGrant(resolved, await getCodeGrant());
   const current = await getLocalTier();
-  if (resolved !== current) {
+  if (effective !== current) {
     await setLocalTier(resolved);
-    notifyTierChanged(resolved);
+    notifyTierChanged(effective);
   }
 }
 

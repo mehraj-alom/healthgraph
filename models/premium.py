@@ -74,3 +74,54 @@ class PremiumPurchase(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_premium_purchases_patient_status", "patient_id", "status"),
     )
+
+
+CODE_ISSUED = "issued"
+CODE_REDEEMED = "redeemed"
+CODE_REVOKED = "revoked"
+CODE_EXPIRED = "expired"
+ALLOWED_CODE_STATUSES = (
+    CODE_ISSUED,
+    CODE_REDEEMED,
+    CODE_REVOKED,
+    CODE_EXPIRED,
+)
+
+
+class PremiumCode(Base, TimestampMixin):
+    """A redeemable premium code (web sale, support comp, promo).
+
+    Codes grant `tier` for `valid_days` from the moment of redeem.
+    Displayed format is HG-XXXX-XXXX (unambiguous alphabet); stored
+    normalized (uppercase, no separators) in `code`.
+    """
+
+    __tablename__ = "premium_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    code: Mapped[str] = mapped_column(String(16), nullable=False, unique=True, index=True)
+    tier: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=CODE_ISSUED
+    )
+    valid_days: Mapped[int] = mapped_column(nullable=False, server_default="30")
+    max_uses: Mapped[int] = mapped_column(nullable=False, server_default="1")
+    uses: Mapped[int] = mapped_column(nullable=False, server_default="0")
+    issued_to_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    issued_by: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="admin"
+    )
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    redeemed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("patients.patient_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+
+    __table_args__ = (
+        Index("ix_premium_codes_status_tier", "status", "tier"),
+    )

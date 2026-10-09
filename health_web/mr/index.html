@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>mr panel — HealthGraph</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#08090D" />
+<link rel="icon" type="image/png" href="https://healthgraph.shop/icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header class="topbar"><div class="wrap topbar-inner">
+<a class="brand" href="/"><img src="https://healthgraph.shop/logo.png" alt="HealthGraph" />HealthGraph <span style="color:#86868B;font-weight:400">mr panel</span></a>
+<nav class="nav" aria-label="Primary"><a href="/" style="color:#86868B;font-size:14px">← Shop</a><a href="#" id="logout" style="color:#86868B;font-size:14px" hidden>Sign out</a></nav>
+</div></header>
+<div class="wrap" style="padding-top:48px;padding-bottom:80px">
+<!-- Login -->
+<div id="login" style="max-width:440px;margin:0 auto">
+<span class="eyebrow">Private</span>
+<h1 class="display" style="font-size:2.4rem">mr panel</h1>
+<p class="lead" style="margin:10px 0 20px">Buyers, codes, revenue — one private room.</p>
+<div class="card">
+<div class="field"><label for="token">Admin token</label>
+<input id="token" type="password" autocomplete="off" placeholder="Paste your admin token" />
+<p class="hint">Stored only in this browser session. Never shared.</p>
+<p class="err" id="login-err" role="alert" hidden></p></div>
+<button class="btn" id="enter" type="button" style="width:100%">Enter →</button>
+</div>
+</div>
+<!-- App -->
+<div id="app" hidden>
+<div style="display:flex;align-items:end;justify-content:space-between;flex-wrap:wrap;gap:10px">
+<div><span class="eyebrow">Live</span>
+<h1 class="display" style="font-size:2.2rem">Good to see you, mr.</h1></div>
+<button class="btn ghost mini" id="refresh" type="button">Refresh</button>
+</div>
+<div class="tabs" role="tablist" aria-label="Panel sections">
+<button role="tab" aria-selected="true" data-tab="overview">Overview</button>
+<button role="tab" aria-selected="false" data-tab="buyers">Buyers</button>
+<button role="tab" aria-selected="false" data-tab="codes">Codes</button>
+</div>
+<!-- Overview -->
+<div id="tab-overview">
+<div class="stat-grid">
+<div class="stat"><b id="st-buyers">–</b><span>Premium buyers (rows)</span></div>
+<div class="stat"><b id="st-codes">–</b><span>Codes issued</span></div>
+<div class="stat"><b id="st-redeemed">–</b><span>Codes redeemed</span></div>
+<div class="stat"><b id="st-active">–</b><span>Codes live now</span></div>
+</div>
+<div class="card"><h3 style="margin-bottom:8px">Buyers by tier</h3><p id="by-tier" style="color:#B9B9C0">–</p>
+<h3 style="margin:14px 0 8px">Buyers by status</h3><p id="by-status" style="color:#B9B9C0">–</p></div>
+</div>
+<!-- Buyers -->
+<div id="tab-buyers" hidden>
+<div class="toolbar">
+<input id="q" type="search" placeholder="Search order / product…" aria-label="Search buyers" />
+<select id="f-tier" aria-label="Filter tier"><option value="">All tiers</option><option>general</option><option>allin</option></select>
+<select id="f-status" aria-label="Filter status"><option value="">All states</option><option>active</option><option>expired</option><option>cancelled</option><option>refunded</option><option>grace</option></select>
+<button class="btn white mini" id="apply" type="button">Apply</button>
+</div>
+<div class="scroll-x"><table class="admin"><thead><tr><th>Buyer</th><th>Tier</th><th>State</th><th>Via</th><th>Order</th><th>Since</th><th>Until</th></tr></thead><tbody id="buyers"></tbody></table></div>
+</div>
+<!-- Codes -->
+<div id="tab-codes" hidden>
+<div class="card" style="margin-bottom:14px"><h3>Issue codes</h3>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+<div class="field"><label for="c-tier">Tier</label><select id="c-tier"><option value="general">General — €11</option><option value="allin">All-in — €18</option></select></div>
+<div class="field"><label for="c-count">Count</label><input id="c-count" type="number" min="1" max="100" value="1" /></div>
+<div class="field"><label for="c-days">Valid days</label><input id="c-days" type="number" min="1" max="3650" value="30" /></div>
+<div class="field"><label for="c-email">Buyer email (optional)</label><input id="c-email" type="email" placeholder="buyer@example.com" /></div>
+</div>
+<div class="field"><label for="c-note">Note (optional)</label><input id="c-note" type="text" placeholder="e.g. launch promo" /></div>
+<button class="btn" id="issue" type="button">Issue codes →</button>
+<p class="err" id="issue-err" role="alert" hidden></p>
+<div id="issued" style="margin-top:14px"></div>
+</div>
+<div class="scroll-x"><table class="admin"><thead><tr><th>Code</th><th>Tier</th><th>State</th><th>Uses</th><th>Buyer</th><th>Created</th><th></th></tr></thead><tbody id="codes"></tbody></table></div>
+</div>
+</div>
+</div>
+<footer><div class="wrap"><p>© 2026 HealthGraph · mr panel · private.</p></div></footer>
+<script>
+(function(){
+var API='https://api.healthgraph.shop';
+var login=document.getElementById('login'),app=document.getElementById('app'),
+    tokenEl=document.getElementById('token'),loginErr=document.getElementById('login-err'),
+    logout=document.getElementById('logout');
+var token=sessionStorage.getItem('mr-token')||'';
+function auth(){return {'X-Admin-Token':token};}
+function show(ok){login.hidden=ok;app.hidden=!ok;logout.hidden=!ok;}
+function fail(msg){loginErr.textContent=msg;loginErr.hidden=false;}
+function api(path,opts){
+  opts=opts||{};opts.headers=Object.assign({'Content-Type':'application/json'},auth(),opts.headers||{});
+  return fetch(API+path,opts).then(function(r){if(r.status===403||r.status===404)throw {auth:1};if(!r.ok)throw 0;return r.json();});
+}
+function enter(){
+  loginErr.hidden=true;token=tokenEl.value.trim();if(!token){fail('Paste your admin token first.');return;}
+  sessionStorage.setItem('mr-token',token);
+  api('/api/v1/admin/stats').then(function(){show(true);load();}).catch(function(e){
+    sessionStorage.removeItem('mr-token');token='';
+    fail(e&&e.auth?'Wrong token — try again.':'Server unreachable — try again.');
+  });
+}
+document.getElementById('enter').addEventListener('click',enter);
+tokenEl.addEventListener('keydown',function(e){if(e.key==='Enter')enter();});
+logout.addEventListener('click',function(e){e.preventDefault();sessionStorage.removeItem('mr-token');token='';tokenEl.value='';show(false);});
+if(token){tokenEl.value=token;enter();}
+// Tabs
+var tabs=Array.prototype.slice.call(document.querySelectorAll('[data-tab]'));
+tabs.forEach(function(b){b.addEventListener('click',function(){
+  tabs.forEach(function(x){x.setAttribute('aria-selected',x===b);document.getElementById('tab-'+x.dataset.tab).hidden=x!==b;});
+});});
+document.getElementById('refresh').addEventListener('click',load);
+function pill(s){return '<span class="pill '+s+'">'+s+'</span>';}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function short(id){return esc(String(id).slice(0,8))+'…';}
+function load(){
+  api('/api/v1/admin/stats').then(function(s){
+    var n=function(o){return Object.keys(o||{}).reduce(function(a,k){return a+o[k];},0);};
+    document.getElementById('st-buyers').textContent=n(s.buyers_by_tier);
+    document.getElementById('st-codes').textContent=s.codes_issued;
+    document.getElementById('st-redeemed').textContent=s.codes_redeemed;
+    document.getElementById('st-active').textContent=s.active_codes;
+    document.getElementById('by-tier').textContent=Object.keys(s.buyers_by_tier||{}).map(function(k){return k+': '+s.buyers_by_tier[k];}).join(' · ')||'–';
+    document.getElementById('by-status').textContent=Object.keys(s.buyers_by_status||{}).map(function(k){return k+': '+s.buyers_by_status[k];}).join(' · ')||'–';
+  }).catch(function(){});
+  loadBuyers();loadCodes();
+}
+function loadBuyers(){
+  var p='?limit=200';
+  var q=document.getElementById('q').value.trim(),t=document.getElementById('f-tier').value,s=document.getElementById('f-status').value;
+  if(q)p+='&q='+encodeURIComponent(q);if(t)p+='&tier='+t;if(s)p+='&status='+s;
+  api('/api/v1/admin/purchases'+p).then(function(list){
+    document.getElementById('buyers').innerHTML=list.map(function(b){
+      return '<tr><td>'+short(b.patient_id)+'</td><td>'+esc(b.tier)+'</td><td>'+pill(b.status)+'</td><td>'+esc(b.provider)+'</td><td>'+esc(b.order_id||'–')+'</td><td>'+esc((b.started_at||'').slice(0,10))+'</td><td>'+esc((b.expires_at||'').slice(0,10))+'</td></tr>';
+    }).join('')||'<tr><td colspan="7">No buyers yet.</td></tr>';
+  }).catch(function(){});
+}
+document.getElementById('apply').addEventListener('click',loadBuyers);
+function loadCodes(){
+  api('/api/v1/admin/codes?limit=200').then(function(list){
+    document.getElementById('codes').innerHTML=list.map(function(c){
+      return '<tr><td><b>'+esc(c.code)+'</b></td><td>'+esc(c.tier)+'</td><td>'+pill(c.status)+'</td><td>'+c.uses+'/'+c.max_uses+'</td><td>'+esc(c.issued_to_email||'–')+'</td><td>'+esc((c.created_at||'').slice(0,10))+'</td><td>'+(c.status==='issued'?'<button class="btn ghost mini" data-revoke="'+c.id+'">Revoke</button>':'')+'</td></tr>';
+    }).join('')||'<tr><td colspan="7">No codes yet.</td></tr>';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-revoke]'),function(b){
+      b.addEventListener('click',function(){
+        api('/api/v1/admin/codes/'+b.dataset.revoke+'/revoke',{method:'POST'}).then(loadCodes).catch(function(){});
+      });
+    });
+  }).catch(function(){});
+}
+document.getElementById('issue').addEventListener('click',function(){
+  var err=document.getElementById('issue-err');err.hidden=true;
+  var body={tier:document.getElementById('c-tier').value,count:parseInt(document.getElementById('c-count').value||'1',10),
+    valid_days:parseInt(document.getElementById('c-days').value||'30',10),
+    issued_to_email:document.getElementById('c-email').value.trim()||undefined,
+    note:document.getElementById('c-note').value.trim()||undefined};
+  api('/api/v1/admin/codes',{method:'POST',body:JSON.stringify(body)}).then(function(list){
+    document.getElementById('issued').innerHTML='<div class="code-box">'+list.map(function(c){return esc(c.code);}).join('<br>')+'</div><p style="color:#B9B9C0">Save them now — codes show in full only here.</p>';
+    loadCodes();load();
+  }).catch(function(){err.textContent='Could not issue codes.';err.hidden=false;});
+});
+})();
+</script>
+</body>
+</html>

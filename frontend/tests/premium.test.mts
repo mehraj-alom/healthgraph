@@ -124,6 +124,37 @@ describe('purchase ledger reporting', () => {
   });
 });
 
+describe('redeem codes', () => {
+  test('grant storage merges above store tier', () => {
+    const f = ['frontend', 'src', 'services', 'premium.ts'];
+    mustContain(f, 'GRANT_KEY', 'grant key');
+    mustContain(f, 'getCodeGrant', 'grant reader');
+    mustContain(f, 'setCodeGrant', 'grant writer');
+    mustContain(f, 'withGrant', 'grant merge');
+  });
+
+  test('store sync never downgrades below a live grant', () => {
+    mustContain(
+      ['frontend', 'src', 'services', 'billing.ts'],
+      'withGrant',
+      'sync merge',
+    );
+  });
+
+  test('redeem UI lives in the premium drawer', () => {
+    mustContain(
+      ['frontend', 'src', 'components', 'RedeemCodeRow.tsx'],
+      '/api/v1/premium/redeem',
+      'redeem endpoint',
+    );
+    mustContain(
+      ['frontend', 'src', 'components', 'ProfileSheet.tsx'],
+      'RedeemCodeRow',
+      'drawer wiring',
+    );
+  });
+});
+
 describe('backend ledger', () => {
   test('premium_purchases model exists with buyer tracking fields', () => {
     const f = ['models', 'premium.py'];

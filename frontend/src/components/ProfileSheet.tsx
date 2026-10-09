@@ -23,6 +23,7 @@ import { LG } from '@/theme/liquidGlass';;
 import { useDocuments } from '@/context/DocumentsContext';
 import { useAuth } from '@/context/AuthContext';
 import { usePremiumTier, type PremiumTier } from '@/services/premium';
+import { RedeemCodeRow } from '@/components/RedeemCodeRow';
 import { useToast } from '@/components/Toast';
 
 /**
@@ -469,6 +470,7 @@ export function ProfileSheet({
                     </View>
                   ))}
                   <Text style={styles.renewNote}>3 days free, then monthly. Cancel anytime — you keep access until the period ends.</Text>
+                  <RedeemCodeRow />
                 </View>
               ) : null}
             </View>

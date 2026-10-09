@@ -14,8 +14,9 @@ Endpoints (all authenticated):
 """
 
 import logging
+import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -28,7 +29,12 @@ from core.db import get_db
 from models.premium import (
     ALLOWED_STATUSES,
     ALLOWED_TIERS,
+    CODE_EXPIRED,
+    CODE_ISSUED,
+    CODE_REDEEMED,
+    CODE_REVOKED,
     STATUS_ACTIVE,
+    PremiumCode,
     PremiumPurchase,
 )
 
@@ -116,6 +122,161 @@ def _is_live(row: PremiumPurchase, now: datetime) -> bool:
     if row.expires_at is not None and row.expires_at <= now:
         return False
     return True
+
+
+# ─── Redeemable codes ────────────────────────────────────────────────────
+
+# Unambiguous alphabet (no 0/O, 1/I/L): shown as HG-XXXX-XXXX, stored bare.
+_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def normalize_code(raw: str) -> str:
+    return "".join(ch for ch in raw.strip().upper() if ch.isalnum())
+
+
+def format_code(stored: str) -> str:
+    return f"HG-{stored[:4]}-{stored[4:8]}" if len(stored) == 8 else stored
+
+
+def generate_code_value() -> str:
+    rng = secrets.SystemRandom()
+    return "".join(rng.choice(_CODE_ALPHABET) for _ in range(8))
+
+
+def mint_code(
+    db: Session,
+    *,
+    tier: str,
+    valid_days: int,
+    issued_by: str,
+    issued_to_email: str | None = None,
+    note: str | None = None,
+    max_uses: int = 1,
+    expires_at: datetime | None = None,
+) -> PremiumCode:
+    """Create a code row, retrying on the (astronomically rare) collision."""
+    for _ in range(5):
+        row = PremiumCode(
+            id=uuid.uuid4(),
+            code=generate_code_value(),
+            tier=tier,
+            status=CODE_ISSUED,
+            valid_days=valid_days,
+            max_uses=max_uses,
+            uses=0,
+            issued_to_email=issued_to_email,
+            issued_by=issued_by,
+            note=note,
+            expires_at=expires_at,
+        )
+        db.add(row)
+        try:
+            db.flush()
+            return row
+        except IntegrityError:
+            db.rollback()
+            continue
+    raise HTTPException(status_code=500, detail="Could not issue code")
+
+
+class RedeemRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=32)
+
+    @field_validator("code")
+    @classmethod
+    def _code(cls, v: str) -> str:
+        v = normalize_code(v)
+        # Accept the displayed HG- prefix or the bare value.
+        if v.startswith("HG"):
+            v = v[2:]
+        if len(v) != 8:
+            raise ValueError("invalid code")
+        return v
+
+
+class RedeemResponse(BaseModel):
+    tier: str
+    expires_at: datetime | None = None
+    already_redeemed: bool = False
+
+
+@router.post("/redeem", response_model=RedeemResponse)
+def redeem_code(
+    payload: RedeemRequest,
+    patient_id: uuid.UUID = Depends(get_authenticated_patient_id),
+    db: Session = Depends(get_db),
+) -> RedeemResponse:
+    """Redeem a premium code: grants `tier` for `valid_days` from now.
+
+    The grant is mirrored into premium_purchases (provider `promo_code`),
+    so status/history and the app's ledger read stay consistent.
+    """
+    now = _utcnow()
+    row = db.execute(
+        select(PremiumCode).where(PremiumCode.code == payload.code)
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Code not found")
+    if row.status == CODE_REVOKED:
+        raise HTTPException(status_code=410, detail="Code revoked")
+    if row.status == CODE_EXPIRED or (
+        row.expires_at is not None and row.expires_at <= now
+    ):
+        if row.status != CODE_EXPIRED:
+            row.status = CODE_EXPIRED
+            db.commit()
+        raise HTTPException(status_code=410, detail="Code expired")
+    if row.uses >= row.max_uses:
+        # Same patient re-submitting their own code reads as success.
+        if row.redeemed_by == patient_id:
+            grant = (
+                db.execute(
+                    select(PremiumPurchase)
+                    .where(
+                        PremiumPurchase.patient_id == patient_id,
+                        PremiumPurchase.order_id == f"code:{row.code}",
+                    )
+                    .order_by(desc(PremiumPurchase.created_at))
+                )
+                .scalars()
+                .first()
+            )
+            return RedeemResponse(
+                tier=row.tier,
+                expires_at=grant.expires_at if grant else None,
+                already_redeemed=True,
+            )
+        raise HTTPException(status_code=410, detail="Code already used")
+
+    row.uses += 1
+    row.redeemed_by = patient_id
+    row.redeemed_at = now
+    if row.uses >= row.max_uses:
+        row.status = CODE_REDEEMED
+    grant = PremiumPurchase(
+        id=uuid.uuid4(),
+        patient_id=patient_id,
+        tier=row.tier,
+        status=STATUS_ACTIVE,
+        provider="promo_code",
+        entitlement=row.tier,
+        order_id=f"code:{row.code}",
+        started_at=now,
+        expires_at=now + timedelta(days=row.valid_days),
+    )
+    db.add(grant)
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("premium code redeem failed")
+        raise HTTPException(status_code=500, detail="Could not redeem code")
+    db.refresh(grant)
+    logger.info(
+        "premium code redeemed",
+        extra={"code_id": str(row.id), "tier": row.tier},
+    )
+    return RedeemResponse(tier=row.tier, expires_at=grant.expires_at)
 
 
 @router.post("/purchases", response_model=PurchaseResponse, status_code=201)

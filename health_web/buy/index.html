@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Buy HealthGraph Premium — 30-day code</title>
+<meta name="description" content="Buy HealthGraph General €11 or All-in €18 for 30 days. Pay securely, get your code instantly, redeem in the app." />
+<link rel="canonical" href="https://health.healthgraph.shop/buy/" />
+<meta name="theme-color" content="#08090D" />
+<link rel="icon" type="image/png" href="https://healthgraph.shop/icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header class="topbar"><div class="wrap topbar-inner">
+<a class="brand" href="/"><img src="https://healthgraph.shop/logo.png" alt="HealthGraph" />HealthGraph <span style="color:#86868B;font-weight:400">Premium</span></a>
+<nav class="nav" aria-label="Primary"><a href="/">Plans</a><a href="/redeem/">Redeem</a></nav>
+</div></header>
+<div class="wrap" style="max-width:640px;padding-top:56px;padding-bottom:80px">
+<span class="eyebrow">Checkout</span>
+<h1 class="display" style="font-size:clamp(2.2rem,5vw,3.2rem)">Buy premium, get your code.</h1>
+<p class="lead" style="margin-bottom:28px">One-time payment. 30 days. No subscription, no renewal. Your code appears instantly after payment.</p>
+<div class="card">
+<div class="field"><label id="tier-label">Plan</label>
+<div class="tier-pick" role="group" aria-labelledby="tier-label">
+<button type="button" id="pick-general" aria-pressed="false"><b>General — €11</b><span>Camera pulse · graph · 30 days</span></button>
+<button type="button" id="pick-allin" aria-pressed="true"><b>All-in — €18</b><span>Everything · face pulse · 3D · voice · 30 days</span></button>
+</div></div>
+<div class="field"><label for="email">Email (for your receipt)</label>
+<input id="email" type="email" autocomplete="email" placeholder="you@example.com" />
+<p class="hint">Receipt and code recovery go here. Nothing else.</p>
+<p class="err" id="err" role="alert" hidden></p></div>
+<button class="btn" id="pay" type="button" style="width:100%">Pay €18 securely →</button>
+<p class="hint" style="margin-top:12px;color:#86868B;font-size:13.5px">Secure card payment via Stripe. Your code shows on the next page — save it, then redeem in the app.</p>
+<div id="unavailable" hidden>
+<p style="margin-top:16px;color:#B9B9C0">Online checkout is opening soon. Until then, codes are issued personally — write to us and you will have yours within a day.</p>
+<a class="btn ghost" style="width:100%;margin-top:10px" href="mailto:hello@healthgraph.shop?subject=Premium%20code">Request a code by email</a>
+</div>
+</div>
+<p style="margin-top:18px;text-align:center"><a href="/" style="color:#86868B;font-size:14px">← Back to plans</a></p>
+</div>
+<footer><div class="wrap"><p>© 2026 HealthGraph · One-time codes, no subscription · DSGVO-compliant.</p></div></footer>
+<script>
+(function(){
+var API='https://api.healthgraph.shop';
+var tier=(new URLSearchParams(location.search).get('tier')||'allin').toLowerCase();
+if(tier!=='general'&&tier!=='allin')tier='allin';
+var prices={general:'Pay \u20AC11 securely \u2192',allin:'Pay \u20AC18 securely \u2192'};
+var g=document.getElementById('pick-general'),a=document.getElementById('pick-allin'),
+    pay=document.getElementById('pay'),email=document.getElementById('email'),
+    err=document.getElementById('err'),un=document.getElementById('unavailable');
+function paint(){g.setAttribute('aria-pressed',tier==='general');a.setAttribute('aria-pressed',tier==='allin');pay.textContent=prices[tier];}
+g.addEventListener('click',function(){tier='general';paint();});
+a.addEventListener('click',function(){tier='allin';paint();});
+paint();
+pay.addEventListener('click',function(){
+  err.hidden=true;
+  var em=email.value.trim();
+  if(em&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){err.textContent='That email does not look right.';err.hidden=false;return;}
+  pay.disabled=true;pay.textContent='Opening secure checkout…';
+  fetch(API+'/api/v1/checkout/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:tier,email:em||undefined})})
+  .then(function(r){if(r.status===503){un.hidden=false;pay.style.display='none';return null;}if(!r.ok)throw 0;return r.json();})
+  .then(function(j){if(j&&j.url)location.href=j.url;})
+  .catch(function(){err.textContent='Checkout did not open — check your connection and retry.';err.hidden=false;pay.disabled=false;paint();});
+});
+})();
+</script>
+</body>
+</html>

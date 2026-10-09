@@ -13,8 +13,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from agents.agent_setup import close_agent, get_medical_agent, initialize_agent
 from app.api.auth import router as auth_router
 from app.api.v1 import (
+    admin,
     body_state,
     chat,
+    checkout,
     daily_logs,
     early_access,
     daily_metrics,
@@ -373,6 +375,8 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(auth_router)
+    app.include_router(admin.router)
+    app.include_router(checkout.router)
     app.include_router(early_access.router)
     app.include_router(documents.router)
     app.include_router(nutrition.router)
