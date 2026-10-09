@@ -22,6 +22,16 @@ export default function Footer() {
         <div className="flex gap-5 text-xs font-medium">
           <a href="#early-access" className="text-ink hover:text-teal transition-colors duration-200">{t.navCta}</a>
           <a href="#features" className="text-fog hover:text-ink transition-colors duration-200">{t.navLinks[1]}</a>
+          <a href="/wissen/" className="text-fog hover:text-ink transition-colors duration-200">
+            {locale === 'de' ? 'Wissen' : 'Guides'}
+          </a>
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-medium">
+          <a href="/wissen/influenza-grippewelle-impfung-grippesaison-2026.html" className="text-white/40 hover:text-ink transition-colors duration-200">Influenza &amp; Impfung</a>
+          <a href="/wissen/lungenpest-sibirien-russland-pestausbruch-einordnung.html" className="text-white/40 hover:text-ink transition-colors duration-200">Sibirien &amp; Lungenpest</a>
+          <a href="/wissen/oelde-magen-darm-imbiss-infekt-norovirus.html" className="text-white/40 hover:text-ink transition-colors duration-200">Oelde Magen-Darm</a>
+          <a href="/wissen/laura-wontorra-schwanger-baby-riccardo-basile.html" className="text-white/40 hover:text-ink transition-colors duration-200">Laura Wontorra</a>
+          <a href="/wissen/daniel-donskoy-inas-nacht-meine-superkraft.html" className="text-white/40 hover:text-ink transition-colors duration-200">Daniel Donskoy</a>
         </div>
       </div>
     </footer>
