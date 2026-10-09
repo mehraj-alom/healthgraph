@@ -361,6 +361,9 @@ export default function MedicationsScreen() {
   const [scanSourceDocIds, setScanSourceDocIds] = useState<string[]>([]);
   const tier = usePremiumTier();
   const openPricing = useOpenPricing();
+  // Locked tiers see the Scan button badged with ✦ and land on Pricing —
+  // the scanner itself (PrescriptionScannerScreen) stays gated.
+  const scanLocked = !tierUnlocks(tier, 'prescriptionScanner');
 
   // ---- Scanned prescription sessions (local record of scanner runs) ----
   const [scanSessions, setScanSessions] = useState<ScanSession[]>([]);
@@ -802,10 +805,10 @@ export default function MedicationsScreen() {
             <Pressable
               onPress={openScanner}
               accessibilityRole="button"
-              accessibilityLabel="Scan prescription pages"
+              accessibilityLabel={scanLocked ? 'Scan prescription pages, General and above' : 'Scan prescription pages'}
               style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
             >
-              <Text style={styles.scanBtnText}>Scan</Text>
+              <Text style={styles.scanBtnText}>Scan{scanLocked ? ' ✦' : ''}</Text>
             </Pressable>
           </View>
         </Entrance>

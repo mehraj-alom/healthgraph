@@ -26,6 +26,7 @@ from app.api.v1 import (
     ontology,
     outbox,
     ppg,
+    premium,
     privacy,
     profile,
     provenance,
@@ -388,6 +389,7 @@ def create_app() -> FastAPI:
     app.include_router(outbox.router)
     app.include_router(ontology.router)
     app.include_router(ppg.router)
+    app.include_router(premium.router)
     app.include_router(privacy.router)
     app.include_router(profile.router)
     app.include_router(trends.router)

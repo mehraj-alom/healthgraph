@@ -3,15 +3,22 @@
  *
  * Wrap any premium surface: entitled tiers render children with zero
  * friction (no upsells, no locks — paying users use everything). Locked
- * tiers get an honest glass card: what this is, which plan unlocks it,
+ * tiers see the real surface blurred behind glass (a capped, non-touchable
+ * preview) plus an honest lock card: what this is, which plan unlocks it,
  * one "See plans" action into Pricing, and a Restore purchases link
  * (Play policy). Quota-exhausted features (AI chat, scans) reuse the same
  * card with quota copy via the `quotaNote` prop.
+ *
+ * Privacy/perf escape hatch: `blurPreview={false}` renders the lock card
+ * alone without mounting children — required where children activate
+ * hardware (camera pulse) or heavy work (3D GL view, model downloads)
+ * on mount. Those call sites document why.
  */
 
-import { useCallback, useState } from 'react';
+import { Children, useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { BlurView } from 'expo-blur';
 
 import { GlassSurface } from '@/components/home/GlassSurface';
 import { tierUnlocks, usePremiumTier, type PremiumFeature, type PremiumTier } from '@/services/premium';
@@ -49,10 +56,26 @@ interface PaywallGateProps {
   body?: string;
   /** Set when a monthly quota ran out ("2 AI messages included in Free"). */
   quotaNote?: string;
+  /**
+   * Render children blurred behind the lock card for locked tiers.
+   * Default true when children exist. Set false where children must not
+   * mount locked (camera hardware, 3D GL view / model downloads).
+   */
+  blurPreview?: boolean;
+  /** Capped preview height so the tease never pushes the pitch off-screen. */
+  previewHeight?: number;
   children: React.ReactNode;
 }
 
-export function PaywallGate({ feature, title, body, quotaNote, children }: PaywallGateProps) {
+export function PaywallGate({
+  feature,
+  title,
+  body,
+  quotaNote,
+  blurPreview,
+  previewHeight = 420,
+  children,
+}: PaywallGateProps) {
   const tier = usePremiumTier();
   const navigation = useNavigation();
   const [restoring, setRestoring] = useState(false);
@@ -84,11 +107,13 @@ export function PaywallGate({ feature, title, body, quotaNote, children }: Paywa
     setRestored(null);
     try {
       const resolved = await restorePurchases();
-      setRestored(
-        resolved === 'free'
-          ? 'No purchases found on this account.'
-          : `Restored — ${TIER_LABEL[resolved]} is active.`,
-      );
+      if (resolved === 'free') {
+        setRestored('No purchases found on this account.');
+      } else {
+        const { reportPremiumPurchase } = await import('@/services/premiumSync');
+        void reportPremiumPurchase(resolved);
+        setRestored(`Restored — ${TIER_LABEL[resolved]} is active.`);
+      }
     } catch {
       setRestored('Restore failed — check your connection and retry.');
     } finally {
@@ -100,7 +125,7 @@ export function PaywallGate({ feature, title, body, quotaNote, children }: Paywa
     return <>{children}</>;
   }
 
-  return (
+  const lockCard = (
     <GlassSurface strong style={styles.card}>
       <View style={styles.glyphWrap}>
         <Text style={styles.glyph}>✦</Text>
@@ -135,6 +160,30 @@ export function PaywallGate({ feature, title, body, quotaNote, children }: Paywa
       {restored ? <Text style={styles.restoredNote}>{restored}</Text> : null}
     </GlassSurface>
   );
+
+  // Free/restricted tiers see the real surface blurred — desire, not a
+  // blank wall. The preview is capped, dimmed, and untouchable; the lock
+  // card below pitches the unlocking plan.
+  const showPreview =
+    (blurPreview ?? true) && Children.count(children) > 0;
+  if (!showPreview) return lockCard;
+
+  return (
+    <View style={styles.teaseWrap}>
+      <View style={[styles.teasePreviewBox, { height: previewHeight }]}>
+        <View
+          pointerEvents="none"
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+          style={styles.teasePreview}
+        >
+          {children}
+        </View>
+        <BlurView tint="dark" intensity={32} style={StyleSheet.absoluteFill} />
+      </View>
+      <View style={styles.teaseLock}>{lockCard}</View>
+    </View>
+  );
 }
 
 /** Open Pricing from any handler (quota exhausted, locked CTA). Same parent-walk. */
@@ -161,6 +210,18 @@ export function useOpenPricing(): () => void {
 
 const styles = StyleSheet.create({
   card: { padding: 20, alignItems: 'center', gap: 8 },
+  // Blurred tease: capped preview box (untouchable live surface under
+  // glass) with the sharp lock card pitched directly below it.
+  teaseWrap: { gap: 12 },
+  teasePreviewBox: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  teasePreview: { opacity: 0.92 },
+  teaseLock: {},
   glyphWrap: {
     width: 40,
     height: 40,

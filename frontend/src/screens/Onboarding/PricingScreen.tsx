@@ -131,6 +131,8 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
           setPayNote('Payment went through — your plan is activating. Reopen plans in a moment.');
           return;
         }
+        const { reportPremiumPurchase } = await import('@/services/premiumSync');
+        void reportPremiumPurchase(hosted.tier);
         await markPricingSeen(hosted.tier);
         onDone();
         return;
@@ -145,6 +147,8 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
           setPayNote('Payment went through — your plan is activating. Reopen plans in a moment.');
           return;
         }
+        const { reportPremiumPurchase } = await import('@/services/premiumSync');
+        void reportPremiumPurchase(result.tier);
         await markPricingSeen(result.tier);
         onDone();
       } else if (result.status === 'cancelled') {
@@ -172,6 +176,8 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
       if (tier === 'free') {
         setPayNote('No purchases found on this Play account.');
       } else {
+        const { reportPremiumPurchase } = await import('@/services/premiumSync');
+        void reportPremiumPurchase(tier);
         await markPricingSeen(tier);
         onDone();
       }

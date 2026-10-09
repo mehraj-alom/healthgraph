@@ -502,10 +502,11 @@ export default function PulseInstrumentScreen() {
           </Pressable>
         </View>
         {/* Premium gate over the instrument area only: header/switcher above
-            stays visible. Locked tiers see the lock card; entitled tiers
-            render children untouched — cameras mount only when unlocked, so
-            a locked mode can never activate its camera. */}
-        <PaywallGate feature={activeFeature} title="Pulse">
+            stays visible. Locked tiers see the lock card alone (children
+            must not mount locked — cameras mount only when unlocked, so
+            a locked mode can never activate its camera). Entitled tiers
+            render children untouched. */}
+        <PaywallGate feature={activeFeature} title="Pulse" blurPreview={false}>
         {machine.phase === 'IDLE' && (
           <GlassSurface strong radius={24} style={styles.panelPad}>
             <Text style={styles.title}>Pulse</Text>

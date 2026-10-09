@@ -22,6 +22,7 @@ import { GV, TYPE, SPACE, FONT } from '@/theme/guava'
 import { LG } from '@/theme/liquidGlass';;
 import { useDocuments } from '@/context/DocumentsContext';
 import { useAuth } from '@/context/AuthContext';
+import { usePremiumTier, type PremiumTier } from '@/services/premium';
 import { useToast } from '@/components/Toast';
 
 /**
@@ -123,6 +124,11 @@ export function ProfileSheet({
   const [legalOpen, setLegalOpen] = useState<'terms' | 'privacy' | null>(null);
   const [premiumOpen, setPremiumOpen] = useState(false);
   const [buying, setBuying] = useState(false);
+  // Live plan state: the chip below always marks the real tier, so paid
+  // users see their plan confirmed and free users see the upgrade path.
+  const currentTier: PremiumTier = usePremiumTier();
+  const planName =
+    currentTier === 'allin' ? 'All-in' : currentTier === 'general' ? 'General' : 'Free';
 
   // Drawer buy buttons run the same Play Billing flow as PricingScreen:
   // hosted paywall first, direct product second. Tier changes propagate
@@ -133,12 +139,14 @@ export function ProfileSheet({
       setBuying(true);
       try {
         const { presentStorePaywall, purchaseTier } = await import('@/services/billing');
+        const { reportPremiumPurchase } = await import('@/services/premiumSync');
         const hosted = await presentStorePaywall();
         if (hosted.status === 'purchased') {
           if (hosted.tier === 'free') {
             toast.info('Payment went through — your plan is activating.');
           } else {
             toast.info(`${hosted.tier === 'allin' ? 'All-in' : 'General'} is active. Enjoy everything.`);
+            void reportPremiumPurchase(hosted.tier);
           }
           return;
         }
@@ -146,6 +154,7 @@ export function ProfileSheet({
         const result = await purchaseTier(tier);
         if (result.status === 'purchased' && result.tier !== 'free') {
           toast.info(`${result.tier === 'allin' ? 'All-in' : 'General'} is active. Enjoy everything.`);
+          void reportPremiumPurchase(result.tier);
         } else if (result.status === 'cancelled') {
           return;
         } else {
@@ -365,7 +374,9 @@ export function ProfileSheet({
                 <View style={styles.rowText}>
                   <Text style={styles.premiumTitle}>Unlock everything</Text>
                   <Text style={styles.premiumSub}>
-                    Every engine, unlimited AI — free for 3 days.
+                    {currentTier === 'free'
+                      ? 'Every engine, unlimited AI — free for 3 days.'
+                      : `Your plan: ${planName} — everything unlocked.`}
                   </Text>
                 </View>
                 <Text style={styles.chev}>{premiumOpen ? '▾' : '›'}</Text>
@@ -378,9 +389,11 @@ export function ProfileSheet({
                       <Text style={styles.tierPrice}>€0</Text>
                     </View>
                     <Text style={styles.tierFeat}>Daily logging & check-ins{'\n'}Medications & dose tracking{'\n'}Timeline & history{'\n'}3 meal scans a month{'\n'}2 AI messages a month</Text>
+                    {currentTier === 'free' ? (
                     <View style={styles.tierCurrent}>
                       <Text style={styles.tierCurrentText}>Your current plan</Text>
                     </View>
+                    ) : null}
                   </View>
                   <View style={styles.tier}>
                     <View style={styles.tierHead}>
@@ -388,6 +401,11 @@ export function ProfileSheet({
                       <Text style={styles.tierPrice}>€11<Text style={styles.tierPer}>/mo</Text></Text>
                     </View>
                     <Text style={styles.tierFeat}>Everything in Free, plus{'\n'}Unlimited camera pulse{'\n'}Health graph & correlations{'\n'}Priority engines{'\n'}Unlimited food & 4 document scans</Text>
+                    {currentTier === 'general' ? (
+                    <View style={styles.tierCurrent}>
+                      <Text style={styles.tierCurrentText}>Your current plan</Text>
+                    </View>
+                    ) : (
                     <Pressable
                       onPress={() => void buyTier('general')}
                       disabled={buying}
@@ -397,6 +415,7 @@ export function ProfileSheet({
                     >
                       <Text style={styles.tierBtnText}>{buying ? 'Opening…' : 'Start 3 days free'}</Text>
                     </Pressable>
+                    )}
                   </View>
                   <View style={[styles.tier, styles.tierBest]}>
                     <View style={styles.tierHead}>
@@ -409,6 +428,11 @@ export function ProfileSheet({
                       <Text style={styles.tierPrice}>€18<Text style={styles.tierPer}>/mo</Text></Text>
                     </View>
                     <Text style={styles.tierFeat}>Everything in General, plus{'\n'}Face pulse — no touch needed{'\n'}3D body view{'\n'}Voice alarms & call reminders{'\n'}Unlimited AI chat & scans</Text>
+                    {currentTier === 'allin' ? (
+                    <View style={styles.tierCurrent}>
+                      <Text style={styles.tierCurrentText}>Your current plan</Text>
+                    </View>
+                    ) : (
                     <Pressable
                       onPress={() => void buyTier('allin')}
                       disabled={buying}
@@ -418,6 +442,7 @@ export function ProfileSheet({
                     >
                       <Text style={styles.tierBtnTextPrimary}>{buying ? 'Opening…' : 'Start 3 days free'}</Text>
                     </Pressable>
+                    )}
                   </View>
                   <Text style={styles.compareTitle}>Compare every feature</Text>
                   {(

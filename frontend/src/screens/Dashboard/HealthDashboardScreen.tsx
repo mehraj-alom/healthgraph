@@ -70,6 +70,7 @@ import { GlassCuboid } from '@/components/GlassCuboid';
 import HGraphMap, { type HMetric, HMAP_ASPECT } from '@/components/home/HGraphMap';
 import { WheelSlider } from '@/components/WheelSlider';
 import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
+import { PaywallGate } from '@/components/PaywallGate';
 import { GlassSurface, useReduceTransparency } from '@/components/home/GlassSurface';
 import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
 import Entrance from '@/components/home/Entrance';
@@ -1212,6 +1213,14 @@ export default function HealthDashboardScreen() {
 
   const renderItem = useCallback(({ item, index }: { item: CorrelationFeedItem; index: number }) => (
     <Entrance index={index} style={styles.section}>
+      {/* Correlations are a General+ feature: free tiers see each card
+          blurred with the lock pitch, paid tiers render untouched. */}
+      <PaywallGate
+        feature="correlations"
+        title="Insights"
+        body="How your engines move together."
+        previewHeight={280}
+      >
       <CorrelationGraphCard
         title={item.title}
         subtitle={item.subtitle}
@@ -1222,6 +1231,7 @@ export default function HealthDashboardScreen() {
             : undefined
         }
       />
+      </PaywallGate>
     </Entrance>
   ), []);
 

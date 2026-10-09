@@ -2027,11 +2027,11 @@ export default function BodyScreen() {
         <Text style={styles.headerTitle}>3D Body</Text>
       </View>
 
-      {/* 3D Canvas (All-in): locked tiers see the paywall card instead of the
-          canvas — the GL view never mounts locked, so no GPU/download work
-          starts before entitlement. Header + layer/structure controls below
-          stay visible outside the gate. */}
-      <PaywallGate feature="body3d" title="3D body" body="Your body in 3D.">
+      {/* 3D Canvas (All-in): locked tiers see the paywall card alone — the
+          GL view never mounts locked (blurPreview off), so no GPU/download
+          work starts before entitlement. Header + layer/structure controls
+          below stay visible outside the gate. */}
+      <PaywallGate feature="body3d" title="3D body" body="Your body in 3D." blurPreview={false}>
         {showGenderPrompt == null && !showOverlay ? (
         <View style={styles.gateToggleWrap}>
           <View style={styles.genderToggle}>
