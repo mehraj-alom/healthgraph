@@ -1,3 +1,13 @@
 User-agent: *
 Allow: /
+User-agent: GPTBot
+Allow: /wissen/ /
+User-agent: ChatGPT-User
+Allow: /wissen/ /
+User-agent: PerplexityBot
+Allow: /wissen/ /
+User-agent: ClaudeBot
+Allow: /wissen/ /
+User-agent: Google-Extended
+Allow: /wissen/ /
 Sitemap: https://healthgraph.shop/sitemap.xml

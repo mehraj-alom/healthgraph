@@ -1,0 +1,18 @@
+# HealthGraph – Gesundheit, verbunden
+
+> Kostenlose DSGVO-konforme Gesundheits-App für Deutschland. Puls per Kamera, Medikamente, Schlaf, Dokumente und Ernährung in einem Graph. Daten bleiben auf dem Gerät.
+
+## Wissen Deutschland
+
+- [Influenza 2026: Grippewelle, Impfung und Grippesaison](https://healthgraph.shop/wissen/influenza-grippewelle-impfung-grippesaison-2026.html): Anspruch nach STIKO, Timing September bis Oktober, Unterschied Grippe Erkältung. Stand 09.10.2026.
+- [Sibirien und Lungenpest: was wirklich bekannt ist](https://healthgraph.shop/wissen/lungenpest-sibirien-russland-pestausbruch-einordnung.html): Irkutsk, WHO, Einordnung für Europa ohne Panik.
+- [Oelde: 51 Magen-Darm-Fälle nach Imbissbesuch](https://healthgraph.shop/wissen/oelde-magen-darm-imbiss-infekt-norovirus.html): Gesundheitsamt, Vorgehen bei Symptomen.
+- [Wissen Übersicht](https://healthgraph.shop/wissen/): Alle Guides für Deutschland.
+
+## App
+
+- [Start](https://healthgraph.shop/): Kostenlos starten, DSGVO-konform, ohne Werbung.
+- Preise: Free 0 Euro für immer, General 11 Euro pro Monat, All-in 18 Euro pro Monat.
+- Hinweis: Wellness-Begleiter, kein Medizinprodukt. Keine Diagnose. Bei Beschwerden ärztlich abklären.
+- Kontakt und Presse: https://healthgraph.shop/press
+- Sprache: Deutsch (de-DE), Englisch verfügbar.

@@ -34,32 +34,8 @@ const ARTICLES = [
       en: 'Oelde: 51 stomach cases after snack bar visit',
     },
     desc: {
-      de: 'Was das Gesundheitsamt sagt, 5-Schritte-Plan + Hygiene für Familien.',
-      en: 'What health officials say, 5-step plan + hygiene for families.',
-    },
-  },
-  {
-    href: '/wissen/laura-wontorra-schwanger-baby-riccardo-basile.html',
-    vol: { de: '100K+ Suchen · Laura Wontorra · Baby', en: '100K+ searches · Laura Wontorra · Baby' },
-    title: {
-      de: 'Laura Wontorra: schwanger, Baby, neuer Freund?',
-      en: 'Laura Wontorra: pregnant, baby, new love?',
-    },
-    desc: {
-      de: 'Riccardo Basile, Alter, Gerüchte – respektvoll, ohne Spekulation.',
-      en: 'Riccardo Basile, age, rumours – respectful, no speculation.',
-    },
-  },
-  {
-    href: '/wissen/daniel-donskoy-inas-nacht-meine-superkraft.html',
-    vol: { de: '5K+ Suchen · Daniel Donskoy · Inas Nacht', en: '5K+ searches · Daniel Donskoy · Inas Nacht' },
-    title: {
-      de: 'Daniel Donskoy bei „Inas Nacht": Meine Superkraft',
-      en: 'Daniel Donskoy on “Inas Nacht”: My Superpower',
-    },
-    desc: {
-      de: 'Gäste, Sendetermin 08.10. + Wiederholung 23.10. + Energie-Guide.',
-      en: 'Guests, air date 08.10. + repeat 23.10. + energy guide.',
+      de: 'Was das Gesundheitsamt sagt, 5-Schritte-Plan bei Symptomen.',
+      en: 'What health officials say, 5-step plan if symptomatic.',
     },
   },
 ];
@@ -85,15 +61,15 @@ export default function Wissen() {
         </h2>
         <p className="mt-2 text-xs md:text-sm font-medium text-fog max-w-[70ch]">
           {locale === 'de'
-            ? 'Geprüfte Guides zu den Google-Trends von heute – ruhig, quellenbasiert, mit Premium-Geschenk per Gmail. Lesen, Geschenk sichern, HealthGraph-Einladung erhalten.'
-            : 'Checked guides on today’s Google Trends – calm, sourced, with a premium gift via Gmail. Read, claim your gift, get your HealthGraph invite.'}
+            ? 'Antworten zu dem, was Deutschland heute sucht, mit RKI und STIKO Stand 09.10.2026. Checkliste als PDF auf Wunsch.'
+            : 'Answers to what Germany searches today, with RKI and STIKO sources. Checklist PDF on request.'}
         </p>
         <div className="mt-3">
           <a
             href="/wissen/"
             className="inline-flex items-center justify-center rounded-full text-sm font-semibold px-6 py-3 w-fit btn-cobalt"
           >
-            {locale === 'de' ? 'Alle 5 Guides ansehen' : 'See all 5 guides'}
+            {locale === 'de' ? 'Alle 3 Guides ansehen' : 'See all 3 guides'}
           </a>
         </div>
       </div>
