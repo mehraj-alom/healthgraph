@@ -60,6 +60,7 @@ export function useHealthAreas(): {
       activitySessions7: 0,
       nutritionMeals7: 0,
       wellbeingDays7: 0,
+      meditationSessions7: 0,
     }),
   );
   const [isLoading, setIsLoading] = useState(true);

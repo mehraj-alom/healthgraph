@@ -139,7 +139,7 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
    * back to today's Free behavior with the honest note — the screen
    * can never trap anyone mid-purchase.
    */
-  const finishPaid = async (plan: PaidPlan): Promise<void> => {
+  const finishPaid = async (plan: PricingPlan): Promise<void> => {
     if (busy) return;
     const productId = productIdForPlan(plan);
     if (productId === null) {
