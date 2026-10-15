@@ -4,15 +4,41 @@
 
 ## Wissen Deutschland
 
-- [Influenza 2026: Grippewelle, Impfung und Grippesaison](https://healthgraph.shop/wissen/influenza-grippewelle-impfung-grippesaison-2026.html): Anspruch nach STIKO, Timing September bis Oktober, Unterschied Grippe Erkältung. Stand 09.10.2026.
-- [Sibirien und Lungenpest: was wirklich bekannt ist](https://healthgraph.shop/wissen/lungenpest-sibirien-russland-pestausbruch-einordnung.html): Irkutsk, WHO, Einordnung für Europa ohne Panik.
-- [Oelde: 51 Magen-Darm-Fälle nach Imbissbesuch](https://healthgraph.shop/wissen/oelde-magen-darm-imbiss-infekt-norovirus.html): Gesundheitsamt, Vorgehen bei Symptomen.
-- [Wissen Übersicht](https://healthgraph.shop/wissen/): Alle Guides für Deutschland.
+- [Ständige Müdigkeit & das 14-Uhr-Loch: 7 Ursachen und was hilft](https://healthgraph.shop/wissen/muedigkeit-ursachen-14-uhr-loch.html): Ständige Müdigkeit und das 14-Uhr-Loch: die 7 häufigsten Ursachen (Blutzucker, Schilddrüse, Eisen, Schlaf, Stress, Medik
+- [Blutdruck Normalwerte: Tabelle nach Alter, Warnzeichen & was zu tun ist](https://healthgraph.shop/wissen/blutdruck-normalwerte-tabelle.html): Blutdruck Normalwerte nach Alter (Tabelle): optimal, normal, erhöht, Hochdruck 1-3. Warnzeichen, richtige Messung und wa
+- [DSGVO Gesundheitsdaten: Rechte, Auskunftsanspruch, Löschung](https://healthgraph.shop/wissen/dsgvo-gesundheitsdaten-rechte.html): DSGVO Gesundheitsdaten: Ihre Rechte bei Gesundheits-Apps. Auskunftsanspruch (Art. 15), Berichtigung (Art. 16), Löschung 
+- [Schlafstörungen: Ursachen, Behandlung und was wirklich hilft](https://healthgraph.shop/wissen/schlafstoerungen-behandlung.html): Schlafstörungen: die 8 häufigsten Ursachen und was wirklich hilft. Von Schlafhygiene bis CBT-I. Wann eine Schlafdiagnose
+- [Gesundheits-App Deutschland: Vergleich 2026, DSGVO & Datenschutz](https://healthgraph.shop/wissen/gesundheitsapp-deutschland-vergleich.html): Gesundheits-App Deutschland Vergleich 2026: HealthGraph, Apple Health, Google Health Connect und andere im direkten Verg
+- [Medikamente richtig einnehmen: Einnahmezeiten, Wechselwirkungen, Tipps](https://healthgraph.shop/wissen/medikamente-einnahme-erinnerung.html): Medikamente richtig einnehmen: Einnahzeiten (morgens, abends, zu Mahlzeiten), typische Wechselwirkungen und 7 Tipps für 
+- [Schilddrüsenunterfunktion: Symptome, Werte, Behandlung](https://healthgraph.shop/wissen/schilddruese-unterfunktion-symptome.html): Schilddrüsenunterfunktion (Hypothyreose): Symptome, Blutwerte (TSH, fT4, fT3) und Behandlung. Wann zum Arzt, was tun, we
+- [Vitamin D Mangel: Symptome, Ursachen, Dosierung](https://healthgraph.shop/wissen/vitamin-d-mangel-symptome.html): Vitamin D Mangel: Symptome (Müdigkeit, Knochenschmerzen, Immunschwäche), Ursachen, richtige Dosierung und was bei zu nie
+- [Stressbewältigung: 7 Techniken, die sofort wirken](https://healthgraph.shop/wissen/stressbewaeltigung-techniken.html): Stressbewältigung: 7 Techniken, die sofort wirken. Von Atemübungen bis Zeitmanagement. Was wirklich hilft und was nur ku
+- [Immunsystem stärken: 10 Lebensmittel und was wirklich hilft](https://healthgraph.shop/wissen/immunsystem-staeern-lebensmittel.html): Immunsystem stärken: 10 Lebensmittel (Zitrus, Joghurt, Knoblauch, Fisch) und was wirklich hilft. Vitamine, Mineralien, S
+- [Blutzucker senken mit Ernährung: Tipps, Lebensmittel, Zusammenhänge](https://healthgraph.shop/wissen/blutzucker-senkung-mit-ernaehrung.html): Blutzucker senken mit Ernährung: Welche Lebensmittel den Blutzucker stabilisieren, was bei Insulinresistenz hilft und wi
+- [Arzttermin vorbereiten: 10 Punkte für eine effiziente Diagnose](https://healthgraph.shop/wissen/arzttermin-vorbereiten-checkliste.html): Arzttermin vorbereiten: 10 Punkte für eine effiziente Diagnose. Medikamentenplan, Symptome notieren, Fragen stellen – Ch
+- [Gesundheitstagebuch führen: Warum, Was, Wie (Vorlage)](https://healthgraph.shop/wissen/gesundheitstagebuch-fuehren.html): Gesundheitstagebuch führen: Warum es bei Arztterminen hilft, was Sie eintragen sollten und wie es mit einer App funktion
+- [Vitamin B12 Mangel: Symptome, Ursachen, Behandlung](https://healthgraph.shop/wissen/b12-mangel-symptome-behandlung.html): Vitamin B12 Mangel: Symptome (Müdigkeit, Kribbeln, Konzentrationsstörungen), Ursachen und Behandlung. Wer gefährdet ist 
+- [Herz-Kreislauf-Prävention: 8 Tipps für ein gesundes Herz](https://healthgraph.shop/wissen/herz-kreislauf-protipps-praevention.html): Herz-Kreislauf-Prävention: 8 Tipps für ein gesundes Herz. Ernährung, Bewegung, Blutdruck, Cholesterin – was wirklich zäh
+- [Elektrolyte & Mineralien: Was sie tun, Mangel-Symptome, Quellen](https://healthgraph.shop/wissen/elektrolyte-mineralien-ablauf.html): Elektrolyte & Mineralien: Natrium, Kalium, Kalzium, Magnesium – was sie tun, Mangel-Symptome und die besten Lebensmittel
+- [Gesundheitliche Untersuchung (Check-up): Was wird geprüft?](https://healthgraph.shop/wissen/gesundheitliche-untersuchung-check-up.html): Gesundheitliche Untersuchung ab 35 (Check-up): Was wird geprüft, wie oft, welche Blutwerte – und was die Kasse zahlt. DS
+- [Gesundheit im Alter: Prävention, Impfungen, Vorsorge](https://healthgraph.shop/wissen/gesundheit-im-alter-praevention.html): Gesundheit im Alter: Prävention, Impfungen (Grippe, Pneumokokken, Herpes Zoster), Vorsorge-Untersuchungen und was ab 60 
+- [Datenauskunft & Löschung bei Gesundheits-Apps: DSGVO Rechte](https://healthgraph.shop/wissen/datenauskunft-loeschung-dsgvo-app.html): Datenauskunft & Löschung bei Gesundheits-Apps: DSGVO Rechte (Art. 15, 17, 20). Wie Sie Auskunft fordern, Daten übertrage
+- [Influenza 2026: Grippewelle, Impfung und Grippesaison](https://healthgraph.shop/wissen/influenza-grippewelle-impfung-grippesaison-2026.html): STIKO, Impfung, Timing, Symptome.
+- [Sibirien und Lungenpest](https://healthgraph.shop/wissen/lungenpest-sibirien-russland-pestausbruch-einordnung.html): WHO, Einordnung für Europa.
+- [Oelde Magen-Darm](https://healthgraph.shop/wissen/oelde-magen-darm-imbiss-infekt-norovirus.html): Gesundheitsamt, Vorgehen.
+
+## Themencluster
+
+- [Symptome verstehen: Müdigkeit, Schlaf, Stress](https://healthgraph.shop/wissen/symptome/): Ursachen und Hilfe bei Symptomen
+- [Medikamente & Behandlung](https://healthgraph.shop/wissen/medikamente-behandlung/): Medikamente richtig einnehmen, Mangel, Werte
+- [Datenkontrolle & DSGVO](https://healthgraph.shop/wissen/datenkontrolle-dsgvo/): Rechte, Apps, Löschung
+- [Prävention: Herz, Immunsystem, Check-up](https://healthgraph.shop/wissen/praevention-gesundheit/): Herz-Kreislauf, Immunsystem, Check-up
+- [Alltag & Organisation](https://healthgraph.shop/wissen/alltag-organisation/): Arzttermin, Tagebuch, Elektrolyte
 
 ## App
 
 - [Start](https://healthgraph.shop/): Kostenlos starten, DSGVO-konform, ohne Werbung.
 - Preise: Free 0 Euro für immer, General 11 Euro pro Monat, All-in 18 Euro pro Monat.
 - Hinweis: Wellness-Begleiter, kein Medizinprodukt. Keine Diagnose. Bei Beschwerden ärztlich abklären.
-- Kontakt und Presse: https://healthgraph.shop/press
+- Kontakt und Presse: https://healthgraph.shop/press/
 - Sprache: Deutsch (de-DE), Englisch verfügbar.

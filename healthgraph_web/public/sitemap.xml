@@ -2,7 +2,33 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://healthgraph.shop/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>https://healthgraph.shop/wissen/</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/press/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://healthgraph.shop/datenschutz/</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/muedigkeit-ursachen-14-uhr-loch.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/blutdruck-normalwerte-tabelle.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/dsgvo-gesundheitsdaten-rechte.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/schlafstoerungen-behandlung.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/gesundheitsapp-deutschland-vergleich.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/medikamente-einnahme-erinnerung.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/schilddruese-unterfunktion-symptome.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/vitamin-d-mangel-symptome.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/stressbewaeltigung-techniken.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/immunsystem-staeern-lebensmittel.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/blutzucker-senkung-mit-ernaehrung.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/arzttermin-vorbereiten-checkliste.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/gesundheitstagebuch-fuehren.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/b12-mangel-symptome-behandlung.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/herz-kreislauf-protipps-praevention.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/elektrolyte-mineralien-ablauf.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/gesundheitliche-untersuchung-check-up.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/gesundheit-im-alter-praevention.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/datenauskunft-loeschung-dsgvo-app.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
   <url><loc>https://healthgraph.shop/wissen/influenza-grippewelle-impfung-grippesaison-2026.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
   <url><loc>https://healthgraph.shop/wissen/lungenpest-sibirien-russland-pestausbruch-einordnung.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
   <url><loc>https://healthgraph.shop/wissen/oelde-magen-darm-imbiss-infekt-norovirus.html</loc><changefreq>daily</changefreq><priority>0.9</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/symptome/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/medikamente-behandlung/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/datenkontrolle-dsgvo/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/praevention-gesundheit/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://healthgraph.shop/wissen/alltag-organisation/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
 </urlset>
