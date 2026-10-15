@@ -27,6 +27,7 @@ import {
   mapSleepSession,
   mapStepsRecord,
   mapWeightRecord,
+  sumDistanceKm,
   type ActivityFragment,
   type SleepFragment,
   type StepsFragment,
@@ -43,6 +44,8 @@ export interface ImportAdapter {
   readExercise: (startISO: string, endISO: string) => Promise<unknown[]>;
   readWeight: (startISO: string, endISO: string) => Promise<unknown[]>;
   readSteps: (startISO: string, endISO: string) => Promise<unknown[]>;
+  /** Distance rows for session attribution; [] when unsupported/denied. */
+  readDistance: (startISO: string, endISO: string) => Promise<unknown[]>;
 }
 
 export interface ImportDayDetail {
@@ -53,6 +56,7 @@ export interface ImportDayDetail {
     activity_type: string;
     duration_minutes: number | null;
     calories_burned: number | null;
+    distance_km: number | null;
   }[];
 }
 
@@ -67,7 +71,12 @@ export interface ImportStore {
   insertActivity: (
     groupId: string,
     eventTime: string,
-    activity: { activity_type: string; duration_minutes: number; calories_burned: number | null },
+    activity: {
+      activity_type: string;
+      duration_minutes: number;
+      calories_burned: number | null;
+      distance_km: number | null;
+    },
   ) => Promise<void>;
   resolveWeightConcept: () => Promise<string | null>;
   saveSteps: (logDate: string, steps: number) => Promise<void>;
@@ -268,7 +277,7 @@ export async function runHealthConnectImport(deps: {
         report.daysTouched += 1;
       }
     } else if (kind === 'exercise') {
-      const items: { frag: ActivityFragment; eventTime: string }[] = [];
+      const items: { frag: ActivityFragment; eventTime: string; endTime: string }[] = [];
       for (const r of raw) {
         const m = mapExerciseSession(r);
         if (m === null) {
@@ -276,13 +285,30 @@ export async function runHealthConnectImport(deps: {
           continue;
         }
         const startInstant = rawInstant(r, 'startTime');
+        const endInstant = rawInstant(r, 'endTime');
         if (startInstant === null || startInstant < start || startInstant > nowISO) {
           report.dropped += 1;
           continue;
         }
-        items.push({ frag: m, eventTime: startInstant });
+        if (endInstant === null) {
+          report.dropped += 1;
+          continue;
+        }
+        items.push({ frag: m, eventTime: startInstant, endTime: endInstant });
       }
-      const byDay = new Map<string, { frag: ActivityFragment; eventTime: string }[]>();
+      // Distance attribution (best-effort): one Distance read per import,
+      // summed per session by containment. A denied/empty read leaves every
+      // session at distanceKm null — the import still succeeds.
+      let distanceRows: unknown[] = [];
+      try {
+        distanceRows = await adapter.readDistance(start, nowISO);
+      } catch {
+        distanceRows = [];
+      }
+      for (const item of items) {
+        item.frag.distanceKm = sumDistanceKm(distanceRows, item.eventTime, item.endTime);
+      }
+      const byDay = new Map<string, { frag: ActivityFragment; eventTime: string; endTime: string }[]>();
       for (const item of items) {
         const day = dayOf(item.eventTime);
         const list = byDay.get(day) ?? [];
@@ -301,6 +327,7 @@ export async function runHealthConnectImport(deps: {
             activity_type: frag.activity_type,
             duration_minutes: frag.duration_minutes,
             calories_burned: frag.calories_burned,
+            distance_km: frag.distanceKm,
           });
           report.activitiesImported += 1;
         }

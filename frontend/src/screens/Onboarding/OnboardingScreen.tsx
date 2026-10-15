@@ -155,6 +155,7 @@ export default function OnboardingScreen() {
   const [lastName, setLastName] = useState('');
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
   // Read-first CTA: the pager arrow appears 4s after each story page
@@ -341,6 +342,25 @@ export default function OnboardingScreen() {
     },
     [width],
   );
+
+  // ---------------------------------------------------------------------------
+  // Sandbox demo (reviewers): sample data, no account, nothing syncs.
+  // Offered only while signed out, so a demo session provably has no
+  // Firebase user and no backend row.
+  // ---------------------------------------------------------------------------
+
+  const handleDemo = useCallback(async (): Promise<void> => {
+    if (demoBusy) return;
+    setDemoBusy(true);
+    setFormError('');
+    try {
+      const { enterDemoMode } = await import('@/services/demoSession');
+      await enterDemoMode();
+    } catch {
+      setFormError('Could not start the demo. Please try again.');
+      setDemoBusy(false);
+    }
+  }, [demoBusy]);
 
   // ---------------------------------------------------------------------------
   // Submit authentication form (validation + Firebase, busy-guarded)
@@ -756,6 +776,21 @@ export default function OnboardingScreen() {
             onPress={() => goAuth('signup')}
           >
             Sign Up
+          </Text>
+        </Text>
+      </View>
+
+        <View
+          style={styles.toggleContainer}
+      >
+        <Text style={styles.toggleText}>
+          {"Just looking around? "}
+
+          <Text
+            style={styles.toggleLink}
+            onPress={() => void handleDemo()}
+          >
+            {demoBusy ? 'Preparing demo…' : 'Try the demo'}
           </Text>
         </Text>
       </View>

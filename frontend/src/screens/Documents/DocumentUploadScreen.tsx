@@ -35,8 +35,8 @@ import { formatFileSize } from '@/services/documents';
 // Constants
 // ---------------------------------------------------------------------------
 
-const ACCEPTED_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
-const ACCEPTED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg'];
+const ACCEPTED_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'application/json', 'application/fhir+json'];
+const ACCEPTED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.json'];
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 // ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ export default function DocumentUploadScreen() {
         !isAcceptedType(asset.mimeType ?? '')
       ) {
         setValidationError(
-          'Unsupported file type. Please upload a PDF, PNG, JPG, or JPEG file.',
+          'Unsupported file type. Please upload a PDF, PNG, JPG, JPEG, or FHIR JSON file.',
         );
         return;
       }
@@ -374,7 +374,11 @@ export default function DocumentUploadScreen() {
             <View style={styles.previewRow}>
               <View style={styles.previewIcon}>
                 <Text style={styles.previewIconText}>
-                  {selectedFile.type.includes('pdf') ? 'PDF' : 'IMG'}
+                  {selectedFile.type.includes('pdf')
+                    ? 'PDF'
+                    : selectedFile.type.includes('json') || selectedFile.name.toLowerCase().endsWith('.json')
+                      ? 'FHIR'
+                      : 'IMG'}
                 </Text>
               </View>
               <View style={styles.previewInfo}>
@@ -382,7 +386,12 @@ export default function DocumentUploadScreen() {
                   {selectedFile.name}
                 </Text>
                 <Text style={styles.previewMeta}>
-                  {selectedFile.type.includes('pdf') ? 'PDF' : 'Image'} ·{' '}
+                  {selectedFile.type.includes('pdf')
+                    ? 'PDF'
+                    : selectedFile.type.includes('json') || selectedFile.name.toLowerCase().endsWith('.json')
+                      ? 'FHIR Bundle'
+                      : 'Image'}{' '}
+                  ·{' '}
                   {formatFileSize(selectedFile.size)}
                 </Text>
               </View>

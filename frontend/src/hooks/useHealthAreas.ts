@@ -29,6 +29,7 @@ import { fitnessWindowStart } from '@/screens/FitnessEngine/fitnessEngine';
 import { todayKey } from '@/screens/Onboarding/momentum';
 import { listSubstanceEntries } from '@/db/queries/substances';
 import { listCycleEntries } from '@/db/queries/cycle';
+import { listMeditationSessions } from '@/db/queries/meditation';
 import { subscribeDataRefresh } from '@/services/dataRefresh';
 import { buildHealthAreas, type HealthAreaState } from '@/screens/HealthAreas/areas';
 
@@ -82,6 +83,7 @@ export function useHealthAreas(): {
               activitySessions7: 0,
               nutritionMeals7: 0,
               wellbeingDays7: 0,
+              meditationSessions7: 0,
             }),
           );
           setIsLoading(false);
@@ -94,7 +96,7 @@ export function useHealthAreas(): {
         if (mounted.current) setIsLoading(false);
         return;
       }
-      const [hrRows, logs, meds, docs, substance, cycle, profile] = await Promise.all([
+      const [hrRows, logs, meds, docs, substance, cycle, profile, meditation] = await Promise.all([
         getRecentLocalHeartRates(patientId, 60).catch(() => []),
         getDailyLogs(patientId, 30).catch(() => []),
         getMedications(patientId).catch(() => []),
@@ -102,6 +104,7 @@ export function useHealthAreas(): {
         listSubstanceEntries(patientId, 500).catch(() => []),
         listCycleEntries(patientId, 500).catch(() => []),
         getProfileCache(patientId).catch(() => ({ data: null })),
+        listMeditationSessions(patientId, 500).catch(() => []),
       ]);
       if (!mounted.current) return;
       const serverHr = detectHeartRate(metricsRef.current);
@@ -138,12 +141,20 @@ export function useHealthAreas(): {
           (l.overall_wellbeing != null || l.energy_level != null || l.stress_level != null),
       ).length;
       if (!mounted.current) return;
+      const meditationDays = meditation
+        .filter((s) => s.completed === 1)
+        .map((s) => String(s.started_at).slice(0, 10));
+      const meditationSessions7 = meditation.filter(
+        (s) =>
+          s.completed === 1 && String(s.started_at).slice(0, 10) >= hubWeekStart,
+      ).length;
       const hubActive = collectActiveDates({
         logDates: logs.map((l) => l.log_date),
         takenInstants: hubTaken.map((e) => e.taken_at),
         substanceDates: substance.map((e) => String(e.occurred_at).slice(0, 10)),
         cycleDates: cycle.map((e) => e.date),
         heartDates: hrRows.map((r) => r.measuredAt),
+        meditationDates: meditationDays,
       });
       setAreas(
         buildHealthAreas({
@@ -159,6 +170,7 @@ export function useHealthAreas(): {
           activitySessions7: hubActivity.length,
           nutritionMeals7: hubNutritionMeals,
           wellbeingDays7: hubWellbeingDays,
+          meditationSessions7,
         }),
       );
       setIsLoading(false);

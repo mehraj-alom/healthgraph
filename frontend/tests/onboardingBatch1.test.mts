@@ -225,8 +225,8 @@ describe('resolveOnboardingGate', () => {
 // ============================================================================
 
 describe('option catalog', () => {
-  test('seven goals; focus areas equal the engine catalog', () => {
-    assert.equal(HEALTH_GOALS.length, 7);
+  test('eight goals; focus areas equal the engine catalog', () => {
+    assert.equal(HEALTH_GOALS.length, 8);
     // Batch 6A: focus IS the engine catalog — pinned by import, not text.
     assert.deepEqual(
       FOCUS_AREAS.map((o) => o.id),

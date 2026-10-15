@@ -138,6 +138,7 @@ describe('exercise session mapping', () => {
       activity_type: 'running',
       duration_minutes: 30,
       calories_burned: 320,
+      distanceKm: null,
       source: 'health_connect',
       dedupeKey: 'hc:exercise:2026-09-21T07:00:00Z:2026-09-21T07:30:00Z:e-1',
     });
@@ -266,7 +267,7 @@ describe('adapter capability', () => {
   });
 
   test('requested data types are the documented minimum set', () => {
-    assert.deepEqual(REQUESTED_DATA_TYPES, ['steps', 'sleep', 'exercise', 'weight']);
+    assert.deepEqual(REQUESTED_DATA_TYPES, ['steps', 'sleep', 'exercise', 'weight', 'distance']);
   });
 
   test('a ready adapter plus fresh consent authorizes import', async () => {

@@ -11,12 +11,15 @@
  * - a session without a duration contributes no minutes (missing ≠ 0);
  * - averages divide over sessions WITH a duration, never over all rows;
  * - calories are user-logged estimates, reported only as "logged" sums;
+ * - distances are user-logged or Health Connect Distance-record sums,
+ *   reported only as "logged" sums; pace divides recorded minutes by
+ *   recorded km on sessions having both (missing ≠ 0);
  * - period comparison mirrors the shared changes.ts contract
  *   (absolute deltas, null when either side is empty) — parity-tested;
  *   the logic is inlined because node-tested pure modules keep zero
  *   imports.
  *
- * Deliberately absent: distance tracking, composite metrics,
+ * Deliberately absent: composite metrics,
  * aerobic-capacity estimates, training-volume math, recovery estimates,
  * calorie math, targets, predictions, and any composite headline number.
  * Step counts live outside this module (device-only step_counts table,
@@ -25,9 +28,21 @@
  * workouts, and never enter this module. Copy is descriptive counts
  * only — never fitter or healthier, never causal.
  *
- * Zero imports except the pure day-key module: safe for node unit tests.
+ * Zero imports: like its sibling engines this module carries its own
+ * noon-anchored shiftDayKey (mirroring the canonical @/utils/dayKey so
+ * plain-node unit tests run without a bundler alias; keep the two in
+ * sync — both are noon-anchored, validated, and return '' on garbage).
  */
-import { shiftDayKey as shiftDayKeyCanonical } from '@/utils/dayKey';
+function shiftDayKeyCanonical(dayKey: string, deltaDays: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return '';
+  const d = new Date(`${dayKey}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() + deltaDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 /** The Batch 6A engine id that activates this engine. */
 export const FITNESS_ENGINE_ID = 'fitness';
@@ -46,6 +61,8 @@ export interface FitnessSession {
   type: string;
   durationMinutes: number | null;
   caloriesLogged: number | null;
+  /** Logged or imported km; null when the session has no distance. */
+  distanceKm: number | null;
 }
 
 function shiftDayKey(dayKey: string, deltaDays: number): string {
@@ -97,6 +114,8 @@ export interface FitnessSummary {
   activeDays: number;
   /** Sum of user-logged calories; null when none logged. */
   caloriesLogged: number | null;
+  /** Sum of logged/imported km; null when no session logged one. */
+  distanceKm: number | null;
 }
 
 /** Summary over the window; nulls (never zeros) where nothing was logged. */
@@ -108,6 +127,9 @@ export function summarizeFitness(sessions: readonly FitnessSession[]): FitnessSu
   const withCalories = sessions.filter(
     (s) => typeof s.caloriesLogged === 'number' && Number.isFinite(s.caloriesLogged),
   );
+  const withDistance = sessions.filter(
+    (s) => typeof s.distanceKm === 'number' && Number.isFinite(s.distanceKm) && (s.distanceKm as number) > 0,
+  );
   return {
     sessions: sessions.length,
     activeMinutes: minutes.length > 0 ? minutes.reduce((a, b) => a + b, 0) : null,
@@ -117,7 +139,43 @@ export function summarizeFitness(sessions: readonly FitnessSession[]): FitnessSu
       withCalories.length > 0
         ? (withCalories.map((s) => s.caloriesLogged as number).reduce((a, b) => a + b, 0))
         : null,
+    distanceKm:
+      withDistance.length > 0
+        ? Math.round(withDistance.map((s) => s.distanceKm as number).reduce((a, b) => a + b, 0) * 100) / 100
+        : null,
   };
+}
+
+/**
+ * Minutes per km for one session; null unless both duration and a
+ * positive distance were recorded. Descriptive only — never a target.
+ */
+export function paceMinPerKm(session: Pick<FitnessSession, 'durationMinutes' | 'distanceKm'>): number | null {
+  if (
+    typeof session.durationMinutes !== 'number' ||
+    !Number.isFinite(session.durationMinutes) ||
+    typeof session.distanceKm !== 'number' ||
+    !Number.isFinite(session.distanceKm) ||
+    session.distanceKm <= 0
+  ) {
+    return null;
+  }
+  return session.durationMinutes / session.distanceKm;
+}
+
+/** "8:24 /km" style pace line; null when pace is unavailable. */
+export function formatPace(pace: number | null): string | null {
+  if (pace === null || !Number.isFinite(pace)) return null;
+  const totalSeconds = Math.round(pace * 60);
+  const mm = Math.floor(totalSeconds / 60);
+  const ss = String(totalSeconds % 60).padStart(2, '0');
+  return `${mm}:${ss} /km`;
+}
+
+/** "12.4 km" style distance line; null when nothing was logged. */
+export function formatDistanceKm(km: number | null): string | null {
+  if (km === null || !Number.isFinite(km)) return null;
+  return `${Math.round(km * 10) / 10} km`;
 }
 
 /**

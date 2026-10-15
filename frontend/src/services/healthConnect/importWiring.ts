@@ -44,12 +44,13 @@ export async function runHealthConnectSync(patientId: string): Promise<ImportRep
       insertActivity: async (
         groupId: string,
         eventTime: string,
-        activity: { activity_type: string; duration_minutes: number; calories_burned: number | null },
+        activity: { activity_type: string; duration_minutes: number; calories_burned: number | null; distance_km: number | null },
       ) => {
         await insertDailyLogEvent(patientId, groupId, 'ACTIVITY_LOG', null, eventTime, {
           activity_type: activity.activity_type,
           duration_minutes: activity.duration_minutes,
           calories_burned: activity.calories_burned,
+          ...(activity.distance_km !== null ? { distance_km: activity.distance_km } : {}),
         });
       },
       resolveWeightConcept: async () =>

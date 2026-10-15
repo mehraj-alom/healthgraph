@@ -30,6 +30,9 @@ import { getCachedPatientId } from '@/services/patientIdentity';
 import { getOnboardingState, saveOnboardingSelections } from '@/db/queries/onboarding';
 import { requestDataRefresh } from '@/services/dataRefresh';
 import { deleteAccountCompletely, deleteAllHealthData } from '@/services/deletion';
+import { exportAndShareDeviceCsv } from '@/services/deviceExportShare';
+import { exitDemoMode } from '@/services/demoSession';
+import { useDemoMode } from '@/hooks/useDemoMode';
 import { deletionFailureMessage, isTimeoutLikeError } from '@/services/deletionContract';
 import {
   DeleteConfirmSheet,
@@ -309,6 +312,10 @@ export default function SettingsScreen() {
   // idempotent retry instead of claiming "nothing was deleted".
   const [deleting, setDeleting] = useState<'data' | 'account' | null>(null);
   const deletingRef = useRef(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const { demoActive } = useDemoMode();
+  const [exitingDemo, setExitingDemo] = useState(false);
   const [sheetMode, setSheetMode] = useState<DeleteMode | null>(null);
   const [sheetResult, setSheetResult] = useState<DeleteResult | null>(null);
 
@@ -361,6 +368,32 @@ export default function SettingsScreen() {
       setDeleting(null);
     }
   }, [deleting, queryClient]);
+
+  const runExport = useCallback(async () => {
+    if (exporting) return;
+    const patientId = getCachedPatientId();
+    if (!patientId) {
+      Alert.alert('Session expired', 'Please sign in again.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const result = await exportAndShareDeviceCsv(patientId);
+      setExportStatus(
+        result.shared
+          ? `Shared ${result.rows} ${result.rows === 1 ? 'row' : 'rows'} as ${result.fileName}.`
+          : `Saved ${result.rows} ${result.rows === 1 ? 'row' : 'rows'} — sharing is unavailable on this device.`,
+      );
+    } catch (err) {
+      setExportStatus(null);
+      Alert.alert(
+        'Export failed',
+        err instanceof Error ? err.message : 'Could not build the export.',
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting]);
 
   const openDeleteDataSheet = useCallback(() => {
     if (deleting) return;
@@ -575,6 +608,53 @@ export default function SettingsScreen() {
           style={styles.signOutBtn}
           textStyle={styles.signOutBtnText}
         />
+
+        {/* ── Your data: takeout (CSV via share sheet) ── */}
+        <Text style={styles.sectionTitle}>Your data</Text>
+        <Card>
+          <Text style={styles.menuRowSubtitle}>
+            {exportStatus ?? 'Daily logs, sits, meds and measurements as one CSV file.'}
+          </Text>
+          <Button
+            title={exporting ? 'Preparing…' : 'Export my data (CSV)'}
+            variant="secondary"
+            onPress={() => void runExport()}
+            disabled={exporting}
+            loading={exporting}
+            fullWidth
+          />
+          {demoActive ? (
+            <Button
+              title={exitingDemo ? 'Wiping…' : 'Exit demo + wipe sample data'}
+              variant="ghost"
+              onPress={() => {
+                Alert.alert(
+                  'Exit demo mode?',
+                  'All sample data is wiped from this phone. Nothing was ever synced.',
+                  [
+                    { text: 'Stay', style: 'cancel' },
+                    {
+                      text: 'Exit + wipe',
+                      style: 'destructive',
+                      onPress: () => {
+                        if (exitingDemo) return;
+                        setExitingDemo(true);
+                        void exitDemoMode()
+                          .catch(() => {
+                            Alert.alert('Exit failed', 'Please try again.');
+                          })
+                          .finally(() => setExitingDemo(false));
+                      },
+                    },
+                  ],
+                );
+              }}
+              disabled={exitingDemo}
+              loading={exitingDemo}
+              fullWidth
+            />
+          ) : null}
+        </Card>
 
         {/* ── Danger Zone (tap to open; real deletion flows) ── */}
         <Pressable

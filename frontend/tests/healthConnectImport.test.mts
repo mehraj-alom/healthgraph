@@ -122,6 +122,10 @@ function readyAdapter(sleep: unknown[] = [], exercise: unknown[] = []): ImportAd
       reads.push({ kind: 'steps', start, end });
       return [];
     },
+    readDistance: async (start: string, end: string) => {
+      reads.push({ kind: 'distance', start, end });
+      return [];
+    },
   };
 }
 
@@ -255,10 +259,11 @@ describe('watermark idempotency', () => {
     assert.equal(second.status, 'ok');
     assert.equal(second.sleepImported, 0);
     assert.equal(second.activitiesImported, 0);
-    // Empty reads: nothing after the watermark.
-    assert.deepEqual(adapter.reads.slice(4), [
+    // Empty reads: nothing after the watermark (distance rides the exercise branch).
+    assert.deepEqual(adapter.reads.slice(5), [
       { kind: 'sleep', start: NOW, end: NOW },
       { kind: 'exercise', start: NOW, end: NOW },
+      { kind: 'distance', start: NOW, end: NOW },
       { kind: 'weight', start: NOW, end: NOW },
       { kind: 'steps', start: NOW, end: NOW },
     ]);

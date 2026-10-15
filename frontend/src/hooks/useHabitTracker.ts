@@ -17,6 +17,7 @@ import { getDailyLogs } from '@/db/queries/dailyLogs';
 import { getTakenEventsInRange } from '@/db/queries/medicationTakenEvents';
 import { listSubstanceEntries } from '@/db/queries/substances';
 import { listCycleEntries } from '@/db/queries/cycle';
+import { listMeditationDays } from '@/db/queries/meditation';
 import { getRecentLocalHeartRates } from '@/db/queries/heartRate';
 import { subscribeDataRefresh } from '@/services/dataRefresh';
 import { todayKey } from '@/screens/Onboarding/momentum';
@@ -76,12 +77,13 @@ export function useHabitTracker(): {
       }
       const now = todayKey();
       const [rangeStart, rangeEnd] = windowStartIso(now, LOOKBACK_DAYS);
-      const [logs, taken, substance, cycle, heart] = await Promise.all([
+      const [logs, taken, substance, cycle, heart, meditationDays] = await Promise.all([
         getDailyLogs(patientId, LOOKBACK_DAYS).catch(() => []),
         getTakenEventsInRange(patientId, rangeStart, rangeEnd).catch(() => []),
         listSubstanceEntries(patientId, 300).catch(() => []),
         listCycleEntries(patientId, 300).catch(() => []),
         getRecentLocalHeartRates(patientId, 200).catch(() => []),
+        listMeditationDays(patientId, 300).catch(() => []),
       ]);
       if (!mounted.current) return;
       // Window floor (local day): unbounded lists (substance/cycle) must
@@ -107,8 +109,9 @@ export function useHabitTracker(): {
       const subDays = substance.map((e) => String(e.occurred_at).slice(0, 10)).filter(inWindow);
       const cycDays = cycle.map((e) => e.date).filter(inWindow);
       const heartDays = heart.map((r) => r.measuredAt.slice(0, 10)).filter(inWindow);
+      const medDays = meditationDays.filter(inWindow);
       const counts = new Map<string, number>();
-      for (const day of [...logDays, ...takenDays, ...subDays, ...cycDays, ...heartDays]) {
+      for (const day of [...logDays, ...takenDays, ...subDays, ...cycDays, ...heartDays, ...medDays]) {
         counts.set(day, (counts.get(day) ?? 0) + 1);
       }
       const active = collectActiveDates({
@@ -117,6 +120,7 @@ export function useHabitTracker(): {
         substanceDates: subDays,
         cycleDates: cycDays,
         heartDates: heartDays,
+        meditationDates: medDays,
       });
       let total = 0;
       for (const n of counts.values()) total += n;

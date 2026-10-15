@@ -88,6 +88,9 @@ export default function HealthAreasScreen() {
       case 'Cycle':
         navigation.navigate('Cycle');
         break;
+      case 'MeditationEngine':
+        navigation.navigate('MeditationEngine');
+        break;
       case 'SleepEngine':
         navigation.navigate('SleepEngine');
         break;

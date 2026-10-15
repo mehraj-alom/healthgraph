@@ -29,7 +29,7 @@ export interface ConsentRecord {
   source: 'settings';
 }
 
-const KNOWN_TYPES: HcDataType[] = ['steps', 'sleep', 'exercise', 'weight'];
+const KNOWN_TYPES: HcDataType[] = ['steps', 'sleep', 'exercise', 'weight', 'distance'];
 
 function isConsentRecord(raw: unknown): raw is ConsentRecord {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false;

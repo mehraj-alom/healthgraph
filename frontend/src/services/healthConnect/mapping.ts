@@ -14,6 +14,7 @@
 
 import type {
   HcDataType,
+  HcDistanceInput,
   HcExerciseSessionInput,
   HcSleepSessionInput,
   HcStepsInput,
@@ -24,6 +25,8 @@ const SOURCE = 'health_connect';
 const MAX_SESSION_MINUTES = 1440;
 const MAX_STEPS_PER_DAY = 300000;
 const MAX_WEIGHT_KG = 500;
+/** A single activity session cannot plausibly cover more than this. */
+const MAX_DISTANCE_KM = 1000;
 const LB_TO_KG = 0.45359237;
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -125,6 +128,8 @@ export interface ActivityFragment {
   activity_type: string;
   duration_minutes: number;
   calories_burned: number | null;
+  /** Summed Distance-record km overlapping the session; null when none. */
+  distanceKm: number | null;
   source: typeof SOURCE;
   dedupeKey: string;
 }
@@ -146,6 +151,7 @@ export function mapExerciseSession(raw: unknown): ActivityFragment | null {
     activity_type: EXERCISE_TYPE_MAP[rawType] ?? 'workout',
     duration_minutes: minutes,
     calories_burned: calories !== null && calories >= 0 ? Math.round(calories) : null,
+    distanceKm: null,
     source: SOURCE,
     dedupeKey: dedupeKey('exercise', start, end, input.uid),
   };
@@ -176,4 +182,69 @@ export function mapStepsRecord(raw: unknown): StepsFragment | null {
     source: SOURCE,
     dedupeKey: `hc:steps:${day}:${input.uid}`,
   };
+}
+
+/** A validated Distance record: interval + km. */
+export interface DistanceFragment {
+  startMs: number;
+  endMs: number;
+  km: number;
+}
+
+/**
+ * Validate one Distance record. Accepts the adapter-normalized
+ * `{ distanceKm }` shape or the raw Health Connect
+ * `{ distance: { value, unit } }` shape (meters/kilometers/miles).
+ */
+export function mapDistanceRecord(raw: unknown): DistanceFragment | null {
+  if (!isRecord(raw)) return null;
+  const startMs = toMs((raw as { startTime?: unknown }).startTime);
+  const endMs = toMs((raw as { endTime?: unknown }).endTime);
+  if (startMs === null || endMs === null || endMs < startMs) return null;
+  const norm = finiteNumber((raw as Partial<HcDistanceInput>).distanceKm);
+  let km: number | null = null;
+  if (norm !== null) {
+    km = norm;
+  } else {
+    const d = (raw as { distance?: unknown }).distance;
+    if (isRecord(d)) {
+      const value = finiteNumber(d.value);
+      const unit = typeof d.unit === 'string' ? d.unit.toLowerCase() : '';
+      if (value !== null) {
+        if (unit === 'kilometers' || unit === 'kilometer' || unit === 'km') km = value;
+        else if (unit === 'meters' || unit === 'meter' || unit === 'm') km = value / 1000;
+        else if (unit === 'miles' || unit === 'mile' || unit === 'mi') km = value * 1.609344;
+      }
+    }
+  }
+  if (km === null || km < 0 || km > MAX_DISTANCE_KM) return null;
+  return { startMs, endMs, km: Math.round(km * 100) / 100 };
+}
+
+/**
+ * Sum validated Distance records fully inside [startISO, endISO].
+ * Containment (not overlap-weighting): GPS distance rows are short
+ * intervals, so partial edge overlap rounds to the containing session
+ * without inventing meters. Null when nothing valid falls inside.
+ */
+export function sumDistanceKm(
+  records: readonly unknown[],
+  startISO: string,
+  endISO: string,
+): number | null {
+  const startMs = Date.parse(startISO);
+  const endMs = Date.parse(endISO);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+  let total = 0;
+  let hits = 0;
+  for (const raw of records) {
+    const m = mapDistanceRecord(raw);
+    if (m === null) continue;
+    if (m.startMs >= startMs && m.endMs <= endMs) {
+      total += m.km;
+      hits += 1;
+    }
+  }
+  if (hits === 0) return null;
+  return Math.round(total * 100) / 100;
 }

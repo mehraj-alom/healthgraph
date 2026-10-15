@@ -96,6 +96,8 @@ export interface DisciplineSources {
   cycleDates: readonly string[];
   /** heart measured_at values. */
   heartDates: readonly string[];
+  /** meditation sit start days (YYYY-MM-DD, completed sits). */
+  meditationDates: readonly string[];
 }
 
 /**
@@ -122,6 +124,10 @@ export function collectActiveDates(sources: DisciplineSources): Set<string> {
     if (day) days.add(day);
   }
   for (const v of sources.heartDates) {
+    const day = sliceDayKey(v);
+    if (day) days.add(day);
+  }
+  for (const v of sources.meditationDates) {
     const day = sliceDayKey(v);
     if (day) days.add(day);
   }
