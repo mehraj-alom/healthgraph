@@ -242,6 +242,7 @@ describe('wellbeing hub area', () => {
     documentCount: 0,
     substanceEntries: 0,
     cycleEntries: 0,
+    meditationSessions7: 0,
     profileWeightKg: null as number | null,
     activeDays7: 0,
     activitySessions7: 0,

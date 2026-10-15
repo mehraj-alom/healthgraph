@@ -20,6 +20,7 @@ export const ENGINE_IDS = [
   'nutrition',
   'wellbeing',
   'heart',
+  'meditation',
 ] as const;
 
 export type EngineId = (typeof ENGINE_IDS)[number];
@@ -88,6 +89,13 @@ export const ENGINES: Record<EngineId, EngineDef> = {
     description: 'See your measured heart rate and HRV.',
     glyph: '♥',
     route: { name: 'HeartEngine' },
+  },
+  meditation: {
+    id: 'meditation',
+    title: 'Practice meditation',
+    description: 'Time your sits and review your practice.',
+    glyph: '◍',
+    route: { name: 'MeditationEngine' },
   },
 };
 

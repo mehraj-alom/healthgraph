@@ -320,6 +320,7 @@ describe('fitness hub area', () => {
     documentCount: 0,
     substanceEntries: 0,
     cycleEntries: 0,
+    meditationSessions7: 0,
     profileWeightKg: null as number | null,
     activeDays7: 0,
     activitySessions7: 0,
@@ -432,8 +433,10 @@ describe('batch 6e wiring', () => {
       src('src/screens/FitnessEngine/FitnessEngineScreen.tsx'),
       src('src/hooks/useFitnessEngine.ts'),
     ].join('\n');
+    // TextInput hint props are labels, not data — scrub before scanning.
+    const scrubbed = hay.replace(/placeholder="[^"]*"/g, '');
     for (const phrase of ['Math.random', 'placeholder', 'sample data', 'mock workout', 'fake', 'score']) {
-      assert.ok(!hay.toLowerCase().includes(phrase), phrase);
+      assert.ok(!scrubbed.toLowerCase().includes(phrase), phrase);
     }
   });
 

@@ -16,7 +16,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * Current database schema version.
  * Increment this when adding new migrations.
  */
-export const CURRENT_SCHEMA_VERSION = 21;
+export const CURRENT_SCHEMA_VERSION = 22;
 
 /**
  * Migration function type.
@@ -1065,6 +1065,42 @@ const migrations: Record<number, MigrationFn> = {
       21,
     );
   },
+  // ========================================================================
+  // Migration 22: meditation sits (additive, device-only)
+  // ========================================================================
+  // One row per finished sit: preset minutes, actual seconds, start/end,
+  // completion flag, optional note. Device-local only like
+  // substance_entries: no sync_status column, no queue rows, wiped with
+  // the patient — the UI labels this data accordingly until server sync
+  // for meditation exists.
+  22: async (db: SQLiteDatabase) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS meditation_sessions (
+        entry_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        preset_min INTEGER NOT NULL,
+        duration_sec INTEGER NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 1,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS ix_meditation_patient_time ON meditation_sessions (patient_id, started_at);
+    `);
+
+    // Record this migration (idempotent — safe to re-run on repair)
+    await db.runAsync(
+      `INSERT INTO _migration_log (version, description)
+       SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM _migration_log WHERE version = ?)`,
+      22,
+      'Meditation sits (device-only)',
+      22,
+    );
+  },
 };
 
 /**
@@ -1126,6 +1162,8 @@ const REQUIRED_TABLES = [
   'food_scan_items',
   // Medication reminder instances (migration 16, device-only)
   'reminder_instances',
+  // Meditation sits (migration 22, device-only)
+  'meditation_sessions',
 ];
 
 /**

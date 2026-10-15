@@ -17,6 +17,10 @@ class PatientProfileResponse(BaseModel):
     weight_kg: float | None = None
     goals: list[str] | None = None
     focus: list[str] | None = None
+    # Premium entitlement (server truth; read-only here — only the
+    # billing verify endpoint writes it).
+    premium_tier: str = "free"
+    premium_expires_at: str | None = None
 
 
 class PatientProfileUpdate(BaseModel):

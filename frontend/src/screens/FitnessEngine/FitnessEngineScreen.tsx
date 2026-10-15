@@ -41,6 +41,9 @@ import { TILE_TONES } from '@/theme/tones';
 import { useFitnessEngine } from '@/hooks/useFitnessEngine';
 import {
   formatActiveMinutes,
+  formatDistanceKm,
+  formatPace,
+  paceMinPerKm,
   type FitnessSession,
 } from '@/screens/FitnessEngine/fitnessEngine';
 
@@ -52,6 +55,10 @@ function formatDayLabel(date: string): string {
 
 function sessionSub(session: FitnessSession): string {  const parts = [formatDayLabel(session.date)];
   if (session.durationMinutes != null) parts.push(formatActiveMinutes(session.durationMinutes));
+  const distance = formatDistanceKm(session.distanceKm);
+  if (distance !== null) parts.push(distance);
+  const pace = formatPace(paceMinPerKm(session));
+  if (pace !== null) parts.push(pace);
   return parts.join(' · ');
 }
 
@@ -291,6 +298,11 @@ export default function FitnessEngineScreen() {
               {summary.caloriesLogged != null ? (
                 <Text style={styles.provenance}>
                   {`${summary.caloriesLogged} calories logged alongside activity.`}
+                </Text>
+              ) : null}
+              {summary.distanceKm != null ? (
+                <Text style={styles.provenance}>
+                  {`${formatDistanceKm(summary.distanceKm)} logged across these sessions.`}
                 </Text>
               ) : null}
             </Card>

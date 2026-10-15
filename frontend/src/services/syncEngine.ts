@@ -22,6 +22,7 @@
 import { getDatabase } from '../db/connection';
 import { api } from './api';
 import { getCachedPatientId } from './patientIdentity';
+import { isDemoPatientId } from './demoMode';
 import {
   markSyncing,
   refreshSyncState,
@@ -164,6 +165,9 @@ async function getPendingMutations(limit = SYNC_BATCH_LIMIT): Promise<SyncQueueI
   const db = await getDatabase();
   const patientId = getCachedPatientId();
   if (!patientId) return [];
+
+  // Sandbox demo rows never sync: the demo patient exists only on device.
+  if (isDemoPatientId(patientId)) return [];
 
   return db.getAllAsync<SyncQueueItem>(
     `
@@ -420,7 +424,7 @@ async function syncRecord(item: SyncQueueItem): Promise<SyncResult> {
   const patientId = getCachedPatientId();
 
   // Patient isolation check
-  if (!patientId) {
+  if (!patientId || isDemoPatientId(patientId)) {
     return {
       success: false,
       queueItemId: item.id,
@@ -675,7 +679,7 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
 
   try {
     // Verify authentication
-    if (!getCachedPatientId()) {
+    if (!getCachedPatientId() || isDemoPatientId(getCachedPatientId())) {
       return [];
     }
 
@@ -712,8 +716,9 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
 
         // Ownership backstop for legacy queue rows: skip (leave pending)
         // anything that does not resolve to this patient. Never sync blindly.
+        // Demo rows never sync, full stop.
         const ownerId = getCachedPatientId();
-        if (!ownerId || !shouldSyncQueueItem(item, ownerId)) {
+        if (!ownerId || isDemoPatientId(ownerId) || !shouldSyncQueueItem(item, ownerId)) {
           continue;
         }
 
@@ -771,7 +776,7 @@ export async function syncPendingMutations(): Promise<SyncResult[]> {
 export async function getSyncState(): Promise<SyncState> {
   const db = await getDatabase();
   const patientId = getCachedPatientId();
-  if (!patientId) {
+  if (!patientId || isDemoPatientId(patientId)) {
     return {
       pendingCount: 0,
       processingCount: 0,
@@ -820,7 +825,7 @@ export async function getSyncState(): Promise<SyncState> {
 export async function retryFailedSyncs(): Promise<number> {
   const db = await getDatabase();
   const patientId = getCachedPatientId();
-  if (!patientId) return 0;
+  if (!patientId || isDemoPatientId(patientId)) return 0;
 
   const result = await db.runAsync(
     `

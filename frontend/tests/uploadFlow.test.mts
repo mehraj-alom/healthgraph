@@ -204,4 +204,12 @@ describe('processing progress copy', () => {
     assert.ok(detail.includes('shareAsync'), 'PDFs hand to the OS viewer');
     assert.ok(detail.includes('isAvailableAsync'), 'missing viewer handled, never silent');
   });
+
+  test('FHIR Bundle JSON is an accepted upload with honest labels', () => {
+    const screen = src('src/screens/Documents/DocumentUploadScreen.tsx');
+    assert.ok(screen.includes('application/fhir+json'), 'FHIR content type accepted');
+    assert.ok(screen.includes("'.json'"), 'json extension accepted');
+    assert.ok(screen.includes('FHIR JSON file'), 'error copy names the format');
+    assert.ok(screen.includes('FHIR Bundle'), 'preview names the format');
+  });
 });

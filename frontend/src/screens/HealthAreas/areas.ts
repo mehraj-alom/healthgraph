@@ -20,6 +20,7 @@ export type HealthAreaId =
   | 'skin'
   | 'substance'
   | 'cycle'
+  | 'meditation'
   | 'discipline';
 
 export type HealthAreaStatus = 'available' | 'no-data';
@@ -34,6 +35,7 @@ const ENGINE_AREA: Record<string, HealthAreaId | null> = {
   nutrition: 'nutrition',
   wellbeing: 'wellbeing',
   heart: 'heart',
+  meditation: 'meditation',
 };
 
 /**
@@ -69,6 +71,7 @@ export type AreaRouteName =
   | 'Documents'
   | 'Substance'
   | 'Cycle'
+  | 'MeditationEngine'
   | 'SleepEngine'
   | 'WeightEngine'
   | 'DisciplineEngine'
@@ -102,6 +105,8 @@ export function areaRouteName(id: HealthAreaId): AreaRouteName | null {
       return 'Substance';
     case 'cycle':
       return 'Cycle';
+    case 'meditation':
+      return 'MeditationEngine';
     case 'weight':
       return 'WeightEngine';
     case 'discipline':
@@ -138,6 +143,8 @@ export interface HealthAreaInputs {
   nutritionMeals7: number;
   /** Trailing-7-day days with a wellbeing rating; 0 when none. */
   wellbeingDays7: number;
+  /** Trailing-7-day completed meditation sits; 0 when none. */
+  meditationSessions7: number;
 }
 
 function countCopy(n: number, one: string, many: string): string {
@@ -380,6 +387,23 @@ export function buildHealthAreas(input: HealthAreaInputs): HealthAreaState[] {
           status: 'no-data',
           source: 'none',
           headline: 'Nothing tracked yet',
+          detail: null,
+        },
+    input.meditationSessions7 > 0
+      ? {
+          id: 'meditation',
+          label: 'Meditation',
+          status: 'available',
+          source: 'device',
+          headline: countCopy(input.meditationSessions7, 'sit this week', 'sits this week'),
+          detail: 'On this device only',
+        }
+      : {
+          id: 'meditation',
+          label: 'Meditation',
+          status: 'no-data',
+          source: 'none',
+          headline: 'No sits yet',
           detail: null,
         },
   );

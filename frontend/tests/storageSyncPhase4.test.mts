@@ -332,7 +332,7 @@ describe('phase 4 wiring', () => {
     assert.ok(engine.includes('(patient_id = ? OR patient_id IS NULL)'), 'dequeue/retry filter');
     assert.ok(engine.includes('shouldSyncQueueItem(item, ownerId)'), 'backstop applied');
     assert.ok(engine.includes('if (!patientId) return [];'), 'logged-out dequeue guard');
-    assert.ok(engine.includes('if (!patientId) return 0;'), 'logged-out retry guard');
+    assert.ok(engine.includes('isDemoPatientId(patientId)) return 0;'), 'logged-out retry guard');
   });
 
   test('logout clears the entire React Query cache and cancels flight', () => {

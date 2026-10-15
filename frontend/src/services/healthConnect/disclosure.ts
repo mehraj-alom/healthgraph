@@ -10,8 +10,8 @@ export const DISCLOSURE_TITLE = 'Connect Health Connect';
 
 export const DISCLOSURE_BODY =
   'Connect Health Connect to fill your Fitness, Sleep, and Weight engines automatically. ' +
-  'With your permission, MedGraph reads your daily steps, sleep sessions, workouts, and weight ' +
-  'records from Health Connect on this device. Imported values are stored on your device and ' +
+  'With your permission, MedGraph reads your daily steps, sleep sessions, workouts, workout ' +
+  'distances, and weight records from Health Connect on this device. Imported values are stored on your device and ' +
   'synced to your account exactly like entries you log by hand, and every import is labeled ' +
   'with its source. You can revoke access at any time in Settings or in the Health Connect ' +
   'app — revoking stops all future imports. Wellness tracking only — not medical advice.';

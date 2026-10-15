@@ -10,7 +10,7 @@
 import type { HcDataType } from './records';
 
 /** Minimum data types the import will ever request (Slice 2 scope). */
-export const REQUESTED_DATA_TYPES: HcDataType[] = ['steps', 'sleep', 'exercise', 'weight'];
+export const REQUESTED_DATA_TYPES: HcDataType[] = ['steps', 'sleep', 'exercise', 'weight', 'distance'];
 
 /**
  * Data types Slice 3 actually imports: sleep + exercise + weight + steps.

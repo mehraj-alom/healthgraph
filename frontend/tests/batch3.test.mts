@@ -313,6 +313,7 @@ describe('health areas', () => {
     documentCount: 0,
     substanceEntries: 0,
     cycleEntries: 0,
+    meditationSessions7: 0,
     profileWeightKg: null,
     activeDays7: 0,
     activitySessions7: 0,

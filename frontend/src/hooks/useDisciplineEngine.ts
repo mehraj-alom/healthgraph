@@ -18,6 +18,7 @@ import { getDailyLogs } from '@/db/queries/dailyLogs';
 import { getTakenEventsInRange } from '@/db/queries/medicationTakenEvents';
 import { listSubstanceEntries } from '@/db/queries/substances';
 import { listCycleEntries } from '@/db/queries/cycle';
+import { listMeditationDays } from '@/db/queries/meditation';
 import { getRecentLocalHeartRates } from '@/db/queries/heartRate';
 import { subscribeDataRefresh } from '@/services/dataRefresh';
 import { todayKey } from '@/screens/Onboarding/momentum';
@@ -92,12 +93,13 @@ export function useDisciplineEngine(): {
       }
       const now = todayKey();
       const [rangeStart, rangeEnd] = trailingRangeIso(now, DISCIPLINE_HISTORY_DAYS);
-      const [logs, taken, substance, cycle, heart] = await Promise.all([
+      const [logs, taken, substance, cycle, heart, meditationDays] = await Promise.all([
         getDailyLogs(patientId, 30).catch(() => []),
         getTakenEventsInRange(patientId, rangeStart, rangeEnd).catch(() => []),
         listSubstanceEntries(patientId, 200).catch(() => []),
         listCycleEntries(patientId, 200).catch(() => []),
         getRecentLocalHeartRates(patientId, 60).catch(() => []),
+        listMeditationDays(patientId, 200).catch(() => []),
       ]);
       if (!mounted.current) return;
       const active = collectActiveDates({
@@ -106,6 +108,7 @@ export function useDisciplineEngine(): {
         substanceDates: substance.map((e) => String(e.occurred_at).slice(0, 10)),
         cycleDates: cycle.map((e) => e.date),
         heartDates: heart.map((r) => r.measuredAt),
+        meditationDates: meditationDays,
       });
       const activeDays7 = countTrailingWeek(active, now);
       const priorDays7 = countPriorWeek(active, now);

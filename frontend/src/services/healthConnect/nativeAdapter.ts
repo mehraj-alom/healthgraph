@@ -153,12 +153,14 @@ export const nativeImportAdapter: ImportAdapter = {
       if (status !== SDK_AVAILABLE) return false;
       const ok = await api.initialize();
       if (!ok) return false;
-      // Slice 3 imports sleep + exercise + weight + steps — request exactly that.
+      // Slice 3 imports sleep + exercise + weight + steps — request exactly that,
+      // plus best-effort Distance for session attribution (never gating).
       await api.requestPermission([
         { accessType: 'read', recordType: 'SleepSession' },
         { accessType: 'read', recordType: 'ExerciseSession' },
         { accessType: 'read', recordType: 'Weight' },
         { accessType: 'read', recordType: 'Steps' },
+        { accessType: 'read', recordType: 'Distance' },
       ]);
       const granted = await api.getGrantedPermissions();
       const names = new Set(granted.map((p) => p?.recordType));
@@ -211,6 +213,39 @@ export const nativeImportAdapter: ImportAdapter = {
           ? (r as { count?: unknown }).count
           : undefined;
       return { uid: recordUid(r, `${startTime}|${endTime}`), startTime, endTime, steps: count };
+    });
+  },
+
+  async readDistance(startISO: string, endISO: string): Promise<unknown[]> {
+    let records: unknown[] = [];
+    try {
+      records = await readType('Distance', startISO, endISO);
+    } catch {
+      return [];
+    }
+    return records.map((r) => {
+      const { startTime, endTime } = intervalOf(r);
+      let distanceKm: unknown;
+      if (typeof r === 'object' && r !== null) {
+        const d = (r as { distance?: unknown }).distance;
+        if (typeof d === 'object' && d !== null) {
+          const value = (d as { value?: unknown }).value;
+          const unit = (d as { unit?: unknown }).unit;
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            const u = typeof unit === 'string' ? unit.toLowerCase() : 'meters';
+            distanceKm = u.startsWith('kilo') || u === 'km' ? value : value / 1000;
+            if (u.startsWith('mile') || u === 'mi') distanceKm = value * 1.609344;
+          }
+        } else if (typeof d === 'number' && Number.isFinite(d)) {
+          distanceKm = d / 1000;
+        }
+      }
+      return {
+        uid: recordUid(r, `${startTime}|${endTime}`),
+        startTime,
+        endTime,
+        distanceKm,
+      };
     });
   },
 };

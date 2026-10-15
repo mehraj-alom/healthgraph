@@ -20,6 +20,7 @@ export const HEALTH_GOALS: readonly OnboardingOption[] = [
   { id: 'nutrition', label: 'Improve nutrition', hint: 'Eat well, feel the difference' },
   { id: 'heart', label: 'Monitor heart metrics', hint: 'Keep an eye on your pulse' },
   { id: 'wellbeing', label: 'Improve wellbeing', hint: 'Energy, mood and calm' },
+  { id: 'meditation', label: 'Practice meditation', hint: 'Sit regularly, build a habit' },
   { id: 'history', label: 'Understand medical history', hint: 'Organize records clearly' },
 ];
 
@@ -38,6 +39,7 @@ export const FOCUS_AREAS: readonly OnboardingOption[] = [
   { id: 'nutrition', label: 'Eat better', hint: 'See your logged meals and estimated calories.' },
   { id: 'wellbeing', label: 'Manage stress & wellbeing', hint: 'See your recorded mood, energy, and stress.' },
   { id: 'heart', label: 'Understand my heart health', hint: 'See your measured heart rate and HRV.' },
+  { id: 'meditation', label: 'Practice meditation', hint: 'Time your sits and review your practice.' },
 ];
 
 /**
