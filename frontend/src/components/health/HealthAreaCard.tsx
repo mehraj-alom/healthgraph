@@ -29,6 +29,7 @@ export const AREA_SOLID: Record<HealthAreaId, string> = {
   substance: '#8A7A5C',
   cycle: '#8A4A55',
   discipline: '#66666F',
+  meditation: '#6A6390',
 };
 
 /** Back-compat tint map (kept so existing imports keep working). */

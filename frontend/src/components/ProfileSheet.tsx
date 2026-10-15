@@ -5,6 +5,7 @@ import {
   Easing,
   findNodeHandle,
   Image,
+  Linking,
   Modal as RNModal,
   PanResponder,
   Animated,
@@ -22,6 +23,13 @@ import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { useDocuments } from '@/context/DocumentsContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/Toast';
+import {
+  IMPRINT_URL,
+  OFF_ATTRIBUTION,
+  PRIVACY_POLICY_URL,
+  hasImprintUrl,
+  hasPrivacyPolicyUrl,
+} from '@/services/legalLinks';
 
 /**
  * ProfileSheet — avatar tap opens this. A LEFT side drawer taking 2/3 of
@@ -443,6 +451,41 @@ export function ProfileSheet({
                   <Text style={styles.rowTitle}>Version</Text>
                 </View>
                 <Text style={styles.rowSub}>{version}</Text>
+              </View>
+              {hasPrivacyPolicyUrl() && PRIVACY_POLICY_URL ? (
+                <Pressable
+                  onPress={() => {
+                    void Linking.openURL(PRIVACY_POLICY_URL as string).catch(() => {});
+                  }}
+                  accessibilityRole="link"
+                  accessibilityLabel="Read the full privacy policy"
+                  style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+                >
+                  <View style={styles.rowText}>
+                    <Text style={styles.rowTitle}>Read full policy ↗</Text>
+                  </View>
+                  <Text style={styles.chev}>›</Text>
+                </Pressable>
+              ) : null}
+              {hasImprintUrl() && IMPRINT_URL ? (
+                <Pressable
+                  onPress={() => {
+                    void Linking.openURL(IMPRINT_URL as string).catch(() => {});
+                  }}
+                  accessibilityRole="link"
+                  accessibilityLabel="Read the legal notice"
+                  style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+                >
+                  <View style={styles.rowText}>
+                    <Text style={styles.rowTitle}>Impressum ↗</Text>
+                  </View>
+                  <Text style={styles.chev}>›</Text>
+                </Pressable>
+              ) : null}
+              <View style={styles.row}>
+                <View style={styles.rowText}>
+                  <Text style={styles.rowSub}>{OFF_ATTRIBUTION}</Text>
+                </View>
               </View>
             </View>
 

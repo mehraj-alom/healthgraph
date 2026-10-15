@@ -1,0 +1,68 @@
+HealthGraph — Play submission notes (branch rea, same-day submit)
+====================================================================
+
+FOR THE PLAY REVIEWER (paste into "Notes for review")
+-----------------------------------------------------
+- No login needed to review: on the login screen tap "Try the demo".
+  It loads offline sample data (logs, meds, meditation sits) under a
+  banner that says Demo mode. "Exit" wipes everything. Nothing leaves
+  the phone in demo mode: no account, no network, no sync.
+- Or create a real account with any email (Firebase Auth). All features
+  work signed-in against the production backend.
+- Camera is used ONLY for: meal photos, fingertip pulse, face pulse
+  (60s measurements, scalars only — frames never stored or sent).
+- Microphone is used ONLY for voice journal turns and the scheduled
+  voice check-in (transcribed in RAM, audio never stored).
+- Notifications are used ONLY for medication reminders and one optional
+  daily practice nudge (off by default).
+- No ads, no analytics SDK, no third-party data sale. Full inventory:
+  docs/compliance/PLAY_LAUNCH_READINESS.md sections 2-4.
+
+BACKEND DEPLOY (must happen before/with the app release)
+-------------------------------------------------------
+- Env (see .env.example): ANDROID_PACKAGE_NAME must equal
+  com.medgraph.app or POST /billing/verify answers 503 and the app
+  stays on Free (safe default, never grants unverified).
+- GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: Play Console service-account key
+  (Android Publisher scope). Absent = billing 503s honestly.
+- Run: alembic upgrade head  (includes bl01 premium columns; the
+  profile endpoint degrades to Free until it runs).
+- No new worker, queue, or index for this release. FHIR .json uploads
+  flow through the existing documents pipeline (OCR skipped by suffix).
+
+PLAY CONSOLE CHECKLIST (owner actions — nothing here is code)
+-------------------------------------------------------------
+[ ] Organization Play account + D-U-N-S match (health category rule).
+[ ] App registered as com.medgraph.app; developer verification done.
+[ ] Privacy policy published at an https URL; paste it into
+    frontend/src/services/legalLinks.ts PRIVACY_POLICY_URL, and into
+    the store listing. Same for IMPRINT_URL (Impressum, section 5 DDG).
+[ ] Data Safety form filed from PLAY_LAUNCH_READINESS.md section 4.
+    Declare: health data collected, stored on device + account, NOT
+    shared, NOT sold. Microphone: foreground voice-turn recording.
+[ ] Health-apps declaration completed.
+[ ] IARC questionnaire answered honestly (health content + AI chat;
+    16+ positioning recommended for Germany).
+[ ] Closed test satisfied if required (12 testers x 14 days) or use an
+    established/organization account.
+[ ] Reviewer notes pasted (above). Staging backend up through review.
+[ ] Merged-manifest check on the release AAB (aapt dump badging):
+    expect POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM, CAMERA (moment-
+    of-use), RECORD_AUDIO (voice turns). NO location, NO
+    SYSTEM_ALERT_WINDOW. If SYSTEM_ALERT_WINDOW appears it is merged
+    from a library — strip it before submit.
+[ ] Confirm R8/minify in the shipped AAB mapping.
+
+KNOWN RISKS IN THIS BUILD (honest)
+-----------------------------------
+- Six feature branches (meditation, CSV export, exercise distance, demo
+  mode, FHIR import, billing wiring) passed unit tests and static
+  review but have NOT run on a physical device in this build. Highest
+  runtime risk: MeditationScreen audio + Settings additions. If the
+  reviewer hits a crash, the fallback is branch main (stable, same
+  release-prep one-liners cherry-picked).
+- tsc/eslint run in CI (pr-checks + build-android). Merge only on green.
+- Billing is wired end-to-end but the store provider is a stub: paid
+  buttons fall back to Free with "Subscriptions open soon". No charge
+  path exists until Console products + a store SDK land. The verify
+  endpoint refuses everything until credentials are configured.

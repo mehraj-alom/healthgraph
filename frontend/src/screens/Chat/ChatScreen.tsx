@@ -658,7 +658,7 @@ function DisclaimerNote({ style }: { style?: object }) {
         accessibilityLabel={open ? 'Hide medical disclaimer' : 'Show medical disclaimer'}
         style={styles.dnHead}
       >
-        <Text style={styles.dnHeadText}>Wellness info only. Not medical advice.</Text>
+        <Text style={styles.dnHeadText}>AI-generated wellness info. Not medical advice.</Text>
         <Text style={styles.dnChevron}>{open ? '▾' : '▸'}</Text>
       </Pressable>
       {open ? (
