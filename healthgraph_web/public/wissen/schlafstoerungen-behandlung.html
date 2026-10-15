@@ -15,85 +15,101 @@
 <meta name="theme-color" content="#08090D" />
 <link rel="icon" type="image/png" href="/icon.png" />
 <script type="application/ld+json">
-{"@context": "https://schema.org", "@type": "MedicalWebPage", "headline": "Schlafstörungen: Ursachen, Behandlung und was wirklich hilft", "inLanguage": "de", "about": ["schlafstoerungen", "schlaflosigkeit", "schlafstoerungen behandlung", "insomnie", "schlafhygiene"], "datePublished": "2026-10-15", "author": {"@type": "Organization", "name": "HealthGraph"}, "publisher": {"@type": "Organization", "name": "HealthGraph"}}
-</script>
-<script type="application/ld+json">
-{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Was ist Schlafstörungen?", "acceptedAnswer": {"@type": "Answer", "text": "Schlafstörungen: die 8 häufigsten Ursachen und was wirklich hilft. Von Schlafhygiene bis CBT-I. Wann eine Schlafdiagnose im Schlaflabor nötig ist."}}, {"@type": "Question", "name": "Wann sollte ich zum Arzt?", "acceptedAnswer": {"@type": "Answer", "text": "Bei anhaltenden Beschwerden über 2 Wochen, starken Schmerzen, Fieber über 38,5°C oder unspezifischen Symptomen, die nicht klären: ärztliche Abklärung. Dieser Artikel ersetzt keine Diagnose."}}]}
+{"@context":"https://schema.org","@type":"MedicalWebPage","headline":"Schlafstörungen: Ursachen, Behandlung und was wirklich hilft","inLanguage":"de","datePublished":"2026-10-15","author":{"@type":"Organization","name":"HealthGraph"},"publisher":{"@type":"Organization","name":"HealthGraph"}}
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#08090D;color:#F5F5F7;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Arial,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased}
-a{color:#4FD1C5}
-.glass{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:20px}
-.glass-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:16px;padding:20px;text-decoration:none;color:#fff;display:block;transition:border-color .3s,transform .3s}
-.glass-card:hover{border-color:rgba(79,209,197,.5);transform:translateY(-2px)}
-.card-label{font-size:11px;color:#4FD1C5;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
-.card-title{display:block;font-size:14px;margin-top:6px;line-height:1.4}
-.wrap{max-width:780px;margin:0 auto;padding:0 20px 80px}
+body{background:#08090D;color:#F5F5F7;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Segoe UI',Roboto,Arial,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased;min-height:100vh}
+a{color:#4FD1C5;text-decoration:none}
+a:hover{color:#7FE3D8}
+.glass-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-radius:20px;padding:22px;color:#fff;display:block;transition:all .3s cubic-bezier(.16,1,.3,1);box-shadow:0 8px 32px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.1)}
+.glass-card:hover{border-color:rgba(79,209,197,.6);transform:translateY(-3px);box-shadow:0 16px 48px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.15)}
+.card-label{font-size:11px;color:#4FD1C5;text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+.card-title{display:block;font-size:15px;margin-top:6px;line-height:1.4;font-weight:600}
+.card-desc{display:block;font-size:12px;color:rgba(255,255,255,.5);margin-top:4px;line-height:1.5}
+.glass-nav{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:4px;background:rgba(20,20,26,.72);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(255,255,255,.12);border-radius:100px;padding:6px 8px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.glass-nav a{color:rgba(255,255,255,.7);font-size:13px;font-weight:500;padding:8px 14px;border-radius:100px;transition:all .2s}
+.glass-nav a:hover{color:#fff;background:rgba(255,255,255,.08)}
+.glass-nav a.active{color:#fff;background:rgba(79,209,197,.15)}
+.hero{position:relative;overflow:hidden;border-radius:24px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(135deg,#0A1030 0%,#15161B 50%,#08090D 100%);padding:60px 40px;margin:90px 20px 0;max-width:1100px;margin-left:auto;margin-right:auto}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 0%,rgba(59,91,255,.35) 0%,rgba(27,42,160,.15) 45%,transparent 70%);pointer-events:none}
+.hero::after{content:'';position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,rgba(59,91,255,.8),transparent);pointer-events:none}
+.hero-inner{position:relative;max-width:780px;margin:0 auto}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;background:rgba(79,209,197,.15);border:1px solid rgba(79,209,197,.5);color:#4FD1C5;padding:6px 14px;border-radius:100px;margin-bottom:20px;backdrop-filter:blur(10px)}
+h1{font-size:clamp(2.2rem,5vw,3.8rem);line-height:1.02;letter-spacing:-.03em;margin-bottom:16px;font-weight:700}
+.lead{color:rgba(255,255,255,.65);font-size:1.12rem;max-width:60ch}
+.meta{color:rgba(255,255,255,.35);font-size:13px;margin-top:16px}
+h2{font-size:1.65rem;letter-spacing:-.01em;margin:48px 0 16px;font-weight:700}
+h2::before{content:'';display:block;width:100%;height:1px;background:linear-gradient(90deg,transparent,rgba(59,91,255,.8),transparent);margin-bottom:24px}
+h3{font-size:1.15rem;margin:28px 0 10px;color:#fff;font-weight:600}
+p{margin:14px 0;color:rgba(255,255,255,.7)}
+ul,ol{margin:14px 0 14px 22px;color:rgba(255,255,255,.7)}
+li{margin:8px 0}
+.info-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:20px;margin:20px 0;backdrop-filter:blur(10px)}
+.info-card p{margin:0;font-size:14px}
+.citation-card{background:rgba(79,209,197,.06);border:1px solid rgba(79,209,197,.2);border-radius:16px;padding:20px;margin:20px 0;backdrop-filter:blur(10px)}
+.citation-card .cite-label{font-size:11px;color:#4FD1C5;text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+.citation-card p{font-size:14px;color:rgba(255,255,255,.75);margin-top:8px}
+.citation-card .cite-src{font-size:11px;color:rgba(255,255,255,.3);margin-top:8px}
+.form-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:28px;margin-top:24px;backdrop-filter:blur(20px)}
+.form-card p{font-size:14px}
+.form-card input{width:100%;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);padding:14px 16px;color:#fff;font-size:16px;margin-top:8px}
+.form-card input:focus{outline:none;border-color:#4FD1C5;background:rgba(255,255,255,.1)}
+.btn{display:inline-block;margin-top:20px;background:linear-gradient(135deg,#3B5BFF 0%,#1B2AA0 100%);color:#fff;font-weight:700;font-size:15px;border:none;border-radius:100px;padding:16px 36px;cursor:pointer;box-shadow:0 8px 32px rgba(59,91,255,.4),inset 0 1px 0 rgba(255,255,255,.25);transition:all .3s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(59,91,255,.5),inset 0 1px 0 rgba(255,255,255,.25)}
+.related{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;max-width:1100px;margin:24px auto 0;padding:0 20px 60px}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;max-width:1100px;margin:0 auto}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff}
 .brand img{height:26px;width:auto;background:#fff;border-radius:8px;padding:3px 6px}
 .brand b{font-size:15px}
-.back{font-size:13px;color:#86868B;text-decoration:none;border:1px solid rgba(255,255,255,.15);padding:8px 16px;border-radius:999px}
-.hero{position:relative;overflow:hidden;border-radius:20px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(135deg,#0A1030 0%,#15161B 60%,#08090D 100%);padding:44px 32px;margin:18px auto 0;max-width:1100px}
-.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 0%,rgba(59,91,255,.28) 0%,rgba(27,42,160,.1) 45%,transparent 70%);pointer-events:none}
-.hero-inner{position:relative;max-width:780px;margin:0 auto}
-.badge{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;background:rgba(79,209,197,.12);border:1px solid rgba(79,209,197,.4);color:#4FD1C5;padding:6px 14px;border-radius:999px;margin-bottom:18px}
-h1{font-size:clamp(2rem,5vw,3.4rem);line-height:1.05;letter-spacing:-.02em;margin-bottom:14px}
-.lead{color:#B9B9C0;font-size:1.12rem;max-width:62ch}
-.meta{color:#86868B;font-size:13px;margin-top:16px}
-h2{font-size:1.65rem;letter-spacing:-.01em;margin:44px 0 12px;padding-top:8px}
-h2::before{content:'';display:block;width:100%;height:1px;background:linear-gradient(90deg,transparent,rgba(59,91,255,.9),transparent);margin-bottom:22px}
-h3{font-size:1.15rem;margin:26px 0 8px;color:#fff}
-p{margin:12px 0;color:#D7D7DC}
-ul,ol{margin:12px 0 12px 22px;color:#D7D7DC}
-li{margin:7px 0}
-.info-card{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:22px;margin:20px 0}
-.src{font-size:.82rem;color:#86868B}
-.form{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:26px;margin-top:18px}
-.form label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px}
-.form input{width:100%;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);padding:13px 15px;color:#fff;font-size:16px}
-.btn{display:inline-block;margin-top:20px;background:linear-gradient(135deg,#3B5BFF 0%,#1B2AA0 100%);color:#fff;font-weight:700;font-size:15px;border:none;border-radius:999px;padding:15px 34px;cursor:pointer;box-shadow:0 8px 32px rgba(59,91,255,.35);text-decoration:none}
-.related{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
-footer{max-width:780px;margin:40px auto 0;padding:24px 20px;color:#86868B;font-size:.8rem;border-top:1px solid rgba(255,255,255,.1)}
-@media(max-width:640px){.related{grid-template-columns:1fr}.hero{padding:32px 20px}}
+.back{font-size:13px;color:rgba(255,255,255,.5);text-decoration:none;border:1px solid rgba(255,255,255,.12);padding:8px 16px;border-radius:100px;backdrop-filter:blur(10px);transition:all .2s}
+.back:hover{color:#fff;border-color:rgba(255,255,255,.25)}
+footer{max-width:780px;margin:40px auto 0;padding:24px 20px;color:rgba(255,255,255,.3);font-size:.8rem;border-top:1px solid rgba(255,255,255,.06)}
+footer a{color:rgba(255,255,255,.4);margin:0 4px}
+footer a:hover{color:#4FD1C5}
+@media(max-width:640px){.related{grid-template-columns:1fr}.hero{padding:40px 24px;margin:80px 12px 0}.glass-nav{top:8px;padding:4px 6px}.glass-nav a{padding:6px 10px;font-size:12px}}
 </style>
 </head>
 <body>
-<div class="topbar">
-<a class="brand" href="/"><img src="/logo.png" alt="HealthGraph" /><b>HealthGraph</b></a>
-<a class="back" href="/wissen/">← Wissen Übersicht</a>
-</div>
+<nav class="glass-nav">
+<a href="/" class="active">HealthGraph</a>
+<a href="/wissen/">Wissen</a>
+<a href="/wissen/symptome/">Symptome</a>
+<a href="/wissen/medikamente-behandlung/">Medikamente</a>
+<a href="/wissen/datenkontrolle-dsgvo/">DSGVO</a>
+<a href="/wissen/praevention-gesundheit/">Prävention</a>
+<a href="/press/">Presse</a>
+</nav>
 <div class="hero"><div class="hero-inner">
-<span class="badge">● Gesundheit · Stand 2026-10-15 · HealthGraph Wissen</span>
+<span class="badge">● Gesundheit · Stand 2026-10-15</span>
 <h1>Schlafstörungen: Ursachen, Behandlung und was wirklich hilft</h1>
 <p class="lead">Schlafstörungen: die 8 häufigsten Ursachen und was wirklich hilft. Von Schlafhygiene bis CBT-I. Wann eine Schlafdiagnose im Schlaflabor nötig ist.</p>
-<p class="meta">Quellen: RKI, DGE, DIM, STIKO – geprüft am 2026-10-15</p>
+<p class="meta">Quellen: RKI, DGE, DIM, STIKO · HealthGraph Wissen</p>
 </div></div>
-<div class="wrap">
-<h2>Das Wichtigste in Kürze</h2>
-<p>Die wirksamste Behandlung bei Schlafstörungen ist die kognitive Verhaltenstherapie für Insomnie (CBT-I). Techniken: Stimulus-Kontrolle (nur schlafen im Bett), Schlafrestriktion, Entspannungstechniken. Mittelfristig besser als Schlafmittel. Wichtig: 7-9 Stunden Schlaf, keine Bildschirme 1 Stunde vor dem Schlafen, kühles dunkles Zimmer.</p>
-<p>Hier finden Sie verlässliche Antworten zu »Schlafstörungen: Ursachen, Behandlung und was wirklich hilft« – mit Quellenangaben und Stand 2026-10-15. Bei anhaltenden Beschwerden oder Unsicherheit: ärztliche Abklärung.</p>
+<div style="max-width:780px;margin:0 auto;padding:0 20px 80px">
+<p style="margin-top:24px;font-size:16px;line-height:1.8">Schlafstörungen: die 8 häufigsten Ursachen und was wirklich hilft. Von Schlafhygiene bis CBT-I. Wann eine Schlafdiagnose im Schlaflabor nötig ist.</p>
+<p style="margin-top:16px">Hier finden Sie verlässliche Antworten zu »Schlafstörungen: Ursachen, Behandlung und was wirklich hilft« – mit Quellenangaben und Stand 2026-10-15. Bei anhaltenden Beschwerden oder Unsicherheit: ärztliche Abklärung.</p>
+<div class="citation-card">
+<p class="cite-label">Zitierfakt</p>
+<p>Schlafstörungen: die 8 häufigsten Ursachen und was wirklich hilft. Von Schlafhygiene bis CBT-I. Wann eine Schlafdiagnose im Schlaflabor nötig ist.</p>
+<p class="cite-src">Quelle: HealthGraph Wissen, RKI, DGE, DIM, STIKO. Stand 2026-10-15.</p>
+</div>
 <h2>Details & Zusammenhänge</h2>
 <h3>Was steckt dahinter?</h3>
 <p>Die genauen Ursachen, Auslöser und Mechanismen, die hinter Schlafstörungen: Ursachen, Behandlung und was wirklich hilft stehen. Verständlich erklärt und mit Quellen.</p>
 <h3>Was hilft?</h3>
 <p>Empfehlungen, die in Alltag, Ernährung und Lebensstil umsetzbar sind. Wann medizinische Abklärung sinnvoll ist.</p>
-<div class="info-card" style="margin-top:20px">
-<p style="color:#4FD1C5;font-weight:600;font-size:13px">Zitierfakt</p>
-<p style="font-size:14px;margin-top:8px">Die wirksamste Behandlung bei Schlafstörungen ist die kognitive Verhaltenstherapie für Insomnie (CBT-I). Techniken: Stimulus-Kontrolle (nur schlafen im Bett), Schlafrestriktion, Entspannungstechniken.</p>
-<p style="color:#86868B;font-size:12px;margin-top:8px">Quelle: HealthGraph Wissen, RKI, DGE, DIM, STIKO. Stand 15.10.2026.</p>
-</div>
 <div class="info-card">
 <p><b style="color:#fff">Hinweis:</b> ersetzt keine ärztliche Diagnose. Bei Beschwerden bitte ärztliche Abklärung. Quellen: RKI, DGE, DIM, STIKO.</p>
 </div>
-<div class="form">
+<div class="form-card">
 <p style="color:#fff;font-weight:600">Kostenlos: Gesundheits-Checkliste als PDF</p>
-<p style="color:#86868B;font-size:13px;margin-top:6px">Häufige Laborwerte, was sie bedeuten, Wann zum Arzt. Einfach E-Mail eintragen.</p>
-<label>E-Mail</label>
+<p style="color:rgba(255,255,255,.4);font-size:13px;margin-top:6px">Häufige Laborwerte, was sie bedeuten, Wann zum Arzt.</p>
 <input type="email" placeholder="deine@email.de" />
 <a class="btn" href="/#early-access">PDF anfordern</a>
 </div>
+<h2>Weitere Guides</h2>
 <div class="related">
 <a class="glass-card" href="/wissen/muedigkeit-ursachen-14-uhr-loch.html"><span class="card-label">Guide</span><span class="card-title">Ständige Müdigkeit & das 14-Uhr-Loch: 7 Ursachen und wa</span></a>
 <a class="glass-card" href="/wissen/blutdruck-normalwerte-tabelle.html"><span class="card-label">Guide</span><span class="card-title">Blutdruck Normalwerte: Tabelle nach Alter, Warnzeichen </span></a>
@@ -117,7 +133,7 @@ footer{max-width:780px;margin:40px auto 0;padding:24px 20px;color:#86868B;font-s
 </div>
 </div>
 <footer>
-HealthGraph · Gesundheit, verbunden · <a href="/">Startseite</a> · <a href="/wissen/">Wissen Übersicht</a> · <a href="/press">Presse</a> · <a href="/datenschutz">Datenschutz</a>
+HealthGraph · Gesundheit, verbunden · <a href="/">Startseite</a> · <a href="/wissen/">Wissen</a> · <a href="/press">Presse</a> · <a href="/datenschutz">Datenschutz</a> · Wellness-Begleiter, kein Medizinprodukt
 </footer>
 </body>
 </html>
