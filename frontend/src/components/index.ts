@@ -17,6 +17,7 @@ export { Slider } from './Slider';
 export { DialInput, feverTint, severityTint } from './DialInput';
 export { WheelSlider } from './WheelSlider';
 export { GlassCuboid } from './GlassCuboid';
+export { GlassCard } from './GlassCard';
 export { AmbientBackground } from './AmbientBackground';
 export { UmbrellaTabBar } from './UmbrellaTabBar';
 export { LogCelebration } from './LogCelebration';

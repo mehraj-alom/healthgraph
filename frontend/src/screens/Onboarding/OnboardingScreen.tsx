@@ -21,7 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/context/AuthContext';
 import { BrandLogo, Button, Card, Input } from '@/components';
 import { Reveal } from '@/components/home/Reveal';
-import { FONT, GV, SPACE, TYPE } from '@/theme/guava';
+import { FONT, GV, LG, SPACE, TYPE } from '@/theme/guava';
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { StageGradient } from '@/components/StageGradient';
 
@@ -1171,7 +1171,7 @@ export default function OnboardingScreen() {
   return (
     <View style={styles.root}>
       {/* Stage wash at the very bottom (auth page + any film fallback). */}
-      <StageGradient />
+      <StageGradient variant="algae" />
       {/* Fullscreen story film above the wash, below the content. */}
       {!reducedMotion && step < 2 && (!heroFailed || !systemFailed) ? (
         <View style={styles.filmLayer} pointerEvents="none">
@@ -1305,7 +1305,7 @@ const styles = StyleSheet.create({
   // story pages (including behind the top bar, footer, and safe insets).
   root: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: LG.stage,
   },
 
   container: {

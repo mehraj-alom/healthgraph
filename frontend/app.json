@@ -1,6 +1,7 @@
 {
   "expo": {
-    "name": "MedGraph",
+    "name": "HealthGraph",
+    "description": "Gesundheit, verbunden: Puls per Kamera, Schlaf, Medikamente, Ernährung, Zyklus – ein Graph. Health, connected.",
     "slug": "medgraph",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,7 +14,16 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.medgraph.app"
+      "bundleIdentifier": "com.medgraph.app",
+      "infoPlist": {
+        "CFBundleDisplayName": "HealthGraph",
+        "NSCameraUsageDescription": "Puls per Kamera messen und Dokumente scannen. Face pulse is computed on-device, frames never stored. / Kamera-Puls und Dokumenten-Scan, direkt am Gerät.",
+        "NSMicrophoneUsageDescription": "Voice check-ins und Sprach-Alarme. / Voice check-ins and spoken alarms.",
+        "NSHealthUpdateUsageDescription": "HealthGraph liest Trainings- und Schlafdaten nur mit deiner Erlaubnis. / Reads workouts and sleep only with permission.",
+        "NSHealthShareUsageDescription": "HealthGraph schreibt Messwerte nur mit deiner Erlaubnis. / Writes vitals only with permission.",
+        "CFBundleLocalizations": ["en", "de"],
+        "CFBundleDevelopmentRegion": "de"
+      }
     },
     "android": {
       "adaptiveIcon": {

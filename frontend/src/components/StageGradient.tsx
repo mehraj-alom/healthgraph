@@ -2,13 +2,16 @@
  * StageGradient — app-wide stage wash (trial).
  *
  * An absolute-fill SVG gradient laid behind screen content; each screen
- * keeps its flat GV.stage background underneath as fallback, so removing
- * the trial is a one-line deletion per screen.
+ * keeps its flat background underneath as fallback, so removing the
+ * trial is a one-line deletion per screen.
  *
  * Variants: 'violet' (neon brand wash), 'ink' (modern deep ink-violet
  * charcoal), 'dawn' (light sunrise peach → lavender → violet for a
- * positive vibe — pair only with dark-ink text, never white), and 'navy'
- * (deep navy wash matching the after-signup priority picker backdrop).
+ * positive vibe — pair only with dark-ink text, never white), 'navy'
+ * (deep navy wash matching the after-signup priority picker backdrop),
+ * and 'algae' (black-teal liquid-glass wash matching the web stage:
+ * black → algae-deep → algae with a teal-blue lift — pair with light
+ * text on LG.stage bases).
  */
 
 import { StyleSheet } from 'react-native';
@@ -20,6 +23,8 @@ const RAMPS = {
   dawn: ['#FFE2C2', '#C9B1F5', '#7C5CD6'],
   /** Deep navy wash — matches the after-signup priority picker backdrop. */
   navy: ['#2E3757', '#20263D', '#11142A'],
+  /** Black-teal liquid glass — matches the web body stage (black base, algae depth, teal-blue lift). */
+  algae: ['#0B4A3F', '#07332B', '#020404'],
 } as const;
 
 export function StageGradient({

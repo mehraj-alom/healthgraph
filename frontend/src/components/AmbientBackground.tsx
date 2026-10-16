@@ -6,11 +6,22 @@ import { StyleSheet, View } from 'react-native';
  *
  * - `dark` (default): teal/blue/purple/gold wash for the deep-navy screens.
  * - `clinical`: pale red + slate wash for the light medical Timeline.
+ * - `algae`: black-teal liquid-glass wash matching the web stage
+ *   (algae + teal-blue ambient on near-black, no purple/gold).
  *
  * Static translucent blobs only — no animation, so it is reduced-motion
  * safe by construction and costs one composite, not frames.
  */
-export function AmbientBackground({ tone = 'dark' }: { tone?: 'dark' | 'clinical' }) {
+export function AmbientBackground({ tone = 'dark' }: { tone?: 'dark' | 'clinical' | 'algae' }) {
+  if (tone === 'algae') {
+    return (
+      <View style={styles.ambient} pointerEvents="none">
+        <View style={[styles.blob, styles.algaeTop]} />
+        <View style={[styles.blob, styles.algaeBlue]} />
+        <View style={[styles.blob, styles.algaeDeep]} />
+      </View>
+    );
+  }
   if (tone === 'clinical') {
     return (
       <View style={styles.ambient} pointerEvents="none">
@@ -65,6 +76,29 @@ const styles = StyleSheet.create({
     top: 1080,
     left: -80,
     backgroundColor: 'rgba(244, 197, 27, 0.08)',
+  },
+  // Black-teal liquid glass (web body parity): algae glow top-left,
+  // teal-blue lift top-right, deep algae pool at the bottom.
+  algaeTop: {
+    width: 340,
+    height: 220,
+    top: -90,
+    left: -70,
+    backgroundColor: 'rgba(20, 122, 101, 0.28)',
+  },
+  algaeBlue: {
+    width: 300,
+    height: 220,
+    top: -60,
+    right: -80,
+    backgroundColor: 'rgba(56, 189, 248, 0.14)',
+  },
+  algaeDeep: {
+    width: 420,
+    height: 300,
+    top: 640,
+    left: -60,
+    backgroundColor: 'rgba(11, 74, 63, 0.5)',
   },
   clinicalRed: {
     width: 320,

@@ -99,3 +99,34 @@ export const SPACE = {
   rCard: 20,
   rPill: 9999,
 } as const;
+
+// ─── Liquid Glass (web parity) ───────────────────────────────────────────────
+// Black-teal algae system from healthgraph_web/src/index.css — the "full
+// glass morphism" stage. GV stays untouched (28 screens rely on it); new
+// code uses LG for the black stage + dark-glass surfaces. Old GV.stage
+// (#0B4A3F) lives on as LG.algae.
+export const LG = {
+  /** App black. */
+  black: '#050807',
+  /** Stage behind everything. */
+  stage: '#060B0A',
+  /** Solid fallback when blur is off (reduced transparency). */
+  stageDeep: '#0A1412',
+  /** Former GV.stage — now the algae accent, never the base. */
+  algae: '#0B4A3F',
+  algaeDeep: '#07332B',
+  algaeBright: '#147A65',
+  teal: '#4FD1C5',
+  tealBlue: '#38BDF8',
+  fog: '#A7B8B2',
+  /** Dark-glass card fill (matches web .lg-card base). */
+  glassFill: 'rgba(10, 18, 16, 0.62)',
+  /** Hairline edge stroke. */
+  glassStroke: 'rgba(255, 255, 255, 0.22)',
+  /** Top specular highlight. */
+  glassHighlight: 'rgba(255, 255, 255, 0.55)',
+  /** Teal bottom refraction. */
+  glassRefraction: 'rgba(79, 209, 197, 0.24)',
+  /** Card radius on the glass system (web .lg-card). */
+  rGlass: 28,
+} as const;

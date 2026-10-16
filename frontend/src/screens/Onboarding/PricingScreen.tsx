@@ -14,7 +14,7 @@ import { Reveal } from '@/components/home/Reveal';
 import { useToast } from '@/components/Toast';
 import { productIdForPlan } from '@/services/billingProducts';
 import { activeBillingProvider, resolvePurchaseOutcome } from '@/services/billingClient';
-import { FONT, GV, SPACE, TYPE } from '@/theme/guava';
+import { FONT, GV, LG, SPACE, TYPE } from '@/theme/guava';
 import { TILE_TONES } from '@/theme/tones';
 import { useReducedMotion } from '@/theme/useReducedMotion';
 import { StageGradient } from '@/components/StageGradient';
@@ -195,7 +195,7 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StageGradient />
+      <StageGradient variant="algae" />
       {glassOff ? (
         <View style={styles.glassSolid} />
       ) : (
@@ -309,11 +309,11 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GV.stage,
+    backgroundColor: LG.stage,
   },
   glassSolid: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: GV.stage,
+    backgroundColor: LG.stage,
   },
   glass: {
     ...StyleSheet.absoluteFill,
