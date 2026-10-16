@@ -120,7 +120,7 @@ const ONBOARDING_DDL = `
 // ============================================================================
 
 describe('engine catalog', () => {
-  test('seven stable unique engines with complete metadata', () => {
+  test('eight stable unique engines with complete metadata', () => {
     assert.deepEqual([...ENGINE_IDS], [
       'sleep',
       'weight',
@@ -129,6 +129,7 @@ describe('engine catalog', () => {
       'nutrition',
       'wellbeing',
       'heart',
+      'meditation',
     ]);
     for (const id of ENGINE_IDS) {
       const def = ENGINES[id];
@@ -161,11 +162,12 @@ describe('engine catalog', () => {
   });
 
   test('all engines, empty selection, duplicates, unknowns', () => {
-    assert.equal(deriveActiveEngines([...ENGINE_IDS]).length, 7);
+    assert.equal(deriveActiveEngines([...ENGINE_IDS]).length, 8);
     assert.deepEqual(deriveActiveEngines([]), []);
     assert.deepEqual(deriveActiveEngines(['sleep', 'sleep', 'bogus']).map((e) => e.id), ['sleep']);
     assert.equal(isEngineId('discipline'), true);
-    assert.equal(isEngineId('meditation'), false);
+    assert.equal(isEngineId('meditation'), true);
+    assert.equal(isEngineId('yoga'), false);
   });
 
   test('getActiveEngines reads focus state (null-safe)', () => {

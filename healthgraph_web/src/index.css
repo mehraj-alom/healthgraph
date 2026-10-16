@@ -1,0 +1,194 @@
+:root {
+  /* — Black · White · Teal-blue Algae — */
+  --black: #050807;
+  --stage: #060b0a;
+  --stage-deep: #020404;
+  --algae: #0b4a3f;
+  --algae-deep: #07332b;
+  --algae-bright: #147a65;
+  --teal: #4fd1c5;
+  --teal-blue: #38bdf8;
+  --blue: #3b5bff;
+  --ink: #ffffff;
+  --fog: #a7b8b2;
+  --teal-dark: #0b7a55;
+  --cobalt: #3b5bff;
+  --panel: #0c1513;
+  --white: #ffffff;
+  --lg-tint: rgba(255, 255, 255, 0.1);
+  --lg-stroke: rgba(255, 255, 255, 0.22);
+  --lg-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--black);
+  color: var(--ink);
+  font-family: Poppins, system-ui, -apple-system, "SF Pro Text", "SF Pro Display", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* Apple dark stage: black base + algae + teal-blue ambient light */
+  background:
+    radial-gradient(1100px 500px at 15% -5%, rgba(20, 122, 101, 0.28), transparent 60%),
+    radial-gradient(900px 500px at 90% 10%, rgba(56, 189, 248, 0.14), transparent 60%),
+    radial-gradient(1000px 700px at 50% 110%, rgba(11, 74, 63, 0.5), transparent 65%),
+    var(--black);
+  background-attachment: fixed;
+}
+
+::selection { background: rgba(79, 209, 197, 0.35); }
+
+.bg-stage { background-color: transparent; }
+.bg-panel { background-color: var(--panel); }
+.text-ink { color: var(--ink); }
+.text-fog { color: var(--fog); }
+.text-teal { color: var(--teal); }
+.text-teal-dark { color: var(--teal-dark); }
+.text-cobalt { color: #9db1ff; }
+.bg-cobalt { background-color: var(--cobalt); }
+.border-cobalt\/60 { border-color: rgba(59, 91, 255, 0.6); }
+
+.rounded-card { border-radius: 28px; }
+.hairline-cobalt { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.glow-cobalt { box-shadow: 0 0 60px rgba(59, 91, 255, 0.14); }
+
+.min-h-full { min-height: 100vh; }
+
+/* — Teal-blue algae accents (Apple-style duotone) — */
+.teal-algae-text {
+  background: linear-gradient(92deg, var(--teal) 0%, #7ef0e2 35%, var(--teal-blue) 75%, #9db1ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.algae-ring { box-shadow: 0 0 0 1px rgba(79, 209, 197, 0.35), 0 0 32px rgba(79, 209, 197, 0.18); }
+.teal-dot { background: linear-gradient(135deg, var(--teal), var(--teal-blue)); }
+
+/* ============ Apple Liquid Glass (iOS 26 HIG) ============
+   Black glass + white specular + teal-blue refraction.
+   Material: black tint 55% + 28px blur + 180% saturate,
+   0.5px edge stroke, top highlight, deep black shadow. */
+.lg, .glass, .liquid-glass, .lg-card, .lg-chip {
+  position: relative;
+  isolation: isolate;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(1.08);
+  backdrop-filter: blur(28px) saturate(180%) brightness(1.08);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.lg-card, .liquid-glass, .glass {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.05) 26%, rgba(255, 255, 255, 0.02) 58%, rgba(79, 209, 197, 0.08) 100%),
+    linear-gradient(120deg, rgba(11, 74, 63, 0.42), rgba(5, 8, 7, 0.55) 55%, rgba(56, 189, 248, 0.1));
+  background-color: color-mix(in srgb, rgba(10, 18, 16, 0.62) 72%, transparent);
+  border: 0.5px solid var(--lg-stroke);
+  border-radius: 28px;
+  corner-shape: superellipse(1.6);
+  box-shadow:
+    var(--lg-shadow),
+    inset 0 0.5px 0.5px rgba(255, 255, 255, 0.55),
+    inset 0 -0.5px 0.5px rgba(255, 255, 255, 0.1),
+    inset 1px 0 1px rgba(255, 255, 255, 0.07),
+    inset -1px 0 1px rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.35s ease, background-color 0.35s ease, border-color 0.35s ease;
+}
+
+/* specular sweep: white top → teal-blue bottom refraction (algae water) */
+.lg-card::before, .liquid-glass::before, .glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32) 0%, transparent 22%),
+    radial-gradient(130% 70% at 50% 115%, rgba(79, 209, 197, 0.24) 0%, transparent 55%),
+    radial-gradient(70% 50% at 88% -8%, rgba(56, 189, 248, 0.2) 0%, transparent 55%),
+    radial-gradient(60% 45% at 8% 0%, rgba(255, 255, 255, 0.14) 0%, transparent 50%);
+  mix-blend-mode: screen;
+}
+
+/* inner refraction stroke */
+.lg-card::after, .liquid-glass::after, .glass::after {
+  content: "";
+  position: absolute;
+  inset: 0.5px;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 8px rgba(255, 255, 255, 0.12);
+}
+
+.lg-card > *, .liquid-glass > *, .glass > * { position: relative; z-index: 1; }
+
+/* black ↔ white rhythm: solid white cards on black stage */
+.card-white {
+  background: var(--white);
+  color: #060b0a;
+  border: 0.5px solid rgba(255, 255, 255, 0.9);
+  border-radius: 28px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* floating bar (navbar): black glass, bottom hairline, safe-area */
+.lg-bar, .liquid-glass-dark {
+  background: color-mix(in srgb, rgba(5, 8, 7, 0.72) 78%, rgba(11, 74, 63, 0.28));
+  -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(1.06);
+  backdrop-filter: blur(28px) saturate(180%) brightness(1.06);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0.5px 0 rgba(255, 255, 255, 0.28);
+  padding-top: env(safe-area-inset-top);
+}
+
+/* small pill controls: black glass chips, teal edge on active */
+.lg-chip {
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.14) 55%, rgba(5, 8, 7, 0.35));
+  border: 0.5px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  box-shadow: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.5), 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* press physics + keyboard focus (teal ring) */
+.lg-card:active { transform: scale(0.99); }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+
+@media (hover: hover) {
+  .lg-card:hover {
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 0 40px rgba(79, 209, 197, 0.1), inset 0 0.5px 0.5px rgba(255, 255, 255, 0.6);
+    border-color: rgba(79, 209, 197, 0.4);
+  }
+}
+
+/* iOS Safari boost */
+@supports (-webkit-touch-callout: none) {
+  .lg-card, .liquid-glass, .glass, .lg-bar, .liquid-glass-dark {
+    -webkit-backdrop-filter: blur(32px) saturate(200%) brightness(1.08);
+  }
+}
+
+/* i18n: DE words run long — allow balanced wrap, keep tracking tight */
+:lang(de) h1, :lang(de) h2 { letter-spacing: -0.015em; word-break: break-word; }
+
+/* accessibility: no transparency / less motion */
+@media (prefers-reduced-transparency: reduce) {
+  .lg-card, .liquid-glass, .glass, .lg-bar, .lg-chip { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .lg-card, .liquid-glass, .glass { background: #0a1412; }
+  body { background: var(--black); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lg-card::before, .liquid-glass::before, .glass::before { display: none; }
+  .lg-card { transition: none; }
+}

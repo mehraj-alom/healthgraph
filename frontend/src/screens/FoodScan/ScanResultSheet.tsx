@@ -10,6 +10,7 @@ import {
 } from '@/services/nutritionService';
 import { MEAL_TYPES, suggestMealType, type MealType } from './mealTypes';
 import { microLine } from './microDisplay';
+import { OFF_ATTRIBUTION } from '@/services/legalLinks';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { saveFoodScanBreakdown } from '@/db/queries/foodScans';
 
@@ -288,6 +289,9 @@ export default function ScanResultSheet({
       </View>
 
       {result.note ? <Text style={styles.note}>{result.note}</Text> : null}
+      {result.items.some((item) => item.barcode) ? (
+        <Text style={styles.note}>{OFF_ATTRIBUTION}</Text>
+      ) : null}
 
       <Text style={styles.sectionLabel}>Log as</Text>
       <Text style={styles.sectionHint}>

@@ -663,7 +663,7 @@ type SymptomDraft = {
   notes: string;
 };
 
-type ActivityDraft = { id: number; activityType: string; duration: string; calories: string };
+type ActivityDraft = { id: number; activityType: string; duration: string; calories: string; distance: string };
 type MedicationDraft = { id: number; name: string; dosage: string; unit: string };
 type VitalDraft = { id: number; conceptId: string; value: string; unit: string };
 type PainDraft = { id: number; structureId: string; bodyLocationId: string; severity: string; painType: string };
@@ -983,7 +983,7 @@ export default function VitalsLoggerScreen() {
       setNextId(existing.symptoms.length + 1);
     }
     setPain(existing.pain.map((item, i) => ({ id: i + 1, structureId: '', bodyLocationId: item.body_location_id ?? '', severity: String(item.severity), painType: item.pain_type ?? '' })));
-    setActivities(existing.activities.map((item, i) => ({ id: i + 1, activityType: item.activity_type, duration: item.duration_minutes == null ? '' : String(item.duration_minutes), calories: item.calories_burned == null ? '' : String(item.calories_burned) })));
+    setActivities(existing.activities.map((item, i) => ({ id: i + 1, activityType: item.activity_type, duration: item.duration_minutes == null ? '' : String(item.duration_minutes), calories: item.calories_burned == null ? '' : String(item.calories_burned), distance: item.distance_km == null ? '' : String(item.distance_km) })));
     setMedications(existing.medications.map((item, i) => ({ id: i + 1, name: item.medication_name, dosage: item.dosage_value == null ? '' : String(item.dosage_value), unit: item.dosage_unit ?? '' })));
     setVitals(existing.vitals.map((item, i) => ({ id: i + 1, conceptId: item.concept_id ?? '', value: item.value == null ? '' : String(item.value), unit: item.unit ?? '' })));
     setFormInitialized(true);
@@ -1211,7 +1211,7 @@ export default function VitalsLoggerScreen() {
     setSymptoms((items) => items.filter((s) => s.id !== id));
 
   const addPain = () => setPain((items) => [...items, { id: Date.now(), structureId: '', bodyLocationId: '', severity: '', painType: '' }]);
-  const addActivity = () => setActivities((items) => [...items, { id: Date.now(), activityType: '', duration: '', calories: '' }]);
+  const addActivity = () => setActivities((items) => [...items, { id: Date.now(), activityType: '', duration: '', calories: '', distance: '' }]);
   const addVital = () => setVitals((items) => [...items, { id: Date.now(), conceptId: '', value: '', unit: '' }]);
 
   const conceptByCode = (terminology: string, code: string) =>
@@ -1439,7 +1439,7 @@ export default function VitalsLoggerScreen() {
         unit: item.unit.trim() || null,
       })),
       pain: pain.map((item) => ({ severity: Number(item.severity), ...(item.bodyLocationId.trim() ? { body_location_id: item.bodyLocationId.trim() } : {}), ...(item.structureId.trim() ? { structure_id: item.structureId.trim() } : {}), ...(item.painType.trim() ? { pain_type: item.painType.trim() } : {}) })),
-      activities: activities.map((item) => ({ activity_type: item.activityType.trim(), ...(item.duration ? { duration_minutes: Number(item.duration) } : {}), ...(item.calories ? { calories_burned: Number(item.calories) } : {}) })),
+      activities: activities.map((item) => ({ activity_type: item.activityType.trim(), ...(item.duration ? { duration_minutes: Number(item.duration) } : {}), ...(item.calories ? { calories_burned: Number(item.calories) } : {}), ...(item.distance ? { distance_km: Number(item.distance) } : {}) })),
       medications: medications.map((item) => ({ medication_name: item.name.trim(), ...(item.dosage ? { dosage_value: Number(item.dosage) } : {}), ...(item.unit.trim() ? { dosage_unit: item.unit.trim() } : {}) })),
       ...((waterMl || mealsCount || appetiteLevel != null) ? { nutrition: { ...(waterMl ? { water_ml: Number(waterMl) } : {}), ...(mealsCount ? { meals_count: Number(mealsCount) } : {}), ...(appetiteLevel != null ? { appetite_level: appetiteLevel } : {}) } } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
@@ -2015,6 +2015,7 @@ export default function VitalsLoggerScreen() {
                 />
                 <Input label="Or enter exact minutes" value={item.duration} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, duration: value } : activity))} keyboardType="number-pad" />
                 <Input label="Calories (optional)" value={item.calories} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, calories: value } : activity))} keyboardType="decimal-pad" />
+                <Input label="Distance in km (optional)" value={item.distance} onChangeText={(value) => setActivities((items) => items.map((activity) => activity.id === item.id ? { ...activity, distance: value } : activity))} keyboardType="decimal-pad" />
                 <Pressable onPress={() => setActivities((items) => items.filter((activity) => activity.id !== item.id))}><Text style={styles.removeBtn}>Remove activity</Text></Pressable>
               </View>
             ))}

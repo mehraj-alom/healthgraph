@@ -391,6 +391,7 @@ export interface ActivityLogRow {
   activity_type: string;
   duration_minutes: number | null;
   calories_burned: number | null;
+  distance_km: number | null;
 }
 
 export async function getActivityLogs(
@@ -419,6 +420,12 @@ export async function getActivityLogs(
       typeof payload.calories_burned === 'number' && Number.isFinite(payload.calories_burned)
         ? payload.calories_burned
         : null;
+    const distanceKm =
+      typeof payload.distance_km === 'number' &&
+      Number.isFinite(payload.distance_km) &&
+      payload.distance_km > 0
+        ? Math.round(payload.distance_km * 100) / 100
+        : null;
     return {
       log_date: r.log_date.slice(0, 10),
       activity_type:
@@ -427,6 +434,7 @@ export async function getActivityLogs(
           : 'Activity',
       duration_minutes: duration,
       calories_burned: calories,
+      distance_km: distanceKm,
     };
   });
 }
@@ -808,6 +816,7 @@ export function buildCheckinRequestFromDetail(
       activity_type: a.activity_type,
       ...(a.duration_minutes != null ? { duration_minutes: a.duration_minutes } : {}),
       ...(a.calories_burned != null ? { calories_burned: a.calories_burned } : {}),
+      ...(a.distance_km != null ? { distance_km: a.distance_km } : {}),
     })),
     medications: (detail?.medications ?? []).map((m) => ({
       medication_name: m.medication_name,
@@ -1241,6 +1250,9 @@ function buildEventsFromRequest(
         activity_type: activity.activity_type,
         duration_minutes: activity.duration_minutes ?? null,
         calories_burned: activity.calories_burned ?? null,
+        ...(activity.distance_km ?? null) !== null
+          ? { distance_km: activity.distance_km }
+          : {},
       },
     });
   }
@@ -1397,6 +1409,7 @@ function buildEventsFromDetail(
         activity_type: activity.activity_type,
         duration_minutes: activity.duration_minutes,
         calories_burned: activity.calories_burned,
+        ...(activity.distance_km != null ? { distance_km: activity.distance_km } : {}),
       },
     });
   }
@@ -1519,6 +1532,10 @@ function reconstructDetail(
           activity_type: payload.activity_type as string,
           duration_minutes: payload.duration_minutes as number ?? null,
           calories_burned: payload.calories_burned as number ?? null,
+          distance_km:
+            typeof payload.distance_km === 'number' && Number.isFinite(payload.distance_km)
+              ? payload.distance_km
+              : null,
         });
         break;
 

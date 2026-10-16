@@ -658,7 +658,7 @@ function DisclaimerNote({ style }: { style?: object }) {
         accessibilityLabel={open ? 'Hide medical disclaimer' : 'Show medical disclaimer'}
         style={styles.dnHead}
       >
-        <Text style={styles.dnHeadText}>Wellness info only. Not medical advice.</Text>
+        <Text style={styles.dnHeadText}>AI-generated wellness info. Not medical advice.</Text>
         <Text style={styles.dnChevron}>{open ? '▾' : '▸'}</Text>
       </Pressable>
       {open ? (
@@ -679,10 +679,12 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [revealingId, setRevealingId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [planId, setPlanId] = useState<PricingPlan>('free');
+  const [planId, setPlanId] = useState<PricingPlan>('allin');
 
   // Display-only tier facts (the locally picked plan — billing is separate).
+  // TESTING BYPASS: paywall off — always all-in/unlimited.
   useEffect(() => {
+    setPlanId('allin');
     getSelectedPlan().then(setPlanId).catch(() => {});
   }, []);
   const planMeta =

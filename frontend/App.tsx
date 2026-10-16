@@ -35,6 +35,8 @@ import {
 } from '@tanstack/react-query';
 
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { useDemoMode } from '@/hooks/useDemoMode';
+import { DemoBanner } from '@/components/DemoBanner';
 import { AnatomyProvider } from '@/context/AnatomyContext';
 import { DocumentsProvider } from '@/context/DocumentsContext';
 
@@ -75,6 +77,7 @@ import PrescriptionReviewScreen from '@/screens/Medications/PrescriptionReviewSc
 import HealthAreasScreen from '@/screens/HealthAreas/HealthAreasScreen';
 import SubstanceScreen from '@/screens/Substance/SubstanceScreen';
 import CycleScreen from '@/screens/Cycle/CycleScreen';
+import MeditationScreen from '@/screens/Meditation/MeditationScreen';
 import SleepEngineScreen from '@/screens/SleepEngine/SleepEngineScreen';
 import WeightEngineScreen from '@/screens/WeightEngine/WeightEngineScreen';
 import DisciplineEngineScreen from '@/screens/DisciplineEngine/DisciplineEngineScreen';
@@ -414,6 +417,11 @@ function AppNavigator() {
     user,
     loading,
   } = useAuth();
+  // Sandbox demo (reviewers): signed-out sample session with zero backend.
+  // Demo skips pricing/setup (both are backend-gated) and gets its own
+  // navigator key so entering/exiting resets the stack.
+  const { demoActive } = useDemoMode();
+  const authed = user !== null || demoActive;
 
   // Account switch isolation: the previous user's server-backed caches must
   // never serve the next user (query keys are not patient-scoped). Clear
@@ -588,10 +596,12 @@ function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <>
+      {demoActive ? <DemoBanner /> : null}
+      <NavigationContainer>
       <ReminderBridge />
       <RootStack.Navigator
-        key={user ? 'authenticated' : 'unauthenticated'}
+        key={user ? 'authenticated' : demoActive ? 'demo' : 'unauthenticated'}
         screenOptions={{
           headerShown: false,
           animation: 'fade',
@@ -601,7 +611,7 @@ function AppNavigator() {
           },
         }}
       >
-        {!user ? (
+        {!authed ? (
           <RootStack.Screen
             name="Onboarding"
             component={OnboardingScreen}
@@ -824,6 +834,14 @@ function AppNavigator() {
                 headerShown: false,
               }}
             />
+            {/* Bell-timed meditation sits (device-only, tracking only). */}
+            <RootStack.Screen
+              name="MeditationEngine"
+              component={MeditationScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
             {/* Sleep goal engine (device check-in data, tracking only). */}
             <RootStack.Screen
               name="SleepEngine"
@@ -915,7 +933,8 @@ function AppNavigator() {
           </>
         )}
       </RootStack.Navigator>
-    </NavigationContainer>
+      </NavigationContainer>
+    </>
   );
 }
 

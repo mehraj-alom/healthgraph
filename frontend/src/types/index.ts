@@ -181,7 +181,7 @@ export interface DailyCheckInRequest {
   symptoms: Array<{ concept_id: string; severity: number; duration_minutes?: number; notes?: string }>;
   vitals: Array<{ concept_id: string; value: number | null; unit: string | null }>;
   pain: Array<{ severity: number; body_location_id?: string; structure_id?: string; pain_type?: string }>;
-  activities: Array<{ activity_type: string; duration_minutes?: number; calories_burned?: number }>;
+  activities: Array<{ activity_type: string; duration_minutes?: number; calories_burned?: number; distance_km?: number }>;
   medications: Array<{ medication_name: string; dosage_value?: number; dosage_unit?: string }>;
 }
 
@@ -210,7 +210,7 @@ export interface DailyCheckInDetail {
   symptoms: Array<{ concept_id: string | null; severity: number; duration_minutes: number | null; notes: string | null }>;
   vitals: Array<{ concept_id: string | null; value: number | null; unit: string | null }>;
   pain: Array<{ body_location_id: string | null; severity: number; pain_type: string | null }>;
-  activities: Array<{ activity_type: string; duration_minutes: number | null; calories_burned: number | null }>;
+  activities: Array<{ activity_type: string; duration_minutes: number | null; calories_burned: number | null; distance_km: number | null }>;
   medications: Array<{ medication_name: string; dosage_value: number | null; dosage_unit: string | null }>;
   notes: string | null;
 }
@@ -399,6 +399,8 @@ export type RootStackParamList = {
   Substance: undefined;
   /** Explicit cycle tracking (device-only, no predictions). */
   Cycle: undefined;
+  /** Bell-timed meditation sits (device-only, tracking only). */
+  MeditationEngine: undefined;
   /** Sleep goal engine (device check-in data, tracking only). */
   SleepEngine: undefined;
   /** Weight goal engine (profile weight shell, tracking only). */

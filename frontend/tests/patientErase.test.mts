@@ -88,6 +88,7 @@ const DDL = `
   CREATE TABLE rppg_measurements (measurement_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE substance_entries (entry_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE craving_entries (entry_id TEXT PRIMARY KEY, patient_id TEXT);
+  CREATE TABLE meditation_sessions (entry_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE strength_sets (entry_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE cycle_entries (entry_id TEXT PRIMARY KEY, patient_id TEXT);
   CREATE TABLE food_scan_items (scan_id TEXT PRIMARY KEY, patient_id TEXT);
@@ -120,6 +121,7 @@ function seedDb() {
     INSERT INTO rppg_measurements VALUES ('r-a1','${A}'), ('r-b1','${B}');
     INSERT INTO substance_entries VALUES ('u-a1','${A}'), ('u-b1','${B}');
     INSERT INTO craving_entries VALUES ('v-a1','${A}'), ('v-b1','${B}');
+    INSERT INTO meditation_sessions VALUES ('med-a1','${A}'), ('med-b1','${B}');
     INSERT INTO strength_sets VALUES ('w-a1','${A}'), ('w-b1','${B}');
     INSERT INTO cycle_entries VALUES ('c-a1','${A}'), ('c-b1','${B}');
     INSERT INTO food_scan_items VALUES ('f-a1','${A}'), ('f-b1','${B}');
@@ -157,7 +159,7 @@ describe('wipePatientTables', () => {
       'medications', 'medication_taken_events', 'daily_logs', 'observations',
       'body_state_snapshots', 'documents', 'profile_cache', 'daily_metrics_cache',
       'trends_cache', 'trends_cache_new', 'scan_sessions', 'ppg_measurements',
-      'rppg_measurements', 'substance_entries', 'craving_entries', 'strength_sets', 'cycle_entries', 'food_scan_items', 'step_counts', 'onboarding_state',
+      'rppg_measurements', 'substance_entries', 'craving_entries', 'meditation_sessions', 'strength_sets', 'cycle_entries', 'food_scan_items', 'step_counts', 'onboarding_state',
     ]) {
       const remaining = await db.getAllAsync<{ patient_id: string }>(
         `SELECT patient_id FROM ${table}`,

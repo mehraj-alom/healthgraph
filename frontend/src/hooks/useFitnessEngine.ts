@@ -85,6 +85,7 @@ export function useFitnessEngine(): {
           type: r.activity_type,
           durationMinutes: r.duration_minutes,
           caloriesLogged: r.calories_burned,
+          distanceKm: r.distance_km,
         })),
       );
       setIsLoading(false);

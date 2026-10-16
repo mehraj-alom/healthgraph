@@ -54,6 +54,9 @@ def get_profile(
     """
     patient = _get_or_create_patient(db, patient_id)
 
+    # getattr: rows predate the billing migration until it runs — degrade
+    # to Free instead of 500ing the whole profile.
+    premium_expires = getattr(patient, "premium_expires_at", None)
     return PatientProfileResponse(
         display_name=patient.full_name,
         phone_number=patient.phone_number,
@@ -61,6 +64,8 @@ def get_profile(
         weight_kg=patient.weight_kg,
         goals=_decode_ids(patient.goals_json),
         focus=_decode_ids(patient.focus_json),
+        premium_tier=getattr(patient, "premium_tier", None) or "free",
+        premium_expires_at=premium_expires.isoformat() if premium_expires else None,
     )
 
 

@@ -19,6 +19,7 @@ export const TILE_TONES = {
   nutrition: ['#46543A', '#6E7F4E'],
   wellbeing: ['#454550', '#66666F'],
   heart: ['#37605A', '#56837B'],
+  meditation: ['#3E3A5C', '#6A6390'],
 } as const;
 
 export type ToneKey = keyof typeof TILE_TONES;

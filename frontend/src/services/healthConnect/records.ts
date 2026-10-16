@@ -5,7 +5,7 @@
  * mapping.ts, never trusted. No native imports — pure TypeScript.
  */
 
-export type HcDataType = 'steps' | 'sleep' | 'exercise' | 'weight';
+export type HcDataType = 'steps' | 'sleep' | 'exercise' | 'weight' | 'distance';
 
 export interface HcSleepSessionInput {
   uid: unknown;
@@ -26,6 +26,14 @@ export interface HcExerciseSessionInput {
   endTime: unknown;
   exerciseType: unknown;
   activeCaloriesKcal: unknown;
+}
+
+/** Raw Distance record passthrough (validated in mapping.ts). */
+export interface HcDistanceInput {
+  uid: unknown;
+  startTime: unknown;
+  endTime: unknown;
+  distanceKm: unknown;
 }
 
 export interface HcStepsInput {

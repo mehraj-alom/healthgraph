@@ -12,7 +12,7 @@ export default function Compare() {
       className="w-full flex flex-col pt-1.5 md:pt-2 px-3 md:px-5 pb-1.5 md:pb-2 gap-1.5 md:gap-2 bg-stage"
     >
       <div
-        className="rounded-card bg-white/[0.045] border border-white/10 p-5 md:p-8"
+        className="rounded-card lg-card p-5 md:p-8"
         style={reveal.getAnimStyle(0)}
       >
         <h2 className="text-[clamp(2.5rem,6vw,5rem)] font-semibold leading-[1.02] tracking-[-0.02em] text-ink">
@@ -23,7 +23,7 @@ export default function Compare() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2">
         <div
-          className="rounded-card bg-white/[0.045] border border-white/10 p-5 md:p-7 flex flex-col gap-4"
+          className="rounded-card lg-card p-5 md:p-7 flex flex-col gap-4"
           style={reveal.getAnimStyle(1)}
         >
           <h3 className="text-xl md:text-2xl font-semibold tracking-[-0.01em] text-fog">

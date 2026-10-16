@@ -23,14 +23,18 @@ from logger import logger
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
-_ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
+_ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".json"}
 _ALLOWED_MAGIC_BYTES = {
     ".pdf": (b"%PDF-",),
     ".png": (b"\x89PNG\r\n\x1a\n",),
     ".jpg": (b"\xff\xd8\xff",),
     ".jpeg": (b"\xff\xd8\xff",),
+    # JSON has no magic number: FHIR Bundles must start with "{" after
+    # optional whitespace. Full Bundle validation happens in the worker
+    # (parse failure → FAILED, never into the OCR pipeline).
+    ".json": (b"{",),
 }
-_ALLOWED_CONTENT_TYPES = {"application/pdf", "image/png", "image/jpeg"}
+_ALLOWED_CONTENT_TYPES = {"application/pdf", "image/png", "image/jpeg", "application/json", "application/fhir+json"}
 _MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MiB — matches storage/save_doc.py
 
 # Upload feeds the expensive OCR/extraction pipeline. 5/min burst + 10/hour
@@ -51,10 +55,21 @@ def _validate_upload(file: UploadFile) -> None:
     if content_type and content_type not in _ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported content type.")
 
-    # Magic-byte sniff (first 8 bytes; seek back afterwards). Prevents a
-    # renamed/abused file from entering the OCR pipeline.
-    head = file.file.read(8)
+    # Magic-byte sniff (seek back afterwards). Prevents a renamed/abused
+    # file from entering the OCR pipeline. JSON has no magic number:
+    # tolerate a UTF-8 BOM and leading whitespace before "{" (64-byte
+    # window is plenty — real Bundles start with "{" immediately).
+    head = file.file.read(64 if file_ext == ".json" else 8)
     file.file.seek(0)
+    if file_ext == ".json":
+        probe = head.lstrip()
+        if probe.startswith(b"\xef\xbb\xbf"):
+            probe = probe[3:].lstrip()
+        if not probe.startswith(b"{"):
+            raise HTTPException(
+                status_code=400, detail="File content does not match its extension."
+            )
+        return
     if not any(head.startswith(magic) for magic in _ALLOWED_MAGIC_BYTES[file_ext]):
         raise HTTPException(
             status_code=400, detail="File content does not match its extension."

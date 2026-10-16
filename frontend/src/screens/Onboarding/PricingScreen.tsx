@@ -11,6 +11,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 
 import { Reveal } from '@/components/home/Reveal';
+import { useToast } from '@/components/Toast';
+import { productIdForPlan } from '@/services/billingProducts';
+import { activeBillingProvider, resolvePurchaseOutcome } from '@/services/billingClient';
 import { FONT, GV, SPACE, TYPE } from '@/theme/guava';
 import { TILE_TONES } from '@/theme/tones';
 import { useReducedMotion } from '@/theme/useReducedMotion';
@@ -37,8 +40,9 @@ export async function markPricingNeeded(): Promise<void> {
 
 /** True only for a fresh signup that has not seen pricing yet. */
 export async function shouldShowPricing(): Promise<boolean> {
-  const value = await AsyncStorage.getItem(NEEDED_KEY);
-  return value === '1';
+  // TESTING BYPASS: paywall off — never interrupt signup with pricing.
+  // TODO: restore AsyncStorage check before store release.
+  return false;
 }
 
 /** Clear a stale flag (failed signup, fresh sign-out, login). */
@@ -54,8 +58,9 @@ export async function markPricingSeen(plan: PricingPlan): Promise<void> {
 
 /** The locally picked plan (default Free). Display-only; billing is separate. */
 export async function getSelectedPlan(): Promise<PricingPlan> {
-  const value = await AsyncStorage.getItem(PLAN_KEY);
-  return value === 'general' || value === 'allin' ? value : 'free';
+  // TESTING BYPASS: paywall off — report top tier so all copy/limits read unlimited.
+  // TODO: restore AsyncStorage read before store release.
+  return 'allin';
 }
 
 interface TierDef {
@@ -112,6 +117,7 @@ const VALUE_ROWS = [
 export default function PricingScreen({ onDone }: { onDone: () => void }) {
   const [selected, setSelected] = useState<PricingPlan>('free');
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   // Same frosted material as the profile sidebar: live blur over the
   // stage, brand tint for depth, solid stage under reduced motion.
   const glassOff = useReducedMotion();
@@ -126,6 +132,62 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
     } finally {
       setBusy(false);
       onDone();
+    }
+  };
+
+  /**
+   * Paid continue: attempt a real store purchase, then verify it with
+   * the backend before unlocking anything. Every failure path falls
+   * back to today's Free behavior with the honest note — the screen
+   * can never trap anyone mid-purchase.
+   */
+  const finishPaid = async (plan: PricingPlan): Promise<void> => {
+    if (busy) return;
+    const productId = productIdForPlan(plan);
+    if (productId === null) {
+      await finish('free');
+      return;
+    }
+    setBusy(true);
+    try {
+      const outcome = resolvePurchaseOutcome(
+        await activeBillingProvider().purchase(productId),
+      );
+      if (outcome.action === 'stay') {
+        // Cancelled: stay on screen so they can choose again or skip.
+        return;
+      }
+      if (outcome.action === 'fallback-free') {
+        toast.info(outcome.message);
+        await markPricingSeen(plan);
+        onDone();
+        return;
+      }
+      const { api } = await import('@/services/api');
+      const receipt = await api.post<{ tier: string; premium: boolean }>(
+        '/api/v1/billing/verify',
+        { product_id: outcome.productId, purchase_token: outcome.purchaseToken },
+      );
+      if (receipt?.premium === true) {
+        const { refreshServerEntitlement } = await import('@/services/premium');
+        await refreshServerEntitlement();
+        await markPricingSeen(plan);
+        onDone();
+      } else {
+        toast.info('Purchase could not be confirmed. Nothing is charged today.');
+        await markPricingSeen(plan);
+        onDone();
+      }
+    } catch {
+      toast.info('Purchase failed. Nothing is charged today.');
+      try {
+        await markPricingSeen(plan);
+      } catch {
+        // Never trap anyone here.
+      }
+      onDone();
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -213,7 +275,7 @@ export default function PricingScreen({ onDone }: { onDone: () => void }) {
 
       <View style={styles.footer}>
         <Pressable
-          onPress={() => void finish(selected)}
+          onPress={() => void (selected === 'free' ? finish(selected) : finishPaid(selected))}
           disabled={busy}
           accessibilityRole="button"
           accessibilityLabel={`Continue with ${picked.name}`}

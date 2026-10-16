@@ -57,6 +57,7 @@ const EMPTY_SOURCES: DisciplineSources = {
   substanceDates: [],
   cycleDates: [],
   heartDates: [],
+  meditationDates: [],
 };
 
 // ============================================================================
@@ -131,9 +132,11 @@ describe('active-day union', () => {
       substanceDates: ['2026-09-18T19:30:00'],
       cycleDates: ['2026-09-17'],
       heartDates: ['2026-09-16T12:00:00.000Z'],
+      meditationDates: ['2026-09-15'],
     });
     assert.ok(days.has('2026-09-20'), 'check-in day');
     assert.ok(days.has('2026-09-17'), 'cycle day');
+    assert.ok(days.has('2026-09-15'), 'meditation day');
     for (const d of ['2026-09-16', '2026-09-18', '2026-09-19']) {
       assert.ok(days.has(d), `action day ${d}`);
     }
@@ -146,6 +149,7 @@ describe('active-day union', () => {
       substanceDates: [],
       cycleDates: [],
       heartDates: ['2026-09-20T12:00:00.000Z'],
+      meditationDates: ['2026-09-20'],
     });
     assert.equal(days.size, 1);
   });
@@ -157,6 +161,7 @@ describe('active-day union', () => {
       substanceDates: [],
       cycleDates: [],
       heartDates: [],
+      meditationDates: ['garbage'],
     });
     assert.equal(days.size, 0);
   });
@@ -342,6 +347,7 @@ describe('discipline hub area', () => {
     documentCount: 0,
     substanceEntries: 0,
     cycleEntries: 0,
+    meditationSessions7: 0,
     profileWeightKg: null as number | null,
     activeDays7: 0,
   };

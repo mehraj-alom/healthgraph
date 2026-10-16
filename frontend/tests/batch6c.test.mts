@@ -115,6 +115,7 @@ describe('profile weight model', () => {
       documentCount: 0,
       substanceEntries: 0,
       cycleEntries: 0,
+      meditationSessions7: 0,
       profileWeightKg: null as number | null,
     };
     const empty = buildHealthAreas(base).find((a) => a.id === 'weight');

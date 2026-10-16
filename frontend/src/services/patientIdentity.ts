@@ -54,9 +54,25 @@ export async function loadPatientId(): Promise<string | null> {
 /**
  * Get the cached patient ID synchronously.
  * Must call loadPatientId() first (e.g., on app mount).
+ *
+ * Demo override wins: while a sandbox demo is active every caller
+ * transparently scopes to the demo patient. The real id stays untouched
+ * in SecureStore underneath.
  */
+let _demoOverride: string | null = null;
+
+/** Activate/clear the in-memory demo-patient shadow (never persisted here). */
+export function setDemoOverride(patientId: string | null): void {
+  _demoOverride = patientId;
+}
+
+/** Current demo shadow, if any. */
+export function getDemoOverride(): string | null {
+  return _demoOverride;
+}
+
 export function getCachedPatientId(): string | null {
-  return _cachedPatientId;
+  return _demoOverride ?? _cachedPatientId;
 }
 
 /**

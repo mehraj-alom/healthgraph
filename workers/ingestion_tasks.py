@@ -18,6 +18,7 @@ from services.anatomy.body_state_service import record_anatomical_observation
 from storage.save_doc import StorageService
 from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
+import json
 import os
 
 
@@ -79,6 +80,90 @@ def _document_deleted_or_gone(db, document_id) -> bool:
     return row[0] == "DELETED"
 
 
+def _process_fhir_bundle(db, document, temp_doc_path, document_id_str) -> None:
+    """FHIR Bundle branch: parse → persist → project → COMPLETED.
+
+    Runs INSTEAD of the OCR pipeline for .json uploads. Raises on any
+    failure so the outer handler marks the document FAILED (same terminal
+    semantics as an OCR exception). Respects the delete gate before every
+    write phase, mirroring the OCR path.
+    """
+    from services.fhir.bundle import parse_bundle, summary_lines
+    from services.fhir.project import project_bundle
+
+    _log("info", f"Starting FHIR Bundle import for Document {document_id_str}...", document_id_str)
+    try:
+        with open(temp_doc_path, "r", encoding="utf-8-sig") as handle:
+            payload = json.load(handle)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        _log("warning", f"FHIR Bundle unreadable for Document {document_id_str} ({type(exc).__name__}).", document_id_str)
+        document.status = "FAILED"
+        db.commit()
+        return
+    try:
+        summary = parse_bundle(payload)
+    except ValueError as exc:
+        _log("warning", f"FHIR Bundle rejected for Document {document_id_str} ({exc}).", document_id_str)
+        document.status = "FAILED"
+        db.commit()
+        return
+
+    if _document_deleted_or_gone(db, document.document_id):
+        db.rollback()
+        _log("warning", f"Document {document_id_str} deleted mid-pipeline; aborting before persistence.", document_id_str)
+        return
+    human_log = summary_lines(summary)
+    ocr_record = RawExtractionData(
+        document_id=document.document_id,
+        gateway_json=None,
+        raw_ade_json={},
+        markdown_text=human_log,
+        extraction={
+            "fhir": {
+                "bundle_id": summary.bundle_id,
+                "bundle_type": summary.bundle_type,
+                "medications": [vars(m) for m in summary.medications],
+                "observations": [vars(o) for o in summary.observations],
+                "skipped": summary.skipped,
+            }
+        },
+        extraction_model="fhir-bundle-v1",
+        extraction_prompt_hash=None,
+    )
+    db.add(ocr_record)
+    document.status = "EXTRACTED"
+    db.commit()
+    db.refresh(ocr_record)
+
+    # Vector indexing (best-effort, same as the OCR path): the import log
+    # carries codes and counts only, never patient narrative.
+    if _document_deleted_or_gone(db, document.document_id):
+        db.rollback()
+        _log("warning", f"Document {document_id_str} deleted mid-pipeline; skipping vector indexing.", document_id_str)
+        return
+    try:
+        indexer = VectorIndexer()
+        asyncio.run(indexer.index_markdown_file(document.patient_id, document.document_id, human_log))
+    except Exception as e:
+        _log("warning", f"Vector Indexing skipped for Document {document_id_str} ({type(e).__name__}).", document_id_str)
+
+    # Timeline projection through the clinical services.
+    if _document_deleted_or_gone(db, document.document_id):
+        db.rollback()
+        _log("warning", f"Document {document_id_str} deleted mid-pipeline; skipping timeline mapping.", document_id_str)
+        return
+    counts = project_bundle(db, document, summary)
+    document.status = "COMPLETED"
+    db.commit()
+    _log(
+        "info",
+        f"FHIR Bundle import complete for Document {document_id_str}: "
+        f"{counts['medications']} medications, {counts['measurements']} measurements, "
+        f"{counts['skipped']} skipped.",
+        document_id_str,
+    )
+
+
 def _record_anatomical_observations(db, observations, document_id_str) -> tuple[int, int]:
     """Record anatomical observations, one SAVEPOINT each.
 
@@ -125,6 +210,13 @@ def process_document_pipeline(self, document_id_str: str):
         temp_doc_path = StorageService.materialize_document(db, document.document_id)
         # P15 / D5: never log filesystem paths (security_events.py policy).
         _log("info", f"[Worker] Materialized document {document_id_str} to a temporary file.", document_id_str)
+
+        # FHIR branch: patient-provided Bundle JSON (.json suffix comes from
+        # the stored blob filename) skips OCR entirely — structured data
+        # needs no vision pipeline.
+        if temp_doc_path.endswith(".json"):
+            _process_fhir_bundle(db, document, temp_doc_path, document_id_str)
+            return
 
         # Triage Phase
         _log("info", f"Starting OCR triage for Document {document_id_str}...", document_id_str)

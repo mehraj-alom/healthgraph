@@ -303,6 +303,7 @@ describe('area deep-links', () => {
       'records',
       'substance',
       'cycle',
+      'meditation',
       'discipline',
     ] as const;
     for (const id of pressable) {
@@ -316,12 +317,13 @@ describe('area deep-links', () => {
     assert.equal(areaRouteName('activity'), 'FitnessEngine');
     assert.equal(areaRouteName('nutrition'), 'NutritionEngine');
     assert.equal(areaRouteName('wellbeing'), 'WellbeingEngine');
+    assert.equal(areaRouteName('meditation'), 'MeditationEngine');
   });
 
   test('every mapped route is registered with matching params', () => {
     const types = src('src/types/index.ts');
     const names = new Set(
-      (['heart', 'sleep', 'activity', 'nutrition', 'weight', 'wellbeing', 'medications', 'records', 'substance', 'cycle', 'discipline'] as const).map(
+      (['heart', 'sleep', 'activity', 'nutrition', 'weight', 'wellbeing', 'medications', 'records', 'substance', 'cycle', 'meditation', 'discipline'] as const).map(
         (id) => areaRouteName(id),
       ),
     );
@@ -336,6 +338,8 @@ describe('area deep-links', () => {
     }
     // Heart owns its engine destination (measurement happens inside it).
     assert.equal(areaRouteName('heart'), 'HeartEngine');
+    // Meditation owns its engine destination (timed sits happen inside it).
+    assert.equal(areaRouteName('meditation'), 'MeditationEngine');
   });
 });
 

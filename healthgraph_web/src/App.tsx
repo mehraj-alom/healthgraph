@@ -14,6 +14,8 @@ import Videos from './Videos';
 import Pricing from './Pricing';
 import About from './About';
 import Faq from './Faq';
+import Queries from './Queries';
+import Seo from './Seo';
 import EarlyAccess from './EarlyAccess';
 import Footer from './Footer';
 
@@ -37,6 +39,7 @@ export default function App() {
 
   return (
     <LocaleProvider>
+      <Seo />
       <div className="bg-stage min-h-full">
         {showSplash && <SplashScreen onComplete={done} />}
         <Navbar />
@@ -52,6 +55,7 @@ export default function App() {
           <Videos />
           <Pricing />
           <About />
+          <Queries />
           <Faq />
           <EarlyAccess />
         </main>

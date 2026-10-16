@@ -29,6 +29,8 @@ import { MEDICAL_DISCLAIMER } from '@/constants';
 
 import { IntroVisual } from './IntroVisual';
 import { ProgressGraphVisual } from './ProgressGraphVisual';
+import { ValueStackVisual } from './ValueStackVisual';
+import { EarlyBirdVisual } from './EarlyBirdVisual';
 import { clearPricingNeeded, markPricingNeeded } from './PricingScreen';
 
 /* Showcase hero films (same sources as aurora-onboarding-showcase.html).
@@ -45,23 +47,27 @@ const SYSTEM_VIDEO_URL =
 const LOCAL_FILM = require('../../../assets/app-load.mp4');
 
 /**
- * Onboarding — two premium value screens, then the existing sign-in.
+ * Onboarding — four premium value screens, then the existing sign-in.
  *
  * Pages (horizontal pager):
  *  0. Introduction — "Your health, connected." (connected-hub visual)
  *  1. Bigger picture — "See the bigger picture." (illustrative 7-day
  *     progress graph; fixed artwork, never patient data)
- *  2. Authentication — the existing email/password form, unchanged logic.
+ *  2. Value stack — "10 apps in one. One price." (glass value card;
+ *     price comparison is an illustration, never a competitor quote)
+ *  3. Early access — "Be early. Be different." (first-100 €9 vs €11;
+ *     no fake countdown, no charge today, no cure claim)
+ *  4. Authentication — the existing email/password form, unchanged logic.
  *
  * Visuals are pure code (Views + react-native-svg + Reanimated): no image
  * assets, no new dependencies. Copy, typography and the CTA reuse the
  * Guava system (Poppins, stage, CTA green).
  */
 
-const PAGES = [0, 1, 2] as const;
+const PAGES = [0, 1, 2, 3, 4] as const;
 /** Module-level list identity so the pager never re-mounts on keystrokes. */
-const PAGE_LIST: number[] = [0, 1, 2];
-const STORY_PAGES = 2;
+const PAGE_LIST: number[] = [0, 1, 2, 3, 4];
+const STORY_PAGES = 4;
 
 /** Auth views. Password reset uses Firebase email links: there is no
  *  server-issued OTP in this stack, so "forgot" sends a link and
@@ -155,6 +161,7 @@ export default function OnboardingScreen() {
   const [lastName, setLastName] = useState('');
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
   // Read-first CTA: the pager arrow appears 4s after each story page
@@ -341,6 +348,25 @@ export default function OnboardingScreen() {
     },
     [width],
   );
+
+  // ---------------------------------------------------------------------------
+  // Sandbox demo (reviewers): sample data, no account, nothing syncs.
+  // Offered only while signed out, so a demo session provably has no
+  // Firebase user and no backend row.
+  // ---------------------------------------------------------------------------
+
+  const handleDemo = useCallback(async (): Promise<void> => {
+    if (demoBusy) return;
+    setDemoBusy(true);
+    setFormError('');
+    try {
+      const { enterDemoMode } = await import('@/services/demoSession');
+      await enterDemoMode();
+    } catch {
+      setFormError('Could not start the demo. Please try again.');
+      setDemoBusy(false);
+    }
+  }, [demoBusy]);
 
   // ---------------------------------------------------------------------------
   // Submit authentication form (validation + Firebase, busy-guarded)
@@ -620,6 +646,70 @@ export default function OnboardingScreen() {
     </ScrollView>
   );
 
+  const renderValue = (active: boolean): React.ReactNode => (
+    <ScrollView
+      contentContainerStyle={styles.pageScroll}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
+      <ValueStackVisual active={active} />
+      <View key={active ? 'value-copy-on' : 'value-copy-off'} style={styles.copy}>
+        <Reveal delay={880}>
+          <View style={styles.phases} accessibilityRole="progressbar" accessibilityLabel="Step 3 of 4">
+            <View style={styles.phase}>
+              <Text style={styles.phaseNum}>1</Text>
+              <Text style={styles.phaseText}>Connect</Text>
+            </View>
+            <View style={styles.phase}>
+              <Text style={styles.phaseNum}>2</Text>
+              <Text style={styles.phaseText}>See all</Text>
+            </View>
+            <View style={[styles.phase, styles.phaseOn]}>
+              <Text style={[styles.phaseNum, styles.phaseNumOn]}>3</Text>
+              <Text style={[styles.phaseText, styles.phaseTextOn]}>One price</Text>
+            </View>
+            <View style={styles.phase}>
+              <Text style={styles.phaseNum}>4</Text>
+              <Text style={styles.phaseText}>Be early</Text>
+            </View>
+          </View>
+        </Reveal>
+      </View>
+    </ScrollView>
+  );
+
+  const renderEarly = (active: boolean): React.ReactNode => (
+    <ScrollView
+      contentContainerStyle={styles.pageScroll}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
+      <EarlyBirdVisual active={active} />
+      <View key={active ? 'early-copy-on' : 'early-copy-off'} style={styles.copy}>
+        <Reveal delay={880}>
+          <View style={styles.phases} accessibilityRole="progressbar" accessibilityLabel="Step 4 of 4">
+            <View style={styles.phase}>
+              <Text style={styles.phaseNum}>1</Text>
+              <Text style={styles.phaseText}>Connect</Text>
+            </View>
+            <View style={styles.phase}>
+              <Text style={styles.phaseNum}>2</Text>
+              <Text style={styles.phaseText}>See all</Text>
+            </View>
+            <View style={styles.phase}>
+              <Text style={styles.phaseNum}>3</Text>
+              <Text style={styles.phaseText}>One price</Text>
+            </View>
+            <View style={[styles.phase, styles.phaseOn]}>
+              <Text style={[styles.phaseNum, styles.phaseNumOn]}>4</Text>
+              <Text style={[styles.phaseText, styles.phaseTextOn]}>Be early</Text>
+            </View>
+          </View>
+        </Reveal>
+      </View>
+    </ScrollView>
+  );
+
   const renderAuthErrors = (): React.ReactNode => (
     <>
       {error ? (
@@ -756,6 +846,21 @@ export default function OnboardingScreen() {
             onPress={() => goAuth('signup')}
           >
             Sign Up
+          </Text>
+        </Text>
+      </View>
+
+        <View
+          style={styles.toggleContainer}
+      >
+        <Text style={styles.toggleText}>
+          {"Just looking around? "}
+
+          <Text
+            style={styles.toggleLink}
+            onPress={() => void handleDemo()}
+          >
+            {demoBusy ? 'Preparing demo…' : 'Try the demo'}
           </Text>
         </Text>
       </View>
@@ -1051,11 +1156,13 @@ export default function OnboardingScreen() {
     <View style={{ width, flex: 1 }}>
       {item === 0 ? renderIntro(step === 0) : null}
       {item === 1 ? renderSystem(step === 1) : null}
-      {item === 2 ? renderAuth() : null}
+      {item === 2 ? renderValue(step === 2) : null}
+      {item === 3 ? renderEarly(step === 3) : null}
+      {item === 4 ? renderAuth() : null}
     </View>
   );
 
-  const onAuth = step === 2;
+  const onAuth = step === 4;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -1066,7 +1173,7 @@ export default function OnboardingScreen() {
       {/* Stage wash at the very bottom (auth page + any film fallback). */}
       <StageGradient />
       {/* Fullscreen story film above the wash, below the content. */}
-      {!reducedMotion && step < STORY_PAGES && (!heroFailed || !systemFailed) ? (
+      {!reducedMotion && step < 2 && (!heroFailed || !systemFailed) ? (
         <View style={styles.filmLayer} pointerEvents="none">
           {!heroFailed ? (
             <VideoView
@@ -1093,7 +1200,7 @@ export default function OnboardingScreen() {
         {onAuth ? (
           <>
             <Pressable
-              onPress={() => goTo(1)}
+              onPress={() => goTo(3)}
               hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel="Back to onboarding"
@@ -1121,7 +1228,7 @@ export default function OnboardingScreen() {
               ))}
             </View>
             <Pressable
-              onPress={() => goTo(2)}
+              onPress={() => goTo(4)}
               hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel="Skip to sign in"
@@ -1164,9 +1271,13 @@ export default function OnboardingScreen() {
                 onPress={() => goTo(step + 1)}
                 accessibilityRole="button"
                 accessibilityLabel={
-                  step === 0
+                  step === 2
+                    ? 'Continue to early access'
+                    : step === 3
+                      ? 'Continue to sign in'
+                      : step === 0
                     ? 'Continue to see the bigger picture'
-                    : 'Continue to sign in'
+                    : 'Continue to value'
                 }
                 hitSlop={12}
                 style={({ pressed }) => [
