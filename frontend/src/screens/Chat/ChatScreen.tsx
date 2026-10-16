@@ -679,10 +679,12 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [revealingId, setRevealingId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [planId, setPlanId] = useState<PricingPlan>('free');
+  const [planId, setPlanId] = useState<PricingPlan>('allin');
 
   // Display-only tier facts (the locally picked plan — billing is separate).
+  // TESTING BYPASS: paywall off — always all-in/unlimited.
   useEffect(() => {
+    setPlanId('allin');
     getSelectedPlan().then(setPlanId).catch(() => {});
   }, []);
   const planMeta =

@@ -44,7 +44,8 @@ import { useTheme } from '@/theme';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { getDocumentExtraction } from '@/services/documents';
 import type { DocumentExtraction } from '@/types';
-import { usePremiumEntitled } from '@/services/premium';
+// TESTING BYPASS: paywall off — prescription scanner open to all.
+// import { usePremiumEntitled } from '@/services/premium';
 import { todayKey } from '@/screens/Onboarding/momentum';
 import {
   listScanSessions,
@@ -369,7 +370,6 @@ export default function MedicationsScreen() {
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
   // Prefilled link when adding a medication from a scanned prescription.
   const [scanSourceDocIds, setScanSourceDocIds] = useState<string[]>([]);
-  const premiumEntitled = usePremiumEntitled();
 
   // ---- Scanned prescription sessions (local record of scanner runs) ----
   const [scanSessions, setScanSessions] = useState<ScanSession[]>([]);
@@ -425,16 +425,9 @@ export default function MedicationsScreen() {
   }, [navigation, loadScanSessions]);
 
   const openScanner = useCallback(() => {
-    if (!premiumEntitled) {
-      Alert.alert(
-        'Premium feature',
-        'Prescription scanner requires Premium. See Profile > Premium (3 days free).',
-        [{ text: 'OK' }],
-      );
-      return;
-    }
+    // TESTING BYPASS: paywall off — no Premium alert, straight to scanner.
     navigation.navigate('PrescriptionScanner');
-  }, [navigation, premiumEntitled]);
+  }, [navigation]);
 
   const addMedicationFromScan = useCallback((session: ScanSession) => {
     navigation.navigate('PrescriptionReview', {
