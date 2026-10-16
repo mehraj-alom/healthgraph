@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B4A3F"/>
+      <stop offset="1" stop-color="#07332B"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4FD1C5"/>
+      <stop offset="1" stop-color="#3B5BFF"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="500" rx="28" fill="url(#bg)"/>
+  <circle cx="400" cy="200" r="120" fill="none" stroke="url(#ring)" stroke-width="3" opacity="0.5"/>
+  <circle cx="400" cy="200" r="36" fill="#4FD1C5"/>
+  <g font-family="Poppins,system-ui,sans-serif" text-anchor="middle">
+    <circle cx="330" cy="200" r="44" fill="#FFFFFF" opacity="0.92"/>
+    <text x="330" y="214" font-size="30" font-weight="600" fill="#0B4A3F">A</text>
+    <circle cx="470" cy="200" r="44" fill="#FFFFFF" opacity="0.92"/>
+    <text x="470" y="214" font-size="30" font-weight="600" fill="#0B4A3F">B</text>
+    <text x="400" y="330" font-size="26" font-weight="600" fill="#FFFFFF">Two builders</text>
+    <text x="400" y="360" font-size="15" fill="#A7B8B2">AI + healthcare systems · design that feels human</text>
+  </g>
+</svg>

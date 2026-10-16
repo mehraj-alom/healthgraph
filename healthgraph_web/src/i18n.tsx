@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 export type Locale = 'en' | 'de';
 
 const LocaleCtx = createContext<{ locale: Locale; setLocale: (l: Locale) => void }>({
-  locale: 'en',
+  locale: 'de',
   setLocale: () => {},
 });
 
@@ -14,15 +14,20 @@ function detectLocale(): Locale {
     const saved = localStorage.getItem('hg-locale');
     if (saved === 'de' || saved === 'en') return saved;
   } catch { /* ignore */ }
+  // Deutsch zuerst: Standard ist Deutsch, EN nur bei explizitem EN-Browser.
   try {
-    // Germany (or German-language browser) sees the German videos + copy.
-    if (navigator.language.toLowerCase().startsWith('de')) return 'de';
+    const lang = navigator.language.toLowerCase();
+    if (lang.startsWith('en') && !lang.includes('de')) {
+      // EN-Browser dürfen EN sehen, alle anderen bekommen Deutsch.
+      // Für SEO/Crawler (kein navigator) fällt das auf 'de' zurück.
+      return 'en';
+    }
   } catch { /* ignore */ }
-  return 'en';
+  return 'de';
 }
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>('en');
+  const [locale, setLocaleState] = useState<Locale>('de');
   useEffect(() => setLocaleState(detectLocale()), []);
   useEffect(() => {
     document.documentElement.lang = locale;

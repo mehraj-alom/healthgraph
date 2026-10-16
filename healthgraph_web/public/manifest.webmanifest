@@ -1,0 +1,15 @@
+{
+  "name": "HealthGraph – Gesundheit, verbunden",
+  "short_name": "HealthGraph",
+  "description": "Puls per Kamera, Schlaf, Medikamente, Ernährung, Zyklus und Dokumente in einem Graph. DSGVO-konform.",
+  "lang": "de",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B4A3F",
+  "theme_color": "#0B4A3F",
+  "icons": [
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

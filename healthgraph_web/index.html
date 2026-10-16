@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HealthGraph – Gesundheit verbunden | Puls messen, Schlaf, Medikamente</title>
+    <meta name="description" content="Puls per Kamera messen, Schlaf, Medikamente, Ernährung, Zyklus und Dokumente in einem Graph. DSGVO-konform, ohne Wearable. Kostenlos starten, 11 € General, 18 € All-in." />
+    <link rel="canonical" href="https://healthgraph.shop/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#050807" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="HealthGraph" />
+    <meta property="og:title" content="HealthGraph – Gesundheit verbunden" />
+    <meta property="og:description" content="Kamera-Puls, Schlaf, Medis, Ernährung, Zyklus, Dokumente, 3D-Körper. Sechzehn Funktionen, ein privater Graph. 0 € Start." />
+    <meta property="og:url" content="https://healthgraph.shop/" />
+    <meta property="og:image" content="https://healthgraph.shop/logo.png" />
+    <meta property="og:locale" content="de_DE" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="HealthGraph – Gesundheit verbunden" />
+    <meta name="twitter:description" content="Ein privater Gesundheitsgraph auf deinem Handy. Kostenlos starten, DSGVO-konform." />
+    <meta name="twitter:image" content="https://healthgraph.shop/logo.png" />
+
+    <!-- Languages: Deutsch zuerst -->
+    <link rel="alternate" hreflang="de" href="https://healthgraph.shop/" />
+    <link rel="alternate" hreflang="en" href="https://healthgraph.shop/?lang=en" />
+    <link rel="alternate" hreflang="x-default" href="https://healthgraph.shop/" />
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+    <!-- Structured data: Organization + WebSite + App -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://healthgraph.shop/#org",
+          "name": "HealthGraph",
+          "url": "https://healthgraph.shop/",
+          "logo": "https://healthgraph.shop/logo.png"
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://healthgraph.shop/#website",
+          "url": "https://healthgraph.shop/",
+          "name": "HealthGraph",
+          "inLanguage": ["en", "de"],
+          "publisher": { "@id": "https://healthgraph.shop/#org" }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://healthgraph.shop/#app",
+          "name": "HealthGraph",
+          "applicationCategory": "HealthApplication",
+          "operatingSystem": "Android",
+          "url": "https://healthgraph.shop/",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+        }
+      ]
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <noscript>
+      <h1>HealthGraph: your whole health in one dial</h1>
+      <p>HealthGraph connects pulse, sleep, meds, meals, cycle, documents and 3D body into one private on-device health graph.</p>
+      <p>Camera pulse, face pulse, HRV, sleep logging, medications with family watch, barcode food scan, document search, cycle tracking, voice check-ins, 3D body. Free to start.</p>
+      <a href="https://healthgraph.shop/#early-access">Get early access</a>
+    </noscript>
+  </body>
+</html>

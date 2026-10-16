@@ -18,7 +18,7 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 bg-stage/70 border-b border-white/[0.08] backdrop-blur-xl supports-[backdrop-filter]:bg-stage/60 [backdrop-filter:saturate(1.8)_blur(20px)]">
+      <header className="liquid-glass-dark fixed top-0 left-0 right-0 z-50 backdrop-blur-xl supports-[backdrop-filter]:bg-stage/60 [backdrop-filter:saturate(1.8)_blur(24px)]">
         <div className="flex items-center justify-between h-14 md:h-12 px-4 md:px-6">
           <a href="#home" className="flex items-center gap-2.5 shrink-0">
             <span className="bg-white rounded-lg px-2 py-1.5 flex items-center">
