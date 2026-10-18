@@ -16,6 +16,7 @@ import Pricing from './Pricing';
 import About from './About';
 import Faq from './Faq';
 import EarlyAccess from './EarlyAccess';
+import Neo4jForceGraph from './components/Neo4jForceGraph';
 import Footer from './Footer';
 
 export default function App() {
@@ -51,6 +52,7 @@ export default function App() {
           <How />
           <Privacy />
           <Videos />
+          <Neo4jForceGraph width={1100} height={700} />
           <Wissen />
           <Pricing />
           <About />
