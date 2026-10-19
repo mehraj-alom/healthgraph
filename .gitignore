@@ -258,3 +258,13 @@ agent/skills/*
 *.jpeg
 *.pdf
 *.csv
+
+# Re-include Expo app assets ignored by blanket image rules above.
+# EAS Build skips git-ignored files during upload, which breaks prebuild
+# icon generation. Keep this list in sync with frontend/app.json.
+!frontend/assets/icon.png
+!frontend/assets/adaptive-icon.png
+!frontend/assets/splash-icon.png
+!frontend/assets/favicon.png
+!frontend/assets/android-icon-*.png
+!frontend/assets/logo.png
