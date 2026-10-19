@@ -236,6 +236,10 @@ __marimo__/
 !/*/tsconfig.json
 !/*/modules/healthgraph-ppg/package.json
 !/*/modules/healthgraph-ppg/expo-module.config.json
+!/*/modules/healthgraph-rppg/package.json
+!/*/modules/healthgraph-rppg/expo-module.config.json
+!/*/modules/healthgraph-satts/package.json
+!/*/modules/healthgraph-satts/expo-module.config.json
 *pdf
 *jpg
 *jpeg
