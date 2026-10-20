@@ -36,6 +36,7 @@
       "./modules/healthgraph-ppg/app.plugin.js",
       "./modules/healthgraph-rppg/app.plugin.js",
       "onnxruntime-react-native",
+      "./plugins/withOnnxruntimePackage.js",
       [
         "expo-sqlite",
         {
