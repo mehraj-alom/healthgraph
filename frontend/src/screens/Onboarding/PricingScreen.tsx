@@ -39,8 +39,8 @@ export async function markPricingNeeded(): Promise<void> {
 
 /** True only for a fresh signup that has not seen pricing yet. */
 export async function shouldShowPricing(): Promise<boolean> {
-  const value = await AsyncStorage.getItem(NEEDED_KEY);
-  return value === '1';
+  // TESTING BYPASS: paywall off
+  return false;
 }
 
 /** Clear a stale flag (failed signup, fresh sign-out, login). */
@@ -56,8 +56,8 @@ export async function markPricingSeen(plan: PricingPlan): Promise<void> {
 
 /** The locally picked plan (default Free). Display-only; billing is separate. */
 export async function getSelectedPlan(): Promise<PricingPlan> {
-  const value = await AsyncStorage.getItem(PLAN_KEY);
-  return value === 'general' || value === 'allin' ? value : 'free';
+  // TESTING BYPASS: paywall off
+  return 'allin';
 }
 
 interface TierDef {

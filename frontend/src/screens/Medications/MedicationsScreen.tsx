@@ -419,12 +419,8 @@ export default function MedicationsScreen() {
   }, [navigation, loadScanSessions]);
 
   const openScanner = useCallback(() => {
-    if (!tierUnlocks(tier, 'prescriptionScanner')) {
-      openPricing();
-      return;
-    }
     navigation.navigate('PrescriptionScanner');
-  }, [navigation, tier, openPricing]);
+  }, [navigation]);
 
   const addMedicationFromScan = useCallback((session: ScanSession) => {
     navigation.navigate('PrescriptionReview', {

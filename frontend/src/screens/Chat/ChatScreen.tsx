@@ -589,12 +589,13 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [revealingId, setRevealingId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [planId, setPlanId] = useState<PricingPlan>('free');
+  const [planId, setPlanId] = useState<PricingPlan>('allin');
   const tier = usePremiumTier();
   const openPricing = useOpenPricing();
   const [quotaNote, setQuotaNote] = useState<string | null>(null);
 
   useEffect(() => {
+    setPlanId('allin');
     getSelectedPlan().then(setPlanId).catch(() => {});
   }, []);
 

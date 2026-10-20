@@ -132,17 +132,15 @@ const MIN_TIER: Record<PremiumFeature, PremiumTier> = {
   documentScan: 'general', // general tier has a monthly quota instead of a lock
 };
 
-export function tierUnlocks(tier: PremiumTier, feature: PremiumFeature): boolean {
-  return TIER_RANK[normalizeTier(tier)] >= TIER_RANK[MIN_TIER[feature]];
+export function tierUnlocks(_tier: PremiumTier, _feature: PremiumFeature): boolean {
+  // TESTING BYPASS: paywall off — everything unlocked.
+  return true;
 }
 
 /** Monthly quota; null = unlimited. Exceeding it shows the paywall, not an error. */
-export function monthlyQuota(tier: PremiumTier, feature: 'aiChat' | 'foodScan' | 'documentScan'): number | null {
-  const t = normalizeTier(tier);
-  if (t === 'allin') return null;
-  if (feature === 'aiChat') return t === 'free' ? 2 : 50;
-  if (feature === 'foodScan') return t === 'free' ? 3 : null;
-  return t === 'free' ? 0 : 4; // documentScan
+export function monthlyQuota(_tier: PremiumTier, _feature: 'aiChat' | 'foodScan' | 'documentScan'): number | null {
+  // TESTING BYPASS: paywall off — unlimited.
+  return null;
 }
 
 // ─── Monthly usage counters ──────────────────────────────────────────────────
@@ -201,22 +199,8 @@ export function notifyTierChanged(tier: PremiumTier): void {
 
 /** Current tier — starts free (safe), resolves on mount, live-updates from billing. */
 export function usePremiumTier(): PremiumTier {
-  const [tier, setTier] = useState<PremiumTier>(__DEV__ ? 'allin' : 'free');
-  useEffect(() => {
-    let live = true;
-    void getLocalTier().then((v) => {
-      if (live) setTier(v);
-    });
-    const fn: TierListener = (v) => {
-      if (live) setTier(v);
-    };
-    tierListeners.add(fn);
-    return () => {
-      live = false;
-      tierListeners.delete(fn);
-    };
-  }, []);
-  return tier;
+  // TESTING BYPASS: paywall off — always top tier.
+  return 'allin';
 }
 
 /** Legacy boolean: entitled = any paid tier. Kept for existing call sites. */
@@ -226,7 +210,8 @@ export function usePremiumEntitled(): boolean {
 
 /** Legacy async boolean. Prefer getLocalTier() in new code. */
 export async function isPremiumEntitled(): Promise<boolean> {
-  return (await getLocalTier()) !== 'free';
+  // TESTING BYPASS: paywall off.
+  return true;
 }
 
 /** Legacy writer. Prefer billing.ts purchase/restore flows in new code. */
