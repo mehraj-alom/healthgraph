@@ -101,6 +101,56 @@ jobs:
         working-directory: frontend/android
         run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
+      # Gate: prove the native modules that the on-device features depend on
+      # are actually inside the APK.
+      #
+      # Why this exists: a local Expo module is autolinked from its
+      # package.json + expo-module.config.json. If either file is missing
+      # from the checkout, Expo silently skips the module — the Kotlin/Swift
+      # code is never compiled, requireOptionalNativeModule() resolves to
+      # null at runtime, and the feature reports itself "unavailable"
+      # instead of failing the build. That silently shipped a dead face
+      # rPPG once already. This step turns that silent failure into a
+      # red build.
+      - name: Verify native modules in APK
+        run: |
+          set -euo pipefail
+          APK=frontend/android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "APK not found"; exit 1; }
+          WORK=$(mktemp -d)
+          unzip -q -o "$APK" -d "$WORK"
+
+          echo "--- ABIs in APK (arm64-only expected) ---"
+          mapfile -t ABIS < <(find "$WORK/lib" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+          printf '%s\n' "${ABIS[@]}"
+          if [ "${#ABIS[@]}" -ne 1 ] || [ "${ABIS[0]}" != "arm64-v8a" ]; then
+            echo "FAIL: expected only arm64-v8a, got: ${ABIS[*]}"
+            exit 1
+          fi
+
+          echo "--- native module classes in dex ---"
+          for CLS in \
+            "com/healthgraph/rppg/HealthGraphRPPGModule" \
+            "com/healthgraph/ppg/HealthGraphPPGModule" ; do
+            FOUND=0
+            for DEX in "$WORK"/classes*.dex; do
+              if strings "$DEX" | grep -q "$CLS"; then FOUND=1; break; fi
+            done
+            if [ "$FOUND" -ne 1 ]; then
+              echo "FAIL: native module class missing from APK: $CLS"
+              exit 1
+            fi
+            echo "OK: $CLS present"
+          done
+
+          echo "--- onnxruntime native lib (face rPPG inference) ---"
+          test -f "$WORK/lib/arm64-v8a/libonnxruntime.so" || {
+            echo "FAIL: libonnxruntime.so missing"; exit 1; }
+          echo "OK: libonnxruntime.so present"
+
+          rm -rf "$WORK"
+          echo "APK verification passed"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

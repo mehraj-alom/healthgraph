@@ -240,6 +240,15 @@ __marimo__/
 !/*/modules/healthgraph-rppg/expo-module.config.json
 !/*/modules/healthgraph-satts/package.json
 !/*/modules/healthgraph-satts/expo-module.config.json
+# Local Expo native modules under frontend/modules must keep their
+# package.json + expo-module.config.json tracked. Without them Expo
+# autolinking silently skips the module: the native code is never
+# compiled into the APK, and requireOptionalNativeModule() resolves to
+# null at runtime (the on-device feature then looks "unavailable"
+# instead of reporting a build error). `*json` above ignores every
+# .json file, so each local module needs an explicit exception.
+!/*/modules/*/package.json
+!/*/modules/*/expo-module.config.json
 *pdf
 *jpg
 *jpeg

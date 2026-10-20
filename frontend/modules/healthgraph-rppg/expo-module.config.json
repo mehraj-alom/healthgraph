@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "android": {
+    "modules": ["com.healthgraph.rppg.HealthGraphRPPGModule"]
+  },
+  "ios": {
+    "modules": ["HealthGraphRPPGModule"]
+  }
+}

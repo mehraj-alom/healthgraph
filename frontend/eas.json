@@ -30,6 +30,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.healthgraph.shop",
         "EXPO_PUBLIC_ASSET_CDN_URL": "https://api.healthgraph.shop/assets",

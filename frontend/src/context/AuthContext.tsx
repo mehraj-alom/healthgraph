@@ -141,11 +141,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load patient ID from SecureStore on mount
-    const { loadPatientId } = require('@/services/patientIdentity');
-    loadPatientId();
-
+    // Two independent readiness gates before `loading` may go false:
+    //   1. the Firebase auth state is known (onIdTokenChanged fired), and
+    //   2. the backend patient id is loaded from SecureStore.
+    // Gate 2 exists because getCachedPatientId() reads an in-memory cache
+    // that loadPatientId() populates asynchronously. If a screen reads it
+    // before that resolves, it gets null and reports "Your session has
+    // expired. Please sign in again." on a perfectly valid session.
+    // Both gates must be satisfied, and neither may be flipped early —
+    // flipping gate 2 alone would render the app as signed-out.
     let mounted = true;
+    let patientIdReady = false;
+    let authReady = false;
+    const settle = () => {
+      if (mounted && patientIdReady && authReady) setLoading(false);
+    };
+
+    const { loadPatientId } = require('@/services/patientIdentity');
+    loadPatientId().finally(() => {
+      patientIdReady = true;
+      settle();
+    });
+
     const unsubscribe = onIdTokenChanged(auth, (firebaseUser) => {
       if (!mounted) return;
       if (firebaseUser) {
@@ -188,7 +205,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(null);
         setUserProfile(null);
       }
-      if (mounted) setLoading(false);
+      authReady = true;
+      settle();
     });
     return () => { mounted = false; unsubscribe(); };
   }, []);

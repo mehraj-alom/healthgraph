@@ -14,6 +14,7 @@ cryptography==48.0.1
 firebase_admin==7.5.0
 presidio_analyzer==2.2.364
 presidio_anonymizer==2.2.364
+numpy==1.26.4
 spacy==3.8.16
 langchain-core==1.6.0
 langchain-openai==1.6.0

@@ -1,0 +1,10 @@
+{
+  "name": "healthgraph-rppg",
+  "version": "1.0.0",
+  "description": "On-device face rPPG capture for HealthGraph (Expo native module). Front-camera ROI window capture only — derived rPPG window file stays on device; inference runs via onnxruntime-react-native.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "node --test tests/*.mjs"
+  }
+}
