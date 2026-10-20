@@ -236,6 +236,10 @@ __marimo__/
 !/*/tsconfig.json
 !/*/modules/healthgraph-ppg/package.json
 !/*/modules/healthgraph-ppg/expo-module.config.json
+!/*/modules/healthgraph-rppg/package.json
+!/*/modules/healthgraph-rppg/expo-module.config.json
+!/*/modules/healthgraph-satts/package.json
+!/*/modules/healthgraph-satts/expo-module.config.json
 *pdf
 *jpg
 *jpeg
@@ -258,3 +262,11 @@ agent/skills/*
 *.jpeg
 *.pdf
 *.csv
+
+# Re-include Expo app assets
+!frontend/assets/icon.png
+!frontend/assets/adaptive-icon.png
+!frontend/assets/splash-icon.png
+!frontend/assets/favicon.png
+!frontend/assets/android-icon-*.png
+!frontend/assets/logo.png
