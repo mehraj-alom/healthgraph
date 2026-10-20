@@ -114,18 +114,36 @@ jobs:
       # red build.
       - name: Verify native modules in APK
         run: |
-          set -euo pipefail
-          APK=frontend/android/app/build/outputs/apk/release/app-release.apk
-          test -f "$APK" || { echo "APK not found"; exit 1; }
+          set -uo pipefail
+          # The job's working-directory is `frontend`, so the APK lives under
+          # `android/...` relative to it. Discover it instead of hardcoding
+          # one path so a layout change reports what was actually produced.
+          APK=$(find android -type f -name '*.apk' -path '*outputs/apk/release*' | head -1)
+          if [ -z "$APK" ]; then
+            echo "FAIL: no release APK under android/**/outputs/apk/release"
+            find android -type f -name '*.apk' 2>/dev/null | head -20
+            exit 1
+          fi
+          echo "APK: $APK ($(stat -c %s "$APK") bytes)"
+
           WORK=$(mktemp -d)
           unzip -q -o "$APK" -d "$WORK"
 
-          echo "--- ABIs in APK (arm64-only expected) ---"
-          mapfile -t ABIS < <(find "$WORK/lib" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
-          printf '%s\n' "${ABIS[@]}"
-          if [ "${#ABIS[@]}" -ne 1 ] || [ "${ABIS[0]}" != "arm64-v8a" ]; then
-            echo "FAIL: expected only arm64-v8a, got: ${ABIS[*]}"
-            exit 1
+          FAILED=0
+
+          echo "--- ABIs in APK (arm64-v8a only expected) ---"
+          mapfile -t ABIS < <(find "$WORK/lib" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort)
+          if [ "${#ABIS[@]}" -eq 0 ]; then
+            echo "FAIL: no lib/ directory in APK"
+            FAILED=1
+          else
+            printf '%s\n' "${ABIS[@]}"
+            if [ "${#ABIS[@]}" -ne 1 ] || [ "${ABIS[0]}" != "arm64-v8a" ]; then
+              echo "FAIL: expected only arm64-v8a, got: ${ABIS[*]}"
+              FAILED=1
+            else
+              echo "OK: arm64-v8a only"
+            fi
           fi
 
           echo "--- native module classes in dex ---"
@@ -134,21 +152,34 @@ jobs:
             "com/healthgraph/ppg/HealthGraphPPGModule" ; do
             FOUND=0
             for DEX in "$WORK"/classes*.dex; do
-              if strings "$DEX" | grep -q "$CLS"; then FOUND=1; break; fi
+              if strings "$DEX" 2>/dev/null | grep -q "$CLS"; then FOUND=1; break; fi
             done
             if [ "$FOUND" -ne 1 ]; then
               echo "FAIL: native module class missing from APK: $CLS"
-              exit 1
+              FAILED=1
+            else
+              echo "OK: $CLS present"
             fi
-            echo "OK: $CLS present"
           done
+          echo "--- healthgraph classes actually in the dex ---"
+          for DEX in "$WORK"/classes*.dex; do
+            strings "$DEX" 2>/dev/null | grep -oE 'com/healthgraph/[a-z]+/[A-Za-z]+'
+          done | sort -u | head -20
 
           echo "--- onnxruntime native lib (face rPPG inference) ---"
-          test -f "$WORK/lib/arm64-v8a/libonnxruntime.so" || {
-            echo "FAIL: libonnxruntime.so missing"; exit 1; }
-          echo "OK: libonnxruntime.so present"
+          if [ -f "$WORK/lib/arm64-v8a/libonnxruntime.so" ]; then
+            echo "OK: libonnxruntime.so present"
+          else
+            echo "FAIL: libonnxruntime.so missing"
+            ls "$WORK/lib/arm64-v8a" 2>/dev/null | head -20
+            FAILED=1
+          fi
 
           rm -rf "$WORK"
+          if [ "$FAILED" -ne 0 ]; then
+            echo "APK verification FAILED"
+            exit 1
+          fi
           echo "APK verification passed"
 
       - name: Upload APK
@@ -157,3 +188,7 @@ jobs:
           name: healthgraph-preview-apk
           path: frontend/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+          # Keep the artifact store well under the 500 MB free-tier quota:
+          # a stale preview-apk plus a new one already filled it once and
+          # failed the run at upload time (after a 26-minute build).
+          retention-days: 7
