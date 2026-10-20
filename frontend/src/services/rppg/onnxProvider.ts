@@ -122,9 +122,12 @@ function hasOnnxNativeModule(): boolean {
     const rn = require('react-native') as {
       NativeModules?: Record<string, unknown>;
     };
-    if (rn?.NativeModules?.['Onnxruntime'] != null) return true;
-    // New-arch interop may expose the JSI binding globally without a
-    // registered NativeModule entry.
+    const nm = rn?.NativeModules || {};
+    if (nm['Onnxruntime'] != null) return true;
+    // Some RN/new-arch builds register the module under a different key.
+    for (const key of Object.keys(nm)) {
+      if (/onnx/i.test(key)) return true;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((globalThis as any)?.OrtApi != null) return true;
     return false;
