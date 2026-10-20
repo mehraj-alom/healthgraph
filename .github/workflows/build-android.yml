@@ -206,7 +206,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          APK=frontend/android/app/build/outputs/apk/release/app-release.apk
+          # This is a `run:` step, so paths are relative to the job's
+          # working-directory (frontend) — NOT to the workspace root like
+          # the `uses:` step's `path:` is. Discover the APK the same way
+          # the verification gate does instead of hardcoding either form.
+          APK=$(find android -type f -name '*.apk' -path '*outputs/apk/release*' 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then
+            echo "FAIL: no release APK to publish"
+            exit 1
+          fi
+          echo "Publishing $APK ($(stat -c %s "$APK") bytes)"
           TAG=preview-apk
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" \
