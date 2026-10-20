@@ -101,6 +101,20 @@ jobs:
         working-directory: frontend/android
         run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
+      # Capture the artifact BEFORE the gate below. Assembly takes ~28 min on
+      # a clean runner, so the APK must be saved even if the gate then
+      # fails — otherwise a failed gate throws away the whole build.
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: healthgraph-preview-apk
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          # Keep the artifact store well under the 500 MB free-tier quota:
+          # a stale preview-apk plus a new one already filled it once and
+          # failed the run at upload time (after a 26-minute build).
+          retention-days: 7
+
       # Gate: prove the native modules that the on-device features depend on
       # are actually inside the APK.
       #
@@ -114,11 +128,19 @@ jobs:
       # red build.
       - name: Verify native modules in APK
         run: |
+          # GitHub runs every `run:` block with `bash -e`, so errexit is ON
+          # regardless of what this script sets. This step is a gate that
+          # must report EVERY problem in one pass, so errexit is turned off
+          # explicitly and the outcome is decided by $FAILED at the end.
+          # A `grep` that matches nothing exits 1; under -e that would abort
+          # the step on a diagnostic line, not on a real failure.
+          set +e
           set -uo pipefail
+
           # The job's working-directory is `frontend`, so the APK lives under
           # `android/...` relative to it. Discover it instead of hardcoding
           # one path so a layout change reports what was actually produced.
-          APK=$(find android -type f -name '*.apk' -path '*outputs/apk/release*' | head -1)
+          APK=$(find android -type f -name '*.apk' -path '*outputs/apk/release*' 2>/dev/null | head -1)
           if [ -z "$APK" ]; then
             echo "FAIL: no release APK under android/**/outputs/apk/release"
             find android -type f -name '*.apk' 2>/dev/null | head -20
@@ -164,7 +186,7 @@ jobs:
           echo "--- healthgraph classes actually in the dex ---"
           for DEX in "$WORK"/classes*.dex; do
             strings "$DEX" 2>/dev/null | grep -oE 'com/healthgraph/[a-z]+/[A-Za-z]+'
-          done | sort -u | head -20
+          done | sort -u | head -20 || true
 
           echo "--- onnxruntime native lib (face rPPG inference) ---"
           if [ -f "$WORK/lib/arm64-v8a/libonnxruntime.so" ]; then
@@ -182,13 +204,3 @@ jobs:
           fi
           echo "APK verification passed"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: healthgraph-preview-apk
-          path: frontend/android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
-          # Keep the artifact store well under the 500 MB free-tier quota:
-          # a stale preview-apk plus a new one already filled it once and
-          # failed the run at upload time (after a 26-minute build).
-          retention-days: 7
