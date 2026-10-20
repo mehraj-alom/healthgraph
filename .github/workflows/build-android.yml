@@ -46,6 +46,10 @@ jobs:
     name: Assemble release APK (self-contained preview)
     needs: checks
     runs-on: ubuntu-latest
+    permissions:
+      # actions/upload-artifact needs no extra scope; the release fallback
+      # below needs contents:write to attach the APK to a rolling release.
+      contents: write
     env:
       # Same public runtime config as the release workflow — without these
       # the bundled JS boots against empty API/Firebase/CDN URLs and dies
@@ -100,20 +104,6 @@ jobs:
       - name: Assemble release APK
         working-directory: frontend/android
         run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
-
-      # Capture the artifact BEFORE the gate below. Assembly takes ~28 min on
-      # a clean runner, so the APK must be saved even if the gate then
-      # fails — otherwise a failed gate throws away the whole build.
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: healthgraph-preview-apk
-          path: frontend/android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
-          # Keep the artifact store well under the 500 MB free-tier quota:
-          # a stale preview-apk plus a new one already filled it once and
-          # failed the run at upload time (after a 26-minute build).
-          retention-days: 7
 
       # Gate: prove the native modules that the on-device features depend on
       # are actually inside the APK.
@@ -204,3 +194,37 @@ jobs:
           fi
           echo "APK verification passed"
 
+      # Deliver the APK. The Actions artifact store has a 500 MB free-tier
+      # quota whose usage counter only recalculates every 6-12 hours, so
+      # after deleting old artifacts the store still rejects new uploads
+      # and the run fails at the very last step — throwing away a 28-minute
+      # build. A rolling GitHub Release uses a separate storage pool, so
+      # that is the primary delivery path; the artifact upload is kept as a
+      # best-effort convenience.
+      - name: Publish APK to rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK=frontend/android/app/build/outputs/apk/release/app-release.apk
+          TAG=preview-apk
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "Preview APK (rolling)" \
+              --notes "Rolling preview build. Replaced on every successful run of the Build Android (preview) workflow." \
+              --target "${{ github.sha }}"
+          fi
+          gh release upload "$TAG" "$APK#app-release.apk" --clobber
+          echo "Release $TAG updated."
+
+      - name: Upload APK as workflow artifact (best effort)
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: healthgraph-preview-apk
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          # Keep the artifact store well under the 500 MB free-tier quota:
+          # a stale preview-apk plus a new one already filled it once and
+          # failed the run at upload time (after a 26-minute build).
+          retention-days: 7
