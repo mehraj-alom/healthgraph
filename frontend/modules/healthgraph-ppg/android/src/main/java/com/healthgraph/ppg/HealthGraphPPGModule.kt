@@ -45,6 +45,12 @@ class HealthGraphPPGModule : Module() {
     private const val TAG = "HealthGraphPPG"
     /** Max wait for TorchState.ON after requesting torch. Fail fast after. */
     private const val TORCH_CONFIRM_TIMEOUT_MS = 8000L
+    /**
+     * Max wait for the torch-off request to be applied before the camera
+     * is unbound anyway. Bounded so a stalled CameraX future can never
+     * leave the camera bound (and the flash on) indefinitely.
+     */
+    private const val TORCH_OFF_FALLBACK_MS = 1500L
   }
 
   private val cameraExecutor = Executors.newSingleThreadExecutor()
@@ -762,13 +768,50 @@ class HealthGraphPPGModule : Module() {
         } catch (_: Exception) { }
       }
     } catch (_: Exception) { }
-    try {
+
+    // Switch the torch off and WAIT for the request to actually be applied
+    // before the camera is unbound.
+    //
+    // Why the wait matters: enableTorch(false) is asynchronous. CameraX
+    // drops a pending torch command when the capture session is closed, so
+    // a fire-and-forget enableTorch(false) immediately followed by
+    // unbindAll() can leave the FLASHLIGHT STUCK ON after the measurement
+    // finishes — the flash never gets its off command. Awaiting the
+    // future guarantees the hardware sees it.
+    //
+    // The wait is non-blocking (listener, not get() on the main thread) and
+    // bounded by a fallback timer, so a stalled future can never leave the
+    // camera bound or wedge the UI.
+    val cam = boundCamera
+    val provider = cameraProvider
+    val unbound = AtomicBoolean(false)
+    fun unbindNow() {
+      if (!unbound.compareAndSet(false, true)) return
       try {
-        boundCamera?.cameraControl?.enableTorch(false)
+        provider?.unbindAll()
       } catch (_: Exception) { }
-      cameraProvider?.unbindAll()
-    } catch (_: Exception) { }
-    boundCamera = null
-    cameraProvider = null
+      boundCamera = null
+      cameraProvider = null
+    }
+    try {
+      if (cam == null) {
+        unbindNow()
+      } else {
+        val offFuture = cam.cameraControl.enableTorch(false)
+        offFuture.addListener({
+          try {
+            offFuture.get()
+            dlog("torch off confirmed")
+          } catch (e: Exception) {
+            dlog("torch off future failed: ${e.message ?: "unknown"}")
+          }
+          unbindNow()
+        }, ContextCompat.getMainExecutor(context))
+        // Safety net: never leave the camera bound if the future stalls.
+        mainHandler.postDelayed({ unbindNow() }, TORCH_OFF_FALLBACK_MS)
+      }
+    } catch (_: Exception) {
+      unbindNow()
+    }
   }
 }

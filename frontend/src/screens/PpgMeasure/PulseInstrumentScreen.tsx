@@ -147,6 +147,10 @@ export default function PulseInstrumentScreen() {
   const probeSamples = useRef<FaceProbeSample[]>([]);
   const probeDeadlineAt = useRef<number | null>(null);
   const probeSettled = useRef(false);
+  // The hook's own failure text. Kept in a ref so the probe-timeout branch
+  // (which runs AFTER the hook already failed) can still report the real
+  // cause instead of the generic "no face signal" copy.
+  const rppgErrorRef = useRef<string | null>(null);
   const runStartMs = useRef(0);
   const ppgResultSeen = useRef(false);
   const busyRef = useRef(false);
@@ -230,7 +234,13 @@ export default function PulseInstrumentScreen() {
       return;
     }
     if (r.state === 'FAILED') {
-      dispatch({ type: 'FACE_FAILED', reason: r.error ?? 'The face scan could not be completed. Try again.' });
+      // Keep the hook's real failure text: it is the only place that names
+      // the failing leg (missing native module / ONNX runtime absent /
+      // model download failed / no face signal).
+      const detail = r.error ?? 'The face scan could not be completed. Try again.';
+      rppgErrorRef.current = detail;
+      console.log('rppg stage: FACE_FAILED ' + detail);
+      dispatch({ type: 'FACE_FAILED', reason: detail });
       return;
     }
     if (m === 'CHECKING') {
@@ -248,7 +258,15 @@ export default function PulseInstrumentScreen() {
         // Stop the camera BEFORE leaving face mode: mode exclusivity.
         void rppg.cancel().catch(() => {}).then(() => {
           if (machineRef.current.phase === 'CHECKING') {
-            dispatch({ type: 'FACE_UNAVAILABLE', reason: FACE_UNAVAILABLE_BODY });
+            // The hook's own error is the REAL cause (missing native module,
+            // ONNX runtime absent, model download failed, ...). The generic
+            // body is only a fallback for a plain "no face signal" probe
+            // timeout — dropping the hook error there is what made every
+            // failure look identical ("not available") with no reason.
+            dispatch({
+              type: 'FACE_UNAVAILABLE',
+              reason: rppgErrorRef.current ?? FACE_UNAVAILABLE_BODY,
+            });
           }
         });
       }

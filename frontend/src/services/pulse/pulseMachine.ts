@@ -204,6 +204,16 @@ const BUILD_FAILURE_MARKERS = [
   'isavailable',
   'not available in this',
   'preview build',
+  // The on-device inference runtime could not be reached. The hook names the
+  // failing leg verbatim ("code: native-module-absent" / "require-failed" /
+  // "exports-missing"), so match the leg codes AND the surrounding copy —
+  // without these the panel fell back to the generic "no face signal" title
+  // and hid a build/runtime problem behind a lighting hint.
+  'native-module-absent',
+  'require-failed',
+  'exports-missing',
+  'did not load in this build',
+  'pulse model did not load',
 ];
 
 /** True when the face failure is a build/capability miss, not a lock miss. */
