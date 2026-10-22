@@ -11,7 +11,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -28,8 +27,12 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { GV, TYPE } from '@/theme/guava';
+import { Button } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { LG } from '@/theme/liquidGlass';
 import { lookupBarcode, normalizeBarcode, type BarcodeProduct } from '@/services/barcode';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
 
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
 const SWEEP_MS = 2200;
@@ -103,7 +106,7 @@ export default function BarcodeScanner({
   if (resolvingPerm) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={GV.teal} />
+        <ActivityIndicator size="large" color="#FFFFFF" />
         <Text style={styles.hint}>Preparing camera…</Text>
       </View>
     );
@@ -112,31 +115,31 @@ export default function BarcodeScanner({
   if (!granted) {
     return (
       <View style={styles.center}>
-        <View style={styles.card}>
+        <GlassSurface strong style={styles.card}>
           <Text style={styles.cardTitle}>Camera is off</Text>
           <Text style={styles.cardBody}>
             HealthGraph needs camera access to scan barcodes. Codes are looked
             up by digits only — no images leave this device.
           </Text>
           {canAskAgain ? (
-            <Pressable
+            <Button
+              title="Enable camera"
+              variant="secondary"
               onPress={() => void requestPermission()}
-              accessibilityRole="button"
+              fullWidth
+              size="large"
               accessibilityLabel="Enable camera"
-              style={({ pressed }) => [styles.cta, pressed && { backgroundColor: GV.ctaPressed }]}
-            >
-              <Text style={styles.ctaText}>Enable camera</Text>
-            </Pressable>
+            />
           ) : null}
-          <Pressable
+          <Button
+            title="Open Settings"
+            variant="ghost"
             onPress={() => void Linking.openSettings()}
-            accessibilityRole="button"
+            fullWidth
+            textStyle={styles.ghostText}
             accessibilityLabel="Open system settings to enable camera access"
-            style={({ pressed }) => [styles.secondaryCta, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.secondaryCtaText}>Open Settings</Text>
-          </Pressable>
-        </View>
+          />
+        </GlassSurface>
       </View>
     );
   }
@@ -171,14 +174,14 @@ export default function BarcodeScanner({
       {error && !manual ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.actions}>
         {!manual ? (
-          <Pressable
+          <Button
+            title="Enter digits manually"
+            variant="ghost"
             onPress={() => setManual(true)}
-            accessibilityRole="button"
+            fullWidth
+            textStyle={styles.ghostText}
             accessibilityLabel="Enter barcode digits manually"
-            style={({ pressed }) => [styles.secondaryCta, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.secondaryCtaText}>Enter digits manually</Text>
-          </Pressable>
+          />
         ) : (
           <View style={styles.manualBox}>
             <Text style={styles.manualLabel}>Barcode digits</Text>
@@ -190,7 +193,7 @@ export default function BarcodeScanner({
               }}
               keyboardType="number-pad"
               placeholder="e.g. 3017620422003"
-              placeholderTextColor={GV.fog}
+              placeholderTextColor={SECONDARY}
               maxLength={14}
               style={styles.input}
               accessibilityLabel="Barcode digits"
@@ -199,43 +202,41 @@ export default function BarcodeScanner({
             />
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <View style={styles.manualRow}>
-              <Pressable
-                onPress={() => {
-                  setManual(false);
-                  setDigits('');
-                  setError(null);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Back to camera scanner"
-                style={({ pressed }) => [styles.secondaryCta, styles.manualBtn, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={styles.secondaryCtaText}>Camera</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => void resolve(digits)}
-                disabled={resolving || digits.length < 8}
-                accessibilityRole="button"
-                accessibilityLabel="Look up barcode"
-                style={({ pressed }) => [
-                  styles.cta,
-                  styles.manualBtn,
-                  (resolving || digits.length < 8) && styles.ctaDisabled,
-                  pressed && { backgroundColor: GV.ctaPressed },
-                ]}
-              >
-                <Text style={styles.ctaText}>{resolving ? 'Looking up…' : 'Look up'}</Text>
-              </Pressable>
+              <View style={styles.manualBtn}>
+                <Button
+                  title="Camera"
+                  variant="ghost"
+                  onPress={() => {
+                    setManual(false);
+                    setDigits('');
+                    setError(null);
+                  }}
+                  fullWidth
+                  textStyle={styles.ghostText}
+                  accessibilityLabel="Back to camera scanner"
+                />
+              </View>
+              <View style={styles.manualBtn}>
+                <Button
+                  title={resolving ? 'Looking up…' : 'Look up'}
+                  variant="secondary"
+                  onPress={() => void resolve(digits)}
+                  disabled={resolving || digits.length < 8}
+                  fullWidth
+                  accessibilityLabel="Look up barcode"
+                />
+              </View>
             </View>
           </View>
         )}
-        <Pressable
+        <Button
+          title="Back"
+          variant="ghost"
           onPress={onCancel}
-          accessibilityRole="button"
+          fullWidth
+          textStyle={styles.ghostText}
           accessibilityLabel="Back to scan options"
-          style={({ pressed }) => [styles.secondaryCta, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={styles.secondaryCtaText}>Back</Text>
-        </Pressable>
+        />
       </View>
     </View>
   );
@@ -243,15 +244,12 @@ export default function BarcodeScanner({
 
 const FRAME_H = 180;
 
-const TILE_BG = '#2A3049';
-const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
-
 const styles = StyleSheet.create({
   finder: { flex: 1, gap: 12 },
   frame: {
     flex: 1,
     minHeight: FRAME_H + 48,
-    borderRadius: 8,
+    borderRadius: 24,
     overflow: 'hidden',
     backgroundColor: '#000',
   },
@@ -269,23 +267,41 @@ const styles = StyleSheet.create({
     top: 24,
     height: 3,
     borderRadius: 2,
-    backgroundColor: GV.cta,
-    shadowColor: GV.cta,
+    backgroundColor: LG.card.mint,
+    shadowColor: LG.card.mint,
     shadowOpacity: 0.8,
     shadowRadius: 8,
   },
   resolving: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(11,31,26,0.55)',
+    backgroundColor: 'rgba(3,5,10,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  resolvingText: { ...TYPE.body, color: '#FFFFFF' },
-  error: { ...TYPE.body, color: GV.danger, textAlign: 'center' },
+  resolvingText: {
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#FFFFFF',
+  },
+  error: {
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 22,
+    color: LG.card.danger,
+    textAlign: 'center',
+  },
   actions: { gap: 8, paddingBottom: 8 },
   manualBox: { gap: 8 },
-  manualLabel: { ...TYPE.chip, color: GV.fog },
+  manualLabel: {
+    fontWeight: '600',
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: SECONDARY,
+  },
   input: {
     fontSize: 16,
     color: '#14151D',
@@ -300,35 +316,29 @@ const styles = StyleSheet.create({
   manualBtn: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   card: {
-    backgroundColor: TILE_BG,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderRadius: 8,
     padding: 16,
     gap: 12,
     width: '100%',
   },
-  cardTitle: { ...TYPE.title, color: '#FFFFFF', textAlign: 'center' },
-  cardBody: { ...TYPE.body, color: GV.fog, textAlign: 'center', lineHeight: 21 },
-  hint: { ...TYPE.body, color: GV.fog },
-  cta: {
-    backgroundColor: GV.cta,
-    borderRadius: 9999,
-    paddingVertical: 14,
-    alignItems: 'center',
-    minHeight: 52,
-    justifyContent: 'center',
+  cardTitle: {
+    fontWeight: '600',
+    fontSize: 18,
+    lineHeight: 24,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
-  ctaDisabled: { opacity: 0.5 },
-  ctaText: { ...TYPE.button, color: '#FFFFFF' },
-  secondaryCta: {
-    borderRadius: 9999,
-    paddingVertical: 13,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-    minHeight: 52,
-    justifyContent: 'center',
+  cardBody: {
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: SECONDARY,
+    textAlign: 'center',
   },
-  secondaryCtaText: { ...TYPE.button, color: '#FFFFFF' },
+  hint: {
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 22,
+    color: SECONDARY,
+  },
+  ghostText: { color: '#FFFFFF' },
 });

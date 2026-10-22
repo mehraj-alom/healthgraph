@@ -1,0 +1,127 @@
+<template>
+<style>
+#root { container-type: size; width: 1920px; height: 1080px; position: relative; overflow: hidden; background: #211249; }
+#root .bg { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #211249; }
+#root .topbar { position: absolute; left: 96px; top: 44px; width: 1728px; display: flex; justify-content: space-between; align-items: center; }
+#root .topbar span { font-family: ui-monospace, Menlo, monospace; font-size: 26px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #7C5CD6; }
+#root .toprule { position: absolute; left: 96px; top: 92px; width: 1728px; height: 2px; background: #7C5CD6; }
+#root .hook { position: absolute; left: 96px; top: 122px; width: 1728px; text-align: center; font-family: system-ui, sans-serif; font-weight: 500; font-size: 56px; letter-spacing: -0.02em; line-height: 1; color: #FFF9F1; }
+#root .hook em { font-style: normal; color: #7C5CD6; }
+#root .grid { position: absolute; left: 288px; top: 236px; width: 1344px; height: 600px; }
+#root .sweep { position: absolute; left: -360px; top: 0; width: 360px; height: 600px; background: #4FD1C5; opacity: 0.28; }
+#root .tile { position: absolute; width: 648px; height: 284px; border-radius: 6px; overflow: hidden; }
+#root .t-sleep { left: 0; top: 0; background: #2A175D; }
+#root .t-weight { left: 696px; top: 0; background: #7C5CD6; }
+#root .t-gym { left: 0; top: 316px; background: #341D73; }
+#root .t-macro { left: 696px; top: 316px; background: #C9BCEE; border: 2px solid #2A175D; }
+#root .ord { position: absolute; left: 26px; top: 20px; font-family: ui-monospace, Menlo, monospace; font-size: 24px; font-weight: 500; letter-spacing: 0.14em; }
+#root .t-sleep .ord, #root .t-gym .ord { color: #C9BCEE; }
+#root .t-weight .ord { color: #211249; }
+#root .t-macro .ord { color: #2A175D; }
+#root .tlabel { position: absolute; left: 26px; top: 52px; font-family: system-ui, sans-serif; font-weight: 500; font-size: 54px; letter-spacing: -0.01em; line-height: 1; }
+#root .t-sleep .tlabel, #root .t-gym .tlabel { color: #FFF9F1; }
+#root .t-weight .tlabel { color: #211249; }
+#root .t-macro .tlabel { color: #2A175D; }
+#root .tfoot { position: absolute; left: 26px; bottom: 18px; font-family: ui-monospace, Menlo, monospace; font-size: 22px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }
+#root .t-sleep .tfoot, #root .t-gym .tfoot { color: #C9BCEE; }
+#root .t-weight .tfoot { color: #FFF9F1; }
+#root .t-macro .tfoot { color: #2A175D; }
+#root .chart { position: absolute; right: 30px; top: 40px; width: 240px; height: 200px; }
+#root .chip { position: absolute; padding: 12px 26px; border-radius: 6px; border: 2px solid #7C5CD6; background: #2A175D; font-family: ui-monospace, Menlo, monospace; font-size: 24px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #FFF9F1; white-space: nowrap; }
+#root .c-cycle { left: 60px; top: 560px; }
+#root .c-mood { right: 60px; top: 300px; }
+#root .c-habit { right: 120px; top: 660px; }
+#root .footline { position: absolute; left: 96px; top: 852px; width: 1728px; display: flex; justify-content: space-between; }
+#root .footline span { font-family: ui-monospace, Menlo, monospace; font-size: 24px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #7C5CD6; }
+</style>
+<script src="gsap.min.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+(function () {
+  var tl = gsap.timeline({ paused: true });
+  // Scene 1 (0-8s): hook + sleep tile cascade, moon arc draw; weight tile + trend line
+  tl.fromTo("#root .hook", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.7, ease: "power2.out" }, 0.1);
+  tl.fromTo("#root .t-sleep", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power2.out" }, 0.3);
+  tl.fromTo("#root .moon-arc", { strokeDashoffset: 320 }, { strokeDashoffset: 60, duration: 3.0, ease: "power1.inOut" }, 1.2);
+  tl.fromTo("#root .t-sleep .tfoot", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 3.4);
+  tl.fromTo("#root .t-weight", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power2.out" }, 3.6);
+  tl.fromTo("#root .trend-line", { strokeDashoffset: 520 }, { strokeDashoffset: 0, duration: 2.6, ease: "power1.inOut" }, 4.2);
+  tl.fromTo("#root .noise-dot", { opacity: 0 }, { opacity: 1, duration: 0.4, stagger: 0.12 }, 4.6);
+  // Scene 2 (8-19s): gym tile + rest-timer ring sweep; macro tile + rings fill
+  tl.fromTo("#root .t-gym", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power2.out" }, 8.4);
+  tl.fromTo("#root .timer-ring", { strokeDashoffset: 440 }, { strokeDashoffset: 110, duration: 4.0, ease: "power1.inOut" }, 9.2);
+  tl.fromTo("#root .t-macro", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power2.out" }, 12.2);
+  tl.fromTo("#root .macro-outer", { strokeDashoffset: 500 }, { strokeDashoffset: 120, duration: 2.6, ease: "power1.inOut" }, 13.0);
+  tl.fromTo("#root .macro-inner", { strokeDashoffset: 380 }, { strokeDashoffset: 60, duration: 2.6, ease: "power1.inOut" }, 13.6);
+  tl.fromTo("#root .footline", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 17.6);
+  // Scene 3 (19-27.9s): hold float, chips orbit in, teal sweep travels, stillness
+  tl.fromTo("#root .grid", { y: 0 }, { y: -12, duration: 8.9, ease: "sine.inOut" }, 19.0);
+  tl.fromTo("#root .c-cycle", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out" }, 19.4);
+  tl.fromTo("#root .c-mood", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out" }, 20.4);
+  tl.fromTo("#root .c-habit", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out" }, 21.4);
+  tl.fromTo("#root .sweep", { x: 0, opacity: 0 }, { x: 1750, opacity: 0.28, duration: 2.6, ease: "power1.inOut" }, 22.2);
+  tl.set("#root .sweep", { opacity: 0 }, 25.0);
+  window.__timelines["03-engines-1"] = tl;
+})();
+</script>
+<div id="root" data-composition-id="03-engines-1" data-width="1920" data-height="1080" data-duration="28.504">
+  <div class="clip bg" data-start="0" data-duration="28.504" data-track-index="0"></div>
+  <div class="clip" data-start="0" data-duration="28.504" data-track-index="1">
+    <div class="topbar"><span>Healthgraph — Engines</span><span>03</span></div>
+    <div class="toprule"></div>
+    <div class="hook">EVERY PART, <em>ITS ENGINE</em></div>
+    <div class="grid">
+      <div class="sweep"></div>
+      <div class="tile t-sleep">
+        <div class="ord">01</div>
+        <div class="tlabel">Sleep</div>
+        <svg class="chart" viewBox="0 0 240 200">
+          <path class="moon-arc" d="M30 150 A 80 80 0 0 1 210 70" fill="none" stroke="#4FD1C5" stroke-width="10" stroke-linecap="round" stroke-dasharray="320" stroke-dashoffset="320"/>
+          <circle cx="188" cy="150" r="14" fill="#7C5CD6"/>
+        </svg>
+        <div class="tfoot">Debt · Consistency</div>
+      </div>
+      <div class="tile t-weight">
+        <div class="ord">02</div>
+        <div class="tlabel">Weight</div>
+        <svg class="chart" viewBox="0 0 240 200">
+          <circle class="noise-dot" cx="40" cy="120" r="6" fill="#211249"/>
+          <circle class="noise-dot" cx="80" cy="100" r="6" fill="#211249"/>
+          <circle class="noise-dot" cx="120" cy="112" r="6" fill="#211249"/>
+          <circle class="noise-dot" cx="160" cy="80" r="6" fill="#211249"/>
+          <circle class="noise-dot" cx="200" cy="60" r="6" fill="#211249"/>
+          <path class="trend-line" d="M30 130 L90 105 L140 95 L210 50" fill="none" stroke="#FFF9F1" stroke-width="8" stroke-linecap="round" stroke-dasharray="520" stroke-dashoffset="520"/>
+        </svg>
+        <div class="tfoot">Trend · Weeks</div>
+      </div>
+      <div class="tile t-gym">
+        <div class="ord">03</div>
+        <div class="tlabel">Gym</div>
+        <svg class="chart" viewBox="0 0 240 200">
+          <circle cx="120" cy="100" r="70" fill="none" stroke="#7C5CD6" stroke-width="8" opacity="0.45"/>
+          <circle class="timer-ring" cx="120" cy="100" r="70" fill="none" stroke="#4FD1C5" stroke-width="12" stroke-linecap="round" stroke-dasharray="440" stroke-dashoffset="440" transform="rotate(-90 120 100)"/>
+          <rect x="88" y="92" width="64" height="16" rx="4" fill="#FFF9F1"/>
+          <rect x="76" y="78" width="12" height="44" rx="4" fill="#FFF9F1"/>
+          <rect x="152" y="78" width="12" height="44" rx="4" fill="#FFF9F1"/>
+        </svg>
+        <div class="tfoot">Rest · PRs</div>
+      </div>
+      <div class="tile t-macro">
+        <div class="ord">04</div>
+        <div class="tlabel">Macros</div>
+        <svg class="chart" viewBox="0 0 240 200">
+          <circle cx="120" cy="100" r="80" fill="none" stroke="#2A175D" stroke-width="10" opacity="0.3"/>
+          <circle class="macro-outer" cx="120" cy="100" r="80" fill="none" stroke="#2A175D" stroke-width="14" stroke-linecap="round" stroke-dasharray="500" stroke-dashoffset="500" transform="rotate(-90 120 100)"/>
+          <circle cx="120" cy="100" r="58" fill="none" stroke="#2A175D" stroke-width="8" opacity="0.3"/>
+          <circle class="macro-inner" cx="120" cy="100" r="58" fill="none" stroke="#4FD1C5" stroke-width="12" stroke-linecap="round" stroke-dasharray="380" stroke-dashoffset="380" transform="rotate(-90 120 100)"/>
+        </svg>
+        <div class="tfoot">Cal · Protein</div>
+      </div>
+    </div>
+    <div class="chip c-cycle">Cycle</div>
+    <div class="chip c-mood">Mood</div>
+    <div class="chip c-habit">Habits</div>
+    <div class="footline"><span>Four engines · one system</span><span>Streaks keep it honest</span></div>
+  </div>
+</div>
+</template>

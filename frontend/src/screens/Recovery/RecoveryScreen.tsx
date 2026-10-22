@@ -15,16 +15,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Button, Card, EmptyState, SectionHeader } from '@/components';
-import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { Button, EmptyState } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { useReadiness } from '@/hooks/useReadiness';
 import type { ReadinessBand } from '@/screens/Recovery/recovery';
 
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
+
 const BAND_COPY: Record<ReadinessBand, { title: string; sub: string; color: string }> = {
-  ready: { title: 'Ready', sub: 'Your baseline says go.', color: '#4FD1C5' },
+  ready: { title: 'Ready', sub: 'Your baseline says go.', color: LG.card.mint },
   steady: { title: 'Steady', sub: 'A normal day by your baseline.', color: '#C9A24B' },
-  easy: { title: 'Take it easy', sub: 'Your baseline is asking for rest.', color: '#D4818D' },
+  easy: { title: 'Take it easy', sub: 'Your baseline is asking for rest.', color: LG.card.danger },
 };
 
 export default function RecoveryScreen() {
@@ -46,16 +51,17 @@ export default function RecoveryScreen() {
   }, [navigation]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Recovery.</Text>
+        <Text style={styles.title}>Recovery</Text>
         <Text style={styles.sub}>Overnight restoration, from your own baseline.</Text>
 
         {isLoading ? (
-          <>
+          <View style={styles.center}>
             <Text style={styles.loading}>Loading…</Text>
-            <HealthFact style={styles.fact} />
-          </>
+          </View>
         ) : !readiness ? (
           <EmptyState
             title="Not enough history yet"
@@ -67,7 +73,7 @@ export default function RecoveryScreen() {
           />
         ) : (
           <>
-            <Card style={styles.darkCard}>
+            <GlassSurface strong style={styles.card}>
               <Text style={[styles.bigValue, { color: BAND_COPY[readiness.band].color }]}>
                 {readiness.value}
               </Text>
@@ -76,10 +82,10 @@ export default function RecoveryScreen() {
               <Text style={styles.provenance}>
                 {`From ${readiness.baselineNights} logged ${readiness.baselineNights === 1 ? 'night' : 'nights'} · your baseline, not a population chart.`}
               </Text>
-            </Card>
+            </GlassSurface>
 
-            <SectionHeader dark title="What went in" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
+            <Text style={styles.sectionTitle}>What went in</Text>
+            <GlassSurface strong style={styles.card}>
               {readiness.factors.map((f) => (
                 <View key={f.key} style={styles.factorRow}>
                   <View style={styles.factorMain}>
@@ -100,7 +106,7 @@ export default function RecoveryScreen() {
                   <Text style={styles.factorPoints}>{`${f.points}/${f.max}`}</Text>
                 </View>
               ))}
-            </Card>
+            </GlassSurface>
 
             <Button title="Refresh" variant="ghost" onPress={() => void refetch()} fullWidth textStyle={styles.ghostText} />
           </>
@@ -108,6 +114,7 @@ export default function RecoveryScreen() {
 
         <Button
           title="Measure heart rate"
+          variant="secondary"
           onPress={goMeasure}
           fullWidth
           size="large"
@@ -125,40 +132,34 @@ export default function RecoveryScreen() {
           A wellness hint from your trends — not medical advice, diagnosis, or treatment.
         </Text>
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
-  fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  bigValue: { ...TYPE.display, fontSize: 64, textAlign: 'center', fontVariant: ['tabular-nums'] },
-  bandTitle: { fontFamily: FONT.semi, fontSize: 20, color: '#FFFFFF', textAlign: 'center', marginTop: 4 },
-  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4 },
-  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginTop: 16 },
+  center: { alignItems: 'center', paddingVertical: 24 },
+  card: { padding: 16 },
+  bigValue: { fontWeight: '600', fontSize: 64, lineHeight: 70, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  bandTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', textAlign: 'center', marginTop: 4 },
+  avgSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 4 },
+  provenance: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center', marginTop: 8 },
   factorRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
   factorMain: { width: 128, gap: 2 },
-  factorLabel: { ...TYPE.body, color: '#FFFFFF', fontSize: 14 },
-  factorNote: { ...TYPE.caption, color: GV.fog, fontSize: 11 },
+  factorLabel: { fontWeight: '600', fontSize: 14, lineHeight: 19, color: '#FFFFFF' },
+  factorNote: { fontWeight: '400', fontSize: 11, lineHeight: 14, color: TERTIARY },
   factorBar: { flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.12)' },
   factorFill: { height: 8, borderRadius: 4 },
-  factorPoints: { ...TYPE.caption, color: GV.fog, width: 44, textAlign: 'right', fontVariant: ['tabular-nums'] },
-  measureBtn: { backgroundColor: '#4FD1C5' },
-  measureBtnText: { color: '#062A26' },
-  ghostText: { color: '#A7B8B2' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  factorPoints: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, width: 44, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  measureBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  measureBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
 });

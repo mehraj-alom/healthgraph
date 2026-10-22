@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HealthGraph Engine Audit: What Each Engine Must Add to Replace Real Apps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+<link rel="stylesheet" media="(prefers-color-scheme: light)" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css">
+<link rel="stylesheet" media="(prefers-color-scheme: dark)" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+<style>
+:root {
+    --md-accent: #00D4AA;
+    --md-accent-soft: rgba(0, 212, 170, 0.14);
+    --md-bg: #0A1628;
+    --md-border: #163058;
+    --md-code-bg: #0E1E38;
+    --md-link: #00D4AA;
+    --md-link-hover: #00FCCA;
+    --md-success: #10A85C;
+    --md-surface: #102340;
+    --md-text: #F7F7F2;
+    --md-text-muted: rgba(247, 247, 242, 0.68);
+    --md-warn: #C87C10;
+    --md-scale: 1.25;
+    --md-font-heading: 'Inter', system-ui, -apple-system, sans-serif;
+    --md-font-body: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+    margin: 0;
+    padding: 2rem 1.5rem;
+    background: var(--md-bg);
+    color: var(--md-text);
+    font-family: var(--md-font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    max-width: 960px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+main h1, main h2, main h3, main h4, main h5, main h6 {
+    font-family: var(--md-font-heading);
+    color: var(--md-text);
+    line-height: 1.25;
+    margin: 1.5em 0 0.5em;
+    font-weight: 600;
+    scroll-margin-top: 1rem;
+}
+main h1 { font-size: calc(1rem * var(--md-scale) * var(--md-scale) * var(--md-scale) * var(--md-scale)); margin-top: 0; }
+main h2 { font-size: calc(1rem * var(--md-scale) * var(--md-scale) * var(--md-scale)); border-bottom: 1px solid var(--md-border); padding-bottom: 0.3em; }
+main h3 { font-size: calc(1rem * var(--md-scale) * var(--md-scale)); }
+main h4 { font-size: calc(1rem * var(--md-scale)); }
+main h5, main h6 { font-size: 1rem; color: var(--md-text-muted); }
+
+p { margin: 0.5em 0 1em; }
+a { color: var(--md-link); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: var(--md-link-hover); }
+
+strong { font-weight: 600; }
+em { font-style: italic; }
+
+code {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--md-code-bg);
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+pre {
+    background: var(--md-code-bg);
+    border: 1px solid var(--md-border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    margin: 1.5em 0;
+    position: relative;
+}
+pre code { background: transparent; padding: 0; font-size: 1em; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5em 0;
+    font-size: 0.9375rem;
+}
+th, td {
+    border: 1px solid var(--md-border);
+    padding: 0.5em 0.75em;
+    text-align: left;
+}
+th { background: var(--md-surface); font-weight: 600; }
+td.align-center, th.align-center { text-align: center; }
+td.align-right, th.align-right { text-align: right; }
+
+blockquote {
+    border-left: 3px solid var(--md-border);
+    margin: 1.5em 0;
+    padding: 0.5em 0 0.5em 1.25em;
+    color: var(--md-text-muted);
+    font-style: italic;
+}
+
+ul, ol { padding-left: 1.5em; margin: 0.5em 0 1em; }
+li { margin: 0.25em 0; }
+
+hr {
+    border: 0;
+    border-top: 1px solid var(--md-border);
+    margin: 3em 0;
+}
+
+.callout {
+    border-left: 4px solid var(--md-accent);
+    background: var(--md-accent-soft);
+    padding: 0.75rem 1rem 0.75rem 1.25rem;
+    margin: 1.5em 0;
+    border-radius: 0 8px 8px 0;
+}
+.callout .callout-label {
+    font-family: var(--md-font-heading);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25em;
+    color: var(--md-accent);
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+.callout .callout-icon {
+    display: inline-flex;
+    width: 1.125em;
+    height: 1.125em;
+    align-items: center;
+    justify-content: center;
+}
+.callout-note { border-left-color: var(--md-link); }
+.callout-note .callout-label { color: var(--md-link); }
+.callout-tip { border-left-color: var(--md-success); }
+.callout-tip .callout-label { color: var(--md-success); }
+.callout-important { border-left-color: var(--md-accent); }
+.callout-warning { border-left-color: var(--md-warn); }
+.callout-warning .callout-label { color: var(--md-warn); }
+.callout-caution { border-left-color: var(--md-warn); }
+.callout-caution .callout-label { color: var(--md-warn); }
+.callout p:last-child { margin-bottom: 0; }
+.callout p:first-child { margin-top: 0; }
+
+/* TOC */
+nav.toc { font-size: 0.9375rem; line-height: 1.5; }
+nav.toc ol, nav.toc ul { padding-left: 1.25em; }
+nav.toc a {
+    color: var(--md-text-muted);
+    text-decoration: none;
+    display: block;
+    padding: 0.15em 0.25em;
+    border-radius: 3px;
+}
+nav.toc a:hover { color: var(--md-link); background: var(--md-accent-soft); }
+nav.toc a[aria-current="location"] {
+    color: var(--md-accent);
+    font-weight: 600;
+    background: var(--md-accent-soft);
+}
+
+/* TOC variants */
+body.toc-sticky-sidebar { display: grid; grid-template-columns: 220px 1fr; gap: 2.5rem; max-width: 1200px; }
+body.toc-sticky-sidebar nav.toc {
+    position: sticky;
+    top: 1.5rem;
+    align-self: start;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    border-right: 1px solid var(--md-border);
+    padding-right: 1rem;
+}
+@media (max-width: 800px) {
+    body.toc-sticky-sidebar { display: block; }
+    body.toc-sticky-sidebar nav.toc { position: static; border-right: none; max-height: none; margin-bottom: 2rem; }
+}
+
+body.toc-collapsible-top nav.toc {
+    background: var(--md-surface);
+    border: 1px solid var(--md-border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+}
+body.toc-collapsible-top nav.toc summary { cursor: pointer; font-weight: 600; font-family: var(--md-font-heading); }
+
+body.toc-none nav.toc { display: none; }
+
+/* Search */
+.md-search {
+    position: sticky;
+    top: 0;
+    background: var(--md-bg);
+    padding: 0.5rem 0 0.75rem;
+    z-index: 10;
+    border-bottom: 1px solid var(--md-border);
+    margin-bottom: 1rem;
+}
+.md-search input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--md-border);
+    border-radius: 6px;
+    font-size: 0.9375rem;
+    background: var(--md-surface);
+    color: var(--md-text);
+    font-family: inherit;
+}
+.md-search input:focus {
+    outline: 2px solid var(--md-accent);
+    outline-offset: 2px;
+}
+main section[hidden] { display: none; }
+
+/* Code-copy button */
+.code-copy {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: var(--md-surface);
+    color: var(--md-text-muted);
+    border: 1px solid var(--md-border);
+    border-radius: 5px;
+    padding: 0.2em 0.5em;
+    font-size: 0.75rem;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    font-family: inherit;
+}
+pre:hover .code-copy { opacity: 1; }
+.code-copy:hover { color: var(--md-text); background: var(--md-bg); }
+.code-copy.copied { color: var(--md-success); }
+
+/* Footer */
+footer.md-footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--md-border);
+    color: var(--md-text-muted);
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+footer.md-footer img { max-height: 24px; max-width: 120px; }
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    html { scroll-behavior: auto; }
+}
+
+        body.style-technical { max-width: 960px; line-height: 1.6; }
+        body.style-technical main h2 { font-size: calc(1rem * var(--md-scale) * var(--md-scale)); margin-top: 2.5rem; }
+        body.style-technical pre { font-size: 0.875rem; line-height: 1.5; }
+    </style>
+</head>
+<body class="style-technical toc-sticky-sidebar">
+<nav class="toc" aria-label="Table of contents">
+<ol>
+<li><a href="#how-to-read-this-document">How to read this document</a></li>
+<li><a href="#engine-overview">Engine overview</a></li>
+<li><a href="#1-heartengine-ppg-measurement">1. HeartEngine + PPG measurement</a></li>
+<li><a href="#2-sleepengine">2. SleepEngine</a></li>
+<li><a href="#3-nutritionengine-foodscan">3. NutritionEngine + FoodScan</a></li>
+<li><a href="#4-fitnessengine">4. FitnessEngine</a></li>
+<li><a href="#5-weightengine">5. WeightEngine</a></li>
+<li><a href="#6-wellbeingengine">6. WellbeingEngine</a></li>
+<li><a href="#7-recovery-readiness">7. Recovery / Readiness</a></li>
+<li><a href="#8-cycle">8. Cycle</a></li>
+<li><a href="#9-substance">9. Substance</a></li>
+<li><a href="#10-disciplineengine">10. DisciplineEngine</a></li>
+<li><a href="#11-medications">11. Medications</a></li>
+<li><a href="#12-voice-voicecheckin">12. Voice / VoiceCheckin</a></li>
+<li><a href="#13-documents-ocr-medical-extraction">13. Documents / OCR / medical extraction</a></li>
+<li><a href="#14-report-doctor-sharing">14. Report / doctor sharing</a></li>
+<li><a href="#15-trends-timeline-insights-chat">15. Trends / Timeline / Insights / Chat</a></li>
+<li><a href="#16-vitalslogger-dailylog-and-platform-sync">16. VitalsLogger / DailyLog and platform sync</a></li>
+<li><a href="#priority-build-order">Priority build order</a></li>
+<li><a href="#external-benchmarks-consulted">External benchmarks consulted</a></li>
+</ol>
+</nav>
+<main>
+<div class="md-search"><input type="search" id="md-search-input" placeholder="Filter sections… (Esc to clear)" aria-label="Filter document sections"></div>
+<h1 id="healthgraph-engine-audit-what-each-engine-must-add-to-replace-real-apps">HealthGraph Engine Audit: What Each Engine Must Add to Replace Real Apps</h1>
+<aside class="callout callout-important" role="note"><div class="callout-label"><span class="callout-icon" aria-hidden="true">!</span>IMPORTANT</div><div class="callout-body">Biggest single gap: no Apple HealthKit / Google Health Connect / wearable sync. Every competing engine assumes passive data collection, while HealthGraph is still mostly manual logging plus camera spot checks.</div></aside>
+<aside class="callout callout-note" role="note"><div class="callout-label"><span class="callout-icon" aria-hidden="true">i</span>NOTE</div><div class="callout-body">Wellness guardrail preserved: this audit does not recommend diagnosis, blood-pressure estimation, AFib detection, or treatment advice. Those would change the app's regulatory posture.</div></aside>
+<h2 id="how-to-read-this-document">How to read this document</h2>
+<p>Each engine section names the real-world apps it must replace, lists what exists today, then lists what is missing and what to add. A priority build order follows at the end.</p>
+<h2 id="engine-overview">Engine overview</h2>
+<table><thead><tr><th class="align-left">Engine</th><th class="align-left">Must replace</th><th class="align-left">Current state</th></tr></thead><tbody><tr><td class="align-left">HeartEngine + PPG measurement</td><td class="align-left">Welltory, HRV4Training, Apple Watch Vitals, Fitbit</td><td class="align-left">Spot checks only, no wearable import</td></tr><tr><td class="align-left">SleepEngine</td><td class="align-left">Sleep Cycle, Pillow, Rise, Oura, Whoop</td><td class="align-left">Manual duration/quality only</td></tr><tr><td class="align-left">NutritionEngine + FoodScan</td><td class="align-left">MyFitnessPal, Cronometer, Lose It, Yazio</td><td class="align-left">Macros only, no micros or recipes</td></tr><tr><td class="align-left">FitnessEngine</td><td class="align-left">Strong, Hevy, Fitbod, Strava</td><td class="align-left">Manual activity rows only</td></tr><tr><td class="align-left">WeightEngine</td><td class="align-left">Happy Scale, Bodly, Withings, Renpho</td><td class="align-left">Display shell, almost no trend logic</td></tr><tr><td class="align-left">WellbeingEngine</td><td class="align-left">Daylio, Bearable, MindDoc, Apple State of Mind</td><td class="align-left">Simple 1-5 scores only</td></tr><tr><td class="align-left">Recovery / Readiness</td><td class="align-left">Whoop Recovery, Oura Readiness, Garmin</td><td class="align-left">Score with no overnight data</td></tr><tr><td class="align-left">Cycle</td><td class="align-left">Flo, Clue, Apple Cycle Tracking</td><td class="align-left">Calendar log, no predictions</td></tr><tr><td class="align-left">Substance</td><td class="align-left">Sunnyside, Reframe, I Am Sober</td><td class="align-left">Generic log, no goal tracks</td></tr><tr><td class="align-left">DisciplineEngine</td><td class="align-left">Streaks, Habitica, Habit Pixel</td><td class="align-left">Derived activity only, no custom habits</td></tr><tr><td class="align-left">Medications</td><td class="align-left">Medisafe, Apple Medications</td><td class="align-left">Strongest engine, needs interaction depth</td></tr><tr><td class="align-left">Voice / VoiceCheckin</td><td class="align-left">Echo, Murmur, Speakwise, Dayora</td><td class="align-left">Guided 5-question flow, no free journal</td></tr><tr><td class="align-left">Documents / OCR</td><td class="align-left">Apple Health Records, MyQuest, Eider</td><td class="align-left">4 doc types, no correction UI</td></tr><tr><td class="align-left">Report / doctor sharing</td><td class="align-left">Apple Share with Provider, Clue Doctor Report</td><td class="align-left">One fixed 30-day PDF</td></tr><tr><td class="align-left">Trends / Timeline / Insights / Chat</td><td class="align-left">Bearable, Apple trends, Ada-style guidance</td><td class="align-left">Grounded companion, no streaming/export</td></tr><tr><td class="align-left">VitalsLogger + platform sync</td><td class="align-left">Apple Health, Google Health, Bearable</td><td class="align-left">Great manual capture, no platform sync</td></tr></tbody></table>
+<h2 id="1-heartengine-ppg-measurement">1. HeartEngine + PPG measurement</h2>
+<p><strong>Must replace:</strong> Welltory, HRV4Training, Optimal HRV, Apple Watch Vitals/Heart, Fitbit resting-HR/HRV tracking.</p>
+<p><strong>Have today:</strong> fingertip PPG plus face RPPG spot checks; BPM, signal quality, and reliability gating; RMSSD/SDNN for fingertip measurements; 7-day average and recent history; derived-vitals-only backend with no video uploaded.</p>
+<p><strong>Missing:</strong> no wearable or HealthKit/Health Connect import; no resting vs active context; no HR zones; no SpO2 or respiratory-rate feature set; HRV unavailable for face measurements; no measurement reminders; no calibration or accuracy story; no per-engine export.</p>
+<p><strong>Add:</strong> HealthKit/Health Connect heart-rate import with source labels; resting-HR tagging and morning-reading workflow; HR zones; extended HRV coverage or clear face-RPPG limits; 30/90-day trends with min/max/range; measurement reminders; device accuracy disclosure; per-engine CSV/PDF export. Do not add BP estimation, ECG diagnosis, or AFib claims.</p>
+<h2 id="2-sleepengine">2. SleepEngine</h2>
+<p><strong>Must replace:</strong> Sleep Cycle, Pillow, Rise, Oura sleep, Whoop sleep, Fitbit sleep.</p>
+<p><strong>Have today:</strong> manual sleep duration, 1-5 quality, awakenings; 28-day average, 7-day strip, 14-night history.</p>
+<p><strong>Missing:</strong> no bedtime/wake timestamps; no consistency or sleep-debt score; no sleep stages; no snore/audio detection; no smart alarm; no wearable sleep import; no sleep score, goals, reminders, coaching, or nap handling.</p>
+<p><strong>Add:</strong> bed/wake timestamps and sleep schedule; consistency score and sleep debt; wearable and HealthKit sleep-stage import; optional snore detection; smart alarm; bedtime reminders and sleep goal; sleep coaching tied to recovery; nap logging; sleep history export.</p>
+<h2 id="3-nutritionengine-foodscan">3. NutritionEngine + FoodScan</h2>
+<p><strong>Must replace:</strong> MyFitnessPal, Cronometer, Lose It, Yazio, MacroFactor.</p>
+<p><strong>Have today:</strong> meal-photo AI estimate; barcode lookup; calories plus protein/carbs/fat; editable macro targets and daily calorie ring; meal history.</p>
+<p><strong>Missing:</strong> fallback scans can be kcal-only with zeroed macros; no fiber, sugar, sodium, or micronutrients; no diet templates or allergy flags; no recipe builder, favorites, recents, or templates; no voice logging; no water reminders; weak barcode-miss workflow; less database depth than leaders.</p>
+<p><strong>Add:</strong> fiber/sugar/sodium plus core micronutrients; diet modes such as high-protein, low-carb, and Mediterranean-style; allergen and intolerance flags; portion-correction UI after AI estimation; recipe builder, favorites, recents, meal duplication; voice logging; water reminders; barcode-miss submission workflow; verified-food curation; nutrition export.</p>
+<h2 id="4-fitnessengine">4. FitnessEngine</h2>
+<p><strong>Must replace:</strong> Strong, Hevy, Fitbod, Strava, Apple Fitness.</p>
+<p><strong>Have today:</strong> manual activity type, duration, calories; session counts, active minutes, deltas, history.</p>
+<p><strong>Missing:</strong> no structured sets/reps/weight; no workout templates or plans; no rest timer; no GPS route/distance; no steps/distance; no HR zones; no personal records; no wearable workout import; no progression or recovery-aware programming.</p>
+<p><strong>Add:</strong> structured strength logging with exercise, sets, reps, weight, RPE; workout templates and reusable routines; rest timer; personal records and volume progression; optional GPS tracking; steps/distance via platform sync; workout reminders and weekly goal; workout export.</p>
+<h2 id="5-weightengine">5. WeightEngine</h2>
+<p><strong>Must replace:</strong> Happy Scale, Bodly, Withings/Renpho scale apps, FatSecret weight tracking.</p>
+<p><strong>Have today:</strong> profile weight display; graph only when DailyLog weight history exists.</p>
+<p><strong>Missing:</strong> no goal or goal range; no BMI/body-fat/measurements; no trend smoothing; no smart-scale sync; no weigh-in reminders; no contextual notes for spikes.</p>
+<p><strong>Add:</strong> goal weight or healthy range; BMI, body fat, waist/hip measurements; trend smoothing and milestone view; smart-scale import via HealthKit/Health Connect; weigh-in reminders; spike-context notes; progress-photo linkage; export.</p>
+<h2 id="6-wellbeingengine">6. WellbeingEngine</h2>
+<p><strong>Must replace:</strong> Daylio, Bearable, MindDoc, Apple State of Mind.</p>
+<p><strong>Have today:</strong> 1-5 mood, energy, stress; averages, deltas, 14-day history.</p>
+<p><strong>Missing:</strong> no emotion tags or contributing factors; no journaling linkage; no symptom/medication/sleep correlation depth; no goals; no check-in reminders outside voice; no weekly reflection or AI brief; no export except global report paths.</p>
+<p><strong>Add:</strong> emotion tags and activity/factor tagging; journal linkage; check-in reminders; weekly reflection and pattern brief; cross-factor correlations with actions; goals tied to sleep, activity, and stress; shareable wellness summary; CSV/PDF export. Only add PHQ/GAD-style instruments if the team accepts medical-device scope.</p>
+<h2 id="7-recovery-readiness">7. Recovery / Readiness</h2>
+<p><strong>Must replace:</strong> Whoop Recovery, Oura Readiness, Garmin Training Readiness/Body Battery.</p>
+<p><strong>Have today:</strong> 0-100 score with Ready/Steady/Take-it-easy bands; factor bars and sparse-data guidance.</p>
+<p><strong>Missing:</strong> no overnight wearable physiology; HRV often unavailable; no sleep-stage input; no strain/load target; no training recommendation; no lifestyle-habit correlation; no transparent baseline explanation; no calibration-period handling.</p>
+<p><strong>Add:</strong> overnight HR/HRV/sleep import from wearables; personal baseline display and calibration period; daily strain/load target; actionable guidance such as train, easy activity, or rest; habit correlation for alcohol, caffeine, late meals, and sleep timing; recovery trends; export.</p>
+<h2 id="8-cycle">8. Cycle</h2>
+<p><strong>Must replace:</strong> Flo, Clue, Apple Cycle Tracking.</p>
+<p><strong>Have today:</strong> calendar, period spans, notes; add/edit/delete; device-only storage.</p>
+<p><strong>Missing:</strong> no period prediction; no fertile-window/ovulation prediction; no pregnancy mode; no symptom linkage; no reminders; no partner sharing; no doctor-report integration; no wearable temperature/HR signals; no anonymous/privacy mode story.</p>
+<p><strong>Add:</strong> period predictions; fertile-window and ovulation estimates; symptom linkage across mood, pain, sleep, and energy; TTC/pregnancy/perimenopause modes or an explicitly narrower scope; period and symptom reminders; cycle-aware insights; doctor-report export; strong privacy controls and optional anonymous mode. Without predictions this cannot replace Flo or Clue.</p>
+<h2 id="9-substance">9. Substance</h2>
+<p><strong>Must replace:</strong> Sunnyside, Reframe, I Am Sober, Smoke Free, DrinkControl.</p>
+<p><strong>Have today:</strong> generic alcohol/tobacco/other logging; amount/unit, date/time, notes; 7-day strip and history.</p>
+<p><strong>Missing:</strong> no moderation vs sobriety goal tracks; no standard-drink conversion; no money-saved, calories-avoided, or milestone tracking; no cravings/trigger logging; no reduction plans or coaching; no community model; no reminders or streak system.</p>
+<p><strong>Add:</strong> goal modes such as reduce, quit, and sober-curious; standard drink/cigarette conversion; money, calories, and time-saved dashboard; milestones, streaks, and relapse-aware progress; craving/trigger logging; weekly plan and reminders; motivational content or coaching; exportable progress report.</p>
+<h2 id="10-disciplineengine">10. DisciplineEngine</h2>
+<p><strong>Must replace:</strong> Streaks, Habitica, Habit Pixel, Awesome Habits.</p>
+<p><strong>Have today:</strong> active-day union across logs; streak and medication-adherence percentage; 7-day strip and binary activity graph.</p>
+<p><strong>Missing:</strong> no user-defined habits; no custom frequency or goals; no reminders, widgets, or nudges; no negative-habit tracking; no habit notes; no heatmaps or deep analytics; no social/gamification layer.</p>
+<p><strong>Add:</strong> custom habit builder; daily/weekly/monthly schedules and targets; reminders, widgets, and lock-screen actions; good-habit and bad-habit modes; streak rules and heatmaps; habit notes and mood linkage; export.</p>
+<h2 id="11-medications">11. Medications</h2>
+<p><strong>Must replace:</strong> Medisafe, Apple Medications, Mango-style reminders.</p>
+<p><strong>Have today:</strong> the strongest engine: regimen CRUD, schedule-today, take flow, pause/resume/stop; adherence, refill, duplicate/polypharmacy flags; prescription scan and verify flow; OS reminders with snooze and full-screen call UI.</p>
+<p><strong>Missing vs Medisafe:</strong> interaction checking is flags-only, not a full checker UX; no refill ordering or pharmacy handoff; no caregiver missed-dose alerts; no appointment manager; no broad measurement-tracker suite; limited complex dosing such as taper, PRN, or cycle-based schedules; no travel/timezone handling; no adherence prediction engine; doctor reporting is not medication-centric enough.</p>
+<p><strong>Add:</strong> full interaction checker with severity, sources, and doctor-discussion export; refill management with low-supply forecasting; caregiver alerts for missed critical doses; PRN, taper, alternating-day, and complex schedules; timezone travel handling; appointment linkage; medication-centric doctor report; adherence insights; pharmacy handoff where legally appropriate.</p>
+<h2 id="12-voice-voicecheckin">12. Voice / VoiceCheckin</h2>
+<p><strong>Must replace:</strong> Echo, Murmur, Speakwise, Day One voice journaling, Dayora-style AI journaling.</p>
+<p><strong>Have today:</strong> scheduled daily voice call flow; TTS questions for mood, energy, stress, sleep, water; short turns with backend transcription; structured fields saved to DailyLog.</p>
+<p><strong>Missing:</strong> no free-form journaling; no transcript library or search; no AI summaries or pattern detection; no emotion analysis; no photo/location enrichment; no multilingual support; no playback/export; backend has no streaming, diarization, speaker ID, or session API.</p>
+<p><strong>Add:</strong> free-form voice journal mode alongside guided check-in; transcript history, search, and favorites; AI summaries, keywords, and emotion tags; weekly voice reflection; longer recordings with pause/resume; multilingual transcription; transcript export; backend session/streaming architecture.</p>
+<h2 id="13-documents-ocr-medical-extraction">13. Documents / OCR / medical extraction</h2>
+<p><strong>Must replace:</strong> Apple Health Records/FHIR, MyQuest-style lab apps, Eider, clinical-document OCR pipelines.</p>
+<p><strong>Have today:</strong> PDF/image upload; 4-type classification covering lab, prescription, discharge, imaging; structured extraction and timeline linkage; prescription-med verification; provenance with source references.</p>
+<p><strong>Missing:</strong> only 4 document types; no OCR correction UI; no folders, tags, or full-text search; no lab-value trend views; no FHIR import/export; no provider/EHR connectivity; no reprocess endpoint; tight bulk-upload limits.</p>
+<p><strong>Add:</strong> OCR correction and human-review workflow; more document types such as vaccination, allergy, pathology, cardiology, and visit summaries; lab trends with reference ranges in careful display-only wording; document search, tags, folders, favorites; FHIR R4 import/export; provider-sharing pathway; failed-extraction reprocessing; bulk import; per-document export bundle.</p>
+<h2 id="14-report-doctor-sharing">14. Report / doctor sharing</h2>
+<p><strong>Must replace:</strong> Apple Share with Provider, Clue Doctor Report, Eider share cards, HealthLog PDF/FHIR export.</p>
+<p><strong>Have today:</strong> 30-day doctor PDF; OS share sheet; device-side assembly.</p>
+<p><strong>Missing:</strong> no selective data/time-range builder; no per-engine reports; no FHIR/IPS export; no clinician cover summary; no secure time-boxed sharing; no sharing audit trail; no scheduled reports.</p>
+<p><strong>Add:</strong> share builder with engines, date range, and detail level; clinician-friendly cover page with medications, allergies, conditions, and recent changes; FHIR R4 / International Patient Summary export; per-engine PDFs; secure expiring share link if the backend supports it; sharing history and access log; CSV/JSON companion export.</p>
+<h2 id="15-trends-timeline-insights-chat">15. Trends / Timeline / Insights / Chat</h2>
+<p><strong>Must replace:</strong> Bearable correlations, Apple Health trends, Google Health insights, Ada-style guidance, with the boundary below.</p>
+<p><strong>Have today:</strong> cross-engine averages and correlations; unified timeline and diary views; curated dashboard feed; grounded longitudinal chat with citations; deterministic summaries and provenance.</p>
+<p><strong>Missing:</strong> no chat streaming; no voice input in production chat; no conversation export; no custom date-range comparison; no CSV export; insights lack direct actions and reminders; no goal-tracking linkage; no multilingual chat; relatively basic correlation math.</p>
+<p><strong>Add:</strong> streaming chat responses; voice input/output in chat; conversation and insight-report export; custom date comparisons; CSV export; one next action or reminder per insight; goal tracking linked to trends; stronger anomaly explanations; multilingual support. Do not turn chat into a ranked-diagnosis symptom checker without regulated clinical governance.</p>
+<h2 id="16-vitalslogger-dailylog-and-platform-sync">16. VitalsLogger / DailyLog and platform sync</h2>
+<p><strong>Must replace:</strong> Apple Health manual logging, Google Health, Bearable all-in-one tracking.</p>
+<p><strong>Have today:</strong> excellent central manual capture across mood, sleep, symptoms, pain/body map, activity, meds, vitals, nutrition, and notes; offline-first SQLite with idempotent sync.</p>
+<p><strong>Missing:</strong> no HealthKit sync; no Health Connect sync; no wearable auto-import; no smart-scale/BP/glucose device import; no CSV import; no duplicate-merge workflow; no quick-log widgets, shortcuts, or lock-screen actions.</p>
+<p><strong>Add:</strong> bidirectional HealthKit sync where appropriate; Health Connect sync on Android; wearable auto-import for sleep, HR, HRV, activity, and weight; smart-scale and BP/glucose pathways; CSV import; duplicate detection and merge; widgets, shortcuts, and quick-log actions; background sync reliability dashboard. Treat this as P0 platform work.</p>
+<h2 id="priority-build-order">Priority build order</h2>
+<aside class="callout callout-tip" role="note"><div class="callout-label"><span class="callout-icon" aria-hidden="true">*</span>TIP</div><div class="callout-body">Platform sync unlocks almost every other engine. Manual logging alone cannot beat passive competitors.</div></aside>
+<p><strong>P0 — platform parity:</strong> HealthKit plus Health Connect sync; wearable import for HR/HRV/sleep/activity/weight; reminders beyond medications; export framework covering CSV, JSON, PDF, and FHIR.</p>
+<p><strong>P1 — engine depth:</strong> sleep timestamps, consistency, stages, smart alarm; nutrition micros, recipes, portion correction, voice logging; structured fitness logging and plans; cycle predictions or explicit non-predictive positioning; substance goals, standard units, milestones; custom habits and widgets.</p>
+<p><strong>P2 — clinical and sharing maturity:</strong> medication interaction depth, caregiver alerts, refill forecasting; document correction UI, lab trends, FHIR export; selective doctor-share builder and IPS bundle; chat streaming/export and actionable insights.</p>
+<p><strong>P3 — differentiation:</strong> recovery strain targets and habit correlation; voice journaling library and AI reflections; advanced readiness baselines; German/EU provider-sharing workflows.</p>
+<h2 id="external-benchmarks-consulted">External benchmarks consulted</h2>
+<p>Welltory camera/HRV and wearable integrations; HRV4Training camera-based HRV; Sleep Cycle smart alarm, stages, snore recording; Oura sleep graphs and readiness; Whoop Recovery/Strain/Sleep Coach and habit journal; Cronometer micros and verified database; MyFitnessPal barcode/photo/voice logging; Strong/Hevy/Fitbod/Strava structured strength logging; Happy Scale trend smoothing; Bodly weight/measurements/photos; Daylio mood/voice/goals/AI reflections; Bearable symptoms/factors/correlations; MindDoc courses and validated approach; Apple State of Mind assessments and sharing; Medisafe interactions, Medfriend, refill/appointment reminders, doctor reports; Flo predictions, fertility/pregnancy modes, Anonymous Mode; Clue predictions, pain analysis, wearable integration, Doctor Report; Streaks reminders/widgets/Health integration; Habitica gamified dailies and challenges; Sunnyside moderation plans and coaching; Reframe program and community; I Am Sober milestones; Echo/Murmur/Speakwise/Dayora voice transcription, summaries, mood analysis, export; Apple Health Records/FHIR and Share with Provider; Android Health Connect Medical Records; FHIR R4/IPS export patterns; Ada symptom assessment, safety netting, and doctor-report export.</p>
+<footer class="md-footer"><span style="margin-left:auto">Generated by markdown-html</span></footer>
+</main>
+<script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script id="md-document-interactivity-v1">
+(function () {
+  "use strict";
+  var ENABLED = {"search": true,"copycode": true,"smoothscroll": true,"scrollspy": true};
+
+  // ----- Section grouping (used by search) -----
+  // Each H2 + everything until the next H2 forms a "section" for filter purposes.
+  function groupSections(root) {
+    var groups = [];
+    var current = null;
+    Array.prototype.forEach.call(root.children, function (el) {
+      if (el.tagName === "H2") {
+        if (current) groups.push(current);
+        current = { heading: el, elements: [el], text: el.textContent.toLowerCase() };
+      } else if (current) {
+        current.elements.push(el);
+        current.text += " " + (el.textContent || "").toLowerCase();
+      }
+    });
+    if (current) groups.push(current);
+    return groups;
+  }
+
+  // ----- Search -----
+  function wireSearch(root) {
+    var input = document.getElementById("md-search-input");
+    if (!input || !ENABLED.search) return;
+    var groups = groupSections(root);
+    function apply() {
+      var q = input.value.trim().toLowerCase();
+      groups.forEach(function (g) {
+        var visible = !q || g.text.indexOf(q) !== -1;
+        g.elements.forEach(function (el) { el.hidden = !visible; });
+      });
+    }
+    input.addEventListener("input", apply);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { input.value = ""; apply(); }
+    });
+  }
+
+  // ----- Code-copy -----
+  function wireCopy() {
+    if (!ENABLED.copycode) return;
+    Array.prototype.forEach.call(
+      document.querySelectorAll("pre .code-copy"),
+      function (btn) {
+        btn.addEventListener("click", function () {
+          var pre = btn.parentElement;
+          var code = pre.querySelector("code");
+          if (!code) return;
+          var text = code.textContent;
+          var done = function () {
+            btn.classList.add("copied");
+            var original = btn.textContent;
+            btn.textContent = "Copied";
+            setTimeout(function () {
+              btn.classList.remove("copied");
+              btn.textContent = original === "Copied" ? "Copy" : original;
+            }, 1200);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function () {
+              // Fallback to execCommand on older browsers
+              fallbackCopy(text);
+              done();
+            });
+          } else {
+            fallbackCopy(text);
+            done();
+          }
+        });
+      }
+    );
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  // ----- Smooth-scroll for TOC links -----
+  function wireSmoothScroll() {
+    if (!ENABLED.smoothscroll) return;
+    Array.prototype.forEach.call(
+      document.querySelectorAll("nav.toc a[href^=\"#\"]"),
+      function (a) {
+        a.addEventListener("click", function (e) {
+          var id = a.getAttribute("href").slice(1);
+          var target = document.getElementById(id);
+          if (!target) return;
+          e.preventDefault();
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          history.replaceState(null, "", "#" + id);
+        });
+      }
+    );
+  }
+
+  // ----- Scrollspy -----
+  function wireScrollSpy() {
+    if (!ENABLED.scrollspy || !("IntersectionObserver" in window)) return;
+    var tocLinks = {};
+    Array.prototype.forEach.call(
+      document.querySelectorAll("nav.toc a[href^=\"#\"]"),
+      function (a) {
+        var id = a.getAttribute("href").slice(1);
+        tocLinks[id] = a;
+      }
+    );
+    var headings = document.querySelectorAll("main h2[id], main h3[id]");
+    if (!headings.length) return;
+
+    function clearActive() {
+      Object.keys(tocLinks).forEach(function (k) {
+        tocLinks[k].removeAttribute("aria-current");
+      });
+    }
+
+    var observer = new IntersectionObserver(function (entries) {
+      // Pick the topmost entry currently intersecting
+      var visible = entries.filter(function (e) { return e.isIntersecting; });
+      if (visible.length === 0) return;
+      visible.sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });
+      var id = visible[0].target.id;
+      var link = tocLinks[id];
+      if (link) { clearActive(); link.setAttribute("aria-current", "location"); }
+    }, { rootMargin: "-20% 0px -70% 0px", threshold: 0 });
+
+    Array.prototype.forEach.call(headings, function (h) { observer.observe(h); });
+  }
+
+  // ----- Boot -----
+  function init() {
+    var main = document.querySelector("main");
+    if (!main) return;
+    wireSearch(main);
+    wireCopy();
+    wireSmoothScroll();
+    wireScrollSpy();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

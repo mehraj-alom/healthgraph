@@ -24,10 +24,9 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
-import { FONT, GV, SPACE } from '@/theme/guava';
+import { FONT, SPACE } from '@/theme/guava';
 import { useReducedMotion } from '@/theme/useReducedMotion';
-import { StageGradient } from '@/components/StageGradient';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
 import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { GoalsStep } from './GoalsStep';
 import { FocusStep } from './FocusStep';
@@ -43,6 +42,7 @@ export default function OnboardingSetupScreen() {
   const pager = useRef<FlatList<number> | null>(null);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  void useReducedMotion;
   // Read-first CTA: transparent black arrow, bottom-right, 3.5s after
   // each step lands. Resets per step, clears on unmount.
   const [ctaVisible, setCtaVisible] = useState(false);
@@ -55,7 +55,6 @@ export default function OnboardingSetupScreen() {
   const [goals, setGoals] = useState<string[]>(() => state?.goals ?? []);
   const [focus, setFocus] = useState<string[]>(() => state?.focus ?? []);
   const [seeded, setSeeded] = useState(false);
-  const glassOff = useReducedMotion();
 
   // Adopt stored selections once they load (local edits win afterwards).
   if (state && !seeded) {
@@ -139,22 +138,8 @@ export default function OnboardingSetupScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Goals + focus carry the navy picker backdrop (reference look);
-          the week rides a full liquid-glass backdrop; done keeps the wash. */}
-      {step <= 1 ? (
-        <View style={styles.navyFill} />
-      ) : step === 2 ? (
-        glassOff ? (
-          <View style={styles.liquidSolid} />
-        ) : (
-          <View style={styles.liquidFill}>
-            <BlurView tint="dark" intensity={80} style={styles.liquidFill} />
-            <View style={styles.liquidTint} />
-          </View>
-        )
-      ) : (
-        <StageGradient />
-      )}
+      {/* One world for the whole flow: the same aurora stage as Home. */}
+      <HomeStageBackdrop />
       <View style={styles.topBar}>
         {step > 0 ? (
           <Pressable
@@ -242,38 +227,7 @@ export default function OnboardingSetupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: GV.stage,
-  },
-  navyFill: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#20263D',
-  },
-  liquidFill: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  liquidTint: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(11, 74, 63, 0.5)',
-  },
-  liquidSolid: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: '#05070F',
   },
   topBar: {
     flexDirection: 'row',
@@ -288,7 +242,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   backText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 15,
     lineHeight: 22,
     color: '#FFFFFF',
@@ -319,10 +273,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   skipText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 14,
     lineHeight: 20,
-    color: GV.fog,
+    color: 'rgba(233, 240, 255, 0.66)',
   },
   pager: {
     flex: 1,
@@ -342,21 +296,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   // Transparent black read-first arrow, bottom-right.
+  // Same glass circle as the intro pages' CTA — one voice across the flow.
   goCircle: {
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(12, 12, 14, 0.55)',
+    backgroundColor: 'rgba(255, 255, 255, 0.10)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
   },
   goArrow: {
     color: '#FFFFFF',
     fontSize: 22,
     lineHeight: 26,
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     marginTop: -2,
   },
 });

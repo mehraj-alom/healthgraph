@@ -349,7 +349,7 @@ describe('priority wiring', () => {
     assert.ok(world.includes('CorrelationGraphCard'), 'time-vs-correlations preview');
     assert.ok(world.includes('ENGINES['), 'engine destinations from the catalog');
     assert.ok(world.includes("navigate('OnboardingSetup')"), 'edit priorities path');
-    assert.ok(world.includes("navigate('HealthGraph'"), 'full graph link');
+    assert.ok(!world.includes('Open full graph'), 'no standalone full-graph button');
     assert.ok(!world.includes('describeChange') && !world.includes('summarize'), 'no new health math');
   });
 

@@ -1,0 +1,72 @@
+<template>
+<style>
+#root { container-type: size; width: 1920px; height: 1080px; position: relative; overflow: hidden; background: #211249; }
+#root .clip { position: absolute; }
+#root .f06-cta-bg { left: 0; top: 0; width: 1920px; height: 1080px; background: #211249; }
+#root .f06-cta-ring { left: 660px; top: 190px; width: 600px; height: 600px; border: 2px solid #7C5CD6; border-radius: 50%; }
+#root .f06-cta-topbar { left: 96px; top: 44px; width: 1728px; display: flex; justify-content: space-between; align-items: center; }
+#root .f06-cta-label { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 26px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #FFF9F1; }
+#root .f06-cta-mark { width: 64px; height: 64px; border: 2px solid #7C5CD6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 22px; font-weight: 500; letter-spacing: 0.08em; color: #FFF9F1; }
+#root .f06-cta-rule { left: 96px; top: 128px; width: 1728px; height: 2px; background: #7C5CD6; }
+#root .f06-cta-lockup { left: 96px; top: 300px; width: 1728px; height: 340px; display: flex; align-items: center; justify-content: center; }
+#root .f06-cta-wordmark { display: flex; align-items: baseline; font-family: Georgia, 'Times New Roman', serif; font-weight: 500; font-size: 150px; line-height: 1.0; letter-spacing: -0.02em; color: #FFF9F1; }
+#root .f06-cta-wl { display: inline-block; min-width: 0.32em; text-align: center; }
+#root .f06-cta-wl-pink { color: #7C5CD6; }
+#root .f06-cta-seal { width: 130px; height: 130px; margin-left: 44px; position: relative; flex: none; }
+#root .f06-cta-seal svg { position: absolute; left: 0; top: 0; width: 130px; height: 130px; }
+#root .f06-cta-sealhg { position: absolute; left: 0; top: 0; width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 30px; font-weight: 500; letter-spacing: 0.06em; color: #FFF9F1; }
+#root .f06-cta-tagwrap { left: 96px; top: 648px; width: 1728px; height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+#root .f06-cta-tagrule { width: 420px; height: 2px; background: #7C5CD6; margin-bottom: 26px; }
+#root .f06-cta-tagline { display: flex; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 26px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #7C5CD6; white-space: nowrap; }
+#root .f06-cta-tw { display: inline-block; }
+#root .f06-cta-tsp { display: inline-block; width: 0.6em; }
+#root .f06-cta-foot { left: 96px; top: 830px; width: 1728px; display: flex; justify-content: space-between; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 24px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #C9BCEE; }
+</style>
+<script src="gsap.min.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+(function () {
+  var tl = gsap.timeline({ paused: true });
+  // Beat 1 (0-2.5s): letter cascade into the lockup on a pulsing guide ring
+  tl.fromTo("#root .f06-cta-ring", { opacity: 0.55, scale: 0.55 }, { opacity: 0, scale: 1.35, duration: 2.4, ease: "power2.out" }, 0);
+  tl.fromTo("#root .f06-cta-topbar-in", { opacity: 0, y: -14 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 0);
+  tl.fromTo("#root .f06-cta-rule-in", { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.45, ease: "power2.out" }, 0.05);
+  tl.fromTo("#root .f06-cta-wl",
+    { opacity: 0, y: 64, scale: 0.7 },
+    { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "back.out(2.2)", stagger: 0.18 }, 0.05);
+  // Beat 2 (2.5-5s): tagline wipe + seal draw beside the mark
+  tl.fromTo("#root .f06-cta-tagrule", { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.4, ease: "power2.out" }, 2.5);
+  tl.fromTo("#root .f06-cta-tw",
+    { opacity: 0, x: -34 },
+    { opacity: 1, x: 0, duration: 0.32, ease: "power2.out", stagger: 0.14 }, 2.6);
+  tl.fromTo("#root .f06-cta-seal", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(2.5)" }, 2.9);
+  tl.fromTo("#root .f06-cta-sealring", { strokeDasharray: 377, strokeDashoffset: 377 },
+    { strokeDashoffset: 0, duration: 1.1, ease: "power2.inOut" }, 3.0);
+  tl.fromTo("#root .f06-cta-sealhg", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)" }, 3.9);
+  tl.fromTo("#root .f06-cta-foot-in", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" }, 4.3);
+  // Beat 3 (5-8s): full lockup HOLD, dead still — no-op pin owns the slot to 8.0s
+  tl.fromTo("#root .f06-cta-pin", { opacity: 1 }, { opacity: 1, duration: 3, ease: "none" }, 5);
+  window.__timelines["06-cta"] = tl;
+})();
+</script>
+<div id="root" data-composition-id="06-cta" data-width="1920" data-height="1080">
+  <div class="clip f06-cta-bg" id="f06-cta-bg" data-start="0" data-duration="8" data-track-index="0"><div class="f06-cta-pin"></div></div>
+  <div class="clip f06-cta-ring" id="f06-cta-ring" data-start="0" data-duration="8" data-track-index="1"></div>
+  <div class="clip f06-cta-topbar" id="f06-cta-topbar" data-start="0" data-duration="8" data-track-index="2"><div class="f06-cta-topbar-in" style="width:100%;display:flex;justify-content:space-between;align-items:center;"><div class="f06-cta-label">Healthgraph · End Card</div><div class="f06-cta-mark">HG</div></div></div>
+  <div class="clip f06-cta-rule" id="f06-cta-rule" data-start="0" data-duration="8" data-track-index="3"><div class="f06-cta-rule-in" style="width:100%;height:100%;background:#7C5CD6;"></div></div>
+  <div class="clip f06-cta-lockup" id="f06-cta-lockup" data-start="0" data-duration="8" data-track-index="4">
+    <div class="f06-cta-wordmark"><span class="f06-cta-wl">H</span><span class="f06-cta-wl">e</span><span class="f06-cta-wl">a</span><span class="f06-cta-wl">l</span><span class="f06-cta-wl">t</span><span class="f06-cta-wl">h</span><span class="f06-cta-wl f06-cta-wl-pink">G</span><span class="f06-cta-wl f06-cta-wl-pink">r</span><span class="f06-cta-wl f06-cta-wl-pink">a</span><span class="f06-cta-wl f06-cta-wl-pink">p</span><span class="f06-cta-wl f06-cta-wl-pink">h</span></div>
+    <div class="f06-cta-seal">
+      <svg viewBox="0 0 130 130" fill="none">
+        <circle class="f06-cta-sealring" cx="65" cy="65" r="60" stroke="#7C5CD6" stroke-width="3"/>
+      </svg>
+      <div class="f06-cta-sealhg">HG</div>
+    </div>
+  </div>
+  <div class="clip f06-cta-tagwrap" id="f06-cta-tagwrap" data-start="0" data-duration="8" data-track-index="5">
+    <div class="f06-cta-tagrule"></div>
+    <div class="f06-cta-tagline"><span class="f06-cta-tw">Your</span><span class="f06-cta-tsp">&nbsp;</span><span class="f06-cta-tw">whole</span><span class="f06-cta-tsp">&nbsp;</span><span class="f06-cta-tw">health,</span><span class="f06-cta-tsp">&nbsp;</span><span class="f06-cta-tw">one</span><span class="f06-cta-tsp">&nbsp;</span><span class="f06-cta-tw">place.</span></div>
+  </div>
+  <div class="clip f06-cta-foot" id="f06-cta-foot" data-start="0" data-duration="8" data-track-index="6"><div class="f06-cta-foot-in" style="width:100%;display:flex;justify-content:space-between;"><div>One place</div><div>Every signal</div></div></div>
+</div>
+</template>

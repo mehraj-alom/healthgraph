@@ -13,9 +13,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from agents.agent_setup import close_agent, get_medical_agent, initialize_agent
 from app.api.auth import router as auth_router
 from app.api.v1 import (
+    admin,
     billing,
     body_state,
     chat,
+    checkout,
     daily_logs,
     early_access,
     daily_metrics,
@@ -27,6 +29,7 @@ from app.api.v1 import (
     ontology,
     outbox,
     ppg,
+    premium,
     privacy,
     profile,
     provenance,
@@ -373,7 +376,9 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(auth_router)
+    app.include_router(admin.router)
     app.include_router(billing.router)
+    app.include_router(checkout.router)
     app.include_router(early_access.router)
     app.include_router(documents.router)
     app.include_router(nutrition.router)
@@ -390,6 +395,7 @@ def create_app() -> FastAPI:
     app.include_router(outbox.router)
     app.include_router(ontology.router)
     app.include_router(ppg.router)
+    app.include_router(premium.router)
     app.include_router(privacy.router)
     app.include_router(profile.router)
     app.include_router(trends.router)

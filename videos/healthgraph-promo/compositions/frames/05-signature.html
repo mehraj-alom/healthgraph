@@ -1,0 +1,119 @@
+<template>
+<style>
+#root { container-type: size; width: 1920px; height: 1080px; position: relative; overflow: hidden; background: #211249; }
+#root .bg { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #211249; }
+#root .bg-panel { position: absolute; left: 240px; top: 120px; width: 1440px; height: 720px; background: #341D73; border-radius: 8px; opacity: 0.55; }
+#root .topbar { position: absolute; left: 96px; top: 44px; width: 1728px; display: flex; justify-content: space-between; align-items: center; }
+#root .topbar span { font-family: ui-monospace, Menlo, monospace; font-size: 26px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #7C5CD6; }
+#root .toprule { position: absolute; left: 96px; top: 92px; width: 1728px; height: 2px; background: #7C5CD6; }
+#root .hook { position: absolute; left: 96px; top: 122px; width: 1728px; text-align: center; font-family: Georgia, 'Times New Roman', serif; font-weight: 500; font-size: 54px; letter-spacing: -0.02em; line-height: 1; color: #FFF9F1; }
+#root .hook em { font-style: normal; color: #7C5CD6; }
+#root .stage { position: absolute; left: 96px; top: 220px; width: 1728px; height: 640px; }
+#root .wires { position: absolute; left: 0; top: 0; width: 1728px; height: 640px; pointer-events: none; }
+#root .hub { position: absolute; left: 774px; top: 170px; width: 180px; height: 260px; }
+#root .hub .head { position: absolute; left: 60px; top: 0; width: 60px; height: 60px; border-radius: 50%; background: #FFF9F1; }
+#root .hub .torso { position: absolute; left: 45px; top: 72px; width: 90px; height: 150px; border-radius: 45px; background: #FFF9F1; }
+#root .hub .core { position: absolute; left: 73px; top: 122px; width: 34px; height: 34px; border-radius: 50%; background: #4FD1C5; }
+#root .hubtag { position: absolute; left: 774px; top: 440px; width: 180px; text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 20px; font-weight: 500; letter-spacing: 0.18em; color: #4FD1C5; }
+#root .node { position: absolute; width: 150px; height: 150px; border-radius: 50%; text-align: center; }
+#root .node .nday { display: block; margin-top: 44px; font-family: ui-monospace, Menlo, monospace; font-size: 22px; font-weight: 500; letter-spacing: 0.14em; }
+#root .node .ndot { display: block; margin: 8px auto 0; width: 14px; height: 14px; border-radius: 50%; }
+#root .n-green { background: #2A175D; } .n-green .nday { color: #7C5CD6; } .n-green .ndot { background: #4FD1C5; }
+#root .n-pink { background: #7C5CD6; } .n-pink .nday { color: #211249; } .n-pink .ndot { background: #211249; }
+#root .n-cream { background: #FFF9F1; border: 2px solid #2A175D; } .n-cream .nday { color: #2A175D; } .n-cream .ndot { background: #2A175D; }
+#root .n-lav { background: #C9BCEE; border: 2px solid #2A175D; } .n-lav .nday { color: #2A175D; } .n-lav .ndot { background: #7C5CD6; }
+#root .n1 { left: 789px; top: 15px; } .n2 { left: 1135px; top: 120px; } .n3 { left: 1135px; top: 330px; }
+#root .n4 { left: 789px; top: 435px; } .n5 { left: 443px; top: 330px; } .n6 { left: 443px; top: 120px; }
+#root .wave { position: absolute; left: 200px; top: 268px; width: 1328px; height: 84px; display: flex; align-items: center; gap: 8px; }
+#root .wave i { display: block; width: 18px; border-radius: 4px; background: #4FD1C5; }
+#root .wavetag { position: absolute; left: 200px; top: 238px; font-family: ui-monospace, Menlo, monospace; font-size: 20px; font-weight: 500; letter-spacing: 0.18em; color: #4FD1C5; }
+#root .seal { position: absolute; left: 764px; top: 130px; width: 200px; height: 270px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; padding: 196px 0 0; box-sizing: border-box; }
+#root .seal .stag { position: relative; left: auto; top: auto; width: 200px; text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 30px; font-weight: 700; letter-spacing: 0.14em; line-height: 1.1; padding: 0; color: #4FD1C5; }
+#root .seal .ssub { position: relative; left: auto; top: auto; width: 200px; text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 20px; letter-spacing: 0.22em; line-height: 1.4; padding: 0; color: #FFF9F1; }
+#root .footline { position: absolute; left: 96px; top: 852px; width: 1728px; display: flex; justify-content: space-between; }
+#root .footline span { font-family: ui-monospace, Menlo, monospace; font-size: 24px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #7C5CD6; }
+</style>
+<script src="gsap.min.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+(function () {
+  var tl = gsap.timeline({ paused: true });
+  // Scene 1 (0-7s): hub body + time-tree ring spring into constellation; slow push-in
+  tl.fromTo("#root .hook", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.7, ease: "power2.out" }, 0.1);
+  tl.fromTo("#root .hub", { opacity: 0, scale: 0 }, { opacity: 1, scale: 1, duration: 0.8, ease: "back.out(1.4)" }, 0.3);
+  tl.fromTo("#root .hubtag", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 1.1);
+  tl.fromTo("#root .node", { opacity: 0, scale: 0 }, { opacity: 1, scale: 1, duration: 0.7, ease: "back.out(1.5)", stagger: 0.4 }, 0.9);
+  tl.fromTo("#root .spoke", { strokeDashoffset: 480 }, { strokeDashoffset: 0, duration: 1.1, ease: "power1.inOut", stagger: 0.4 }, 0.9);
+  tl.fromTo("#root .treeline", { strokeDashoffset: 1330 }, { strokeDashoffset: 0, duration: 2.4, ease: "power1.inOut" }, 3.8);
+  tl.fromTo("#root .treedot", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)", stagger: 0.3 }, 4.4);
+  tl.fromTo("#root .stage", { scale: 1 }, { scale: 1.07, duration: 6.5, ease: "sine.inOut" }, 0.5);
+  tl.fromTo("#root .hub", { rotation: -7 }, { rotation: 7, duration: 5.6, ease: "sine.inOut" }, 1.2);
+  // Scene 2 (7-12s): voice waveform pulses across the ring; faint orbit continues
+  tl.fromTo("#root .wavetag", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 7.0);
+  tl.fromTo("#root .wave i", { opacity: 0.25, scaleY: 0.35 }, { opacity: 1, scaleY: 1, duration: 0.5, ease: "sine.inOut", stagger: 0.035 }, 7.1);
+  tl.fromTo("#root .wave i", { scaleY: 1 }, { scaleY: 0.45, duration: 0.5, ease: "sine.inOut", stagger: 0.03 }, 8.7);
+  tl.fromTo("#root .wave i", { scaleY: 0.45 }, { scaleY: 1, duration: 0.5, ease: "sine.inOut", stagger: 0.03 }, 10.1);
+  tl.fromTo("#root .orbitring", { rotation: 0 }, { rotation: 9, duration: 5.0, ease: "sine.inOut" }, 7.0);
+  // Scene 3 (12-18.475s): the lock draws over the hub, glow ignites once, then held stillness
+  tl.fromTo("#root .sealbody", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.6)" }, 12.1);
+  tl.fromTo("#root .sealshackle", { strokeDashoffset: 320 }, { strokeDashoffset: 0, duration: 1.0, ease: "power1.inOut" }, 12.5);
+  tl.fromTo("#root .sealkey", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, 13.4);
+  tl.fromTo("#root .sealring", { opacity: 0, scale: 0.92 }, { opacity: 1, scale: 1.05, duration: 0.8, ease: "power2.out" }, 13.2);
+  tl.fromTo("#root .seal .stag", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5 }, 13.8);
+  tl.fromTo("#root .seal .ssub", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 14.2);
+  tl.fromTo("#root .footline", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 14.4);
+  window.__timelines["05-signature"] = tl;
+})();
+</script>
+<div id="root" data-composition-id="05-signature" data-width="1920" data-height="1080">
+  <div class="clip bg" data-start="0" data-duration="18.475" data-track-index="0"><div class="bg-panel"></div></div>
+  <div class="clip" data-start="0" data-duration="18.475" data-track-index="1">
+    <div class="topbar"><span>Healthgraph — Signature</span><span>05</span></div>
+    <div class="toprule"></div>
+    <div class="hook">A BODY · A GRAPH · <em>SEALED</em></div>
+    <div class="stage">
+      <svg class="wires" viewBox="0 0 1728 640">
+        <circle class="orbitring" cx="864" cy="300" r="295" fill="none" stroke="#7C5CD6" stroke-width="3" stroke-dasharray="8 10" style="transform-origin: 864px 300px;"/>
+        <line class="spoke" x1="864" y1="300" x2="864" y2="90" stroke="#4FD1C5" stroke-width="3" stroke-dasharray="480" stroke-dashoffset="480"/>
+        <line class="spoke" x1="864" y1="300" x2="1210" y2="195" stroke="#7C5CD6" stroke-width="3" stroke-dasharray="480" stroke-dashoffset="480"/>
+        <line class="spoke" x1="864" y1="300" x2="1210" y2="405" stroke="#4FD1C5" stroke-width="3" stroke-dasharray="480" stroke-dashoffset="480"/>
+        <line class="spoke" x1="864" y1="300" x2="864" y2="510" stroke="#7C5CD6" stroke-width="3" stroke-dasharray="480" stroke-dashoffset="480"/>
+        <line class="spoke" x1="864" y1="300" x2="518" y2="405" stroke="#4FD1C5" stroke-width="3" stroke-dasharray="480" stroke-dashoffset="480"/>
+        <line class="spoke" x1="864" y1="300" x2="518" y2="195" stroke="#7C5CD6" stroke-width="3" stroke-dasharray="480" stroke-dashoffset="480"/>
+        <line class="treeline" x1="200" y1="560" x2="1528" y2="560" stroke="#4FD1C5" stroke-width="6" stroke-linecap="round" stroke-dasharray="1330" stroke-dashoffset="1330"/>
+        <circle class="treedot" cx="200" cy="560" r="10" fill="#4FD1C5"/>
+        <circle class="treedot" cx="421" cy="560" r="10" fill="#7C5CD6"/>
+        <circle class="treedot" cx="642" cy="560" r="10" fill="#4FD1C5"/>
+        <circle class="treedot" cx="864" cy="560" r="13" fill="#FFF9F1"/>
+        <circle class="treedot" cx="1085" cy="560" r="10" fill="#4FD1C5"/>
+        <circle class="treedot" cx="1306" cy="560" r="10" fill="#7C5CD6"/>
+        <circle class="treedot" cx="1528" cy="560" r="10" fill="#4FD1C5"/>
+      </svg>
+      <div class="node n-green n1"><span class="nday">DAY 01</span><span class="ndot"></span></div>
+      <div class="node n-pink n2"><span class="nday">DAY 07</span><span class="ndot"></span></div>
+      <div class="node n-cream n3"><span class="nday">DAY 14</span><span class="ndot"></span></div>
+      <div class="node n-lav n4"><span class="nday">DAY 21</span><span class="ndot"></span></div>
+      <div class="node n-pink n5"><span class="nday">DAY 28</span><span class="ndot"></span></div>
+      <div class="node n-green n6"><span class="nday">TODAY</span><span class="ndot"></span></div>
+      <div class="hub"><div class="head"></div><div class="torso"></div><div class="core"></div></div>
+      <div class="hubtag">LIVING BODY</div>
+      <div class="wavetag">VOICE CHECK-IN</div>
+      <div class="wave">
+        <i style="height:30px;"></i><i style="height:44px;"></i><i style="height:26px;"></i><i style="height:58px;"></i><i style="height:36px;"></i><i style="height:66px;"></i><i style="height:28px;"></i><i style="height:52px;"></i><i style="height:70px;"></i><i style="height:34px;"></i><i style="height:48px;"></i><i style="height:24px;"></i><i style="height:62px;"></i><i style="height:40px;"></i><i style="height:56px;"></i><i style="height:30px;"></i><i style="height:68px;"></i><i style="height:38px;"></i><i style="height:50px;"></i><i style="height:26px;"></i><i style="height:60px;"></i><i style="height:42px;"></i><i style="height:32px;"></i><i style="height:64px;"></i><i style="height:28px;"></i><i style="height:54px;"></i><i style="height:36px;"></i><i style="height:66px;"></i><i style="height:44px;"></i><i style="height:30px;"></i><i style="height:58px;"></i><i style="height:40px;"></i>
+      </div>
+      <div class="seal">
+        <svg viewBox="0 0 200 200" style="position:absolute;left:0;top:0;width:200px;height:200px;">
+          <circle class="sealring" cx="100" cy="110" r="88" fill="none" stroke="#4FD1C5" stroke-width="5"/>
+          <path class="sealshackle" d="M70 100 L70 72 A 30 30 0 0 1 130 72 L130 100" fill="none" stroke="#FFF9F1" stroke-width="10" stroke-linecap="round" stroke-dasharray="320" stroke-dashoffset="320"/>
+          <rect class="sealbody" x="55" y="96" width="90" height="70" rx="8" fill="#2A175D" stroke="#4FD1C5" stroke-width="4"/>
+          <circle class="sealkey" cx="100" cy="122" r="9" fill="#4FD1C5"/>
+          <rect class="sealkey" x="96" y="128" width="8" height="18" rx="3" fill="#4FD1C5"/>
+        </svg>
+        <div class="stag">SEALED</div>
+        <div class="ssub">ON-DEVICE</div>
+      </div>
+    </div>
+    <div class="footline"><span>Encrypted · Offline-first · One-tap delete</span><span>05 / 06</span></div>
+  </div>
+</div>
+</template>

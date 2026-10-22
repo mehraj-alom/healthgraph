@@ -21,6 +21,7 @@ import models.anatomy  # noqa: F401
 import models.outbox  # noqa: F401
 import models.medications  # noqa: F401
 import models.early_access  # noqa: F401
+import models.premium  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

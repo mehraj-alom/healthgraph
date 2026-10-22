@@ -59,7 +59,7 @@ export function bezier(easing: EasingTuple) {
 }
 
 /** Timing config for withTiming() using the standard motion curve. */
-export function timingConfig(duration = durations.standard, curve: EasingTuple = curves.snappy) {
+export function timingConfig(duration: number = durations.standard, curve: EasingTuple = curves.snappy) {
   return { duration, easing: bezier(curve) };
 }
 

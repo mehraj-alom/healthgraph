@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { PpgCameraPreview } from 'healthgraph-ppg';
@@ -44,16 +44,19 @@ import {
 import {
   EngravedLabel,
   INST,
-  Panel,
   QualityDial,
   TactileButton,
   Well,
 } from '@/components/pulse/Instrument';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { PaywallGate } from '@/components/PaywallGate';
+import { tierUnlocks, usePremiumTier } from '@/services/premium';
+import { LG } from '@/theme/liquidGlass';
 import FaceGuideOverlay, { type FaceGuideVisual } from '@/components/pulse/FaceGuideOverlay';
 import FingertipGuideOverlay, { type FingertipGuideVisual } from '@/components/pulse/FingertipGuideOverlay';
 import PulseTraceView from '@/components/pulse/PulseTraceView';
 import BpmTrendView, { type BpmPoint } from '@/components/pulse/BpmTrendView';
-import { FONT } from '@/theme/guava';
 
 const FINGERTIP_DURATION_S = 60;
 
@@ -136,6 +139,16 @@ export default function PulseInstrumentScreen() {
   const [hrvBase, setHrvBase] = useState<HrvBaseline | null>(null);
   const [trend, setTrend] = useState<BpmPoint[]>([]);
   const [elapsed, setElapsed] = useState(0);
+  // Premium gates only — measurement logic below is untouched. Camera
+  // (fingertip PPG) needs General+, face rPPG needs All-in. Starts
+  // free-safe, resolves live via usePremiumTier.
+  const tier = usePremiumTier();
+  const cameraUnlocked = tierUnlocks(tier, 'cameraPulse');
+  const faceUnlocked = tierUnlocks(tier, 'facePulse');
+  // Explicit camera vs face switcher. IDLE shows the selected mode's entry;
+  // mid-flow phases derive the active mode from the machine (single source
+  // of truth) so a locked camera can never mount while gated.
+  const [preferredMode, setPreferredMode] = useState<'face' | 'camera'>('face');
 
   // Mutable run mirrors (effects + timers must see current values).
   const machineRef = useRef(machine);
@@ -403,6 +416,42 @@ export default function PulseInstrumentScreen() {
     void loadRecent();
   }, [loadRecent]);
 
+  // Mode switching never touches the measurement pipeline: switching away
+  // from a non-IDLE phase resets to IDLE (same RESET as "Measure again"),
+  // and the camera entry below reaches FINGERTIP_READY via existing reducer
+  // events only — the face camera is never started for the camera path.
+  const runBusy =
+    machine.phase === 'CHECKING' || machine.phase === 'FACE_RUN' || machine.phase === 'FINGERTIP_RUN';
+  const switchMode = useCallback(
+    (next: 'face' | 'camera') => {
+      if (next === preferredMode || runBusy) return;
+      if (machine.phase !== 'IDLE') measureAgain();
+      setPreferredMode(next);
+    },
+    [preferredMode, runBusy, machine.phase, measureAgain],
+  );
+
+  const beginCameraReady = useCallback(() => {
+    dispatch({ type: 'BEGIN_CHECK' });
+    dispatch({ type: 'FACE_UNAVAILABLE', reason: FACE_UNAVAILABLE_BODY });
+    dispatch({ type: 'CHOOSE_FINGERTIP' });
+  }, []);
+
+  // Active instrument mode: live machine phases win; IDLE / terminal-entry
+  // states follow the user's switcher selection. COMPLETE stays gated by the
+  // modality that produced it (a downgrade mid-session keeps the result locked).
+  const activeModeKey: 'face' | 'fingertip' = (() => {
+    if (machine.mode === 'face') return 'face';
+    if (machine.mode === 'fingertip') return 'fingertip';
+    if (machine.phase === 'FINGERTIP_READY') return 'fingertip';
+    if (machine.phase === 'COMPLETE') {
+      if (machine.completedMode === 'face') return 'face';
+      if (machine.completedMode === 'fingertip') return 'fingertip';
+    }
+    return preferredMode === 'face' ? 'face' : 'fingertip';
+  })();
+  const activeFeature = activeModeKey === 'face' ? 'facePulse' : 'cameraPulse';
+
   const faceActive = machine.mode === 'face' && (machine.phase === 'CHECKING' || machine.phase === 'FACE_RUN');
   const fingertipActive = machine.mode === 'fingertip' && machine.phase === 'FINGERTIP_RUN';
 
@@ -428,13 +477,59 @@ export default function PulseInstrumentScreen() {
   }, [machine.phase, ppg.liveBpm, rppg.liveStability]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <View style={styles.screen}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content} scrollEventThrottle={16}>
+        {/* Camera vs face switcher — always visible so a locked mode can be
+            left without entering the paywall. Locked modes carry ✦. */}
+        <View style={styles.modeSwitch} accessibilityRole="tablist" accessibilityLabel="Pulse mode">
+          <Pressable
+            onPress={() => switchMode('camera')}
+            disabled={runBusy}
+            accessibilityRole="button"
+            accessibilityLabel={cameraUnlocked ? 'Camera pulse mode' : 'Camera pulse mode, premium'}
+            accessibilityState={{ selected: preferredMode === 'camera', disabled: runBusy }}
+            style={({ pressed }) => [
+              styles.modeBtn,
+              preferredMode === 'camera' && styles.modeBtnActive,
+              runBusy && styles.modeBtnDisabled,
+              pressed && !runBusy && styles.modeBtnPressed,
+            ]}
+          >
+            <Text style={[styles.modeBtnText, preferredMode === 'camera' && styles.modeBtnTextActive]}>
+              {cameraUnlocked ? 'Camera' : 'Camera ✦'}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => switchMode('face')}
+            disabled={runBusy}
+            accessibilityRole="button"
+            accessibilityLabel={faceUnlocked ? 'Face pulse mode' : 'Face pulse mode, premium'}
+            accessibilityState={{ selected: preferredMode === 'face', disabled: runBusy }}
+            style={({ pressed }) => [
+              styles.modeBtn,
+              preferredMode === 'face' && styles.modeBtnActive,
+              runBusy && styles.modeBtnDisabled,
+              pressed && !runBusy && styles.modeBtnPressed,
+            ]}
+          >
+            <Text style={[styles.modeBtnText, preferredMode === 'face' && styles.modeBtnTextActive]}>
+              {faceUnlocked ? 'Face' : 'Face ✦'}
+            </Text>
+          </Pressable>
+        </View>
+        {/* Premium gate over the instrument area only: header/switcher above
+            stays visible. Locked tiers see the lock card alone (children
+            must not mount locked — cameras mount only when unlocked, so
+            a locked mode can never activate its camera). Entitled tiers
+            render children untouched. */}
+        <PaywallGate feature={activeFeature} title="Pulse" blurPreview={false}>
         {machine.phase === 'IDLE' && (
-          <Panel>
-            <Text style={styles.title}>Pulse.</Text>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
+            <Text style={styles.title}>Pulse</Text>
             <Text style={styles.body}>
-              Face first, fingertip as backup. All on this device.
+              Face first, fingertip backup.
             </Text>
             {(recentRppg || recentPpg) && (
               <View style={styles.recents}>
@@ -452,17 +547,21 @@ export default function PulseInstrumentScreen() {
                 )}
               </View>
             )}
-            <TactileButton title="Begin check" onPress={beginCheck} accessibilityLabel="Begin automatic measurement check" />
+            {preferredMode === 'face' ? (
+              <TactileButton title="Begin check" onPress={beginCheck} accessibilityLabel="Begin automatic measurement check" />
+            ) : (
+              <TactileButton title="Begin fingertip check" onPress={beginCameraReady} accessibilityLabel="Begin fingertip measurement check" />
+            )}
             <View style={styles.protoCard}>
               <Text style={styles.protoTitle}>Morning read</Text>
               <Text style={styles.protoLine}>On waking · lying still · breathe normally</Text>
-              <Text style={styles.protoLine}>60 seconds of stillness · same time daily builds the baseline</Text>
+              <Text style={styles.protoLine}>60 seconds of stillness.</Text>
             </View>
-          </Panel>
+          </GlassSurface>
         )}
 
         {(machine.phase === 'CHECKING' || machine.phase === 'FACE_RUN') && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>{machine.phase === 'CHECKING' ? 'Checking face signal' : 'Face measurement'}</EngravedLabel>
             <Well style={styles.previewWell}>
               {faceActive && (
@@ -486,11 +585,11 @@ export default function PulseInstrumentScreen() {
             )}
             <Text style={styles.hint}>{rppg.hint}</Text>
             <TactileButton title="Cancel" onPress={cancelRun} variant="danger" />
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'FACE_UNAVAILABLE' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Face path · standby</EngravedLabel>
             <Text style={styles.titleSm}>
               {isFaceBuildFailure(machine.reason) ? FACE_BUILD_TITLE : FACE_UNAVAILABLE_TITLE}
@@ -511,11 +610,11 @@ export default function PulseInstrumentScreen() {
             {isFaceBuildFailure(machine.reason) ? null : (
               <TactileButton title="Retry face scan" onPress={retryFace} variant="secondary" />
             )}
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'FINGERTIP_READY' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Fingertip path · ready</EngravedLabel>
             <Text style={styles.titleSm}>Fingertip measurement</Text>
             <View style={styles.tips}>
@@ -525,11 +624,11 @@ export default function PulseInstrumentScreen() {
             </View>
             <TactileButton title="Begin fingertip" onPress={beginFingertip} accessibilityLabel="Begin fingertip measurement" />
             <TactileButton title="Back" onPress={cancelRun} variant="secondary" />
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'FINGERTIP_RUN' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Fingertip measurement</EngravedLabel>
             <Well style={styles.previewWell}>
               {fingertipActive && <PpgCameraPreview style={styles.preview} />}
@@ -551,11 +650,11 @@ export default function PulseInstrumentScreen() {
             </View>
             <Text style={styles.hint}>{ppg.hint}</Text>
             <TactileButton title="Cancel" onPress={cancelRun} variant="danger" />
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'COMPLETE' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Measurement complete</EngravedLabel>
             {machine.completedMode === 'face' && rppg.result?.heartRateBpm != null && (
               <View style={styles.resultBlock}>
@@ -633,40 +732,52 @@ export default function PulseInstrumentScreen() {
               </View>
             )}
             <TactileButton title="Measure again" onPress={measureAgain} />
-          </Panel>
+          </GlassSurface>
         )}
 
         {machine.phase === 'ERROR' && (
-          <Panel>
+          <GlassSurface strong radius={24} style={styles.panelPad}>
             <EngravedLabel>Instrument fault</EngravedLabel>
             <Text style={styles.titleSm}>Measurement could not finish</Text>
             <Text style={styles.body}>{machine.reason ?? 'An unexpected error stopped the measurement. Try again.'}</Text>
             <TactileButton title="Back to start" onPress={measureAgain} />
-          </Panel>
+          </GlassSurface>
         )}
+        </PaywallGate>
 
         <Text style={styles.disclaimer}>Wellness measurements only. Not a medical device — not for diagnosis or treatment.</Text>
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: INST.face },
-  content: { paddingHorizontal: 26, paddingBottom: 32, paddingTop: 8, gap: 12 },
+  screen: {
+    flex: 1,
+    backgroundColor: LG.stage.bottom,
+  },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: 26, paddingBottom: 32, paddingTop: 20, gap: 16 },
+  // Frosted panel pad (GlassSurface carries the material + rim).
+  panelPad: {
+    padding: 20,
+    gap: 12,
+  },
   title: {
-    fontFamily: FONT.semi,
-    fontSize: 32,
-    lineHeight: 38,
-    letterSpacing: -0.3,
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
     color: '#FFFFFF',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
   titleSm: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 20,
     lineHeight: 26,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
     textAlign: 'center',
   },
@@ -678,7 +789,7 @@ const styles = StyleSheet.create({
   meta: { fontSize: 12, lineHeight: 17, color: INST.dim, textAlign: 'center', fontVariant: ['tabular-nums'] },
   disclaimer: { fontSize: 11, lineHeight: 15, color: INST.engraved, textAlign: 'center', marginTop: 4 },
   simBadge: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 12,
     letterSpacing: 1,
     color: INST.red,
@@ -699,7 +810,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  recentBpm: { fontFamily: FONT.semi, fontSize: 16, color: INST.steel, fontVariant: ['tabular-nums'] },
+  recentBpm: { fontWeight: '600', fontSize: 16, color: INST.steel, fontVariant: ['tabular-nums'] },
   recentMeta: { fontSize: 12, color: INST.dim },
   protoCard: {
     borderWidth: 1,
@@ -710,7 +821,7 @@ const styles = StyleSheet.create({
     gap: 2,
     marginTop: 4,
   },
-  protoTitle: { fontFamily: FONT.semi, fontSize: 14, color: INST.steel },
+  protoTitle: { fontWeight: '600', fontSize: 14, color: INST.steel },
   protoLine: { fontSize: 12, color: INST.dim },
   previewWell: { minHeight: 300, justifyContent: 'center' },
   preview: { width: '100%', height: 300 },
@@ -726,13 +837,30 @@ const styles = StyleSheet.create({
   },
   readout: { alignItems: 'center', paddingVertical: 4 },
   readoutValue: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 64,
     lineHeight: 70,
     color: INST.steel,
     fontVariant: ['tabular-nums'],
   },
-  readoutUnit: { fontFamily: FONT.semi, fontSize: 12, letterSpacing: 1.5, color: INST.engraved },
+  readoutUnit: { fontWeight: '600', fontSize: 12, letterSpacing: 1.5, color: INST.engraved },
   dialRow: { alignItems: 'center' },
   resultBlock: { gap: 12 },
+  modeSwitch: { flexDirection: 'row', gap: 8 },
+  modeBtn: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  modeBtnActive: { backgroundColor: '#4FD1C5', borderColor: '#4FD1C5' },
+  modeBtnDisabled: { opacity: 0.5 },
+  modeBtnPressed: { opacity: 0.85 },
+  modeBtnText: { fontWeight: '600', fontSize: 15, lineHeight: 20, color: INST.steel },
+  modeBtnTextActive: { color: '#062A26' },
 });

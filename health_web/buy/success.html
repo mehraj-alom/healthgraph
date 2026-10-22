@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Your premium code — HealthGraph</title>
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#08090D" />
+<link rel="icon" type="image/png" href="https://healthgraph.shop/icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header class="topbar"><div class="wrap topbar-inner">
+<a class="brand" href="/"><img src="https://healthgraph.shop/logo.png" alt="HealthGraph" />HealthGraph <span style="color:#86868B;font-weight:400">Premium</span></a>
+<nav class="nav" aria-label="Primary"><a href="/redeem/">How to redeem</a></nav>
+</div></header>
+<div class="wrap" style="max-width:640px;padding-top:56px;padding-bottom:80px;text-align:center">
+<span class="eyebrow">Payment successful</span>
+<h1 class="display" style="font-size:clamp(2.2rem,5vw,3.2rem)">Here is your code.</h1>
+<p class="lead" id="sub">Confirming your payment…</p>
+<div class="card" id="card" hidden>
+<div class="code-box" id="code">····</div>
+<p style="color:#B9B9C0" id="tier-line"></p>
+<button class="btn white" id="copy" type="button">Copy code</button>
+<div style="margin-top:22px;text-align:left">
+<p style="font-weight:600">Redeem in 30 seconds:</p>
+<ol style="color:#B9B9C0;margin:10px 0 0 20px">
+<li>Open the HealthGraph app</li>
+<li>Profile → Premium → “Have a code?”</li>
+<li>Enter the code — your tier unlocks instantly</li>
+</ol>
+</div>
+</div>
+<p class="err" id="err" role="alert" hidden style="color:#ff8a80;margin-top:16px"></p>
+</div>
+<footer><div class="wrap"><p>© 2026 HealthGraph · Save your code — it is shown once.</p></div></footer>
+<script>
+(function(){
+var API='https://api.healthgraph.shop';
+var sid=new URLSearchParams(location.search).get('session_id');
+var sub=document.getElementById('sub'),card=document.getElementById('card'),
+    code=document.getElementById('code'),tier=document.getElementById('tier-line'),
+    err=document.getElementById('err'),copy=document.getElementById('copy');
+if(!sid){sub.textContent='No order found. If you just paid, please wait a moment and reopen your receipt link.';return;}
+function poll(n){
+fetch(API+'/api/v1/checkout/order?session_id='+encodeURIComponent(sid))
+.then(function(r){if(!r.ok)throw 0;return r.json();})
+.then(function(j){
+  if(j.paid&&j.code){sub.textContent='Thank you — premium is yours for 30 days.';code.textContent=j.code;
+    tier.textContent=(j.tier==='allin'?'All-in':'General')+' · 30 days · redeem in the app';
+    card.hidden=false;}
+  else if(n>0){setTimeout(function(){poll(n-1);},2500);sub.textContent='Confirming your payment…';}
+  else{sub.textContent='Payment is still confirming — keep this page open, your code appears here.';setTimeout(function(){poll(8);},5000);}
+}).catch(function(){err.hidden=false;err.textContent='Could not reach the server — check your connection.';});
+}
+poll(8);
+copy.addEventListener('click',function(){
+  var t=code.textContent;
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){copy.textContent='Copied ✓';});}
+  else{var r=document.createRange();r.selectNodeContents(code);var s=getSelection();s.removeAllRanges();s.addRange(r);try{document.execCommand('copy');copy.textContent='Copied ✓';}catch(e){}s.removeAllRanges();}
+});
+})();
+</script>
+</body>
+</html>

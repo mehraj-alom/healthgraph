@@ -24,7 +24,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Svg, { Circle } from 'react-native-svg';
-import { Button, Card, EmptyState, SectionHeader } from '@/components';
+import { Button, EmptyState } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { getFasting, startFast, endFast } from '@/services/fastingStore';
 import {
   FASTING_WINDOWS,
@@ -33,8 +37,6 @@ import {
   type FastState,
 } from '@/services/fasting';
 import { EngineGraph } from '@/components/EngineGraph';
-import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
 import { TILE_TONES } from '@/theme/tones';
 import { useNutritionEngine } from '@/hooks/useNutritionEngine';
 import {
@@ -51,6 +53,9 @@ import {
 } from '@/screens/NutritionEngine/macroTargets';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { saveMacroTargets } from '@/services/macroTargetStore';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 function formatDayLabel(date: string): string {
   const d = new Date(`${date}T12:00:00`);
@@ -79,7 +84,7 @@ function CalorieRing({ progress }: { progress: { actual: number; target: number;
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke="#4FD1C5"
+          stroke={LG.card.mint}
           strokeWidth={stroke}
           fill="none"
           strokeLinecap="round"
@@ -93,11 +98,11 @@ function CalorieRing({ progress }: { progress: { actual: number; target: number;
         <Text style={{ color: '#FFFFFF', fontSize: 26, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
           {progress ? Math.round(progress.actual).toLocaleString('en-US') : '—'}
         </Text>
-        <Text style={{ color: '#8EA0B8', fontSize: 12 }}>
+        <Text style={{ color: SECONDARY, fontSize: 12 }}>
           {progress ? `of ${Math.round(progress.target).toLocaleString('en-US')} kcal` : 'no target'}
         </Text>
         {progress && progress.remaining > 0 ? (
-          <Text style={{ color: '#8EA0B8', fontSize: 12 }}>{`${Math.round(progress.remaining).toLocaleString('en-US')} left`}</Text>
+          <Text style={{ color: SECONDARY, fontSize: 12 }}>{`${Math.round(progress.remaining).toLocaleString('en-US')} left`}</Text>
         ) : null}
       </View>
     </View>
@@ -120,7 +125,7 @@ function MacroBar({
     <View style={{ marginTop: 10 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
         <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600' }}>{label}</Text>
-        <Text style={{ color: '#8EA0B8', fontSize: 12, fontVariant: ['tabular-nums'] }}>
+        <Text style={{ color: SECONDARY, fontSize: 12, fontVariant: ['tabular-nums'] }}>
           {progress ? `${Math.round(progress.actual)}${unit} of ${Math.round(progress.target)}${unit}` : '—'}
         </Text>
       </View>
@@ -193,8 +198,8 @@ function FastingCard() {
 
   return (
     <>
-      <SectionHeader dark title="Fasting" titleStyle={styles.histTitle} />
-      <Card style={styles.darkCard}>
+      <Text style={styles.sectionTitle}>Fasting</Text>
+      <GlassSurface strong style={styles.card}>
         {state === null ? (
           <Text style={styles.avgSub}>Loading…</Text>
         ) : status.phase === 'idle' ? (
@@ -225,9 +230,12 @@ function FastingCard() {
             </Text>
             <Button
               title={busy ? 'Saving…' : 'End fast'}
+              variant="secondary"
               onPress={() => void end()}
               disabled={busy}
               fullWidth
+              style={styles.logBtn}
+              textStyle={styles.logBtnText}
             />
           </>
         )}
@@ -238,7 +246,7 @@ function FastingCard() {
           </Text>
         ) : null}
         <Text style={styles.provenance}>Timer only. Stays on this device.</Text>
-      </Card>
+      </GlassSurface>
     </>
   );
 }
@@ -389,296 +397,302 @@ export default function NutritionEngineScreen() {
     : { title: 'Meals per day', points: mealPoints, decimals: 0 };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Nutrition.</Text>
-        <Text style={styles.sub}>Logged meals only.</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Nutrition</Text>
+          <Text style={styles.sub}>Logged meals only.</Text>
 
-        {isLoading ? (
-          <>
-            <Text style={styles.loading}>Loading…</Text>
-            <HealthFact style={styles.fact} />
-          </>
-        ) : summary.activeDays === 0 ? (
-          <EmptyState
-            title="No meals logged yet"
-            message="Log meals or scan food to begin."
-          />
-        ) : (
-          <>
-            <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <Text style={styles.bigValue}>
-                {`${summary.mealsLogged} ${summary.mealsLogged === 1 ? 'meal' : 'meals'}`}
-              </Text>
-              <Text style={styles.avgSub}>
-                {`Logged meals · ${summary.activeDays} ${summary.activeDays === 1 ? 'day' : 'days'}`}
-              </Text>
-              {mealsLine ? <Text style={styles.change}>{mealsLine}</Text> : null}
-            </Card>
-
-            {summary.kcalLogged != null ? (
-              <>
-                <SectionHeader dark title="Estimated calories" titleStyle={styles.histTitle} />
-                <Card style={styles.darkCard}>
-                  <Text style={styles.bigValue}>{formatKcal(summary.kcalLogged)}</Text>
-                  <Text style={styles.avgSub}>
-                    {summary.avgKcalPerDay != null
-                      ? `Avg ${formatKcal(summary.avgKcalPerDay)}/day · ${summary.kcalDays} ${summary.kcalDays === 1 ? 'day' : 'days'}`
-                      : 'Estimated intake'}
-                  </Text>
-                  {kcalLine ? <Text style={styles.change}>{kcalLine}</Text> : null}
-                  <Text style={styles.provenance}>
-                    Scans estimate. Not measured, not a target.
-                  </Text>
-                </Card>
-              </>
-            ) : null}
-
-            <SectionHeader dark title="Today" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              {!hasTargets ? (
-                <>
-                  <Text style={styles.bigValue}>—</Text>
-                  <Text style={styles.avgSub}>Set your targets to light up today&apos;s rings.</Text>
-                  <Button title="Set targets" onPress={openEditor} fullWidth textStyle={styles.ringBtnText} />
-                </>
-              ) : !todayMacros ? (
-                <>
-                  <Text style={styles.bigValue}>—</Text>
-                  <Text style={styles.avgSub}>No scans today yet — rings fill from food scans.</Text>
-                  <Button title="Set targets" variant="ghost" onPress={openEditor} fullWidth textStyle={styles.scanText} />
-                </>
-              ) : (
-                <>
-                  <CalorieRing progress={calProgress} />
-                  <MacroBar label="Protein" color="#7E9BF5" progress={proteinProgress} unit="g" />
-                  <MacroBar label="Carbs" color="#6BAFD4" progress={carbsProgress} unit="g" />
-                  <MacroBar label="Fat" color="#C9A24B" progress={fatProgress} unit="g" />
-                  {weekLine ? <Text style={styles.change}>{weekLine}</Text> : null}
-                  <Text style={styles.provenance}>From today&apos;s scans. Your targets, your call.</Text>
-                  <Button title="Edit targets" variant="ghost" onPress={openEditor} fullWidth textStyle={styles.scanText} />
-                </>
-              )}
-            </Card>
-
-            <FastingCard />
-
-            {classifiedMeals > 0 ? (
-              <>
-                <SectionHeader dark title="Logged meals by type" titleStyle={styles.histTitle} />
-                <Card style={styles.darkCard}>
-                  {typeCounts.map(({ type, count }) => (
-                    <View key={type} style={styles.typeRow}>
-                      <View style={[styles.typeDot, { backgroundColor: TILE_TONES.nutrition[1] }]} />
-                      <Text style={styles.typeLabel}>{type}</Text>
-                      <Text style={styles.typeCount}>{`${count} of ${classifiedMeals}`}</Text>
-                    </View>
-                  ))}
-                  <Text style={styles.provenance}>
-                    Logged meals only.
-                  </Text>
-                </Card>
-              </>
-            ) : null}
-
-            {graph.points.length > 0 ? (
-              <>
-                <SectionHeader dark title={graph.title} titleStyle={styles.histTitle} />
-                <Card style={styles.darkCard}>
-                  <EngineGraph points={graph.points} tone={TILE_TONES.nutrition[1]} decimals={graph.decimals} />
-                  <Text style={styles.avgSub}>
-                    {`${graph.points.length} ${graph.points.length === 1 ? 'day' : 'days'}`}
-                  </Text>
-                </Card>
-              </>
-            ) : null}
-
-            <SectionHeader dark title="Recent days" titleStyle={styles.histTitle} />
-            <View style={styles.list}>
-              {[...days]
-                .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-                .slice(0, 14)
-                .map((day) => (
-                  <Card key={day.date} style={styles.darkCard}>
-                    <View style={styles.rowTop}>
-                      <View style={styles.rowMain}>
-                        <Text style={styles.rowTitle}>{daySub(day)}</Text>
-                        {day.label ? (
-                          <Text style={styles.rowSub} numberOfLines={2}>
-                            {day.label}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </View>
-                  </Card>
-                ))}
+          {isLoading ? (
+            <View style={styles.center}>
+              <Text style={styles.loading}>Loading…</Text>
             </View>
-          </>
-        )}
+          ) : summary.activeDays === 0 ? (
+            <EmptyState
+              title="No meals logged yet"
+              message="Log meals or scan food to begin."
+            />
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>This week</Text>
+              <GlassSurface strong style={styles.card}>
+                <Text style={styles.bigValue}>
+                  {`${summary.mealsLogged} ${summary.mealsLogged === 1 ? 'meal' : 'meals'}`}
+                </Text>
+                <Text style={styles.avgSub}>
+                  {`Logged meals · ${summary.activeDays} ${summary.activeDays === 1 ? 'day' : 'days'}`}
+                </Text>
+                {mealsLine ? <Text style={styles.change}>{mealsLine}</Text> : null}
+              </GlassSurface>
 
-        <Button
-          title="Log meals"
-          onPress={() => go('DailyLog')}
-          fullWidth
-          size="large"
-          style={styles.logBtn}
-          textStyle={styles.logBtnText}
-        />
-        <Button
-          title="Scan food"
-          variant="ghost"
-          onPress={() => go('FoodScan')}
-          fullWidth
-          textStyle={styles.scanText}
-        />
-
-        <Modal visible={editorOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditorOpen(false)}>
-          <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-              <Text style={styles.title}>Your targets.</Text>
-              <Text style={styles.sub}>Starting points only — adjust to what works for you.</Text>
-
-              <Text style={styles.editLabel}>Goal</Text>
-              <View style={styles.chipRow}>
-                {(['lose', 'maintain', 'gain'] as const).map((g) => (
-                  <Pressable
-                    key={g}
-                    onPress={() => setEditGoal(g)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: editGoal === g }}
-                    style={[styles.chip, editGoal === g && styles.chipOn]}
-                  >
-                    <Text style={[styles.chipTxt, editGoal === g && styles.chipTxtOn]}>
-                      {g === 'lose' ? 'Eat less' : g === 'gain' ? 'Eat more' : 'Stay steady'}
+              {summary.kcalLogged != null ? (
+                <>
+                  <Text style={styles.sectionTitle}>Estimated calories</Text>
+                  <GlassSurface strong style={styles.card}>
+                    <Text style={styles.bigValue}>{formatKcal(summary.kcalLogged)}</Text>
+                    <Text style={styles.avgSub}>
+                      {summary.avgKcalPerDay != null
+                        ? `Avg ${formatKcal(summary.avgKcalPerDay)}/day · ${summary.kcalDays} ${summary.kcalDays === 1 ? 'day' : 'days'}`
+                        : 'Estimated intake'}
                     </Text>
-                  </Pressable>
-                ))}
-              </View>
+                    {kcalLine ? <Text style={styles.change}>{kcalLine}</Text> : null}
+                    <Text style={styles.provenance}>
+                      Scans estimate. Not measured, not a target.
+                    </Text>
+                  </GlassSurface>
+                </>
+              ) : null}
 
-              <Text style={styles.editLabel}>Activity</Text>
-              <View style={styles.chipRow}>
-                {(['light', 'moderate', 'active', 'very-active'] as const).map((a) => (
-                  <Pressable
-                    key={a}
-                    onPress={() => setEditActivity(a)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: editActivity === a }}
-                    style={[styles.chip, editActivity === a && styles.chipOn]}
-                  >
-                    <Text style={[styles.chipTxt, editActivity === a && styles.chipTxtOn]}>{a}</Text>
-                  </Pressable>
-                ))}
-              </View>
+              <Text style={styles.sectionTitle}>Today</Text>
+              <GlassSurface strong style={styles.card}>
+                {!hasTargets ? (
+                  <>
+                    <Text style={styles.bigValue}>—</Text>
+                    <Text style={styles.avgSub}>Set your targets to light up today&apos;s rings.</Text>
+                    <Button title="Set targets" variant="secondary" onPress={openEditor} fullWidth style={styles.logBtn} textStyle={styles.logBtnText} />
+                  </>
+                ) : !todayMacros ? (
+                  <>
+                    <Text style={styles.bigValue}>—</Text>
+                    <Text style={styles.avgSub}>No scans today yet — rings fill from food scans.</Text>
+                    <Button title="Set targets" variant="ghost" onPress={openEditor} fullWidth textStyle={styles.ghostText} />
+                  </>
+                ) : (
+                  <>
+                    <CalorieRing progress={calProgress} />
+                    <MacroBar label="Protein" color="#7E9BF5" progress={proteinProgress} unit="g" />
+                    <MacroBar label="Carbs" color="#6BAFD4" progress={carbsProgress} unit="g" />
+                    <MacroBar label="Fat" color="#C9A24B" progress={fatProgress} unit="g" />
+                    {weekLine ? <Text style={styles.change}>{weekLine}</Text> : null}
+                    <Text style={styles.provenance}>From today&apos;s scans. Your targets, your call.</Text>
+                    <Button title="Edit targets" variant="ghost" onPress={openEditor} fullWidth textStyle={styles.ghostText} />
+                  </>
+                )}
+              </GlassSurface>
 
-              <View style={styles.editRow}>
-                <View style={styles.editHalf}>
-                  <Text style={styles.editLabel}>Age (optional)</Text>
-                  <TextInput
-                    value={editAge}
-                    onChangeText={setEditAge}
-                    placeholder="—"
-                    placeholderTextColor="#5A6B85"
-                    keyboardType="numeric"
-                    style={styles.editInput}
-                  />
-                </View>
-                <View style={styles.editHalf}>
-                  <Text style={styles.editLabel}>Sex (optional)</Text>
-                  <View style={styles.chipRow}>
-                    {(['female', 'male'] as const).map((s) => (
-                      <Pressable
-                        key={s}
-                        onPress={() => setEditSex(editSex === s ? null : s)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: editSex === s }}
-                        style={[styles.chip, editSex === s && styles.chipOn]}
-                      >
-                        <Text style={[styles.chipTxt, editSex === s && styles.chipTxtOn]}>
-                          {s === 'female' ? 'F' : 'M'}
-                        </Text>
-                      </Pressable>
+              <FastingCard />
+
+              {classifiedMeals > 0 ? (
+                <>
+                  <Text style={styles.sectionTitle}>Logged meals by type</Text>
+                  <GlassSurface strong style={styles.card}>
+                    {typeCounts.map(({ type, count }) => (
+                      <View key={type} style={styles.typeRow}>
+                        <View style={[styles.typeDot, { backgroundColor: TILE_TONES.nutrition[1] }]} />
+                        <Text style={styles.typeLabel}>{type}</Text>
+                        <Text style={styles.typeCount}>{`${count} of ${classifiedMeals}`}</Text>
+                      </View>
                     ))}
+                    <Text style={styles.provenance}>
+                      Logged meals only.
+                    </Text>
+                  </GlassSurface>
+                </>
+              ) : null}
+
+              {graph.points.length > 0 ? (
+                <>
+                  <Text style={styles.sectionTitle}>{graph.title}</Text>
+                  <GlassSurface strong style={styles.card}>
+                    <EngineGraph points={graph.points} tone={TILE_TONES.nutrition[1]} decimals={graph.decimals} />
+                    <Text style={styles.avgSub}>
+                      {`${graph.points.length} ${graph.points.length === 1 ? 'day' : 'days'}`}
+                    </Text>
+                  </GlassSurface>
+                </>
+              ) : null}
+
+              <Text style={styles.sectionTitle}>Recent days</Text>
+              <View style={styles.list}>
+                {[...days]
+                  .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+                  .slice(0, 14)
+                  .map((day) => (
+                    <GlassSurface key={day.date} strong style={styles.card}>
+                      <View style={styles.rowTop}>
+                        <View style={styles.rowMain}>
+                          <Text style={styles.rowTitle}>{daySub(day)}</Text>
+                          {day.label ? (
+                            <Text style={styles.rowSub} numberOfLines={2}>
+                              {day.label}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </GlassSurface>
+                  ))}
+              </View>
+            </>
+          )}
+
+          <Button
+            title="Log meals"
+            variant="secondary"
+            onPress={() => go('DailyLog')}
+            fullWidth
+            size="large"
+            style={styles.logBtn}
+            textStyle={styles.logBtnText}
+          />
+          <Button
+            title="Scan food"
+            variant="ghost"
+            onPress={() => go('FoodScan')}
+            fullWidth
+            textStyle={styles.ghostText}
+          />
+
+          <Modal visible={editorOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditorOpen(false)}>
+            <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+              <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+                <Text style={styles.title}>Your targets</Text>
+                <Text style={styles.sub}>Starting points only — adjust to what works for you.</Text>
+
+                <Text style={styles.editLabel}>Goal</Text>
+                <View style={styles.chipRow}>
+                  {(['lose', 'maintain', 'gain'] as const).map((g) => (
+                    <Pressable
+                      key={g}
+                      onPress={() => setEditGoal(g)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: editGoal === g }}
+                      style={[styles.chip, editGoal === g && styles.chipOn]}
+                    >
+                      <Text style={[styles.chipTxt, editGoal === g && styles.chipTxtOn]}>
+                        {g === 'lose' ? 'Eat less' : g === 'gain' ? 'Eat more' : 'Stay steady'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={styles.editLabel}>Activity</Text>
+                <View style={styles.chipRow}>
+                  {(['light', 'moderate', 'active', 'very-active'] as const).map((a) => (
+                    <Pressable
+                      key={a}
+                      onPress={() => setEditActivity(a)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: editActivity === a }}
+                      style={[styles.chip, editActivity === a && styles.chipOn]}
+                    >
+                      <Text style={[styles.chipTxt, editActivity === a && styles.chipTxtOn]}>{a}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <View style={styles.editRow}>
+                  <View style={styles.editHalf}>
+                    <Text style={styles.editLabel}>Age (optional)</Text>
+                    <TextInput
+                      value={editAge}
+                      onChangeText={setEditAge}
+                      placeholder="—"
+                      placeholderTextColor="rgba(233,240,255,0.45)"
+                      keyboardType="numeric"
+                      style={styles.editInput}
+                    />
+                  </View>
+                  <View style={styles.editHalf}>
+                    <Text style={styles.editLabel}>Sex (optional)</Text>
+                    <View style={styles.chipRow}>
+                      {(['female', 'male'] as const).map((s) => (
+                        <Pressable
+                          key={s}
+                          onPress={() => setEditSex(editSex === s ? null : s)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: editSex === s }}
+                          style={[styles.chip, editSex === s && styles.chipOn]}
+                        >
+                          <Text style={[styles.chipTxt, editSex === s && styles.chipTxtOn]}>
+                            {s === 'female' ? 'F' : 'M'}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              <Pressable
-                onPress={suggestFromProfile}
-                accessibilityRole="button"
-                accessibilityLabel="Suggest targets from profile"
-                style={({ pressed }) => [styles.suggestBtn, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={styles.suggestTxt}>
-                  {profileMeasures.weightKg != null
-                    ? `Suggest from profile (${profileMeasures.weightKg} kg)`
-                    : 'Add weight in your profile to unlock suggestions'}
-                </Text>
-              </Pressable>
+                <Pressable
+                  onPress={suggestFromProfile}
+                  accessibilityRole="button"
+                  accessibilityLabel="Suggest targets from profile"
+                  style={({ pressed }) => [styles.suggestBtn, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.suggestTxt}>
+                    {profileMeasures.weightKg != null
+                      ? `Suggest from profile (${profileMeasures.weightKg} kg)`
+                      : 'Add weight in your profile to unlock suggestions'}
+                  </Text>
+                </Pressable>
 
-              <Text style={styles.editLabel}>Calories / day</Text>
-              <TextInput
-                value={editCalories}
-                onChangeText={setEditCalories}
-                placeholder="e.g., 2200"
-                placeholderTextColor="#5A6B85"
-                keyboardType="numeric"
-                style={styles.editInput}
-              />
-              <Text style={styles.editLabel}>Protein g / day</Text>
-              <TextInput
-                value={editProtein}
-                onChangeText={setEditProtein}
-                placeholder="e.g., 140"
-                placeholderTextColor="#5A6B85"
-                keyboardType="numeric"
-                style={styles.editInput}
-              />
-              <Text style={styles.editLabel}>Carbs g / day</Text>
-              <TextInput
-                value={editCarbs}
-                onChangeText={setEditCarbs}
-                placeholder="e.g., 250"
-                placeholderTextColor="#5A6B85"
-                keyboardType="numeric"
-                style={styles.editInput}
-              />
-              <Text style={styles.editLabel}>Fat g / day</Text>
-              <TextInput
-                value={editFat}
-                onChangeText={setEditFat}
-                placeholder="e.g., 70"
-                placeholderTextColor="#5A6B85"
-                keyboardType="numeric"
-                style={styles.editInput}
-              />
+                <Text style={styles.editLabel}>Calories / day</Text>
+                <TextInput
+                  value={editCalories}
+                  onChangeText={setEditCalories}
+                  placeholder="e.g., 2200"
+                  placeholderTextColor="rgba(233,240,255,0.45)"
+                  keyboardType="numeric"
+                  style={styles.editInput}
+                />
+                <Text style={styles.editLabel}>Protein g / day</Text>
+                <TextInput
+                  value={editProtein}
+                  onChangeText={setEditProtein}
+                  placeholder="e.g., 140"
+                  placeholderTextColor="rgba(233,240,255,0.45)"
+                  keyboardType="numeric"
+                  style={styles.editInput}
+                />
+                <Text style={styles.editLabel}>Carbs g / day</Text>
+                <TextInput
+                  value={editCarbs}
+                  onChangeText={setEditCarbs}
+                  placeholder="e.g., 250"
+                  placeholderTextColor="rgba(233,240,255,0.45)"
+                  keyboardType="numeric"
+                  style={styles.editInput}
+                />
+                <Text style={styles.editLabel}>Fat g / day</Text>
+                <TextInput
+                  value={editFat}
+                  onChangeText={setEditFat}
+                  placeholder="e.g., 70"
+                  placeholderTextColor="rgba(233,240,255,0.45)"
+                  keyboardType="numeric"
+                  style={styles.editInput}
+                />
 
-              <Button
-                title={savingTargets ? 'Saving…' : 'Save targets'}
-                onPress={() => void saveTargets()}
-                disabled={savingTargets}
-                fullWidth
-                style={styles.logBtn}
-                textStyle={styles.logBtnText}
-              />
-              <Button title="Cancel" variant="ghost" onPress={() => setEditorOpen(false)} fullWidth textStyle={styles.scanText} />
-            </ScrollView>
-          </SafeAreaView>
-        </Modal>
-        <Text style={styles.disclaimer}>
-          From your check-ins and food scans on this device. Tracking only — not medical advice, diagnosis, or treatment.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+                <Button
+                  title={savingTargets ? 'Saving…' : 'Save targets'}
+                  variant="secondary"
+                  onPress={() => void saveTargets()}
+                  disabled={savingTargets}
+                  fullWidth
+                  style={styles.logBtn}
+                  textStyle={styles.logBtnText}
+                />
+                <Button title="Cancel" variant="ghost" onPress={() => setEditorOpen(false)} fullWidth textStyle={styles.ghostText} />
+              </ScrollView>
+            </SafeAreaView>
+          </Modal>
+          <Text style={styles.disclaimer}>
+            From your check-ins and food scans on this device. Tracking only — not medical advice, diagnosis, or treatment.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  modalSafe: { flex: 1, backgroundColor: '#05070F' },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   presetBtn: {
     borderRadius: 9999,
@@ -689,41 +703,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  presetText: { ...TYPE.chip, color: '#FFFFFF' },
-  error: { ...TYPE.caption, color: GV.danger },
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
-  fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  bigValue: { ...TYPE.display, fontSize: 40, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
-  change: { ...TYPE.body, color: '#E8ECF1', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
-  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
+  presetText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: '#FFFFFF' },
+  error: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: LG.card.danger },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginTop: 16 },
+  center: { alignItems: 'center', paddingVertical: 24 },
+  card: { padding: 16 },
+  bigValue: { fontWeight: '600', fontSize: 40, lineHeight: 48, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  avgSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
+  change: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
+  provenance: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center', marginTop: 8 },
   typeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   typeDot: { width: 8, height: 8, borderRadius: 4 },
-  typeLabel: { ...TYPE.body, color: '#FFFFFF', flex: 1 },
-  typeCount: { ...TYPE.body, color: GV.fog, fontVariant: ['tabular-nums'] },
-  list: { gap: SPACE.cardGap },
+  typeLabel: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', flex: 1 },
+  typeCount: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  list: { gap: 12 },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   rowMain: { flex: 1, gap: 4 },
-  rowTitle: { ...TYPE.button, fontSize: 15, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
-  rowSub: { ...TYPE.caption, color: GV.fog },
-  logBtn: { backgroundColor: '#4FD1C5' },
-  logBtnText: { color: '#062A26' },
-  scanText: { color: '#A7B8B2' },
-  ringBtnText: { color: '#062A26' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
-  editLabel: { ...TYPE.caption, color: GV.fog, marginTop: 14, marginBottom: 6 },
+  rowTitle: { fontWeight: '600', fontSize: 15, lineHeight: 20, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  rowSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY },
+  logBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  logBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
+  editLabel: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, marginTop: 14, marginBottom: 6 },
   editInput: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
     borderRadius: 10,
     color: '#FFFFFF',
@@ -742,16 +747,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
-  chipOn: { backgroundColor: '#4FD1C5', borderColor: '#4FD1C5' },
-  chipTxt: { color: '#A7B8B2', fontSize: 13, fontWeight: '600' },
-  chipTxtOn: { color: '#062A26' },
+  chipOn: { backgroundColor: LG.card.mint, borderColor: LG.card.mint },
+  chipTxt: { color: SECONDARY, fontSize: 13, fontWeight: '600' },
+  chipTxtOn: { color: '#0B0F1A' },
   suggestBtn: {
     borderWidth: 1,
-    borderColor: '#2A4A73',
+    borderColor: 'rgba(255,255,255,0.16)',
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
     marginTop: 14,
   },
-  suggestTxt: { color: '#8EA0B8', fontSize: 13, fontWeight: '600' },
+  suggestTxt: { color: SECONDARY, fontSize: 13, fontWeight: '600' },
 });

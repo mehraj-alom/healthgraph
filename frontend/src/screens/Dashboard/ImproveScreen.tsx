@@ -2,14 +2,19 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { toneForCategory } from '@/theme/tones';
-import { StageGradient } from '@/components/StageGradient';
+import { Button } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { SPOKE_GUIDANCE, GUIDANCE_FALLBACK } from '@/components/home/HGraphMap';
 import type { ImproveMetric, RootStackParamList } from '@/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Route = RouteProp<RootStackParamList, 'Improve'>;
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 /**
  * Improve / Keep — the actions window behind the dashboard duo buttons.
@@ -34,11 +39,8 @@ export default function ImproveScreen() {
     return 'in zone';
   };
 
-  // Flat white cards: status reads from a single small dot + label copy,
-  // never from tinted fills. Keep = CTA green, needs-a-nudge = amber dot.
   const renderCard = (m: ImproveMetric, maintain: boolean) => {
     const g = SPOKE_GUIDANCE[m.id] ?? GUIDANCE_FALLBACK;
-    // Spotlight the direction that moves toward the goal.
     const towardLow = g.goal === 'low';
     const first = maintain
       ? { title: 'Keep doing', items: towardLow ? g.lower : g.raise }
@@ -50,11 +52,9 @@ export default function ImproveScreen() {
       : towardLow
         ? { title: 'Watch for', items: g.raise }
         : { title: 'Ease off', items: g.lower };
-    const dotColor = maintain ? GV.cta : GV.fx.amber;
-    const tone = toneForCategory(m.id)[0];
+    const dotColor = maintain ? LG.card.mint : LG.card.danger;
     return (
-      <View key={m.id} style={styles.card}>
-        <View style={[styles.toneStrip, { backgroundColor: tone }]} />
+      <GlassSurface strong key={m.id} style={styles.card}>
         <View style={styles.cardTopRow}>
           <View style={[styles.toneDot, { backgroundColor: dotColor }]} />
           <Text style={styles.toneLabel}>
@@ -81,136 +81,121 @@ export default function ImproveScreen() {
             ))}
           </View>
         ) : null}
-      </View>
+      </GlassSurface>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StageGradient />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.85 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-        >
-          <Text style={styles.backBtnText}>‹ Back</Text>
-        </Pressable>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={12}
+          >
+            <Text style={styles.backBtnText}>‹ Back</Text>
+          </Pressable>
 
-        <Text style={styles.title}>{focus === 'improve' ? 'Improve' : 'Keep going'}</Text>
-        <Text style={styles.subtitle}>
-          {focus === 'improve'
-            ? 'Based on your dial right now. What to move.'
-            : 'What is holding steady. What sustains it.'}
-        </Text>
+          <Text style={styles.title}>{focus === 'improve' ? 'Improve' : 'Keep going'}</Text>
+          <Text style={styles.sub}>
+            {focus === 'improve'
+              ? 'Based on your dial right now. What to move.'
+              : 'What is holding steady. What sustains it.'}
+          </Text>
 
-        {primary.length === 0 ? (
-          focus === 'improve' ? (
-            <View style={styles.emptyCard}>
-              <View style={styles.celebrateTile}>
-                <Text style={styles.celebrateGlyph}>✓</Text>
-              </View>
-              <Text style={styles.emptyTitle}>
-                Nothing to improve.
-              </Text>
-              <Text style={styles.emptyText}>
-                Every signal is sitting in its healthy zone. Whatever you are
-                doing is working. Keep it up, and check back after your next
-                few logs.
-              </Text>
-              <Pressable
-                onPress={() => navigation.setParams({ focus: 'keep' })}
-                style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.85 }]}
-                accessibilityRole="button"
-                accessibilityLabel="See what to keep doing"
-                hitSlop={12}
-              >
-                <Text style={styles.emptyBtnText}>See what to keep doing →</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>
-                Nothing steady yet. You can build it.
-              </Text>
-              <Text style={styles.emptyText}>
-                Signals show up here once they have a few days of history.
-                Meanwhile, tap below to see exactly what to improve first.
-              </Text>
-              <Pressable
-                onPress={() => navigation.setParams({ focus: 'improve' })}
-                style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.85 }]}
-                accessibilityRole="button"
-                accessibilityLabel="See what to improve"
-                hitSlop={12}
-              >
-                <Text style={styles.emptyBtnText}>
-                  See what to improve →
+          {primary.length === 0 ? (
+            focus === 'improve' ? (
+              <GlassSurface strong style={styles.emptyCard}>
+                <View style={styles.celebrateTile}>
+                  <Text style={styles.celebrateGlyph}>✓</Text>
+                </View>
+                <Text style={styles.emptyTitle}>
+                  Nothing to improve.
                 </Text>
-              </Pressable>
-            </View>
-          )
-        ) : (
-          primary.map((m) => renderCard(m, focus === 'keep'))
-        )}
+                <Text style={styles.emptyText}>
+                  Every signal is sitting in its healthy zone. Whatever you are
+                  doing is working. Keep it up, and check back after your next
+                  few logs.
+                </Text>
+                <Button
+                  title="See what to keep doing"
+                  variant="secondary"
+                  onPress={() => navigation.setParams({ focus: 'keep' })}
+                  fullWidth
+                  style={styles.primaryBtn}
+                  textStyle={styles.primaryBtnText}
+                />
+              </GlassSurface>
+            ) : (
+              <GlassSurface strong style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>
+                  Nothing steady yet. You can build it.
+                </Text>
+                <Text style={styles.emptyText}>
+                  Signals show up here once they have a few days of history.
+                  Meanwhile, tap below to see exactly what to improve first.
+                </Text>
+                <Button
+                  title="See what to improve"
+                  variant="secondary"
+                  onPress={() => navigation.setParams({ focus: 'improve' })}
+                  fullWidth
+                  style={styles.primaryBtn}
+                  textStyle={styles.primaryBtnText}
+                />
+              </GlassSurface>
+            )
+          ) : (
+            primary.map((m) => renderCard(m, focus === 'keep'))
+          )}
 
-        {secondary.length > 0 ? (
-          <>
-            <Text style={styles.sectionTitle}>
-              {focus === 'improve' ? 'Holding steady' : 'Needs attention'}
-            </Text>
-            {secondary.map((m) => renderCard(m, focus === 'improve'))}
-          </>
-        ) : null}
+          {secondary.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>
+                {focus === 'improve' ? 'Holding steady' : 'Needs attention'}
+              </Text>
+              {secondary.map((m) => renderCard(m, focus === 'improve'))}
+            </>
+          ) : null}
 
-        <Text style={styles.foot}>
-          Wellness nudges from your own averages. Not medical advice.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+          <Text style={styles.foot}>
+            Wellness nudges from your own averages. Not medical advice.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: GV.stage,
-  },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
   content: {
     paddingHorizontal: SPACE.screenH,
+    paddingVertical: 12,
     paddingBottom: 32,
-    gap: SPACE.cardGap,
+    gap: 12,
   },
   backBtn: {
     alignSelf: 'flex-start',
     minHeight: 44,
     justifyContent: 'center',
-    paddingHorizontal: SPACE.screenH,
-    borderRadius: SPACE.rPill,
-    backgroundColor: GV.card,
+    paddingHorizontal: 4,
   },
   backBtnText: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 15,
-    color: GV.ink,
+    lineHeight: 20,
+    color: '#FFFFFF',
   },
-  title: {
-    ...TYPE.display,
-    color: GV.card,
-    textAlign: 'center',
-  },
-  subtitle: {
-    ...TYPE.body,
-    color: GV.fog,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginBottom: 4 },
   card: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    padding: 16,
     gap: 8,
   },
   cardTopRow: {
@@ -219,51 +204,57 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toneDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 9999,
-  },
-  toneStrip: {
-    height: 4,
-    borderRadius: 2,
-    marginBottom: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   toneLabel: {
-    ...TYPE.chip,
-    color: GV.ink,
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#FFFFFF',
     flex: 1,
   },
   valuePill: {
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: SPACE.rPill,
+    borderRadius: 9999,
   },
   valuePillText: {
-    ...TYPE.chip,
-    color: GV.ink,
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
   watchBlock: {
     marginTop: 8,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     gap: 4,
   },
   cardLabel: {
-    ...TYPE.title,
-    color: GV.ink,
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.4,
+    color: '#FFFFFF',
   },
   cardStatus: {
-    ...TYPE.caption,
-    color: GV.muted,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
+    fontVariant: ['tabular-nums'],
   },
   flag: {
-    ...TYPE.caption,
-    fontFamily: FONT.semi,
-    color: GV.ink,
-    backgroundColor: GV.wash,
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -271,71 +262,60 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   listTitle: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 14,
     lineHeight: 20,
-    color: GV.ink,
+    color: '#FFFFFF',
     marginTop: 8,
   },
   tip: {
-    ...TYPE.body,
-    color: GV.body,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: SECONDARY,
   },
-  sectionTitle: {
-    ...TYPE.caption,
-    color: GV.fog,
-    letterSpacing: 1,
-    textAlign: 'center',
-    marginTop: 8,
-  },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
   emptyCard: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    padding: 20,
     gap: 8,
     alignItems: 'center',
   },
   celebrateTile: {
     width: 56,
     height: 56,
-    borderRadius: 16,
-    backgroundColor: GV.wash,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   celebrateGlyph: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 28,
     lineHeight: 32,
-    color: GV.cta,
+    color: LG.card.mint,
   },
-  emptyBtn: {
-    marginTop: 8,
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    borderRadius: SPACE.rPill,
-    backgroundColor: GV.cta,
-  },
-  emptyBtnText: {
-    ...TYPE.button,
-    fontSize: 14,
+  primaryBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF', marginTop: 8 },
+  primaryBtnText: { color: '#0B0F1A' },
+  emptyTitle: {
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.4,
     color: '#FFFFFF',
     textAlign: 'center',
   },
-  emptyTitle: {
-    ...TYPE.title,
-    color: GV.ink,
-    textAlign: 'center',
-  },
   emptyText: {
-    ...TYPE.body,
-    color: GV.muted,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: SECONDARY,
     textAlign: 'center',
   },
   foot: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: TERTIARY,
     textAlign: 'center',
     marginTop: 8,
   },

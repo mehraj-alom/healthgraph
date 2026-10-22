@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aurora Onboarding — iOS Showcase</title>
+<meta name="description" content="Two iPhone frames side by side showcasing Aurora onboarding: Join Aurora hero + Create New Profile form. Auto-scaling stage.">
+<!-- Google Fonts: Playfair Display (400,500,600 + italic) + Inter (400,500,600,700) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============ ITC Garamond Std Narrow (self-hosted Cloudinary) ============ */
+@font-face{
+  font-family:"ITC Garamond Std Narrow";
+  src:url("https://res.cloudinary.com/dgupuutfn/raw/upload/v1783596334/ITCGaramondStd-LtNarrow_i2zcip.woff2") format("woff2"),
+      url("https://res.cloudinary.com/dgupuutfn/raw/upload/v1783596334/ITCGaramondStd-LtNarrow_soc5vc.woff") format("woff");
+  font-weight:300;font-style:normal;font-display:swap;
+}
+@font-face{
+  font-family:"ITC Garamond Std Narrow";
+  src:url("https://res.cloudinary.com/dgupuutfn/raw/upload/v1783596334/ITCGaramondStd-BkNarrow_xjfoc0.woff2") format("woff2"),
+      url("https://res.cloudinary.com/dgupuutfn/raw/upload/v1783596334/ITCGaramondStd-BkNarrow_wfoxm1.woff") format("woff");
+  font-weight:400;font-style:normal;font-display:swap;
+}
+@font-face{
+  font-family:"ITC Garamond Std Narrow";
+  src:url("https://res.cloudinary.com/dgupuutfn/raw/upload/v1783596334/ITCGaramondStd-BkNarrowIta_hiy9ld.woff2") format("woff2"),
+      url("https://res.cloudinary.com/dgupuutfn/raw/upload/v1783596334/ITCGaramondStd-BkNarrowIta_rlarxo.woff") format("woff");
+  font-weight:400;font-style:italic;font-display:swap;
+}
+@font-face{
+  font-family:"ITC Garamond Std Narrow";
+  src:url("https://res.cloudinary.com/dgupuutfn/raw/upload/v1783596334/ITCGaramondStd-BkNarrow_xjfoc0.woff2") format("woff2"),
+      url("https://res.cloudinary.com/dgupuutfn/raw/upload/v1783596334/ITCGaramondStd-BkNarrow_wfoxm1.woff") format("woff");
+  font-weight:500;font-style:normal;font-display:swap;
+}
+/* ============ Reset / stage ============ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#F4F4F4;font-family:"Inter",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+.ze-viewport{width:100vw;height:100vh;height:100svh;display:flex;align-items:center;justify-content:center;padding:40px;overflow:hidden;background:#F4F4F4}
+.ze-stage{display:flex;gap:70px;align-items:flex-start;transform-origin:center center;flex:none}
+/* ============ iOS device frame (reusable) ============ */
+.iphone{width:370px;height:790px;border-radius:48px;position:relative;flex:none;overflow:hidden;
+  box-shadow:0 40px 80px rgba(0,0,0,0.18),0 0 0 1px rgba(0,0,0,0.12)}
+.iphone.light{background:#F2F2F7}
+.iphone.dark{background:#000}
+.screen{position:absolute;inset:0;border-radius:48px;overflow:hidden}
+.screen.s1{background:#02040c}
+.screen.s2{background:#14151d}
+/* Dynamic Island */
+.island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:126px;height:37px;border-radius:24px;background:#000;z-index:30}
+/* Status bar */
+.statusbar{position:absolute;top:0;left:0;right:0;height:54px;z-index:31;display:flex;align-items:flex-start;justify-content:space-between;padding:20px 30px 0 34px;pointer-events:none}
+.statusbar .time{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;font-weight:590;font-size:17px;line-height:1;color:#fff;letter-spacing:-0.2px}
+.statusbar .icons{display:flex;align-items:center;gap:7px}
+/* Home indicator */
+.home{position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:139px;height:5px;border-radius:100px;z-index:31}
+.iphone.light .home{background:rgba(0,0,0,0.25)}
+.iphone.dark .home{background:rgba(255,255,255,0.7)}
+/* ================================================================
+   SCREEN 1 — Aurora "Join" hero
+   Native 470x1008 design scaled to 370x790 via scale(0.787234).
+   Layout positions below are in 470-space (406+32*2=470).
+   Aurora mapping (our words, same positions/styles):
+     logo      -> Aurora brand (Circle + "Aurora")
+     title     -> "Join" / italic "Aurora"
+     subtitle  -> "Follow these 3 quick phases / to activate your space."
+     button    -> white pill "Create Account" (+ Apple mark per frame spec)
+     terms     -> "Member of the team? Log in"
+   ================================================================ */
+.s1-scale{position:absolute;top:0;left:0;width:470px;height:1008px;transform:scale(0.787234);transform-origin:top left}
+.s1-video{position:absolute;inset:0;width:470px;height:1008px;object-fit:cover;object-position:center 48%;z-index:0;background:#02040c}
+.s1-fade{position:absolute;left:0;right:0;bottom:0;height:46%;z-index:1;
+  background:linear-gradient(to bottom,rgba(2,4,12,0) 0%,rgba(2,4,12,.35) 46%,rgba(2,4,12,.72) 100%)}
+.s1-logo{position:absolute;top:74px;left:0;right:0;z-index:4;display:flex;align-items:center;justify-content:center;gap:10px;
+  filter:drop-shadow(0 0 7px rgba(190,215,255,.28))}
+.s1-logo svg{width:26px;height:26px}
+.s1-logo span{color:#fff;font-size:24px;font-weight:600;letter-spacing:-0.02em;font-family:"Inter",sans-serif}
+.s1-title{position:absolute;top:618px;left:0;right:0;z-index:4;text-align:center;
+  font-family:"ITC Garamond Std Narrow",Georgia,serif;font-weight:300;font-size:66px;line-height:68px;letter-spacing:0.2px;color:#fff;
+  text-shadow:0 0 34px rgba(255,255,255,.22),0 1px 2px rgba(0,0,0,.35)}
+.s1-title em{font-style:italic;font-weight:400;
+  text-shadow:0 0 10px rgba(255,255,255,.6),0 0 20px rgba(255,235,190,.5),0 0 40px rgba(255,210,140,.32),0 1px 2px rgba(0,0,0,.35)}
+.s1-subtitle{position:absolute;top:787px;left:0;right:0;z-index:4;text-align:center;
+  font-family:"Inter",sans-serif;font-size:16.5px;font-weight:400;line-height:26px;color:rgba(255,255,255,.52)}
+.s1-steps{position:absolute;top:838px;left:0;right:0;z-index:4;display:flex;align-items:center;justify-content:center;gap:8px}
+.s1-steps .stp{display:flex;align-items:center;gap:7px;padding:6px 12px 6px 6px;border-radius:999px;font-family:"Inter",sans-serif;font-size:11.5px;font-weight:500;letter-spacing:0.1px}
+.s1-steps .stp i{font-style:normal;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+.s1-steps .stp.on{background:#fff;color:#111}
+.s1-steps .stp.on i{background:#111;color:#fff}
+.s1-steps .stp.off{background:rgba(255,255,255,.12);color:rgba(255,255,255,.75)}
+.s1-steps .stp.off i{background:rgba(255,255,255,.16);color:rgba(255,255,255,.6)}
+.s1-btn{position:absolute;top:874px;left:32px;width:406px;height:55px;z-index:4;
+  background:#fff;border-radius:28px;box-shadow:0 6px 26px rgba(0,0,0,.28);
+  display:flex;align-items:center;justify-content:center;gap:9px;border:0;cursor:pointer}
+.s1-btn span{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:18px;font-weight:500;color:#1a1a1a;-webkit-text-stroke:0.6px #1a1a1a;letter-spacing:-0.01em}
+.s1-terms{position:absolute;top:950px;left:0;right:0;z-index:4;text-align:center;font-family:"Inter",sans-serif;font-size:12px;font-weight:400;color:rgba(255,255,255,.42)}
+.s1-terms b{font-weight:400;color:rgba(255,255,255,.82)}
+/* ================================================================
+   SCREEN 2 — Aurora "Create New Profile" form
+   Aurora mapping (our words, same positions/styles):
+     heading  -> "Create New Profile" (was "Unlock Pro:")
+     rows 1-5 -> 3 phases + helper + footer link (was Guides features)
+     cards    -> First Name / Last Name (was Monthly $20 / Yearly $200)
+     badge    -> "Phase 1 of 3" (was "Save $40.00")
+     button   -> "Create Account" (was "Subscribe")
+   ================================================================ */
+.s2-video{position:absolute;left:0;top:-30%;width:370px;height:790px;object-fit:cover;z-index:0;background:#14151d}
+.s2-fade{position:absolute;inset:0;z-index:1;
+  background:linear-gradient(to bottom,rgba(20,21,29,0) 0%,rgba(20,21,29,0) 40%,rgba(20,21,29,0.55) 55%,rgba(20,21,29,0.92) 66%,#14151d 74%,#14151d 100%)}
+.s2-heading{position:absolute;left:28px;top:386px;z-index:4;font-family:"ITC Garamond Std Narrow",Georgia,serif;font-weight:500;font-size:26px;line-height:1;color:#fff;letter-spacing:0.2px;text-shadow:0 0 18px rgba(120,180,220,0.35)}
+.s2-sub{position:absolute;left:28px;top:414px;z-index:4;font-family:"Inter",sans-serif;font-size:12px;font-weight:400;color:rgba(255,255,255,.50)}
+.s2-divider{position:absolute;left:28px;top:418px;width:265px;height:1px;z-index:4;
+  background:linear-gradient(to right,rgba(255,255,255,0.30) 0%,rgba(255,255,255,0.30) 70%,rgba(255,255,255,0) 100%)}
+.s2-list{position:absolute;left:28px;top:429px;width:314px;z-index:4}
+.s2-row{display:flex;align-items:center;height:24px;color:#fff;font-family:"Inter",sans-serif;font-size:13.5px;font-weight:400}
+.s2-row .ic{width:22px;height:24px;display:inline-flex;align-items:center;justify-content:flex-start;flex:none}
+.s2-row .tx{margin-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s2-row .tx b{font-weight:600}
+.s2-cards{position:absolute;left:28px;top:561px;width:314px;height:123px;z-index:4}
+.s2-card-month{position:absolute;left:0;top:0;width:144px;height:123px;border-radius:14px;overflow:hidden;
+  border:1px solid rgba(255,255,255,0.11);padding:14px 14px 15px 15px;
+  background-image:url("https://polo-pecan-73837341.figma.site/_assets/v11/ef4533e6536f2495088e56e0f98036b5ff15446d.png");
+  background-size:cover;background-position:center;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,0.35)}
+.s2-card-year{position:absolute;left:154px;top:0;width:160px;height:123px;border-radius:14px;background:#1e212a;
+  border:1px solid rgba(255,255,255,0.11);padding:14px 14px 15px 15px;color:#fff}
+.s2-card-label{font-family:"Inter",sans-serif;font-size:13px;font-weight:400;color:#fff}
+.s2-card-year .s2-card-label{color:rgba(255,255,255,0.50)}
+.s2-card-price{font-family:"Inter",sans-serif;font-size:19px;font-weight:500;margin-top:6px;letter-spacing:0.3px;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,0.35)}
+.s2-card-year .s2-card-price{color:rgba(255,255,255,0.62);text-shadow:none}
+.s2-card-bottom{position:absolute;left:15px;bottom:15px;font-family:"Inter",sans-serif;font-size:12px;font-weight:400;color:#fff}
+.s2-card-year .s2-card-bottom{color:rgba(255,255,255,0.50)}
+.s2-badge{position:absolute;left:15px;top:66px;display:inline-flex;align-items:center;padding:5px 8px;border-radius:11px;background:#4d5057;
+  font-family:"Inter",sans-serif;font-size:10.5px;font-weight:600;letter-spacing:0.2px;color:rgba(255,255,255,0.65);white-space:nowrap}
+.s2-subscribe{position:absolute;left:28px;top:709px;width:314px;height:50px;z-index:4;background:#fff;border-radius:26px;border:0;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:10px}
+.s2-subscribe span{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:16px;font-weight:500;color:#0c0c0e;-webkit-text-stroke:0.4px #0c0c0e}
+.s2-foot{position:absolute;left:28px;top:766px;width:314px;z-index:4;text-align:center;font-family:"Inter",sans-serif;font-size:11px;color:rgba(255,255,255,.42)}
+.s2-foot b{color:rgba(255,255,255,.8);font-weight:500}
+/* ============ Entrance animations (gated behind .ze-ready) ============ */
+.ze-viewport .ze-anim{opacity:0}
+.ze-viewport.ze-ready .ze-anim{animation-fill-mode:both;animation-timing-function:cubic-bezier(0.16,1,0.3,1)}
+.ze-viewport.ze-ready .ze-bg1{animation-name:zeBgSettle;animation-duration:1.7s;animation-delay:0s}
+.ze-viewport.ze-ready .ze-drop{animation-name:zeDrop;animation-duration:0.9s;animation-delay:0.45s}
+.ze-viewport.ze-ready .ze-title{animation-name:zeReveal;animation-duration:0.9s;animation-delay:0.62s}
+.ze-viewport.ze-ready .ze-sub{animation-name:zeReveal;animation-duration:0.9s;animation-delay:0.78s}
+.ze-viewport.ze-ready .ze-steps{animation-name:zeReveal;animation-duration:0.9s;animation-delay:0.86s}
+.ze-viewport.ze-ready .ze-btn{animation-name:zeReveal;animation-duration:0.9s;animation-delay:0.94s}
+.ze-viewport.ze-ready .ze-terms{animation-name:zeReveal;animation-duration:0.9s;animation-delay:1.06s}
+.ze-viewport.ze-ready .ze-bg2{animation-name:zeBgSettle;animation-duration:1.7s;animation-delay:0.12s}
+.ze-viewport.ze-ready .ze-h{animation-name:zeReveal;animation-duration:0.9s;animation-delay:0.58s}
+.ze-viewport.ze-ready .ze-line{animation-name:zeLine;animation-duration:0.9s;animation-delay:0.72s;transform-origin:left center}
+.ze-viewport.ze-ready .ze-r1{animation-name:zeReveal;animation-duration:0.9s;animation-delay:0.80s}
+.ze-viewport.ze-ready .ze-r2{animation-name:zeReveal;animation-duration:0.9s;animation-delay:0.88s}
+.ze-viewport.ze-ready .ze-r3{animation-name:zeReveal;animation-duration:0.9s;animation-delay:0.96s}
+.ze-viewport.ze-ready .ze-r4{animation-name:zeReveal;animation-duration:0.9s;animation-delay:1.04s}
+.ze-viewport.ze-ready .ze-r5{animation-name:zeReveal;animation-duration:0.9s;animation-delay:1.12s}
+.ze-viewport.ze-ready .ze-cardm{animation-name:zeReveal;animation-duration:0.9s;animation-delay:1.22s}
+.ze-viewport.ze-ready .ze-cardy{animation-name:zeReveal;animation-duration:0.9s;animation-delay:1.30s}
+.ze-viewport.ze-ready .ze-sub2{animation-name:zeReveal;animation-duration:0.9s;animation-delay:1.42s}
+.ze-viewport.ze-ready .ze-badge{animation-name:zePop;animation-duration:0.7s;animation-delay:1.55s;animation-timing-function:cubic-bezier(0.34,1.56,0.64,1)}
+@keyframes zeBgSettle{from{transform:scale(1.12);opacity:0}to{transform:scale(1);opacity:1}}
+/* Screen-1 bg lives inside .s1-scale (already scaled 0.787234) — settle around it */
+.ze-viewport.ze-ready .ze-bg1{animation-name:zeBgSettleS1}
+@keyframes zeBgSettleS1{from{transform:scale(0.787234) scale(1.12);opacity:0}to{transform:scale(0.787234) scale(1);opacity:1}}
+@keyframes zeReveal{from{transform:translateY(26px) scale(0.985);filter:blur(7px);opacity:0}to{transform:none;filter:blur(0);opacity:1}}
+@keyframes zeDrop{from{transform:translateY(-16px) scale(0.90);opacity:0}to{transform:none;opacity:1}}
+@keyframes zeLine{from{transform:scaleX(0);opacity:0}to{transform:scaleX(1);opacity:1}}
+@keyframes zePop{0%{transform:translateY(8px) scale(0.78);opacity:0}60%{transform:translateY(0) scale(1.07);opacity:1}100%{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  .ze-viewport .ze-anim{opacity:1 !important;animation:none !important;transform:none !important;filter:none !important}
+}
+</style>
+</head>
+<body>
+<div class="ze-viewport" id="zeViewport">
+  <div class="ze-stage" id="zeStage">
+
+    <!-- ================= PHONE 1 · Aurora Join hero (light frame) ================= -->
+    <div class="iphone light" aria-label="Aurora onboarding hero">
+      <div class="screen s1">
+        <div class="s1-scale ze-anim ze-bg1" id="zeBg1">
+          <video class="s1-video" id="zeVideo1" autoplay loop muted playsinline preload="auto">
+            <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260710_114906_ad7cee37-9e56-434f-99bc-92d5bdc4f9fe.mp4" type="video/mp4">
+          </video>
+          <div class="s1-fade"></div>
+          <div class="s1-logo ze-anim ze-drop">
+            <!-- Aurora brand: Circle mark + wordmark (replaces places logo, same slot) -->
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#fff"/><circle cx="12" cy="12" r="4" fill="#02040c"/></svg>
+            <span>Aurora</span>
+          </div>
+          <h1 class="s1-title ze-anim ze-title">Join<br><em>Aurora</em></h1>
+          <p class="s1-subtitle ze-anim ze-sub">Follow these 3 quick phases<br>to activate your space.</p>
+          <div class="s1-steps ze-anim ze-steps" aria-label="Onboarding steps">
+            <span class="stp on"><i>1</i>Register</span>
+            <span class="stp off"><i>2</i>Studio</span>
+            <span class="stp off"><i>3</i>Profile</span>
+          </div>
+          <button class="s1-btn ze-anim ze-btn" type="button">
+            <svg width="18" height="21" viewBox="0 0 18 21" fill="#1a1a1a" aria-hidden="true"><path d="M15.5 10.9c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.9-3.5.9-.7 0-1.9-.9-3.1-.9-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.6.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.2 0 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.2-2.6-.1 0-2.4-.9-2.2-4.2zM13.4 2.6c.6-.8 1.1-1.9 1-3-1 0-2.1.6-2.8.6-.6 0-1.6-.6-2.6-.6-.9 1.6-.4 3.9 1 5.2.7.8 1.9 1.9 2.9 1.8 1 0 2-.6 2.9-.6-.3-1 .1-2.6-.4-3.4z"/></svg>
+            <span>Create Account</span>
+          </button>
+          <p class="s1-terms ze-anim ze-terms">Member of the team? <b>Log in</b></p>
+        </div>
+        <div class="island"></div>
+        <div class="statusbar">
+          <span class="time">11:11</span>
+          <span class="icons">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="#fff" aria-hidden="true"><rect x="0" y="7" width="3" height="5" rx="0.8"/><rect x="5" y="5" width="3" height="7" rx="0.8"/><rect x="10" y="2.5" width="3" height="9.5" rx="0.8"/><rect x="15" y="0" width="3" height="12" rx="0.8"/></svg>
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M1.5 4.2a10 10 0 0 1 14 0"/><path d="M4 6.8a6.4 6.4 0 0 1 9 0"/><circle cx="8.5" cy="10" r="1.3" fill="#fff" stroke="none"/></svg>
+            <svg width="27" height="13" viewBox="0 0 27 13" fill="none" aria-hidden="true"><rect x="0.7" y="0.7" width="21" height="11.6" rx="3.2" stroke="#fff" stroke-opacity="0.5" stroke-width="1"/><rect x="2.5" y="2.5" width="15" height="8" rx="1.8" fill="#fff"/><rect x="24" y="4" width="2.3" height="5" rx="1.1" fill="#fff" fill-opacity="0.5"/></svg>
+          </span>
+        </div>
+        <div class="home"></div>
+      </div>
+    </div>
+
+    <!-- ================= PHONE 2 · Aurora Create Profile (dark frame) ================= -->
+    <div class="iphone dark" aria-label="Aurora create profile">
+      <div class="screen s2">
+        <video class="s2-video ze-anim ze-bg2" id="zeVideo2" autoplay loop muted playsinline preload="auto">
+          <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260710_115050_a1ba47d0-aedf-413c-9dea-14509599d3dd.mp4" type="video/mp4">
+        </video>
+        <div class="s2-fade"></div>
+        <h2 class="s2-heading ze-anim ze-h">Create New Profile</h2>
+        <div class="s2-divider ze-anim ze-line"></div>
+        <div class="s2-list">
+          <div class="s2-row ze-anim ze-r1"><span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg></span><span class="tx"><b>1 ·</b> Register your identity</span></div>
+          <div class="s2-row ze-anim ze-r2"><span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><line x1="10.5" y1="18.5" x2="13.5" y2="18.5"/></svg></span><span class="tx"><b>2 ·</b> Configure your studio</span></div>
+          <div class="s2-row ze-anim ze-r3"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.988-8-13.083-8-5.096 0-5.096 8 0 8 5.095 0 7.988-8 13.083-8z"/></svg></span><span class="tx"><b>3 ·</b> Finalize your profile</span></div>
+          <div class="s2-row ze-anim ze-r4"><span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3c.4 3.6 1.4 4.6 5 5-3.6.4-4.6 1.4-5 5-.4-3.6-1.4-4.6-5-5 3.6-.4 4.6-1.4 5-5Z"/></svg></span><span class="tx">Input your basic details to begin</span></div>
+          <div class="s2-row ze-anim ze-r5"><span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round"><circle cx="8.5" cy="8" r="3"/><path d="M3.5 19c.6-3 2.8-4.5 5-4.5s4.4 1.5 5 4.5"/><path d="M15.5 5.5a3 3 0 0 1 0 5.8M17.5 14.7c1.4.7 2.4 2 2.8 4.3"/></svg></span><span class="tx">Requires at least 8 symbols</span></div>
+        </div>
+        <div class="s2-cards">
+          <div class="s2-card-month ze-anim ze-cardm">
+            <div class="s2-card-label">First Name</div>
+            <div class="s2-card-price">Alex</div>
+            <div class="s2-card-bottom">Step 1 · Active</div>
+          </div>
+          <div class="s2-card-year ze-anim ze-cardy">
+            <div class="s2-card-label">Last Name</div>
+            <div class="s2-card-price">Morgan</div>
+            <div class="s2-badge ze-anim ze-badge">Phase 1 of 3</div>
+            <div class="s2-card-bottom">Step 2 · Studio</div>
+          </div>
+        </div>
+        <button class="s2-subscribe ze-anim ze-sub2" type="button">
+          <span>Create Account</span>
+          <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#0c0c0e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5 7 7.5 1.5 13.5"/></svg>
+        </button>
+        <p class="s2-foot ze-anim ze-sub2" style="animation-delay:1.5s">Member of the team? <b>Log in</b> · Or continue with Google</p>
+        <div class="island"></div>
+        <div class="statusbar">
+          <span class="time">11:11</span>
+          <span class="icons">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="#fff" aria-hidden="true"><rect x="0" y="7" width="3" height="5" rx="0.8"/><rect x="5" y="5" width="3" height="7" rx="0.8"/><rect x="10" y="2.5" width="3" height="9.5" rx="0.8"/><rect x="15" y="0" width="3" height="12" rx="0.8"/></svg>
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M1.5 4.2a10 10 0 0 1 14 0"/><path d="M4 6.8a6.4 6.4 0 0 1 9 0"/><circle cx="8.5" cy="10" r="1.3" fill="#fff" stroke="none"/></svg>
+            <svg width="27" height="13" viewBox="0 0 27 13" fill="none" aria-hidden="true"><rect x="0.7" y="0.7" width="21" height="11.6" rx="3.2" stroke="#fff" stroke-opacity="0.5" stroke-width="1"/><rect x="2.5" y="2.5" width="15" height="8" rx="1.8" fill="#fff"/><rect x="24" y="4" width="2.3" height="5" rx="1.1" fill="#fff" fill-opacity="0.5"/></svg>
+          </span>
+        </div>
+        <div class="home"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script>
+(function(){
+  var viewport=document.getElementById('zeViewport');
+  var stage=document.getElementById('zeStage');
+  /* Stage auto-scale: fit 810x790 stage into viewport minus 40px padding, *0.95, centered */
+  function fit(){
+    var pad=80; /* 40px each side */
+    var needW=stage.scrollWidth||810, needH=stage.scrollHeight||790;
+    var availW=Math.max(320,window.innerWidth-pad), availH=Math.max(320,window.innerHeight-pad);
+    var ratio=Math.min(availW/needW,availH/needH,1)*0.95;
+    stage.style.transform='scale('+ratio+')';
+  }
+  window.addEventListener('resize',fit);
+  fit();
+  /* Entrance gating: both videos loadeddata + fonts ready, or 5s safety */
+  var ready=false;
+  function go(){ if(ready) return; ready=true; viewport.classList.add('ze-ready'); }
+  var v1=document.getElementById('zeVideo1'), v2=document.getElementById('zeVideo2');
+  var seen1=false, seen2=false;
+  function check(){ if(seen1&&seen2) fontsThenGo(); }
+  function fontsThenGo(){
+    try{
+      if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(function(){go();}); setTimeout(go,1200); }
+      else go();
+    }catch(e){ go(); }
+  }
+  if(v1) v1.addEventListener('loadeddata',function(){seen1=true;check();},{once:true});
+  if(v2) v2.addEventListener('loadeddata',function(){seen2=true;check();},{once:true});
+  /* autoplay nudge for strict policies */
+  [v1,v2].forEach(function(v){ if(!v) return; var p=v.play&&v.play(); if(p&&p.catch) p.catch(function(){}); });
+  setTimeout(go,5000);
+  /* if videos cached and already ready */
+  setTimeout(function(){
+    try{
+      if(v1&&v1.readyState>=2) seen1=true;
+      if(v2&&v2.readyState>=2) seen2=true;
+      check();
+    }catch(e){}
+  },800);
+})();
+</script>
+</body>
+</html>

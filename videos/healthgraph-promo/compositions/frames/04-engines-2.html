@@ -1,0 +1,146 @@
+<template>
+<style>
+#root { container-type: size; width: 1920px; height: 1080px; position: relative; overflow: hidden; background: #211249; }
+#root .bg { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #211249; }
+#root .bg-glow { position: absolute; left: 240px; top: 120px; width: 1440px; height: 720px; background: #341D73; border-radius: 8px; opacity: 0.55; }
+#root .topbar { position: absolute; left: 96px; top: 44px; width: 1728px; display: flex; justify-content: space-between; align-items: center; }
+#root .topbar span { font-family: ui-monospace, Menlo, monospace; font-size: 26px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #C9BCEE; }
+#root .toprule { position: absolute; left: 96px; top: 92px; width: 1728px; height: 2px; background: #7C5CD6; }
+#root .hook { position: absolute; left: 96px; top: 122px; width: 1728px; text-align: center; font-family: Georgia, 'Times New Roman', serif; font-weight: 500; font-size: 54px; letter-spacing: -0.02em; line-height: 1; color: #FFF9F1; }
+#root .hook em { font-style: normal; color: #7C5CD6; }
+#root .stage { position: absolute; left: 96px; top: 220px; width: 1728px; height: 640px; }
+#root .tile { position: absolute; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; gap: 4px; padding: 20px 26px 54px; box-sizing: border-box; }
+#root .ord { position: static; font-family: ui-monospace, Menlo, monospace; font-size: 24px; font-weight: 500; letter-spacing: 0.14em; line-height: 1.3; }
+#root .tlabel { position: static; font-family: Georgia, 'Times New Roman', serif; font-weight: 500; font-size: 52px; letter-spacing: -0.01em; line-height: 1.04; }
+#root .tfoot { position: absolute; left: 26px; right: 26px; bottom: 18px; font-family: ui-monospace, Menlo, monospace; font-size: 22px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; line-height: 1.3; }
+#root .t-pulse { left: 0; top: 0; width: 560px; height: 300px; background: #2A175D; }
+#root .t-pulse .ord, #root .t-pulse .tfoot { color: #C9BCEE; }
+#root .t-pulse .tlabel { color: #FFF9F1; }
+#root .t-pulse .tlabel em { font-style: normal; color: #4FD1C5; }
+#root .t-recover { left: 584px; top: 0; width: 560px; height: 300px; background: #7C5CD6; }
+#root .t-recover .ord, #root .t-recover .tfoot { color: #FFF9F1; }
+#root .t-recover .tlabel { color: #FFF9F1; }
+#root .t-habit { left: 1168px; top: 0; width: 560px; height: 300px; background: #C9BCEE; border: 2px solid #2A175D; }
+#root .t-habit .ord, #root .t-habit .tfoot { color: #2A175D; }
+#root .t-habit .tlabel { color: #2A175D; }
+#root .t-rx { left: 0; top: 324px; width: 840px; height: 316px; background: #FFF9F1; border: 2.5px solid #2A175D; border-radius: 8px; }
+#root .t-rx .ord { color: #2A175D; }
+#root .t-rx .tlabel { color: #2A175D; }
+#root .rxrow { position: absolute; left: 26px; width: 560px; height: 40px; display: flex; align-items: center; gap: 16px; }
+#root .rxrow .box { width: 28px; height: 28px; border-radius: 6px; border: 2px solid #2A175D; position: relative; flex: none; }
+#root .rxrow .tick { position: absolute; left: 5px; top: 1px; font-family: ui-monospace, Menlo, monospace; font-size: 22px; font-weight: 700; color: #FFF9F1; }
+#root .rxrow .txt { font-family: ui-monospace, Menlo, monospace; font-size: 24px; font-weight: 500; letter-spacing: 0.1em; color: #2A175D; }
+#root .r1 { top: 128px; } .r2 { top: 178px; } .r3 { top: 228px; }
+#root .refill { position: absolute; right: 30px; top: 120px; width: 190px; height: 170px; background: #2A175D; border-radius: 6px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 10px 8px; box-sizing: border-box; }
+#root .refill .rtag { font-family: ui-monospace, Menlo, monospace; font-size: 20px; font-weight: 500; letter-spacing: 0.14em; color: #C9BCEE; line-height: 1.25; }
+#root .refill .rnum { font-family: Georgia, 'Times New Roman', serif; font-weight: 500; font-size: 84px; line-height: 1.05; color: #4FD1C5; }
+#root .refill .runit { font-family: ui-monospace, Menlo, monospace; font-size: 20px; letter-spacing: 0.14em; color: #FFF9F1; line-height: 1.25; }
+#root .t-pdf { left: 864px; top: 324px; width: 864px; height: 316px; background: #341D73; border-radius: 8px; }
+#root .t-pdf .ord, #root .t-pdf .tfoot { color: #C9BCEE; }
+#root .t-pdf .tlabel { color: #FFF9F1; }
+#root .t-pdf .tlabel em { font-style: normal; color: #4FD1C5; }
+#root .stamp { position: absolute; right: 60px; top: 66px; width: 300px; height: 180px; border: 6px solid #4FD1C5; border-radius: 8px; text-align: center; }
+#root .stamp .sword { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 52px; font-weight: 700; letter-spacing: 0.1em; color: #4FD1C5; margin-top: 28px; }
+#root .stamp .ssub { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 22px; letter-spacing: 0.22em; color: #4FD1C5; margin-top: 8px; }
+#root .web { position: absolute; left: 0; top: 0; width: 1728px; height: 640px; pointer-events: none; }
+#root .footline { position: absolute; left: 96px; top: 852px; width: 1728px; display: flex; justify-content: space-between; }
+#root .footline span { font-family: ui-monospace, Menlo, monospace; font-size: 24px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #C9BCEE; }
+</style>
+<script src="gsap.min.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+(function () {
+  var tl = gsap.timeline({ paused: true });
+  // Scene 1 (0-9s): triptych forms left-to-center — pulse tile, dial tile, habit tile
+  tl.fromTo("#root .hook", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.7, ease: "power2.out" }, 0.1);
+  tl.fromTo("#root .t-pulse", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power2.out" }, 0.3);
+  tl.fromTo("#root .pulse-line", { strokeDashoffset: 640 }, { strokeDashoffset: 0, duration: 3.2, ease: "power1.inOut" }, 1.0);
+  tl.fromTo("#root .t-pulse .tfoot", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 3.6);
+  tl.fromTo("#root .t-recover", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power2.out" }, 3.4);
+  tl.fromTo("#root .dial-arc", { strokeDashoffset: 470 }, { strokeDashoffset: 90, duration: 3.4, ease: "power1.inOut" }, 4.0);
+  var rec = { v: 0 };
+  var recEl = document.querySelector('#root .rec-num');
+  tl.to(rec, { v: 92, duration: 3.4, ease: "power1.inOut", onUpdate: function () { if (recEl) recEl.textContent = Math.round(rec.v); } }, 4.0);
+  tl.fromTo("#root .t-habit", { opacity: 0, y: 60, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power2.out" }, 6.2);
+  tl.fromTo("#root .habit-dot", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)", stagger: 0.18 }, 6.8);
+  // Scene 2 (9-18s): prescription card cascades in, rows check off, refill counts down
+  tl.fromTo("#root .t-rx", { opacity: 0, y: 70, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "power2.out" }, 9.2);
+  tl.fromTo("#root .rxrow", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out", stagger: 1.1 }, 10.2);
+  tl.fromTo("#root .rxrow .box", { backgroundColor: "#FFF9F1" }, { backgroundColor: "#2A175D", duration: 0.3, stagger: 1.1 }, 10.9);
+  tl.fromTo("#root .rxrow .tick", { opacity: 0 }, { opacity: 1, duration: 0.3, stagger: 1.1 }, 10.9);
+  tl.fromTo("#root .refill", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.6)" }, 12.4);
+  var ref = { v: 30 };
+  var refEl = document.querySelector('#root .refill .rnum');
+  tl.to(ref, { v: 7, duration: 4.6, ease: "power1.inOut", onUpdate: function () { if (refEl) refEl.textContent = (Math.round(ref.v) < 10 ? "0" : "") + Math.round(ref.v); } }, 12.8);
+  tl.fromTo("#root .footline", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 16.6);
+  // Scene 3 (18-25s + hold): insights web threads tiles, PDF slams the stamp and holds
+  tl.fromTo("#root .t-pdf", { opacity: 0, y: 70, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "power2.out" }, 18.2);
+  tl.fromTo("#root .thread", { strokeDashoffset: 500 }, { strokeDashoffset: 0, duration: 1.4, ease: "power1.inOut", stagger: 0.5 }, 19.2);
+  tl.fromTo("#root .web-node", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)", stagger: 0.5 }, 19.6);
+  tl.fromTo("#root .stamp", { opacity: 0, scale: 2.1 }, { opacity: 1, scale: 1, duration: 0.38, ease: "power4.in" }, 23.4);
+  tl.fromTo("#root .stage", { y: 0 }, { y: -10, duration: 4.3, ease: "sine.inOut" }, 23.4);
+  window.__timelines["04-engines-2"] = tl;
+})();
+</script>
+<div id="root" data-composition-id="04-engines-2" data-width="1920" data-height="1080" data-duration="28.212">
+  <div class="clip bg" data-start="0" data-duration="28.212" data-track-index="0"><div class="bg-glow"></div></div>
+  <div class="clip" data-start="0" data-duration="28.212" data-track-index="1">
+    <div class="topbar"><span>Healthgraph — Engines II</span><span>04</span></div>
+    <div class="toprule"></div>
+    <div class="hook">THE SECOND ROW <em>RISES</em></div>
+    <div class="stage">
+      <svg class="web" viewBox="0 0 1728 640">
+        <path class="thread" d="M280 150 L 864 150 L 1300 480" fill="none" stroke="#4FD1C5" stroke-width="3" stroke-dasharray="500" stroke-dashoffset="500"/>
+        <path class="thread" d="M864 150 L 420 480 L 1300 480" fill="none" stroke="#7C5CD6" stroke-width="3" stroke-dasharray="500" stroke-dashoffset="500"/>
+        <path class="thread" d="M1448 150 L 1300 480 L 420 480" fill="none" stroke="#4FD1C5" stroke-width="3" stroke-dasharray="500" stroke-dashoffset="500"/>
+        <circle class="web-node" cx="864" cy="150" r="12" fill="#4FD1C5"/>
+        <circle class="web-node" cx="420" cy="480" r="12" fill="#7C5CD6"/>
+        <circle class="web-node" cx="1300" cy="480" r="12" fill="#4FD1C5"/>
+      </svg>
+      <div class="tile t-pulse">
+        <div class="ord">04 / A</div>
+        <div class="tlabel">Pulse <em>live</em></div>
+        <svg viewBox="0 0 560 190" style="position:absolute;left:0;top:110px;width:560px;height:190px;">
+          <path class="pulse-line" d="M0 95 L140 95 L175 95 L195 40 L220 150 L245 70 L265 95 L420 95 L445 60 L470 130 L490 95 L560 95" fill="none" stroke="#4FD1C5" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="640" stroke-dashoffset="640"/>
+        </svg>
+        <div class="tfoot">Fingertip check</div>
+      </div>
+      <div class="tile t-recover">
+        <div class="ord">04 / B</div>
+        <div class="tlabel">Recovery <span class="rec-num">0</span></div>
+        <svg viewBox="0 0 560 190" style="position:absolute;left:0;top:110px;width:560px;height:190px;">
+          <circle cx="430" cy="95" r="66" fill="none" stroke="#211249" stroke-width="14" opacity="0.35"/>
+          <path class="dial-arc" d="M430 29 A 66 66 0 1 1 364 95" fill="none" stroke="#FFF9F1" stroke-width="14" stroke-linecap="round" stroke-dasharray="470" stroke-dashoffset="470"/>
+        </svg>
+        <div class="tfoot">Own baseline</div>
+      </div>
+      <div class="tile t-habit">
+        <div class="ord">04 / C</div>
+        <div class="tlabel">Mood · Habit</div>
+        <svg viewBox="0 0 560 170" style="position:absolute;left:0;top:120px;width:560px;height:170px;">
+          <circle class="habit-dot" cx="90" cy="85" r="26" fill="#2A175D"/>
+          <circle class="habit-dot" cx="200" cy="85" r="26" fill="#7C5CD6"/>
+          <circle class="habit-dot" cx="310" cy="85" r="26" fill="#2A175D"/>
+          <circle class="habit-dot" cx="420" cy="85" r="26" fill="#4FD1C5"/>
+        </svg>
+        <div class="tfoot">Cycle beside it all</div>
+      </div>
+      <div class="tile t-rx">
+        <div class="ord">04 / D — Rx</div>
+        <div class="tlabel">Scanned · Confirmed</div>
+        <div class="rxrow r1"><div class="box"><span class="tick">✓</span></div><div class="txt">DOSE 01 — TAKEN</div></div>
+        <div class="rxrow r2"><div class="box"><span class="tick">✓</span></div><div class="txt">DOSE 02 — TAKEN</div></div>
+        <div class="rxrow r3"><div class="box"><span class="tick">✓</span></div><div class="txt">REFILL — QUEUED</div></div>
+        <div class="refill"><div class="rtag">Refill in</div><div class="rnum">30</div><div class="runit">DOSES</div></div>
+      </div>
+      <div class="tile t-pdf">
+        <div class="ord">04 / E — Report</div>
+        <div class="tlabel">Doctor-<em>ready</em></div>
+        <div class="stamp"><span class="sword">SEALED</span><span class="ssub">ONE TAP</span></div>
+        <div class="tfoot" style="color:#C9BCEE;">Sleep × workout linked</div>
+      </div>
+    </div>
+    <div class="footline"><span>Engines II — second wave</span><span>04 / 06</span></div>
+  </div>
+</div>
+</template>

@@ -1,0 +1,52 @@
+# healthgraph.shop + www — HealthGraph marketing site (Caddy snippet).
+#
+# LIVE TOPOLOGY (VPS, MatrixHost — verified 2026-09-30; this doc was stale):
+#   healthgraph.shop serves /opt/healthgraph-web/current (symlink into
+#   /opt/healthgraph-web/releases/<timestamp>/, deploy-owned). www 301s to
+#   the apex. Umami analytics (/api/send*, /s.js -> 127.0.0.1:3000) lives in
+#   the same block. There is NO /var/www/healthgraph anymore.
+#
+# DEPLOY STEPS (on the dev machine, opticpulse user):
+#   1. Fresh build:  cd healthgraph_web && npm run build   (dist/ output)
+#   2. Ship as a new release (atomic symlink swap, zero downtime):
+#        REL=$(date +%Y%m%d-%H%M%S)
+#        tar czf /tmp/hgweb-dist.tar.gz -C healthgraph_web/dist .
+#        scp /tmp/hgweb-dist.tar.gz deploy@46.232.234.248:/tmp/
+#        ssh deploy@46.232.234.248 "mkdir -p /opt/healthgraph-web/releases/$REL \
+#          && tar xzf /tmp/hgweb-dist.tar.gz -C /opt/healthgraph-web/releases/$REL \
+#          && rm /tmp/hgweb-dist.tar.gz \
+#          && cd /opt/healthgraph-web && OLD=$(readlink current) \
+#          && ln -sfn /opt/healthgraph-web/releases/$REL current \
+#          && ln -sfn $OLD previous && readlink current"
+#      Rollback: re-point `current` at `previous` (same ln -sfn pattern).
+#   3. NO Caddy reload needed (static swap only; the api block in
+#      deploy/caddy-api.Caddyfile is untouched by this snippet).
+#   4. Verify:    curl -s -o /dev/null -w "%{http_code}\n" https://healthgraph.shop/
+#                 curl -s https://healthgraph.shop/ | grep -o '<title>[^<]*</title>'
+#                 curl -s -o /dev/null -w "%{http_code}\n" https://healthgraph.shop/videos/en/health-independence.mp4
+#                 curl -s -o /dev/null -w "%{http_code}\n" https://healthgraph.shop/s.js
+#                 curl -s https://api.healthgraph.shop/health
+#
+# Static only: file_server, no reverse_proxy here, so no API keys or
+# backend restarts are involved. The landing page makes no browser calls
+# to the API, so CORS_ORIGINS="" (deny-all) stays correct.
+
+healthgraph.shop, www.healthgraph.shop {
+	root * /var/www/healthgraph
+	file_server
+
+	header {
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Strict-Transport-Security "max-age=31536000;"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	encode zstd gzip
+
+	log {
+		output file /var/log/caddy/site-healthgraph.log
+		format json
+	}
+}

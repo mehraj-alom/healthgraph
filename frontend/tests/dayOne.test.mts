@@ -146,4 +146,25 @@ describe('day-one wiring + copy guards', () => {
       assert.ok(!hay.includes(phrase), phrase);
     }
   });
+
+  test('no "day one" in visible copy and no em dashes anywhere', () => {
+    const strip = (s: string) =>
+      s
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+        .join('\n');
+    const section = strip(src('src/screens/Dashboard/DayOneSection.tsx'));
+    assert.ok(!/day.one/i.test(section), 'no day-one text in the strip');
+    assert.ok(!section.includes('—'), 'no em dashes in the strip');
+    const svc = strip(src('src/services/dayOne.ts'));
+    assert.ok(!svc.includes('—'), 'no em dashes in statuses');
+  });
+
+  test('header is a live readiness count, not a generic subtitle', () => {
+    const section = src('src/screens/Dashboard/DayOneSection.tsx');
+    assert.ok(section.includes('Get set up.'), 'sentence-case header with period');
+    assert.ok(section.includes('of ') && section.includes('ready'), 'live X of Y ready count');
+    assert.ok(!section.includes('Three quick'), 'no generic subtitle');
+  });
 });

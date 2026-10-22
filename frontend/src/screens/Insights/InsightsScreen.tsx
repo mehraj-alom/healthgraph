@@ -2,9 +2,10 @@
  * InsightsScreen — the cross-engine correlation feed, first-class.
  *
  * Same live feed + curation as the dashboard preview (shared
- * useCuratedFeed), rendered full-bleed: every insight card with its
- * verdict, pull-to-refresh, honest empty state. Custom-correlation
- * building stays on the Dashboard; this screen is for reading.
+ * useCuratedFeed), rendered full-bleed on the aurora stage: every insight
+ * card with its verdict, pull-to-refresh, honest empty state.
+ * Custom-correlation building stays on the Dashboard; this screen is for
+ * reading.
  */
 import { useCallback, useState } from 'react';
 import {
@@ -17,7 +18,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CorrelationGraphCard from '@/components/home/CorrelationGraphCard';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
 import { graphToneForStream } from '@/theme/tones';
 import { useDailyMetrics } from '@/hooks/useDailyMetrics';
 import { useTrends } from '@/hooks/useTrends';
@@ -29,9 +32,14 @@ import {
 import { useCuratedFeed } from '@/screens/Dashboard/useCuratedFeed';
 import { useBehaviorImpacts } from '@/hooks/useBehaviorImpacts';
 import type { Impact } from '@/services/behaviorImpacts';
+import { PaywallGate } from '@/components/PaywallGate';
+import { tierUnlocks, usePremiumTier } from '@/services/premium';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 const IMPACT_CONFIDENCE_COLORS: Record<string, string> = {
-  high: '#4FD1C5',
+  high: '#5CE8B8',
   medium: '#8EA0B8',
   low: '#5A6472',
 };
@@ -41,23 +49,27 @@ function ImpactRows({ impacts }: { impacts: Impact[] }) {
   return (
     <View style={styles.section}>
       <Text style={styles.patternsTitle}>Day patterns</Text>
-      <Text style={styles.patternsSub}>Same behavior, different days — compared.</Text>
-      {impacts.map((item, i) => (
-        <View key={`${item.factor}-${item.outcome}-${item.lag}-${i}`} style={styles.impactRow}>
-          <View style={[styles.verdictDot, { backgroundColor: IMPACT_CONFIDENCE_COLORS[item.confidence] ?? '#8EA0B8' }]} />
-          <View style={styles.impactMain}>
-            <Text style={styles.impactLine}>{item.line}</Text>
-            <Text style={styles.impactConf}>{item.confidence} confidence</Text>
+      <GlassSurface strong noBlur style={styles.impactCard}>
+        {impacts.map((item, i) => (
+          <View
+            key={`${item.factor}-${item.outcome}-${item.lag}-${i}`}
+            style={[styles.impactRow, i < impacts.length - 1 && styles.impactDivider]}
+          >
+            <View style={[styles.verdictDot, { backgroundColor: IMPACT_CONFIDENCE_COLORS[item.confidence] ?? '#8EA0B8' }]} />
+            <View style={styles.impactMain}>
+              <Text style={styles.impactLine}>{item.line}</Text>
+              <Text style={styles.impactConf}>{item.confidence} confidence</Text>
+            </View>
           </View>
-        </View>
-      ))}
+        ))}
+      </GlassSurface>
     </View>
   );
 }
 
 const VERDICT_COLORS: Record<string, string> = {
-  good: '#4FD1C5',
-  bad: '#F27E7E',
+  good: '#5CE8B8',
+  bad: '#FF8E8E',
   neutral: '#8EA0B8',
 };
 
@@ -88,6 +100,7 @@ export default function InsightsScreen() {
   const { visibleFeed } = useCuratedFeed(feedQuery.items, feedQuery.streams, feedQuery.pairs);
   const { impacts } = useBehaviorImpacts();
   const [refreshing, setRefreshing] = useState(false);
+  const tier = usePremiumTier();
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -101,67 +114,83 @@ export default function InsightsScreen() {
 
   const loading = visibleFeed.length === 0 && (feedQuery.isLocalLoading || trends.data == null);
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Insights.</Text>
-        <Text style={styles.sub}>
-          {visibleFeed.length > 0
-            ? `${visibleFeed.length} live ${visibleFeed.length === 1 ? 'connection' : 'connections'} across your engines`
-            : 'How your engines move together.'}
-        </Text>
-      </View>
-      {loading ? (
+  // Element only — creating it runs no hooks; the gate decides whether it
+  // ever renders, so paid users see byte-identical UI.
+  const feed = loading ? (
+    <View style={styles.center}>
+      <ActivityIndicator size="large" color="#5CE8B8" />
+      <Text style={styles.body}>Reading your patterns…</Text>
+    </View>
+  ) : (
+    <FlatList
+      data={visibleFeed}
+      keyExtractor={(item) => item.id}
+      renderItem={({ item }) => <InsightCard item={item} />}
+      contentContainerStyle={styles.list}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor="#FFFFFF" />
+      }
+      ListHeaderComponent={<ImpactRows impacts={impacts} />}
+      ListEmptyComponent={
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#4FD1C5" />
-          <Text style={styles.body}>Reading your patterns…</Text>
+          <Text style={styles.title2}>No insights yet</Text>
+          <Text style={styles.body}>
+            Log a few days — connections appear here.
+          </Text>
         </View>
-      ) : (
-        <FlatList
-          data={visibleFeed}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <InsightCard item={item} />}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor="#4FD1C5" />
-          }
-          ListHeaderComponent={<ImpactRows impacts={impacts} />}
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.title2}>No insights yet</Text>
-              <Text style={styles.body}>
-                Log sleep, mood, activity, and water for a few days — connections appear here.
-              </Text>
-            </View>
-          }
-        />
-      )}
-      <Text style={styles.disclaimer}>
-        Correlations from your logged data — patterns, not causes. Tracking only.
-      </Text>
-    </SafeAreaView>
+      }
+    />
+  );
+
+  return (
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Insights</Text>
+          <Text style={styles.sub}>
+            {visibleFeed.length > 0
+              ? `${visibleFeed.length} live ${visibleFeed.length === 1 ? 'connection' : 'connections'} across your engines`
+              : 'How your engines move together.'}
+          </Text>
+        </View>
+        {tierUnlocks(tier, 'correlations') ? feed : (
+          <View style={styles.gateWrap}>
+            <PaywallGate feature="correlations" title="Insights" body="How your engines move together.">
+              {feed}
+            </PaywallGate>
+          </View>
+        )}
+        <Text style={styles.disclaimer}>
+          Patterns from your data — not causes.
+        </Text>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
   header: { paddingHorizontal: SPACE.screenH, paddingTop: 8, paddingBottom: 4 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 2 },
+  gateWrap: { flex: 1, paddingHorizontal: SPACE.screenH, paddingTop: 8 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, marginTop: 2 },
   list: { paddingHorizontal: SPACE.screenH, paddingBottom: 24, gap: 12 },
-  section: { marginTop: 4 },
-  patternsTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', marginLeft: 4 },
-  patternsSub: { color: '#8EA0B8', fontSize: 13, marginLeft: 4, marginTop: 2, marginBottom: 8 },
-  impactRow: { flexDirection: 'row', gap: 10, paddingVertical: 8, paddingHorizontal: 4 },
+  section: { marginTop: 8 },
+  patternsTitle: { color: '#FFFFFF', fontSize: 20, lineHeight: 25, fontWeight: '600', letterSpacing: -0.4, marginBottom: 10 },
+  impactCard: { paddingVertical: 6, paddingHorizontal: 16 },
+  impactRow: { flexDirection: 'row', gap: 10, paddingVertical: 10, alignItems: 'center' },
+  impactDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.10)' },
   impactMain: { flex: 1, gap: 2 },
-  impactLine: { color: '#FFFFFF', fontSize: 14, fontVariant: ['tabular-nums'] },
-  impactConf: { color: '#8EA0B8', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4 },
+  impactLine: { color: '#FFFFFF', fontSize: 14, lineHeight: 19, fontVariant: ['tabular-nums'] },
+  impactConf: { color: TERTIARY, fontSize: 11, lineHeight: 14, textTransform: 'uppercase', letterSpacing: 0.4 },
   verdictRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, marginLeft: 4 },
   verdictDot: { width: 8, height: 8, borderRadius: 4 },
-  verdictText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
+  verdictText: { fontSize: 12, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
-  title2: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
-  body: { color: '#8EA0B8', fontSize: 14, textAlign: 'center' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center', paddingHorizontal: SPACE.screenH, paddingBottom: 8 },
+  title2: { color: '#FFFFFF', fontSize: 18, lineHeight: 23, fontWeight: '600', letterSpacing: -0.3 },
+  body: { color: SECONDARY, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  disclaimer: { fontWeight: '400', fontSize: 12, lineHeight: 17, color: TERTIARY, textAlign: 'center', paddingHorizontal: SPACE.screenH, paddingBottom: 8 },
 });

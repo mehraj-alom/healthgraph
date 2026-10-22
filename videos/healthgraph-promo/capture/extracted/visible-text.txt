@@ -1,0 +1,4 @@
+HealthGraph product brief (no-capture build — mobile app, no URL).
+Message: Ten health apps in one private place.
+Engines: sleep debt + consistency, weight trend + goals, workout logging with rest timer + PRs, macro rings + targets, readiness hint, adherence + refill + safety, cycle, substance, vitals, wellbeing, discipline.
+Signature: 3D body, left-to-right health-graph time tree, voice check-in calls, camera pulse (PPG), prescription confirm-or-tweak, cross-engine Insights feed, one-tap doctor PDF, offline-first, on-device private.

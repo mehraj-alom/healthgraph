@@ -147,6 +147,23 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = ""
 
     # ─────────────────────────────────────────────────────────────────────
+    # Premium web sales (health.healthgraph.shop) + mr admin panel.
+    #
+    # ADMIN_API_TOKEN: bearer secret for /api/v1/admin/*. Empty = the
+    # admin routes answer 404 (no probing surface). Set a long random
+    # token in production (deploy/backend.env.example documents it).
+    # STRIPE_*: web checkout for 30-day premium codes. All empty =
+    # checkout answers 503 and the site falls back to admin-issued codes.
+    # ─────────────────────────────────────────────────────────────────────
+    ADMIN_API_TOKEN: str = ""
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_GENERAL: str = ""
+    STRIPE_PRICE_ALLIN: str = ""
+    CODE_DEFAULT_DAYS: int = 30
+    PUBLIC_WEB_URL: str = "https://health.healthgraph.shop"
+
+    # ─────────────────────────────────────────────────────────────────────
     # Nutrition / food-scan (AICredits VLM + USDA FoodData Central).
     #
     # AICredits is OpenAI-compatible (base_url + api_key). The key is a

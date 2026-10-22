@@ -13,8 +13,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAudioRecorder, requestRecordingPermissionsAsync } from 'expo-audio';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { Button, Card, EmptyState } from '@/components';
+import { SPACE } from '@/theme/guava';
+import { Button, EmptyState } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { LG } from '@/theme/liquidGlass';
 import { todayKeyLocal } from '@/utils/dayKey';
 import { requestDataRefresh } from '@/services/dataRefresh';
 import { getCachedPatientId } from '@/services/patientIdentity';
@@ -29,6 +32,9 @@ import {
 } from '@/services/voiceJournal';
 
 const LISTEN_SECONDS = 12;
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 type Phase = 'idle' | 'recording' | 'working' | 'preview' | 'saving';
 
@@ -195,95 +201,105 @@ export default function VoiceJournalScreen() {
   const canRecordMore = turns.length < MAX_JOURNAL_TURNS;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Voice journal.</Text>
-        <Text style={styles.sub}>Speak freely. Turns save verbatim to today’s notes.</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Voice journal</Text>
+          <Text style={styles.sub}>Speak freely. Turns save verbatim to today’s notes.</Text>
 
-        {phase === 'idle' && turns.length === 0 ? (
-          <EmptyState
-            title="No turns yet"
-            message="Record a 12-second turn. Add up to ten turns per entry."
-          />
-        ) : null}
+          {phase === 'idle' && turns.length === 0 ? (
+            <EmptyState
+              title="No turns yet"
+              message="Record a 12-second turn. Add up to ten turns per entry."
+            />
+          ) : null}
 
-        {transcript.length > 0 ? (
-          <Card style={styles.darkCard}>
-            <Text style={styles.transcript}>{transcript}</Text>
-            <Text style={styles.provenance}>
-              {`${turns.length} ${turns.length === 1 ? 'turn' : 'turns'} · verbatim, unedited`}
-            </Text>
-          </Card>
-        ) : null}
+          {transcript.length > 0 ? (
+            <GlassSurface strong style={styles.card}>
+              <Text style={styles.transcript}>{transcript}</Text>
+              <Text style={styles.provenance}>
+                {`${turns.length} ${turns.length === 1 ? 'turn' : 'turns'} · verbatim, unedited`}
+              </Text>
+            </GlassSurface>
+          ) : null}
 
-        {phase === 'recording' ? (
-          <Card style={styles.darkCard}>
-            <Text style={styles.bigValue}>{`${elapsed}s / ${LISTEN_SECONDS}s`}</Text>
-            <Text style={styles.avgSub}>Recording… tap stop when done.</Text>
-          </Card>
-        ) : null}
+          {phase === 'recording' ? (
+            <GlassSurface strong style={styles.card}>
+              <Text style={styles.bigValue}>{`${elapsed}s / ${LISTEN_SECONDS}s`}</Text>
+              <Text style={styles.avgSub}>Recording… tap stop when done.</Text>
+            </GlassSurface>
+          ) : null}
 
-        {phase === 'working' ? <Text style={styles.loading}>Transcribing…</Text> : null}
-        {phase === 'saving' ? <Text style={styles.loading}>Saving…</Text> : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        {savedMsg ? <Text style={styles.saved}>{savedMsg}</Text> : null}
+          {phase === 'working' ? <Text style={styles.loading}>Transcribing…</Text> : null}
+          {phase === 'saving' ? <Text style={styles.loading}>Saving…</Text> : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {savedMsg ? <Text style={styles.saved}>{savedMsg}</Text> : null}
 
-        {phase === 'recording' ? (
-          <Button title="Stop turn" onPress={() => void stopTurn()} fullWidth size="large" style={styles.stopBtn} textStyle={styles.stopBtnText} />
-        ) : (
-          <>
-            {canRecordMore ? (
-              <Button
-                title={turns.length === 0 ? 'Record first turn' : 'Record another turn'}
-                onPress={() => void startTurn()}
-                fullWidth
-                size="large"
-                style={styles.measureBtn}
-                textStyle={styles.measureBtnText}
-              />
-            ) : (
-              <Text style={styles.avgSub}>{`Turn limit reached (${MAX_JOURNAL_TURNS}). Save or discard this entry.`}</Text>
-            )}
-            {transcript.length > 0 && phase !== 'saving' ? (
-              <>
-                <Button title="Save to today’s notes" onPress={() => void save()} fullWidth textStyle={styles.recoveryText} />
-                <Button title="Discard entry" variant="ghost" onPress={discard} fullWidth textStyle={styles.recoveryText} />
-              </>
-            ) : null}
-          </>
-        )}
+          {phase === 'recording' ? (
+            <Button
+              title="Stop turn"
+              variant="secondary"
+              onPress={() => void stopTurn()}
+              fullWidth
+              size="large"
+              style={styles.measureBtn}
+              textStyle={styles.measureBtnText}
+            />
+          ) : (
+            <>
+              {canRecordMore ? (
+                <Button
+                  title={turns.length === 0 ? 'Record first turn' : 'Record another turn'}
+                  variant="secondary"
+                  onPress={() => void startTurn()}
+                  fullWidth
+                  size="large"
+                  style={styles.measureBtn}
+                  textStyle={styles.measureBtnText}
+                />
+              ) : (
+                <Text style={styles.avgSub}>{`Turn limit reached (${MAX_JOURNAL_TURNS}). Save or discard this entry.`}</Text>
+              )}
+              {transcript.length > 0 && phase !== 'saving' ? (
+                <>
+                  <Button
+                    title="Save to today’s notes"
+                    variant="secondary"
+                    onPress={() => void save()}
+                    fullWidth
+                    style={styles.measureBtn}
+                    textStyle={styles.measureBtnText}
+                  />
+                  <Button title="Discard entry" variant="ghost" onPress={discard} fullWidth textStyle={styles.ghostText} />
+                </>
+              ) : null}
+            </>
+          )}
 
-        <Text style={styles.disclaimer}>Transcripts save to today’s notes. Tracking only — not medical advice.</Text>
-      </ScrollView>
-    </SafeAreaView>
+          <Text style={styles.disclaimer}>Transcripts save to today’s notes. Tracking only — not medical advice.</Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: 26, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
-  error: { ...TYPE.body, color: GV.danger, textAlign: 'center', marginTop: 8 },
-  saved: { ...TYPE.body, color: '#4FD1C5', textAlign: 'center', marginTop: 8 },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  transcript: { ...TYPE.body, color: '#E8ECF1' },
-  bigValue: { ...TYPE.display, fontSize: 40, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4 },
-  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  measureBtn: { backgroundColor: '#4FD1C5' },
-  measureBtnText: { color: '#062A26' },
-  stopBtn: { backgroundColor: '#E5484D' },
-  stopBtnText: { color: '#FFFFFF' },
-  recoveryText: { color: '#A7B8B2' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginTop: 16 },
+  error: { fontWeight: '400', fontSize: 15, lineHeight: 22, color: LG.card.danger, textAlign: 'center', marginTop: 8 },
+  saved: { fontWeight: '400', fontSize: 15, lineHeight: 22, color: LG.card.mint, textAlign: 'center', marginTop: 8 },
+  card: { padding: 16 },
+  transcript: { fontWeight: '400', fontSize: 15, lineHeight: 22, color: '#FFFFFF' },
+  bigValue: { fontWeight: '600', fontSize: 40, lineHeight: 48, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  avgSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 4 },
+  provenance: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center', marginTop: 8 },
+  measureBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  measureBtnText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
 });

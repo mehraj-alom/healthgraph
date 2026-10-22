@@ -21,10 +21,13 @@ import { HabitGrid } from '@/screens/Settings/HabitGrid';
 import { HealthConnectSection } from '@/screens/Settings/HealthConnectSection';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, Card, Input, NumberInput } from '@/components';
+import { Button, Input, NumberInput } from '@/components';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { TILE_TONES } from '@/theme/tones';
-import { CategoryTile } from '@/components/CategoryTile';
+import { LG } from '@/theme/liquidGlass';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import Entrance from '@/components/home/Entrance';
+import { ExploreGlyph } from '@/components/home/ExploreGlyphs';
 import { api } from '@/services/api';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { getOnboardingState, saveOnboardingSelections } from '@/db/queries/onboarding';
@@ -464,13 +467,22 @@ export default function SettingsScreen() {
   }, [sheetMode, sheetResult, logout]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.screen}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe}>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        <Entrance index={0}>
+          <View style={styles.heroBlock}>
+            <Text style={styles.heroTitle}>Account</Text>
+            <Text style={styles.heroSub} numberOfLines={1}>{email}</Text>
+          </View>
+        </Entrance>
         {/* ── Identity (photo + name only; tap photo to change) ── */}
-        <Card padding="sm" level={1} style={styles.identityCard}>
+        <Entrance index={1}>
+        <GlassSurface strong style={styles.identityCard}>
           <View style={styles.identityRow}>
             <Pressable
               style={styles.identityAvatar}
@@ -493,9 +505,11 @@ export default function SettingsScreen() {
               </Text>
             </View>
           </View>
-        </Card>
+        </GlassSurface>
+        </Entrance>
 
         {/* ── Activity (habit tracker from real tracked rows) ── */}
+        <Entrance index={2}>
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Activity</Text>
         </View>
@@ -506,10 +520,12 @@ export default function SettingsScreen() {
           streakDays={habit.streakDays}
           isLoading={habit.isLoading}
         />
+        </Entrance>
 
         {/* ── About You ── */}
-        <Text style={styles.sectionTitle}>About You</Text>
-        <Card padding="lg" level={1} style={styles.card}>
+        <Entrance index={3}>
+        <Text style={styles.sectionTitle}>About you</Text>
+        <GlassSurface strong style={styles.card}>
           <Input
             label="Name"
             value={displayName}
@@ -559,46 +575,81 @@ export default function SettingsScreen() {
               />
             </View>
           </View>
-        </Card>
+        </GlassSurface>
+        </Entrance>
 
         {/* ── Preferences (deliberate-change shortcuts; home is the drawer) ── */}
+        <Entrance index={4}>
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Preferences</Text>
         </View>
-        <View style={styles.miniTiles}>
-          <CategoryTile
-            tone={TILE_TONES.wellbeing}
-            label="Goals & focus areas"
-            hint="Edit what matters"
-            active={false}
-            accessibilityLabel="Edit goals and focus areas"
+        <View style={styles.prefList}>
+          <GlassSurface
+            noBlur
+            radius={20}
+            style={styles.prefRow}
             onPress={() => navigation.navigate('OnboardingSetup')}
-          />
-          <CategoryTile
-            tone={TILE_TONES.heart}
-            label="Health areas"
-            hint="Browse engines"
-            active={false}
-            accessibilityLabel="View health areas"
+            accessibilityRole="button"
+            accessibilityLabel="Edit goals and focus areas"
+          >
+            <View style={styles.prefGlyph}>
+              <ExploreGlyph name="target" size={22} color="rgba(255,255,255,0.92)" />
+            </View>
+            <View style={styles.prefMain}>
+              <Text style={styles.prefTitle} numberOfLines={1}>Goals & focus areas</Text>
+              <Text style={styles.prefHint} numberOfLines={1}>Edit what matters</Text>
+            </View>
+            <Text style={styles.prefChevron}>›</Text>
+          </GlassSurface>
+          <GlassSurface
+            noBlur
+            radius={20}
+            style={styles.prefRow}
             onPress={() => navigation.navigate('HealthAreas')}
-          />
-          <CategoryTile
-            tone={TILE_TONES.wellbeing}
-            label="Doctor report"
-            hint="30-day PDF"
-            active={false}
-            accessibilityLabel="Generate doctor report PDF"
+            accessibilityRole="button"
+            accessibilityLabel="View health areas"
+          >
+            <View style={styles.prefGlyph}>
+              <ExploreGlyph name="heart" size={22} color="rgba(255,255,255,0.92)" />
+            </View>
+            <View style={styles.prefMain}>
+              <Text style={styles.prefTitle} numberOfLines={1}>Health areas</Text>
+              <Text style={styles.prefHint} numberOfLines={1}>Explore</Text>
+            </View>
+            <Text style={styles.prefChevron}>›</Text>
+          </GlassSurface>
+          <GlassSurface
+            noBlur
+            radius={20}
+            style={styles.prefRow}
             onPress={() => navigation.navigate('Report')}
-          />
+            accessibilityRole="button"
+            accessibilityLabel="Generate doctor report PDF"
+          >
+            <View style={styles.prefGlyph}>
+              <ExploreGlyph name="doc" size={22} color="rgba(255,255,255,0.92)" />
+            </View>
+            <View style={styles.prefMain}>
+              <Text style={styles.prefTitle} numberOfLines={1}>Doctor report</Text>
+              <Text style={styles.prefHint} numberOfLines={1}>30-day PDF</Text>
+            </View>
+            <Text style={styles.prefChevron}>›</Text>
+          </GlassSurface>
         </View>
+        </Entrance>
 
         {/* ── 3D anatomy downloads ── */}
-        <AnatomyStorageSection />
+        <Entrance index={5}>
+          <AnatomyStorageSection />
+        </Entrance>
 
         {/* ── Health Connect sync (sleep + workouts, explicit consent) ── */}
-        <HealthConnectSection />
+        <Entrance index={5}>
+          <HealthConnectSection />
+        </Entrance>
 
         {/* ── Account Section ── */}
+        <Entrance index={6}>
         <Button
           title="Sign Out"
           fullWidth
@@ -608,10 +659,11 @@ export default function SettingsScreen() {
           style={styles.signOutBtn}
           textStyle={styles.signOutBtnText}
         />
+        </Entrance>
 
         {/* ── Your data: takeout (CSV via share sheet) ── */}
         <Text style={styles.sectionTitle}>Your data</Text>
-        <Card>
+        <GlassSurface strong style={styles.card}>
           <Text style={styles.menuRowSubtitle}>
             {exportStatus ?? 'Daily logs, sits, meds and measurements as one CSV file.'}
           </Text>
@@ -654,9 +706,10 @@ export default function SettingsScreen() {
               fullWidth
             />
           ) : null}
-        </Card>
+        </GlassSurface>
 
         {/* ── Danger Zone (tap to open; real deletion flows) ── */}
+        <Entrance index={6}>
         <Pressable
           onPress={() => setDangerOpen((v) => !v)}
           accessibilityRole="button"
@@ -667,8 +720,9 @@ export default function SettingsScreen() {
           <Text style={[styles.sectionTitle, styles.dangerTitle]}>Danger zone</Text>
           <Text style={styles.dangerChev}>{dangerOpen ? '▴' : '▾'}</Text>
         </Pressable>
+        </Entrance>
         {dangerOpen ? (
-        <View style={styles.dangerCard}>
+        <GlassSurface strong tint={LG.card.danger} tintOpacity={0.10} style={styles.dangerCard}>
           <Pressable
             style={styles.dangerRow}
             onPress={openDeleteDataSheet}
@@ -698,12 +752,12 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.menuRowChevron}>›</Text>
           </Pressable>
-        </View>
+        </GlassSurface>
         ) : null}
       </ScrollView>
       <View style={styles.saveBar}>
         <Button
-          title={saveMutation.isSuccess ? 'Saved' : saveMutation.isPending ? 'Saving' : 'Save Profile'}
+          title={saveMutation.isSuccess ? 'Saved' : saveMutation.isPending ? 'Saving' : 'Save'}
           onPress={() => saveMutation.mutate()}
           fullWidth
           loading={saveMutation.isPending}
@@ -726,7 +780,8 @@ export default function SettingsScreen() {
         }}
         onClose={closeSheet}
       />
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -739,38 +794,58 @@ const TILE_BG = '#2A3049';
 const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: NAVY,
+    backgroundColor: LG.stage.bottom,
+  },
+  safe: {
+    flex: 1,
   },
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingHorizontal: 26,
+    paddingTop: 20,
     paddingBottom: 32,
-    gap: 24,
+    gap: 16,
+  },
+  heroBlock: {
+    paddingTop: 16,
+    paddingBottom: 4,
+    gap: 3,
+  },
+  heroTitle: {
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
+    color: '#FFFFFF',
+  },
+  heroSub: {
+    fontWeight: '400',
+    fontSize: 17,
+    lineHeight: 22,
+    color: 'rgba(233,240,255,0.66)',
   },
   // Section headings carry no margins: the parent gap sets every
-  // block exactly 24 apart, and sectionHead sets title-to-subtitle
-  // to exactly 4. One rhythm, no stacked margins.
+  // block apart, and sectionHead sets title-to-subtitle to exactly 4.
   sectionHead: {
     gap: 4,
   },
   sectionTitle: {
-    ...TYPE.title,
-    fontSize: 18,
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 24,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
-    letterSpacing: -0.2,
   },
   sectionSubtitle: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
   },
   card: {
     gap: 16,
-    backgroundColor: TILE_BG,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderWidth: 1,
-    borderRadius: 8,
+    padding: 20,
   },
   inputWell: {
     borderRadius: 8,
@@ -779,19 +854,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  // Static material tile (no live blur for small repeated tiles).
   storageBox: {
     flex: 1,
-    backgroundColor: TILE_BG,
-    borderColor: HAIRLINE_ON_NAVY,
+    backgroundColor: LG.card.fillStatic,
+    borderColor: LG.card.border,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 20,
     padding: 16,
     gap: 4,
     alignItems: 'center',
   },
   storageBoxLabel: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 16,
+    lineHeight: 22,
     color: '#FFFFFF',
   },
   storageBoxActions: {
@@ -805,14 +882,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   storageDeleteText: {
-    ...TYPE.body,
-    fontFamily: FONT.semi,
-    color: GV.danger,
+    fontWeight: '600',
+    fontSize: 15,
+    lineHeight: 22,
+    color: LG.card.danger,
   },
   storageCancelText: {
-    ...TYPE.body,
-    fontFamily: FONT.semi,
-    color: GV.fog,
+    fontWeight: '600',
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(233,240,255,0.66)',
   },
   field: {
     gap: 8,
@@ -825,12 +904,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   fieldLabel: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
   },
   fieldValue: {
-    ...TYPE.body,
-    fontFamily: FONT.semi,
+    fontWeight: '600',
+    fontSize: 15,
+    lineHeight: 22,
     color: '#FFFFFF',
     paddingVertical: 8,
   },
@@ -846,7 +928,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   signOutBtnText: {
-    color: NAVY,
+    color: '#0B0F1A',
   },
   outlineBtn: {
     borderColor: 'rgba(255, 255, 255, 0.25)',
@@ -861,8 +943,53 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   dangerChev: {
-    ...TYPE.title,
-    color: GV.danger,
+    fontWeight: '600',
+    fontSize: 18,
+    lineHeight: 24,
+    color: 'rgba(233,240,255,0.45)',
+  },
+  // Quiet preference rows: monochrome glyph + headline + hint.
+  prefList: {
+    gap: 12,
+  },
+  prefRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    minHeight: 68,
+  },
+  prefGlyph: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prefMain: {
+    flex: 1,
+    gap: 2,
+  },
+  prefTitle: {
+    fontWeight: '600',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.1,
+    color: '#FFFFFF',
+  },
+  prefHint: {
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
+  },
+  prefChevron: {
+    fontSize: 22,
+    color: 'rgba(233,240,255,0.45)',
   },
   // Compact deliberate-change rows (small, quiet — the drawer's Health
   // section is their primary home).
@@ -895,21 +1022,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuRowSubtitle: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
   },
   menuRowChevron: {
-    ...TYPE.title,
-    color: GV.fog,
-    opacity: 0.7,
+    fontWeight: '400',
+    fontSize: 22,
+    color: 'rgba(233,240,255,0.45)',
     marginLeft: 8,
   },
   identityCard: {
-    gap: 0,
-    backgroundColor: TILE_BG,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderWidth: 1,
-    borderRadius: 8,
+    padding: 16,
   },
   identityRow: {
     flexDirection: 'row',
@@ -930,7 +1055,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   identityName: {
-    ...TYPE.title,
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
   },
   photoImage: {
@@ -938,19 +1066,17 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   photoInitial: {
-    ...TYPE.display,
+    fontWeight: '600',
+    fontSize: 24,
+    lineHeight: 30,
     color: '#FFFFFF',
   },
   dangerTitle: {
-    color: GV.danger,
+    color: LG.card.danger,
   },
   dangerCard: {
-    backgroundColor: TILE_BG,
-    borderRadius: 8,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(214, 69, 69, 0.35)',
   },
   dangerRow: {
     flexDirection: 'row',
@@ -958,13 +1084,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   dangerRowTitle: {
-    ...TYPE.body,
-    fontFamily: FONT.semi,
-    color: GV.danger,
+    fontWeight: '600',
+    fontSize: 15,
+    lineHeight: 22,
+    color: LG.card.danger,
     marginBottom: 2,
   },
   dangerDivider: {
     height: 1,
-    backgroundColor: HAIRLINE_ON_NAVY,
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
 });

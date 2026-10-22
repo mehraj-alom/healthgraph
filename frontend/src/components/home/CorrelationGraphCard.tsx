@@ -20,17 +20,17 @@
 
 import React, { memo, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import { BlurView } from 'expo-blur';
 import Svg, {
   Path,
   Line,
   Circle,
+  Rect,
   Text as SvgText,
   G,
 } from 'react-native-svg';
 
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { MarkerHighlight } from '@/components/MarkerHighlight';
-import { MARK_DARK } from '@/components/markerScribble';
 
 export interface TimeSeriesPoint {
   date: string;
@@ -239,6 +239,15 @@ function TimeSeriesPlot({
   // Two-tone: the wash carries the feature tone, the line its lifted glow.
   const lineGlow = lighten(color, 0.45);
   const wash = withAlpha(color, 0.16);
+  // Signature moment: the latest value lives ON the latest dot in a white
+  // pill, so the number is read where it happened — not in a corner.
+  const lastVal = points[points.length - 1].value;
+  const pillLabel = `${compactNum(lastVal)}${unit ? ` ${unit}` : ''}`;
+  const pillW = Math.max(pillLabel.length * 6.8 + 18, 44);
+  const pillH = 24;
+  const pillXRaw = lastX + 12;
+  const pillX = Math.min(pillXRaw, g.right - pillW);
+  const pillY = Math.min(Math.max(lastY - pillH / 2, g.top), g.bottom - pillH);
 
   return (
     <Svg
@@ -269,39 +278,47 @@ function TimeSeriesPlot({
         );
       })}
 
-      {/* average guide */}
-      <Line
-        x1={g.left}
-        y1={g.yFor(g.avg)}
-        x2={g.right}
-        y2={g.yFor(g.avg)}
-        stroke={withAlpha(color, 0.45)}
-        strokeWidth={1.25}
-        strokeDasharray="4 5"
-      />
-      <SvgText x={g.right - 2} y={g.yFor(g.avg) - 5} fontSize={10} fontFamily={FONT.semi} fill={withAlpha(color, 0.9)} textAnchor="end">
-        {`avg ${compactNum(g.avg)}${unit ?? ''}`}
-      </SvgText>
+      {/* average guide removed by design: the curve and the hero
+          value carry the story; a dashed mean added noise, not signal. */}
 
       {/* tone wash under the curve */}
       {g.area ? <Path d={g.area} fill={wash} stroke="none" /> : null}
 
-      {/* luminous line (no area stroke — the wash carries the tone) */}
+      {/* luminous line (no area stroke — the wash carries the tone).
+          A single point has no line; the signature dot + pill below
+          carries it. */}
       {g.path ? (
         <Path d={g.path} fill="none" stroke={lineGlow} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-      ) : (
-        <Circle cx={g.xs[0]} cy={g.ys[0]} r={4} fill={lineGlow} />
-      )}
-
-      {/* last-value dot */}
-      {g.path ? (
-        <Circle cx={lastX} cy={lastY} r={4} fill={lineGlow} stroke="#FFFFFF" strokeWidth={2} />
       ) : null}
 
-      {/* data points on the curve */}
+      {/* last-value dot: larger than the trail dots, white ring, and the
+          latest value riding beside it in a white pill */}
+      <Circle cx={lastX} cy={lastY} r={4.5} fill={lineGlow} stroke="#FFFFFF" strokeWidth={2} />
+      <G>
+        <Rect
+          x={pillX}
+          y={pillY}
+          width={pillW}
+          height={pillH}
+          rx={pillH / 2}
+          fill="#FFFFFF"
+        />
+        <SvgText
+          x={pillX + pillW / 2}
+          y={pillY + pillH / 2 + 4}
+          fontSize={11}
+          fontFamily={FONT.semi}
+          fill="#10141F"
+          textAnchor="middle"
+        >
+          {pillLabel}
+        </SvgText>
+      </G>
+
+      {/* data points on the curve: quiet trail dots, the last dot leads */}
       {g.path && points.length > 1
-        ? g.xs.map((x, i) => (
-            <Circle key={i} cx={x} cy={g.ys[i]} r={3} fill={lineGlow} stroke="#FFFFFF" strokeWidth={1.5} />
+        ? g.xs.slice(0, -1).map((x, i) => (
+            <Circle key={i} cx={x} cy={g.ys[i]} r={2.5} fill={lineGlow} stroke="#FFFFFF" strokeWidth={1} />
           ))
         : null}
 
@@ -457,6 +474,11 @@ function CorrelationGraphCard({
   const r = data.kind === 'correlation' ? data.r : null;
   const verdict: HealthVerdict = data.kind === 'correlation' ? data.verdict : 'neutral';
   const vs = verdictStyle(verdict);
+  // Title wears its own curve color: the name and the line are one voice.
+  // Neutral correlations fall back to white so the title never goes dull.
+  const streamColor = data.kind === 'timeSeries' ? lineColor : VERDICT_CURVE[verdict];
+  const titleColor =
+    data.kind === 'correlation' && verdict === 'neutral' ? '#FFFFFF' : lighten(streamColor, 0.45);
 
   const stats = useMemo(() => {
     if (data.kind !== 'timeSeries' || data.points.length === 0) return null;
@@ -475,6 +497,12 @@ function CorrelationGraphCard({
 
   const selectedPoint = data.kind === 'timeSeries' && selected != null ? data.points[selected] : null;
   const unit = data.kind === 'timeSeries' ? data.unit ?? '' : '';
+  // The window lives in the eyebrow as a date span ("Mar 3 – Mar 9") —
+  // never a "7 days" chip, never a min–max range readout.
+  const windowLabel =
+    data.kind === 'timeSeries' && data.points.length > 0
+      ? `${shortDate(data.points[0].date)} – ${shortDate(data.points[data.points.length - 1].date)}`.toUpperCase()
+      : null;
 
   const accessibilityLabel =
     data.kind === 'timeSeries'
@@ -483,29 +511,30 @@ function CorrelationGraphCard({
 
   return (
     <View
-      style={[styles.card, style]}
+      style={[styles.glassWrap, style]}
       accessible
       accessibilityRole="image"
       accessibilityLabel={accessibilityLabel}
     >
-      {/* header */}
+      {/* dark orbs behind the frosted surface (reference: smoked orbs) */}
+      <View style={styles.orbA} pointerEvents="none" />
+      <View style={styles.orbB} pointerEvents="none" />
+      <View style={styles.orbC} pointerEvents="none" />
+      <BlurView tint="dark" intensity={55} style={styles.glassFill} />
+      <View style={styles.glassContent}>
+      {/* header: colorful title left, window date right and small */}
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <View style={styles.eyebrowRow}>
-            <Text style={styles.eyebrow} numberOfLines={1}>
-              {subtitle ? subtitle.toUpperCase() : 'LIVE'}
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: titleColor }]} numberOfLines={2}>
+              {title}
             </Text>
+            {data.kind === 'timeSeries' && windowLabel ? (
+              <Text style={styles.windowDate} numberOfLines={1}>
+                {windowLabel}
+              </Text>
+            ) : null}
           </View>
-          {/* Sketchpen shade behind the tagline: dark slate on glass —
-              yellow would muddy the white title instead of lifting it. */}
-          <MarkerHighlight
-            color={MARK_DARK}
-            opacity={0.9}
-            textStyle={styles.title}
-            numberOfLines={2}
-          >
-            {title}
-          </MarkerHighlight>
         </View>
         {r != null && Number.isFinite(r) && data.kind === 'correlation' ? (
           <View style={styles.pillCol}>
@@ -519,12 +548,12 @@ function CorrelationGraphCard({
         ) : null}
       </View>
 
-      {/* hero stat row for time series */}
+      {/* hero stat row for time series: value + delta only, the unit
+          rides with the value pill on the latest dot */}
       {stats && data.kind === 'timeSeries' ? (
         <View style={styles.heroRow}>
           <Text style={styles.heroValue} selectable>
             {compactNum(selectedPoint ? selectedPoint.value : stats.last)}
-            <Text style={styles.heroUnit}>{unit}</Text>
           </Text>
           <View style={styles.deltaChip}>
             <Text style={[styles.deltaText, stats.flat ? styles.deltaTextFlat : stats.up ? styles.deltaTextUp : styles.deltaTextDown]}>
@@ -564,34 +593,8 @@ function CorrelationGraphCard({
         ) : null}
       </View>
 
-      {/* legend */}
-      {data.points.length > 0 ? (
-        <View style={styles.legend}>
-          {data.kind === 'timeSeries' ? (
-            <>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: lineColor }]} />
-                <Text style={styles.legendText}>Daily values</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={styles.legendDash} />
-                <Text style={styles.legendText}>Average</Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: VERDICT_CURVE[verdict] }]} />
-                <Text style={styles.legendText}>Paired days</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={styles.legendDash} />
-                <Text style={styles.legendText}>Best fit</Text>
-              </View>
-            </>
-          )}
-        </View>
-      ) : null}
+      {/* legend removed by design: the trail dots, the white-pill latest
+          value, and the r badge explain the encoding without a key. */}
 
       {/* inspector / footer */}
       {data.kind === 'timeSeries' && selectedPoint ? (
@@ -601,17 +604,14 @@ function CorrelationGraphCard({
             {compactNum(selectedPoint.value)}{unit}
           </Text>
         </View>
-      ) : (
+      ) : data.kind === 'correlation' ? (
         <View style={styles.footer}>
-          <Text style={styles.footerText} numberOfLines={data.kind === 'correlation' ? 2 : 1}>
-            {data.kind === 'timeSeries' && stats
-              ? `Range ${compactNum(stats.min)}–${compactNum(stats.max)}${unit} · tap chart to inspect`
-              : data.kind === 'correlation'
-                ? `${data.points.length} paired days · ${verdictLabel(verdict)}${data.xLabel && data.yLabel ? ` · X ${data.xLabel} → Y ${data.yLabel}` : ''}`
-                : 'Live from your logs'}
+          <Text style={styles.footerText} numberOfLines={2}>
+            {`${data.points.length} paired days · ${verdictLabel(verdict)}${data.xLabel && data.yLabel ? ` · X ${data.xLabel} → Y ${data.yLabel}` : ''}`}
           </Text>
         </View>
-      )}
+      ) : null}
+      </View>
     </View>
   );
 }
@@ -621,19 +621,49 @@ function CorrelationGraphCard({
 export default memo(CorrelationGraphCard);
 
 const styles = StyleSheet.create({
-  // Dark glass card on the black stage: flat dark panel, hairline rim,
-  // soft black depth. Curve / fit / dot hues stay data-encoded.
-  card: {
-    backgroundColor: D_PANEL,
+  // Real frosted glass (reference: smoked orbs on black): dark orbs behind,
+  // a dark blur surface above them, content floating on top. Hairline rim
+  // catches the light. Curve / fit / dot hues stay data-encoded.
+  glassWrap: {
     borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: D_RIM,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
+    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: '#0B0D12',
+  },
+  orbA: {
+    position: 'absolute',
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    left: -70,
+    top: -60,
+    backgroundColor: '#232833',
+  },
+  orbB: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    right: -50,
+    top: 40,
+    backgroundColor: '#1B2029',
+  },
+  orbC: {
+    position: 'absolute',
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    left: '30%',
+    bottom: -90,
+    backgroundColor: '#20262F',
+  },
+  glassFill: {
+    ...StyleSheet.absoluteFill,
+  },
+  glassContent: {
+    padding: SPACE.cardPad,
+    gap: 0,
   },
   header: {
     flexDirection: 'row',
@@ -642,13 +672,16 @@ const styles = StyleSheet.create({
     gap: SPACE.cardGap,
   },
   headerText: { flex: 1, gap: 4 },
-  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  eyebrow: {
-    ...TYPE.chip,
+  titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 },
+  windowDate: {
+    ...TYPE.caption,
+    fontSize: 11,
+    lineHeight: 14,
     color: D_FOG,
-    letterSpacing: 1.2,
+    fontVariant: ['tabular-nums'],
+    flexShrink: 0,
   },
-  title: { ...TYPE.title, fontSize: 17, lineHeight: 22, color: '#FFFFFF' },
+  title: { ...TYPE.title, fontSize: 20, lineHeight: 26, letterSpacing: -0.4, flex: 1 },
   pillCol: { gap: 6, alignItems: 'flex-end', marginTop: 2 },
   badge: {
     backgroundColor: 'rgba(255,255,255,0.12)',
@@ -694,25 +727,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: D_WELL,
+    backgroundColor: 'rgba(4,6,11,0.55)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
-  legend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginTop: 8,
-  },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendDash: {
-    width: 16,
-    borderTopWidth: 2,
-    borderTopColor: '#3A4358',
-    borderStyle: 'dashed',
-  },
-  legendText: { ...TYPE.caption, color: D_FOG },
   inspector: {
     flexDirection: 'row',
     alignItems: 'center',

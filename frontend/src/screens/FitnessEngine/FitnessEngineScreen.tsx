@@ -22,10 +22,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Button, Card, Chip, EmptyState, Input, SectionHeader } from '@/components';
+import { Button, Chip, EmptyState, Input } from '@/components';
 import { EngineGraph } from '@/components/EngineGraph';
-import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { todayKey } from '@/screens/Onboarding/momentum';
 import {
@@ -46,6 +48,9 @@ import {
   paceMinPerKm,
   type FitnessSession,
 } from '@/screens/FitnessEngine/fitnessEngine';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 function formatDayLabel(date: string): string {
   const d = new Date(`${date}T12:00:00`);
@@ -143,8 +148,8 @@ function StrengthSection({ today }: { today: string }) {
 
   return (
     <>
-      <SectionHeader dark title="Strength" titleStyle={styles.histTitle} />
-      <Card style={styles.darkCard}>
+      <Text style={styles.sectionTitle}>Strength</Text>
+      <GlassSurface strong style={styles.card}>
         <Input
           label="Exercise"
           value={exercise}
@@ -178,9 +183,12 @@ function StrengthSection({ today }: { today: string }) {
         {formError ? <Text style={styles.error}>{formError}</Text> : null}
         <Button
           title={saving ? 'Saving…' : 'Add set'}
+          variant="secondary"
           onPress={() => void handleAdd()}
           disabled={saving}
           fullWidth
+          style={styles.logBtn}
+          textStyle={styles.logBtnText}
         />
         {Object.keys(volume).length > 0 ? (
           <Text style={styles.avgSub}>
@@ -193,11 +201,11 @@ function StrengthSection({ today }: { today: string }) {
           </Text>
         ) : null}
         <Text style={styles.provenance}>Sets stay on this device only. Estimates, not measurements.</Text>
-      </Card>
+      </GlassSurface>
       {todaySets.length > 0 ? (
         <View style={styles.list}>
           {todaySets.map((s) => (
-            <Card key={s.entry_id} style={styles.darkCard}>
+            <GlassSurface key={s.entry_id} strong style={styles.card}>
               <View style={styles.rowTop}>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowTitle}>{s.exercise}</Text>
@@ -213,7 +221,7 @@ function StrengthSection({ today }: { today: string }) {
                   <Text style={[styles.rowBtnText, styles.deleteText]}>Delete</Text>
                 </Pressable>
               </View>
-            </Card>
+            </GlassSurface>
           ))}
         </View>
       ) : null}
@@ -246,180 +254,171 @@ export default function FitnessEngineScreen() {
   const stepPoints = stepDays.map((d) => ({ date: d.log_date, value: d.steps }));
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Fitness.</Text>
-        <Text style={styles.sub}>Logged activity only.</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Fitness</Text>
+          <Text style={styles.sub}>Logged activity only.</Text>
 
-        {isLoading ? (
-          <>
-            <Text style={styles.loading}>Loading…</Text>
-            <HealthFact style={styles.fact} />
-          </>
-        ) : !hasContent ? (
-          <EmptyState
-            title="No activity logged yet"
-            message="Log a walk, run, or any exercise to begin."
-          />
-        ) : (
-          <>
-            {stepDays.length > 0 ? (
-              <>
-                <SectionHeader dark title="Steps" titleStyle={styles.histTitle} />
-                <Card style={styles.darkCard}>
-                  {stepsToday != null ? (
-                    <Text style={styles.bigValue}>{stepsToday.toLocaleString()}</Text>
-                  ) : null}
-                  <Text style={styles.avgSub}>
-                    {stepsToday != null ? 'Steps today' : `${stepDays.length} ${stepDays.length === 1 ? 'day' : 'days'} counted`}
-                  </Text>
-                  <EngineGraph points={stepPoints} tone={TILE_TONES.fitness[1]} decimals={0} />
-                  <Text style={styles.provenance}>From Health Connect · on this device only.</Text>
-                </Card>
-              </>
-            ) : null}
-            {summary.sessions > 0 ? (
-              <>
-            <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <Text style={styles.bigValue}>
-                {`${summary.sessions} ${summary.sessions === 1 ? 'session' : 'sessions'}`}
-              </Text>
-              {summary.activeMinutes != null ? (
-                <Text style={styles.minutesValue}>{formatActiveMinutes(summary.activeMinutes)}</Text>
-              ) : null}
-              <Text style={styles.avgSub}>
-                {summary.activeMinutes != null
-                  ? `Active minutes · ${summary.activeDays} ${summary.activeDays === 1 ? 'day' : 'days'}`
-                  : `${summary.activeDays} ${summary.activeDays === 1 ? 'day' : 'days'} · no durations recorded`}
-              </Text>
-              {sessionsLine ? <Text style={styles.change}>{sessionsLine}</Text> : null}
-              {minutesLine ? <Text style={styles.change}>{minutesLine}</Text> : null}
-              {summary.caloriesLogged != null ? (
-                <Text style={styles.provenance}>
-                  {`${summary.caloriesLogged} calories logged alongside activity.`}
-                </Text>
-              ) : null}
-              {summary.distanceKm != null ? (
-                <Text style={styles.provenance}>
-                  {`${formatDistanceKm(summary.distanceKm)} logged across these sessions.`}
-                </Text>
-              ) : null}
-            </Card>
-
-            <SectionHeader dark title="Sessions per day" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <View style={styles.strip}>
-                {week.map((d) => (
-                  <View key={d.date} style={styles.cell}>
-                    <View style={[styles.dot, d.sessions > 0 ? styles.dotOn : styles.dotOff]}>
-                      {d.sessions > 1 ? <Text style={styles.dotCount}>{d.sessions}</Text> : null}
-                    </View>
-                    <Text style={styles.cellDay}>{d.date.slice(8)}</Text>
-                  </View>
-                ))}
-              </View>
-              <Text style={styles.weekTotal}>
-                {weekSessions === 0
-                  ? 'Nothing recorded this week.'
-                  : `${weekSessions} ${weekSessions === 1 ? 'session' : 'sessions'} this week.`}
-              </Text>
-            </Card>
-
-            {minutesPoints.length > 0 ? (
-              <>
-                <SectionHeader dark title="Active minutes" titleStyle={styles.histTitle} />
-                <Card style={styles.darkCard}>
-                  <EngineGraph points={minutesPoints} tone={TILE_TONES.fitness[1]} decimals={0} />
-                  <Text style={styles.avgSub}>
-                    {`${minutesPoints.length} ${minutesPoints.length === 1 ? 'day' : 'days'} with durations`}
-                  </Text>
-                </Card>
-              </>
-            ) : null}
-
-            <SectionHeader dark title="Recent sessions" titleStyle={styles.histTitle} />
-            <View style={styles.list}>
-              {[...sessions]
-                .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-                .slice(0, 14)
-                .map((session, i) => (
-                  <Card key={`${session.date}-${session.type}-${i}`} style={styles.darkCard}>
-                    <View style={styles.rowTop}>
-                      <View style={styles.rowMain}>
-                        <Text style={styles.rowTitle}>{session.type}</Text>
-                        <Text style={styles.rowSub}>{sessionSub(session)}</Text>
-                      </View>
-                    </View>
-                  </Card>
-                ))}
+          {isLoading ? (
+            <View style={styles.center}>
+              <Text style={styles.loading}>Loading…</Text>
             </View>
-              </>
-            ) : null}
-          </>
-        )}
+          ) : !hasContent ? (
+            <EmptyState
+              title="No activity logged yet"
+              message="Log a walk, run, or any exercise to begin."
+            />
+          ) : (
+            <>
+              {stepDays.length > 0 ? (
+                <>
+                  <Text style={styles.sectionTitle}>Steps</Text>
+                  <GlassSurface strong style={styles.card}>
+                    {stepsToday != null ? (
+                      <Text style={styles.bigValue}>{stepsToday.toLocaleString()}</Text>
+                    ) : null}
+                    <Text style={styles.avgSub}>
+                      {stepsToday != null ? 'Steps today' : `${stepDays.length} ${stepDays.length === 1 ? 'day' : 'days'} counted`}
+                    </Text>
+                    <EngineGraph points={stepPoints} tone={TILE_TONES.fitness[1]} decimals={0} />
+                    <Text style={styles.provenance}>From Health Connect · on this device only.</Text>
+                  </GlassSurface>
+                </>
+              ) : null}
+              {summary.sessions > 0 ? (
+                <>
+                  <Text style={styles.sectionTitle}>This week</Text>
+                  <GlassSurface strong style={styles.card}>
+                    <Text style={styles.bigValue}>
+                      {`${summary.sessions} ${summary.sessions === 1 ? 'session' : 'sessions'}`}
+                    </Text>
+                    {summary.activeMinutes != null ? (
+                      <Text style={styles.minutesValue}>{formatActiveMinutes(summary.activeMinutes)}</Text>
+                    ) : null}
+                    <Text style={styles.avgSub}>
+                      {summary.activeMinutes != null
+                        ? `Active minutes · ${summary.activeDays} ${summary.activeDays === 1 ? 'day' : 'days'}`
+                        : `${summary.activeDays} ${summary.activeDays === 1 ? 'day' : 'days'} · no durations recorded`}
+                    </Text>
+                    {sessionsLine ? <Text style={styles.change}>{sessionsLine}</Text> : null}
+                    {minutesLine ? <Text style={styles.change}>{minutesLine}</Text> : null}
+                    {summary.caloriesLogged != null ? (
+                      <Text style={styles.provenance}>
+                        {`${summary.caloriesLogged} calories logged alongside activity.`}
+                      </Text>
+                    ) : null}
+                  </GlassSurface>
 
-        <StrengthSection today={todayKey()} />
+                  <Text style={styles.sectionTitle}>Sessions per day</Text>
+                  <GlassSurface strong style={styles.card}>
+                    <View style={styles.strip}>
+                      {week.map((d) => (
+                        <View key={d.date} style={styles.cell}>
+                          <View style={[styles.dot, d.sessions > 0 ? styles.dotOn : styles.dotOff]}>
+                            {d.sessions > 1 ? <Text style={styles.dotCount}>{d.sessions}</Text> : null}
+                          </View>
+                          <Text style={styles.cellDay}>{d.date.slice(8)}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <Text style={styles.weekTotal}>
+                      {weekSessions === 0
+                        ? 'Nothing recorded this week.'
+                        : `${weekSessions} ${weekSessions === 1 ? 'session' : 'sessions'} this week.`}
+                    </Text>
+                  </GlassSurface>
 
-        <Button
-          title="Log activity"
-          onPress={goLog}
-          fullWidth
-          size="large"
-          style={styles.logBtn}
-          textStyle={styles.logBtnText}
-        />
-        <Text style={styles.disclaimer}>
-          From your check-ins on this device. Tracking only — not medical advice, diagnosis, or treatment.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+                  {minutesPoints.length > 0 ? (
+                    <>
+                      <Text style={styles.sectionTitle}>Active minutes</Text>
+                      <GlassSurface strong style={styles.card}>
+                        <EngineGraph points={minutesPoints} tone={TILE_TONES.fitness[1]} decimals={0} />
+                        <Text style={styles.avgSub}>
+                          {`${minutesPoints.length} ${minutesPoints.length === 1 ? 'day' : 'days'} with durations`}
+                        </Text>
+                      </GlassSurface>
+                    </>
+                  ) : null}
+
+                  <Text style={styles.sectionTitle}>Recent sessions</Text>
+                  <View style={styles.list}>
+                    {[...sessions]
+                      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+                      .slice(0, 14)
+                      .map((session, i) => (
+                        <GlassSurface key={`${session.date}-${session.type}-${i}`} strong style={styles.card}>
+                          <View style={styles.rowTop}>
+                            <View style={styles.rowMain}>
+                              <Text style={styles.rowTitle}>{session.type}</Text>
+                              <Text style={styles.rowSub}>{sessionSub(session)}</Text>
+                            </View>
+                          </View>
+                        </GlassSurface>
+                      ))}
+                  </View>
+                </>
+              ) : null}
+            </>
+          )}
+
+          <StrengthSection today={todayKey()} />
+
+          <Button
+            title="Log activity"
+            variant="secondary"
+            onPress={goLog}
+            fullWidth
+            size="large"
+            style={styles.logBtn}
+            textStyle={styles.logBtnText}
+          />
+          <Text style={styles.disclaimer}>
+            From your check-ins on this device. Tracking only — not medical advice, diagnosis, or treatment.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
-  fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  bigValue: { ...TYPE.display, fontSize: 40, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  minutesValue: { ...TYPE.display, fontSize: 28, color: '#FFFFFF', textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
-  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
-  change: { ...TYPE.body, color: '#E8ECF1', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
-  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginTop: 16 },
+  center: { alignItems: 'center', paddingVertical: 24 },
+  card: { padding: 16 },
+  bigValue: { fontWeight: '600', fontSize: 40, lineHeight: 48, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  minutesValue: { fontWeight: '600', fontSize: 28, lineHeight: 34, color: '#FFFFFF', textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
+  avgSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
+  change: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
+  provenance: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center', marginTop: 8 },
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   dot: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   dotOn: { backgroundColor: TILE_TONES.fitness[1] },
   dotOff: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
   dotCount: { fontSize: 10, fontWeight: '700', color: '#14201D' },
-  cellDay: { ...TYPE.caption, fontSize: 12, color: GV.fog, fontVariant: ['tabular-nums'] },
-  weekTotal: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  list: { gap: SPACE.cardGap },
+  cellDay: { fontWeight: '400', fontSize: 12, lineHeight: 16, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  weekTotal: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 8 },
+  list: { gap: 12 },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   rowMain: { flex: 1, gap: 4 },
-  rowTitle: { ...TYPE.button, fontSize: 15, color: '#FFFFFF' },
-  rowSub: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
+  rowTitle: { fontWeight: '600', fontSize: 15, lineHeight: 20, color: '#FFFFFF' },
+  rowSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, fontVariant: ['tabular-nums'] },
   rowBtn: { minWidth: 44, minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  rowBtnText: { ...TYPE.chip, color: '#3DDC84' },
-  deleteText: { color: GV.danger },
+  rowBtnText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: '#FFFFFF' },
+  deleteText: { color: LG.card.danger },
   setRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-end' },
   setField: { flex: 1 },
   setUnit: { flexDirection: 'row', gap: 8, paddingBottom: 4 },
-  error: { ...TYPE.caption, color: GV.danger },
-  logBtn: { backgroundColor: '#4FD1C5' },
-  logBtnText: { color: '#062A26' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  error: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: LG.card.danger },
+  logBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  logBtnText: { color: '#0B0F1A' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
 });

@@ -9,13 +9,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Skeleton, Card, Chip, SectionHeader } from '@/components';
+import { Skeleton } from '@/components';
 import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
-import { TILE_TONES } from '@/theme/tones';
-import { StageGradient } from '@/components/StageGradient';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { useTrends } from '@/hooks/useTrends';
 import { useTrendRange, TREND_RANGE_ORDER, TREND_RANGES } from '@/context/TrendRangeContext';
+import { PaywallGate } from '@/components/PaywallGate';
+import { tierUnlocks, usePremiumTier } from '@/services/premium';
 import type {
   TrendsResponse,
   DailyWellbeingPoint,
@@ -24,6 +27,9 @@ import type {
   SymptomSummary,
   SymptomTimeSeries,
 } from '@/types';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -34,12 +40,12 @@ const SCORE_LABELS: Record<number, string> = {
 };
 
 const LINE_COLORS = {
-  wellbeing: GV.teal,
-  energy: GV.cta,
-  stress: GV.fx.blue,
-  sleepDuration: GV.fx.sky,
-  sleepQuality: GV.fx.green,
-  symptom: GV.fx.blue,
+  wellbeing: LG.card.mint,
+  energy: '#FFFFFF',
+  stress: SECONDARY,
+  sleepDuration: '#FFFFFF',
+  sleepQuality: LG.card.mint,
+  symptom: LG.card.mint,
 };
 
 // ---------------------------------------------------------------------------
@@ -55,9 +61,9 @@ function formatMinutes(minutes: number): string {
 }
 
 function trendColor(direction: string): string {
-  if (direction === 'improving') return GV.cta;
-  if (direction === 'declining') return GV.danger;
-  return GV.muted;
+  if (direction === 'improving') return LG.card.mint;
+  if (direction === 'declining') return LG.card.danger;
+  return SECONDARY;
 }
 
 function trendIcon(direction: string): string {
@@ -111,9 +117,9 @@ function LineChart({
   const validData = data.filter((d) => d.value !== null) as { date: string; value: number }[];
   if (validData.length === 0) {
     return (
-      <View style={[styles.chartContainer, { height }]}>
+      <GlassSurface strong style={[styles.chartContainer, { minHeight: height }]}>
         <Text style={styles.noDataText}>No data in this period</Text>
-      </View>
+      </GlassSurface>
     );
   }
 
@@ -130,7 +136,7 @@ function LineChart({
   });
 
   return (
-    <View style={styles.chartContainer}>
+    <GlassSurface strong style={styles.chartContainer}>
       {showLabels && (
         <View style={styles.yAxis}>
           <Text style={styles.axisLabel}>{Math.round(maxV)}</Text>
@@ -199,7 +205,7 @@ function LineChart({
           })}
         </View>
       )}
-    </View>
+    </GlassSurface>
   );
 }
 
@@ -219,9 +225,9 @@ function ScatterPlot({
   const [selectedPoint, setSelectedPoint] = useState<ScatterPoint | null>(null);
   if (points.length === 0) {
     return (
-      <View style={[styles.chartContainer, { height }]}>
+      <GlassSurface strong style={[styles.chartContainer, { minHeight: height }]}>
         <Text style={styles.noDataText}>No paired data available</Text>
-      </View>
+      </GlassSurface>
     );
   }
 
@@ -235,7 +241,7 @@ function ScatterPlot({
   const yRange = yMax - yMin || 1;
 
   return (
-    <View style={styles.chartContainer}>
+    <GlassSurface strong style={styles.chartContainer}>
       <View style={[styles.chartArea, { height }]}>
         {[0.25, 0.5, 0.75].map((frac) => (
           <View key={frac} style={[styles.gridLine, { top: `${frac * 100}%` }]} />
@@ -271,7 +277,7 @@ function ScatterPlot({
         <Text style={styles.scatterAxisLabel}>{xLabel}: {formatMinutes(Math.round(xMin))}–{formatMinutes(Math.round(xMax))}</Text>
         <Text style={styles.scatterAxisLabel}>{yLabel}: {yMin.toFixed(1)}–{yMax.toFixed(1)}</Text>
       </View>
-    </View>
+    </GlassSurface>
   );
 }
 
@@ -279,7 +285,7 @@ function HorizontalBarChart({ items, color }: { items: { label: string; value: n
   const maxValue = Math.max(...items.map((i) => i.value), 1);
 
   return (
-    <View style={styles.barChart}>
+    <GlassSurface strong style={styles.barChart}>
       {items.map((item, i) => (
         <View key={i} style={styles.barRow}>
           <Text style={styles.barLabel} numberOfLines={1}>{item.label}</Text>
@@ -289,7 +295,7 @@ function HorizontalBarChart({ items, color }: { items: { label: string; value: n
           <Text style={styles.barValue}>{item.value}</Text>
         </View>
       ))}
-    </View>
+    </GlassSurface>
   );
 }
 
@@ -297,7 +303,7 @@ function ActivityChart({ points }: { points: { date: string; event_count: number
   const maxValue = Math.max(...points.map((point) => point.event_count), 1);
 
   return (
-    <View style={styles.activityChart}>
+    <GlassSurface strong style={styles.activityChart}>
       {points.map((point) => (
         <View key={point.date} style={styles.activityColumn}>
           <View style={styles.activityTrack}>
@@ -307,7 +313,7 @@ function ActivityChart({ points }: { points: { date: string; event_count: number
           <Text style={styles.activityLabel}>{formatDateShort(point.date)}</Text>
         </View>
       ))}
-    </View>
+    </GlassSurface>
   );
 }
 
@@ -318,7 +324,7 @@ function ActivityChart({ points }: { points: { date: string; event_count: number
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      <SectionHeader title={title} />
+      <Text style={styles.sectionTitle}>{title}</Text>
       {children}
     </View>
   );
@@ -331,34 +337,54 @@ function StatCard({ label, value, sublabel, color }: {
   color?: string;
 }) {
   return (
-    <Card style={styles.statCardInner}>
+    <GlassSurface strong style={styles.statCardInner}>
       {color ? <View style={[styles.statDot, { backgroundColor: color }]} /> : null}
       <Text style={styles.statLabel}>{label}</Text>
       <Text style={styles.statValue}>{value}</Text>
       {sublabel ? <Text style={styles.statSublabel}>{sublabel}</Text> : null}
-    </Card>
+    </GlassSurface>
   );
 }
 
 function TrendBadge({ trend }: { trend: { direction: string; label: string } }) {
   return (
-    <View style={styles.trendBadge}>
+    <GlassSurface noBlur style={styles.trendBadge}>
       <View style={[styles.trendDot, { backgroundColor: trendColor(trend.direction) }]} />
       <Text style={styles.trendText}>
         {trendIcon(trend.direction)} {trend.label}
       </Text>
-    </View>
+    </GlassSurface>
   );
 }
 
 function InsightCard({ text }: { text: string }) {
   return (
-    <Card style={styles.insightCardInner}>
+    <GlassSurface strong style={styles.insightCardInner}>
       <View style={styles.insightIconTile}>
         <Text style={styles.insightIconText}>!</Text>
       </View>
       <Text style={styles.insightText}>{text}</Text>
-    </Card>
+    </GlassSurface>
+  );
+}
+
+function FilterChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.chip,
+        selected ? styles.chipSelected : styles.chipIdle,
+        pressed && { opacity: 0.75 },
+      ]}
+    >
+      <Text style={selected ? styles.chipTextSelected : styles.chipTextIdle} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -368,16 +394,12 @@ function InsightCard({ text }: { text: string }) {
 
 export default function TrendsScreen({ embedded = false }: { embedded?: boolean }) {
   const navigation = useNavigation();
-  // Single global range — one selection drives every correlation graph.
   const { range, days: selectedDays, setRange } = useTrendRange();
   const [selectedSymptom, setSelectedSymptom] = useState<string | null>(null);
 
   const { data: trend, isLoading, error } = useTrends(selectedDays);
+  const tier = usePremiumTier();
 
-  // Range transitions (week → month → year) refetch while the previous
-  // range's charts are still on screen. Instead of flashing a full-screen
-  // spinner, keep the stale charts visible under a blur + skeleton overlay
-  // so the switch feels continuous and premium.
   const hasContent = trend != null && trend.logged_days > 0;
   const transitioning = isLoading && hasContent;
 
@@ -390,39 +412,106 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
   const sleepEnergyScatter = trend?.sleep_energy_scatter ?? [];
   const sleepStressScatter = trend?.sleep_stress_scatter ?? [];
 
-  return (
-    <SafeAreaView style={embedded ? styles.embeddedContainer : styles.container} edges={embedded ? [] : ['top']} >
-      <StageGradient />
-      {!embedded && (
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Trends</Text>
-        </View>
-      )}
-      {embedded && (
+  if (embedded) {
+    return (
+      <View style={styles.embeddedContainer}>
         <View style={styles.embeddedHeader}>
           <Text style={styles.headerTitle}>Trends</Text>
           <Text style={styles.embeddedSubtitle}>This {TREND_RANGES[range].label.toLowerCase()}</Text>
         </View>
-      )}
+        <TrendsBody
+          trend={trend}
+          isLoading={isLoading}
+          error={error}
+          hasContent={hasContent}
+          transitioning={transitioning}
+          range={range}
+          setRange={setRange}
+          setSelectedSymptom={setSelectedSymptom}
+          activeSymptomId={activeSymptomId}
+          activeSymptomSeries={activeSymptomSeries}
+          sleepEnergyScatter={sleepEnergyScatter}
+          sleepStressScatter={sleepStressScatter}
+          embedded
+        />
+      </View>
+    );
+  }
 
-      {/* Range selector — global: one tap retunes every graph */}
+  // Element only — creating it runs no hooks; the gate decides whether it
+  // ever renders, so paid users see byte-identical UI.
+  const body = (
+    <TrendsBody
+      trend={trend}
+      isLoading={isLoading}
+      error={error}
+      hasContent={hasContent}
+      transitioning={transitioning}
+      range={range}
+      setRange={setRange}
+      setSelectedSymptom={setSelectedSymptom}
+      activeSymptomId={activeSymptomId}
+      activeSymptomSeries={activeSymptomSeries}
+      sleepEnergyScatter={sleepEnergyScatter}
+      sleepStressScatter={sleepStressScatter}
+      embedded={false}
+    />
+  );
+
+  return (
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Trends</Text>
+        </View>
+        {tierUnlocks(tier, 'trends') ? body : (
+          <View style={styles.gateWrap}>
+            <PaywallGate feature="trends" title="Trends">
+              {body}
+            </PaywallGate>
+          </View>
+        )}
+      </SafeAreaView>
+    </View>
+  );
+}
+
+function TrendsBody({
+  trend, isLoading, error, hasContent, transitioning, range, setRange,
+  setSelectedSymptom, activeSymptomId, activeSymptomSeries,
+  sleepEnergyScatter, sleepStressScatter, embedded,
+}: {
+  trend: TrendsResponse | null | undefined;
+  isLoading: boolean;
+  error: unknown;
+  hasContent: boolean;
+  transitioning: boolean;
+  range: keyof typeof TREND_RANGES;
+  setRange: (r: keyof typeof TREND_RANGES) => void;
+  setSelectedSymptom: (s: string | null) => void;
+  activeSymptomId: string | null;
+  activeSymptomSeries: SymptomTimeSeries | undefined;
+  sleepEnergyScatter: ScatterPoint[];
+  sleepStressScatter: ScatterPoint[];
+  embedded: boolean;
+}) {
+  return (
+    <>
       <View style={styles.rangeRow}>
-        {TREND_RANGE_ORDER.map((key) => {
-          return (
-            <Chip
-              key={key}
-              label={TREND_RANGES[key].label}
-              selected={range === key}
-              color={GV.cta}
-              onPress={() => { setRange(key); setSelectedSymptom(null); }}
-            />
-          );
-        })}
+        {TREND_RANGE_ORDER.map((key) => (
+          <FilterChip
+            key={key}
+            label={TREND_RANGES[key].label}
+            selected={range === key}
+            onPress={() => { setRange(key); setSelectedSymptom(null); }}
+          />
+        ))}
       </View>
 
       {isLoading && !hasContent ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={GV.teal} />
+          <ActivityIndicator size="large" color={LG.card.mint} />
           <Text style={styles.loadingText}>Loading trends…</Text>
           <HealthFact style={styles.factText} />
         </View>
@@ -439,48 +528,43 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
       ) : (
         <View style={embedded ? undefined : styles.contentWrap}>
         <TrendsScrollContainer embedded={embedded}>
-          {/* HEALTH OVERVIEW */}
           <Section title="Health Overview">
             <View style={styles.summaryRow}>
               <StatCard label="Days logged" value={trend.logged_days} />
               {trend.avg_wellbeing !== null && (
-                <StatCard label="Avg wellbeing" value={`${trend.avg_wellbeing}`} sublabel={SCORE_LABELS[Math.round(trend.avg_wellbeing)]} color={GV.teal} />
+                <StatCard label="Avg wellbeing" value={`${trend.avg_wellbeing}`} sublabel={SCORE_LABELS[Math.round(trend.avg_wellbeing)]} color={LG.card.mint} />
               )}
             </View>
             <View style={styles.summaryRow}>
               {trend.avg_energy !== null && (
-                <StatCard label="Avg energy" value={`${trend.avg_energy}`} sublabel={SCORE_LABELS[Math.round(trend.avg_energy)]} color={GV.cta} />
+                <StatCard label="Avg energy" value={`${trend.avg_energy}`} sublabel={SCORE_LABELS[Math.round(trend.avg_energy)]} color="#FFFFFF" />
               )}
               {trend.avg_stress !== null && (
-                <StatCard label="Avg stress" value={`${trend.avg_stress}`} sublabel={SCORE_LABELS[Math.round(trend.avg_stress)]} color={GV.fx.blue} />
+                <StatCard label="Avg stress" value={`${trend.avg_stress}`} sublabel={SCORE_LABELS[Math.round(trend.avg_stress)]} color={SECONDARY} />
               )}
             </View>
           </Section>
 
-          {/* Wellbeing */}
           <Section title="Wellbeing">
             <TrendBadge trend={trend.wellbeing_trend} />
             <LineChart data={trend.wellbeing_points.map((p) => ({ date: p.date, value: p.wellbeing }))} color={LINE_COLORS.wellbeing} yMin={0.5} yMax={5.5} />
           </Section>
 
-          {/* Energy */}
           <Section title="Energy">
             <LineChart data={trend.wellbeing_points.map((p) => ({ date: p.date, value: p.energy }))} color={LINE_COLORS.energy} yMin={0.5} yMax={5.5} />
           </Section>
 
-          {/* Stress */}
           <Section title="Stress">
             <LineChart data={trend.wellbeing_points.map((p) => ({ date: p.date, value: p.stress }))} color={LINE_COLORS.stress} yMin={0.5} yMax={5.5} />
           </Section>
 
-          {/* Sleep */}
           <Section title="Sleep">
             <TrendBadge trend={trend.sleep_trend} />
             {trend.avg_sleep_minutes !== null && (
               <View style={styles.summaryRow}>
-                <StatCard label="Avg duration" value={formatMinutes(trend.avg_sleep_minutes)} color={GV.fx.sky} />
+                <StatCard label="Avg duration" value={formatMinutes(trend.avg_sleep_minutes)} color="#FFFFFF" />
                 {trend.avg_sleep_quality !== null && (
-                  <StatCard label="Avg quality" value={`${trend.avg_sleep_quality}/5`} color={GV.fx.green} />
+                  <StatCard label="Avg quality" value={`${trend.avg_sleep_quality}/5`} color={LG.card.mint} />
                 )}
                 {trend.min_sleep_minutes !== null && trend.max_sleep_minutes !== null && (
                   <StatCard label="Range" value={`${formatMinutes(trend.min_sleep_minutes)}–${formatMinutes(trend.max_sleep_minutes)}`} />
@@ -489,40 +573,35 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             )}
           </Section>
 
-          {/* Sleep Duration */}
           <Section title="Sleep Duration">
             <LineChart data={trend.sleep_points.map((p) => ({ date: p.date, value: p.duration_minutes !== null ? p.duration_minutes / 60 : null }))} color={LINE_COLORS.sleepDuration} yMin={0} />
             <Text style={styles.chartAxisUnit}>hours</Text>
           </Section>
 
-          {/* Sleep Quality */}
           <Section title="Sleep Quality">
             <LineChart data={trend.sleep_points.map((p) => ({ date: p.date, value: p.sleep_quality }))} color={LINE_COLORS.sleepQuality} yMin={0.5} yMax={5.5} />
           </Section>
 
-          {/* Sleep & Energy */}
           <Section title="Sleep & Energy">
             <ScatterPlot points={sleepEnergyScatter} color={LINE_COLORS.energy} xLabel="Sleep" yLabel="Energy" />
             {trend.sleep_energy_correlation.paired_count > 0 && (
-              <View style={styles.correlationBadge}>
+              <GlassSurface strong style={styles.correlationBadge}>
                 <Text style={styles.correlationText}>{trend.sleep_energy_correlation.description}</Text>
                 <Text style={styles.correlationMeta}>Based on {trend.sleep_energy_correlation.paired_count} paired observations</Text>
-              </View>
+              </GlassSurface>
             )}
           </Section>
 
-          {/* Sleep & Stress */}
           <Section title="Sleep & Stress">
             <ScatterPlot points={sleepStressScatter} color={LINE_COLORS.stress} xLabel="Sleep" yLabel="Stress" />
             {trend.sleep_stress_correlation.paired_count > 0 && (
-              <View style={styles.correlationBadge}>
+              <GlassSurface strong style={styles.correlationBadge}>
                 <Text style={styles.correlationText}>{trend.sleep_stress_correlation.description}</Text>
                 <Text style={styles.correlationMeta}>Based on {trend.sleep_stress_correlation.paired_count} paired observations</Text>
-              </View>
+              </GlassSurface>
             )}
           </Section>
 
-          {/* Symptoms */}
           <Section title="Symptoms">
             {trend.symptom_summaries.length > 0 ? (
               trend.symptom_summaries.map((sym) => (
@@ -533,22 +612,18 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             )}
           </Section>
 
-          {/* Symptom Frequency */}
           {trend.symptom_summaries.length > 0 && (
             <Section title="Most Frequent Symptoms">
-              <HorizontalBarChart items={trend.symptom_summaries.slice(0, 8).map((s) => ({ label: s.display_name, value: s.count }))} color={GV.fx.blue} />
+              <HorizontalBarChart items={trend.symptom_summaries.slice(0, 8).map((s) => ({ label: s.display_name, value: s.count }))} color={LG.card.mint} />
             </Section>
           )}
 
-          {/* Symptom Severity */}
           {trend.symptom_time_series.length > 0 && (
             <Section title="Symptom Severity">
               <View style={styles.symptomSelector}>
-                {trend.symptom_time_series.map((ts) => {
-                  return (
-                    <Chip key={ts.concept_id} label={ts.display_name} selected={ts.concept_id === activeSymptomId} color={TILE_TONES.discipline[0]} onPress={() => setSelectedSymptom(ts.concept_id)} />
-                  );
-                })}
+                {trend.symptom_time_series.map((ts) => (
+                  <FilterChip key={ts.concept_id} label={ts.display_name} selected={ts.concept_id === activeSymptomId} onPress={() => setSelectedSymptom(ts.concept_id)} />
+                ))}
               </View>
 
               {activeSymptomSeries && activeSymptomSeries.points.length > 0 ? (
@@ -569,7 +644,6 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             </Section>
           )}
 
-          {/* Medical Records */}
           <Section title="Health Records">
             <View style={styles.summaryRow}>
               <StatCard label="Documents" value={trend.documents_processed} />
@@ -582,7 +656,6 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             )}
           </Section>
 
-          {/* Insights */}
           {trend.insights.length > 0 && (
             <Section title="Insights">
               {trend.insights.map((insight, i) => (
@@ -600,9 +673,9 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
             accessibilityRole="progressbar"
             accessibilityLabel={`Updating trends to ${TREND_RANGES[range].label}`}
           >
-            <View style={styles.transitionCard}>
+            <GlassSurface strong style={styles.transitionCard}>
               <View style={styles.transitionPill}>
-                <ActivityIndicator size="small" color={GV.cta} />
+                <ActivityIndicator size="small" color={LG.card.mint} />
                 <Text style={styles.transitionPillText}>
                   Updating to {TREND_RANGES[range].label}…
                 </Text>
@@ -610,12 +683,12 @@ export default function TrendsScreen({ embedded = false }: { embedded?: boolean 
               <Skeleton width="45%" height={12} />
               <Skeleton width="100%" height={110} accent />
               <Skeleton width="70%" height={14} />
-            </View>
+            </GlassSurface>
           </View>
         )}
         </View>
       )}
-    </SafeAreaView>
+    </>
   );
 }
 
@@ -634,7 +707,7 @@ function DualLineChart({ dataA, dataB, colorA, colorB, height = 100, yMin, yMax 
 }) {
   const allVals = [...dataA.filter((d) => d.value !== null).map((d) => d.value!), ...dataB.filter((d) => d.value !== null).map((d) => d.value!)];
   if (allVals.length === 0) {
-    return <View style={[styles.chartContainer, { height }]}><Text style={styles.noDataText}>No data in this period</Text></View>;
+    return <GlassSurface strong style={[styles.chartContainer, { minHeight: height }]}><Text style={styles.noDataText}>No data in this period</Text></GlassSurface>;
   }
 
   const minV = yMin ?? Math.min(...allVals) - 0.5;
@@ -665,7 +738,7 @@ function DualLineChart({ dataA, dataB, colorA, colorB, height = 100, yMin, yMax 
   }
 
   return (
-    <View style={styles.chartContainer}>
+    <GlassSurface strong style={styles.chartContainer}>
       <View style={[styles.chartArea, { height }]}>
         {[0.25, 0.5, 0.75].map((frac) => (<View key={frac} style={[styles.gridLine, { top: `${frac * 100}%` }]} />))}
         {renderLine(dataA, colorA, 'a')}
@@ -680,7 +753,7 @@ function DualLineChart({ dataA, dataB, colorA, colorB, height = 100, yMin, yMax 
           })}
         </View>
       )}
-    </View>
+    </GlassSurface>
   );
 }
 
@@ -691,7 +764,7 @@ function DualLineChart({ dataA, dataB, colorA, colorB, height = 100, yMin, yMax 
 function SymptomRow({ symptom }: { symptom: SymptomSummary }) {
   const severityLabel = symptom.avg_severity !== null ? `Severity ${symptom.avg_severity}/10` : null;
   return (
-    <View style={styles.symptomRow}>
+    <GlassSurface strong style={styles.symptomRow}>
       <View style={styles.symptomInfo}>
         <Text style={styles.symptomName}>{symptom.display_name}</Text>
         <Text style={styles.symptomMeta}>
@@ -699,7 +772,7 @@ function SymptomRow({ symptom }: { symptom: SymptomSummary }) {
         </Text>
       </View>
       <Text style={styles.symptomDate}>{formatDateShort(symptom.latest_date)}</Text>
-    </View>
+    </GlassSurface>
   );
 }
 
@@ -708,32 +781,59 @@ function SymptomRow({ symptom }: { symptom: SymptomSummary }) {
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: GV.stage },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
   embeddedContainer: { backgroundColor: 'transparent', overflow: 'visible' },
 
   header: {
     alignItems: 'center',
     paddingHorizontal: SPACE.screenH,
-    paddingVertical: 8,
+    paddingVertical: 12,
   },
-  headerTitle: { ...TYPE.display, color: '#FFFFFF', textAlign: 'center' },
+  headerTitle: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  gateWrap: { flex: 1, paddingHorizontal: SPACE.screenH, paddingTop: 8 },
   embeddedHeader: { paddingTop: 24, paddingBottom: 8 },
-  embeddedSubtitle: { ...TYPE.caption, color: GV.fog, marginTop: 8 },
+  embeddedSubtitle: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, marginTop: 8 },
 
   rangeRow: {
     flexDirection: 'row',
     paddingHorizontal: SPACE.screenH,
     paddingVertical: 8,
     gap: 8,
-    backgroundColor: GV.stage,
+    backgroundColor: 'transparent',
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 9999,
+    borderWidth: 1,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  chipIdle: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  chipSelected: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+  },
+  chipTextIdle: {
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#FFFFFF',
+  },
+  chipTextSelected: {
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#0B0F1A',
   },
 
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
-  loadingText: { ...TYPE.body, color: GV.fog },
-  factText: { ...TYPE.caption, color: GV.fog, textAlign: 'center', maxWidth: 300 },
-  // Range-transition layer: stale charts stay mounted underneath while the
-  // new range loads; the flat stage + white skeleton card sits on top and
-  // swallows touches so users can't act on stale numbers mid-flight.
+  loadingText: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY },
+  factText: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', maxWidth: 300 },
   contentWrap: { flex: 1 },
   transitionOverlay: {
     position: 'absolute',
@@ -744,13 +844,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: SPACE.screenH,
-    backgroundColor: GV.stage,
-    opacity: 0.96,
+    backgroundColor: 'rgba(5,7,15,0.92)',
   },
   transitionCard: {
     width: '100%',
     maxWidth: 340,
     gap: 8,
+    padding: 16,
   },
   transitionPill: {
     flexDirection: 'row',
@@ -759,105 +859,100 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: SPACE.rPill,
-    backgroundColor: GV.wash,
+    borderRadius: 9999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  transitionPillText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.cta, fontSize: 12 },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACE.cardPad },
-  emptyTitle: { ...TYPE.title, color: '#FFFFFF', marginBottom: 8 },
-  emptyText: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
+  transitionPillText: { fontWeight: '600', fontSize: 12, lineHeight: 16, color: LG.card.mint },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  emptyTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginBottom: 8 },
+  emptyText: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
 
-  scrollContent: { paddingHorizontal: SPACE.screenH, paddingBottom: 32, gap: SPACE.sectionGap },
+  scrollContent: { paddingHorizontal: SPACE.screenH, paddingBottom: 32, gap: 24 },
 
-  section: { marginTop: SPACE.sectionGap, gap: SPACE.cardGap },
-  sectionTitle: { ...TYPE.title, color: '#FFFFFF', marginBottom: 8 },
+  section: { marginTop: 8, gap: 12 },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginBottom: 4 },
 
-  summaryRow: { flexDirection: 'row', gap: SPACE.cardGap, flexWrap: 'wrap' },
+  summaryRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
   statCardInner: {
     flex: 1,
     minWidth: 90,
     alignItems: 'center',
+    padding: 16,
   },
   statDot: { width: 8, height: 8, borderRadius: 4, marginBottom: 8 },
-  statLabel: { ...TYPE.caption, color: GV.muted, marginBottom: 8 },
-  statValue: { ...TYPE.title, color: GV.ink, fontSize: 20 },
-  statSublabel: { ...TYPE.caption, color: GV.muted, marginTop: 2 },
+  statLabel: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, marginBottom: 8 },
+  statValue: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  statSublabel: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, marginTop: 2 },
 
   trendBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 8,
-    backgroundColor: GV.card,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: SPACE.rPill,
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: 4,
+    marginBottom: 4,
   },
   trendDot: { width: 8, height: 8, borderRadius: 4 },
-  trendText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink },
+  trendText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: '#FFFFFF' },
 
-  chartContainer: { marginTop: 8, backgroundColor: GV.card, borderRadius: SPACE.rCard, padding: SPACE.cardPad },
+  chartContainer: { marginTop: 4, padding: 16 },
   chartArea: {
     position: 'relative',
-    backgroundColor: GV.card,
+    backgroundColor: 'transparent',
     borderRadius: 12,
     overflow: 'hidden',
   },
   chartDot: { position: 'absolute', width: 8, height: 8, borderRadius: 4, marginLeft: -4, marginTop: -4, zIndex: 2 },
   chartLine: { position: 'absolute', zIndex: 1 },
-  gridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: GV.line, opacity: 0.6 },
-  gridLineVert: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: GV.line, opacity: 0.6 },
+  gridLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.12)', opacity: 0.6 },
+  gridLineVert: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.12)', opacity: 0.6 },
 
   yAxis: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 30, justifyContent: 'space-between', paddingVertical: 4, zIndex: 3 },
-  axisLabel: { ...TYPE.caption, color: GV.muted, fontSize: 10, textAlign: 'right' },
+  axisLabel: { fontWeight: '400', fontSize: 10, lineHeight: 13, color: TERTIARY, textAlign: 'right', fontVariant: ['tabular-nums'] },
   xAxis: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginTop: 4 },
-  xAxisLabel: { ...TYPE.caption, color: GV.muted, fontSize: 10 },
-  chartAxisUnit: { ...TYPE.caption, color: GV.muted, marginTop: 4 },
-  tooltip: { alignSelf: 'center', backgroundColor: GV.ink, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginTop: 8 },
-  tooltipText: { ...TYPE.caption, color: '#FFFFFF' },
+  xAxisLabel: { fontWeight: '400', fontSize: 10, lineHeight: 13, color: TERTIARY },
+  chartAxisUnit: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, marginTop: 4 },
+  tooltip: { alignSelf: 'center', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginTop: 8 },
+  tooltipText: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
 
-  scatterDot: { position: 'absolute', width: 10, height: 10, borderRadius: 5, marginLeft: -5, marginTop: -5, opacity: 0.8 },
+  scatterDot: { position: 'absolute', width: 10, height: 10, borderRadius: 5, marginLeft: -5, marginTop: -5, opacity: 0.9 },
   scatterAxis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  scatterAxisLabel: { ...TYPE.caption, color: GV.muted, fontSize: 10 },
+  scatterAxisLabel: { fontWeight: '400', fontSize: 10, lineHeight: 13, color: TERTIARY },
 
   correlationBadge: {
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
-    padding: SPACE.cardPad,
+    padding: 16,
     marginTop: 8,
   },
-  correlationText: { ...TYPE.body, color: GV.ink },
-  correlationMeta: { ...TYPE.caption, color: GV.muted, marginTop: 8 },
+  correlationText: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF' },
+  correlationMeta: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, marginTop: 8, fontVariant: ['tabular-nums'] },
 
-  barChart: { gap: 8, backgroundColor: GV.card, borderRadius: SPACE.rCard, padding: SPACE.cardPad },
+  barChart: { gap: 8, padding: 16 },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  barLabel: { ...TYPE.body, color: GV.ink, width: 120, textAlign: 'right' },
-  barTrack: { flex: 1, height: 16, backgroundColor: GV.wash, borderRadius: 4, overflow: 'hidden' },
+  barLabel: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', width: 120, textAlign: 'right' },
+  barTrack: { flex: 1, height: 16, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 4, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 4 },
-  barValue: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink, width: 24 },
+  barValue: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: '#FFFFFF', width: 24, fontVariant: ['tabular-nums'] },
 
-  activityChart: { height: 140, flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingTop: 16, backgroundColor: GV.card, borderRadius: SPACE.rCard, padding: SPACE.cardPad },
+  activityChart: { height: 140, flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingTop: 16, padding: 16 },
   activityColumn: { flex: 1, alignItems: 'center', minWidth: 28 },
-  activityTrack: { height: 90, width: '70%', justifyContent: 'flex-end', backgroundColor: GV.wash },
-  activityFill: { width: '100%', backgroundColor: GV.cta, minHeight: 2 },
-  activityValue: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.ink, fontSize: 10, marginTop: 2 },
-  activityLabel: { ...TYPE.caption, color: GV.muted, fontSize: 9, marginTop: 2 },
+  activityTrack: { height: 90, width: '70%', justifyContent: 'flex-end', backgroundColor: 'rgba(255,255,255,0.12)' },
+  activityFill: { width: '100%', backgroundColor: LG.card.mint, minHeight: 2 },
+  activityValue: { fontWeight: '600', fontSize: 10, lineHeight: 13, color: '#FFFFFF', marginTop: 2, fontVariant: ['tabular-nums'] },
+  activityLabel: { fontWeight: '400', fontSize: 9, lineHeight: 12, color: TERTIARY, marginTop: 2 },
 
   symptomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: GV.card,
-    borderRadius: SPACE.rCard,
     paddingVertical: 12,
-    paddingHorizontal: SPACE.cardPad,
+    paddingHorizontal: 16,
   },
   symptomInfo: { flex: 1 },
-  symptomName: { ...TYPE.body, fontFamily: FONT.semi, color: GV.ink },
-  symptomMeta: { ...TYPE.caption, color: GV.muted, marginTop: 2 },
-  symptomDate: { ...TYPE.caption, color: GV.muted, marginLeft: 16 },
+  symptomName: { fontWeight: '600', fontSize: 15, lineHeight: 21, color: '#FFFFFF' },
+  symptomMeta: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, marginTop: 2, fontVariant: ['tabular-nums'] },
+  symptomDate: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, marginLeft: 16, fontVariant: ['tabular-nums'] },
 
   symptomSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
 
@@ -865,21 +960,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginBottom: 8,
+    padding: 16,
+    alignItems: 'flex-start',
   },
   insightIconTile: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: GV.wash,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  insightIconText: { ...TYPE.caption, fontFamily: FONT.semi, color: GV.cta },
-  insightText: { ...TYPE.body, color: GV.ink, flex: 1 },
+  insightIconText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: LG.card.mint },
+  insightText: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', flex: 1 },
 
   noDataText: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 21,
+    color: SECONDARY,
     paddingVertical: 8,
   },
 });

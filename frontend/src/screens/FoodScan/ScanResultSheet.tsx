@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { SPACE } from '@/theme/guava';
+import { Button, Chip } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { LG } from '@/theme/liquidGlass';
 import { useToast } from '@/components/Toast';
-import { Chip } from '@/components';
 import {
   logScannedMeal,
   type FoodScanConfidence,
@@ -14,15 +16,16 @@ import { OFF_ATTRIBUTION } from '@/services/legalLinks';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { saveFoodScanBreakdown } from '@/db/queries/foodScans';
 
-void FONT;
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 const STEP_G = 10;
 const MIN_G = 10;
 
 const CONFIDENCE_DOT: Record<FoodScanConfidence, string> = {
-  high: GV.cta,
-  med: GV.fx.amber,
-  low: GV.muted,
+  high: LG.card.mint,
+  med: '#E8862E',
+  low: TERTIARY,
 };
 
 const CONFIDENCE_LABEL: Record<FoodScanConfidence, string> = {
@@ -198,7 +201,7 @@ export default function ScanResultSheet({
   };
 
   return (
-    <View style={styles.sheet}>
+    <GlassSurface strong style={styles.sheet}>
       <View style={styles.headRow}>
         {photoUri ? (
           <Image source={{ uri: photoUri }} style={styles.thumb} accessibilityLabel={photoLabel} />
@@ -235,7 +238,7 @@ export default function ScanResultSheet({
         </Text>
       )}
 
-      <Text style={styles.sectionLabel}>Items</Text>
+      <Text style={styles.sectionTitle}>Items</Text>
       <View style={styles.items}>
         {rows.map((row, i) => (
           <View key={`${row.item.label}-${i}`} style={styles.itemRow}>
@@ -293,7 +296,7 @@ export default function ScanResultSheet({
         <Text style={styles.note}>{OFF_ATTRIBUTION}</Text>
       ) : null}
 
-      <Text style={styles.sectionLabel}>Log as</Text>
+      <Text style={styles.sectionTitle}>Log as</Text>
       <Text style={styles.sectionHint}>
         A scan identifies food. You decide what this was.
       </Text>
@@ -305,7 +308,7 @@ export default function ScanResultSheet({
             selected={mealType === type}
             onPress={() => setMealType(type)}
             size="medium"
-            color={GV.cta}
+            color={LG.card.mint}
             accessibilityLabel={`Log as ${type}`}
           />
         ))}
@@ -313,34 +316,22 @@ export default function ScanResultSheet({
 
       {logError ? <Text style={styles.error}>{logError}</Text> : null}
 
-      <Pressable
+      <Button
+        title={logging ? 'Logging…' : `Log ${mealType.toLowerCase()}`}
+        variant="secondary"
         onPress={() => void logMeal()}
         disabled={logging}
-        accessibilityRole="button"
+        loading={logging}
+        fullWidth
+        size="large"
         accessibilityLabel={`Log ${mealType.toLowerCase()}`}
-        accessibilityState={{ disabled: logging, busy: logging }}
-        style={({ pressed }) => [
-          styles.cta,
-          pressed && !logging && { backgroundColor: GV.ctaPressed },
-          logging && { opacity: 0.6 },
-        ]}
-      >
-        <Text style={styles.ctaText}>{logging ? 'Logging…' : `Log ${mealType.toLowerCase()}`}</Text>
-      </Pressable>
-    </View>
+      />
+    </GlassSurface>
   );
 }
 
-const NAVY = '#080A11';
-const TILE_BG = '#2A3049';
-const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
-
 const styles = StyleSheet.create({
   sheet: {
-    backgroundColor: TILE_BG,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderRadius: 8,
     padding: 16,
     gap: 12,
   },
@@ -360,7 +351,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   title: {
-    ...TYPE.title,
+    fontWeight: '600',
+    fontSize: 18,
+    lineHeight: 24,
     color: '#FFFFFF',
   },
   confRow: {
@@ -374,8 +367,10 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   confText: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
   },
   retake: {
     minHeight: 44,
@@ -386,11 +381,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   retakeText: {
-    ...TYPE.chip,
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
     color: '#FFFFFF',
   },
   hero: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 40,
     lineHeight: 46,
     color: '#FFFFFF',
@@ -398,20 +395,26 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   range: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
-  sectionLabel: {
-    ...TYPE.title,
-    fontSize: 17,
+  sectionTitle: {
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.4,
     color: '#FFFFFF',
-    marginTop: 4,
+    marginTop: 8,
   },
   sectionHint: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
   },
   chips: {
     flexDirection: 'row',
@@ -445,14 +448,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   itemLabel: {
-    ...TYPE.button,
+    fontWeight: '600',
     fontSize: 15,
+    lineHeight: 20,
     color: '#FFFFFF',
     flex: 1,
   },
   itemMacros: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
     fontVariant: ['tabular-nums'],
   },
   stepper: {
@@ -469,13 +475,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stepGlyph: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 18,
     lineHeight: 22,
     color: '#FFFFFF',
   },
   stepValue: {
-    ...TYPE.chip,
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
     color: '#FFFFFF',
     minWidth: 56,
     minHeight: 44,
@@ -487,22 +495,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   note: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
   },
   error: {
-    ...TYPE.caption,
-    color: GV.danger,
-  },
-  cta: {
-    backgroundColor: GV.cta,
-    borderRadius: SPACE.rPill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-  },
-  ctaText: {
-    ...TYPE.button,
-    color: '#FFFFFF',
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.danger,
   },
 });

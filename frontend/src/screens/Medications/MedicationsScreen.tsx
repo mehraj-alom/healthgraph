@@ -44,8 +44,8 @@ import { useTheme } from '@/theme';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { getDocumentExtraction } from '@/services/documents';
 import type { DocumentExtraction } from '@/types';
-// TESTING BYPASS: paywall off — prescription scanner open to all.
-// import { usePremiumEntitled } from '@/services/premium';
+import { usePremiumTier, tierUnlocks } from '@/services/premium';
+import { useOpenPricing } from '@/components/PaywallGate';
 import { todayKey } from '@/screens/Onboarding/momentum';
 import {
   listScanSessions,
@@ -65,7 +65,12 @@ import {
   requestReminderPermissions,
 } from '@/services/reminderNotifications';
 import { GV, TYPE, FONT } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { Button, Card, Chip, Input } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import Entrance from '@/components/home/Entrance';
+import { ExploreGlyph } from '@/components/home/ExploreGlyphs';
 import FamilyWatchSection from '@/screens/Medications/FamilyWatchSection';
 import { HealthFact } from '@/components/HealthFact';
 import type { Medication, MedicationFrequency, MedicationRoute, MedicationStatus, DailyMedicationSchedule, MedicationTakenEvent } from '@/types';
@@ -129,15 +134,6 @@ const ROUTE_LABELS: Record<MedicationRoute, string> = {
   OTHER: 'Other',
 };
 
-// ── Status dot hues — small flat dots on dark tiles ──
-const STATUS_DOTS: Record<MedicationStatus, string> = {
-  ACTIVE: GV.fx.green,
-  SCHEDULED: GV.fx.blue,
-  COMPLETED: GV.muted,
-  PAUSED: GV.fx.amber,
-  DISCONTINUED: GV.muted,
-};
-
 // ── Helper functions ──
 function formatTime(time: string): string {
   const [hours, minutes] = time.split(':').map(Number);
@@ -156,17 +152,17 @@ function getStatusLabel(status: MedicationStatus): string {
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
-/** Friendly one-liner per scan-session lifecycle state. */
+/** One short line per scan-session state. */
 function scanStatusCopy(status: ScanSession['status']): string {
   switch (status) {
     case 'capturing':
-      return 'Unfinished scan. Pages were never uploaded.';
+      return 'Unfinished scan.';
     case 'uploading':
-      return 'Uploading pages…';
+      return 'Uploading…';
     case 'awaiting_extraction':
-      return 'Reading pages. Verify & add appears when reading finishes. Nothing is added automatically.';
+      return 'Reading pages…';
     case 'reviewed':
-      return 'Done. Medicines confirmed from this scan.';
+      return 'Done.';
   }
 }
 
@@ -218,16 +214,14 @@ function NavySegmented({
   );
 }
 
-// ── Med tile: FocusTile language for a medication ────────────────────────
-// Solid full-colour box with name + details only. Tap shows the
-// Edit/Pause/Stop menu floating ABOVE the box (sibling overlay, never
-// inside the tile), with a teal 2px ring while open.
+// ── Med row: one frosted glass row per medication ───────────────────────
+// Monochrome pill glyph + name + a single dose · time line. No solid
+// fills, no per-med hues — status lives in the insight line, not color.
+// Tap opens the Edit/Pause/Stop menu floating above the row.
 
 function MedTile({
-  index,
   medication,
   extraLines,
-  fullWidth,
   expanded,
   onToggle,
   onEdit,
@@ -236,10 +230,8 @@ function MedTile({
   onStop,
   onRefill,
 }: {
-  index: number;
   medication: Medication;
   extraLines?: string[];
-  fullWidth?: boolean;
   expanded: boolean;
   onToggle: () => void;
   onEdit: () => void;
@@ -248,7 +240,6 @@ function MedTile({
   onStop: () => void;
   onRefill: () => void;
 }) {
-  const solid = solidForMedication(medication.medication_id, index);
   const frequencyLabel = FREQUENCY_LABELS[medication.frequency] || medication.frequency;
   const doseLine = [
     medication.strength ? `${medication.strength}${medication.strength_unit ? ` ${medication.strength_unit}` : ''}` : null,
@@ -257,40 +248,38 @@ function MedTile({
   const timeLine = medication.scheduled_times && medication.scheduled_times.length > 0
     ? medication.scheduled_times.map(formatTime).join(' · ')
     : frequencyLabel;
+  const metaLine = [doseLine, timeLine].filter(Boolean).join(' · ');
 
   return (
-    <View style={[styles.tileWrap, fullWidth && styles.tileWrapFull, expanded && styles.tileWrapOpen]}>
-      <Pressable
+    <View style={[styles.tileWrap, expanded && styles.tileWrapOpen]}>
+      <GlassSurface
+        noBlur
+        radius={20}
+        style={styles.tile}
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityLabel={`${medication.name} details`}
-        accessibilityState={{ expanded }}
-        style={({ pressed }) => [
-          styles.tile,
-          { backgroundColor: solid },
-          fullWidth && styles.tileFull,
-          expanded && styles.tileOn,
-          pressed && { opacity: 0.88 },
-        ]}
       >
-        <View style={[styles.statusDot, { backgroundColor: STATUS_DOTS[medication.status] }]} />
-        <Text style={styles.tileLabel} numberOfLines={2}>
-          {medication.name}
-        </Text>
-        {doseLine ? (
-          <Text style={styles.tileMeta} numberOfLines={1}>
-            {doseLine}
+        <View style={styles.tileGlyph}>
+          <ExploreGlyph name="pill" size={22} color="rgba(255,255,255,0.92)" />
+        </View>
+        <View style={styles.tileMain}>
+          <Text style={styles.tileLabel} numberOfLines={1}>
+            {medication.name}
           </Text>
-        ) : null}
-        <Text style={styles.tileMeta} numberOfLines={1}>
-          {timeLine}
-        </Text>
-        {(extraLines ?? []).map((line, i) => (
-          <Text key={i} style={[styles.tileMeta, styles.tileInsight]} numberOfLines={1}>
-            {line}
-          </Text>
-        ))}
-      </Pressable>
+          {metaLine ? (
+            <Text style={styles.tileMeta} numberOfLines={1}>
+              {metaLine}
+            </Text>
+          ) : null}
+          {(extraLines ?? []).map((line, i) => (
+            <Text key={i} style={[styles.tileMeta, styles.tileInsight]} numberOfLines={1}>
+              {line}
+            </Text>
+          ))}
+        </View>
+        <Text style={styles.tileChevron}>›</Text>
+      </GlassSurface>
       {expanded ? (
         <Pressable
           onPress={onToggle}
@@ -370,6 +359,11 @@ export default function MedicationsScreen() {
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
   // Prefilled link when adding a medication from a scanned prescription.
   const [scanSourceDocIds, setScanSourceDocIds] = useState<string[]>([]);
+  const tier = usePremiumTier();
+  const openPricing = useOpenPricing();
+  // Locked tiers see the Scan button badged with ✦ and land on Pricing —
+  // the scanner itself (PrescriptionScannerScreen) stays gated.
+  const scanLocked = !tierUnlocks(tier, 'prescriptionScanner');
 
   // ---- Scanned prescription sessions (local record of scanner runs) ----
   const [scanSessions, setScanSessions] = useState<ScanSession[]>([]);
@@ -425,9 +419,12 @@ export default function MedicationsScreen() {
   }, [navigation, loadScanSessions]);
 
   const openScanner = useCallback(() => {
-    // TESTING BYPASS: paywall off — no Premium alert, straight to scanner.
+    if (!tierUnlocks(tier, 'prescriptionScanner')) {
+      openPricing();
+      return;
+    }
     navigation.navigate('PrescriptionScanner');
-  }, [navigation]);
+  }, [navigation, tier, openPricing]);
 
   const addMedicationFromScan = useCallback((session: ScanSession) => {
     navigation.navigate('PrescriptionReview', {
@@ -553,13 +550,13 @@ export default function MedicationsScreen() {
     return pending[0] ?? null;
   }, [schedule]);
 
-  // Headline + sub mirror the reference rhythm (big centered title,
-  // one short helper line). No eyebrow line above the title.
+  // Headline + sub: one job per sentence, outcome first. The sub is the
+  // next dose, today's count, or the empty nudge — never instructions.
   const sub = nextDose
     ? `Next · ${nextDose.medication.name} at ${formatTime(nextDose.scheduled_time)}`
     : activeMedications.length > 0
-      ? 'Tap a tile to edit, pause, or stop.'
-      : 'Add your medications to begin.';
+      ? `${todayTaken}/${todayTotal} taken today.`
+      : 'Add what you take.';
 
   // Handle medication taken — local-first with server reconciliation
   const handleTakeDose = useCallback(async (medication: Medication, scheduledTime: string) => {
@@ -752,7 +749,9 @@ export default function MedicationsScreen() {
   }, [navigation]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.screen}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -769,47 +768,50 @@ export default function MedicationsScreen() {
           />
         }
       >
-        {/* Reference hero: big centered title, one helper. */}
-        <Text style={styles.headline}>Medications.</Text>
-        <Text style={styles.sub} numberOfLines={2}>{sub}</Text>
+        <Entrance index={0}>
+          <Text style={styles.headline}>Medications</Text>
+          <Text style={styles.sub} numberOfLines={2}>{sub}</Text>
+        </Entrance>
 
-        {todayTotal > 0 ? (
-          <View style={styles.progressWrap} accessibilityLabel={`${todayTaken} of ${todayTotal} doses taken`}>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { flex: todayPct }]} />
-              <View style={{ flex: Math.max(0, 1 - todayPct) }} />
+        <Entrance index={1}>
+          {todayTotal > 0 ? (
+            <View style={styles.progressWrap} accessibilityLabel={`${todayTaken} of ${todayTotal} doses taken`}>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { flex: todayPct }]} />
+                <View style={{ flex: Math.max(0, 1 - todayPct) }} />
+              </View>
             </View>
+          ) : null}
+
+          <NavySegmented
+            value={selectedTab}
+            onChange={setSelectedTab}
+            tabs={[
+              { key: 'active', label: `Active · ${activeMedications.length}` },
+              { key: 'schedule', label: `Today · ${todayTaken}/${todayTotal}` },
+              { key: 'history', label: 'History' },
+            ]}
+          />
+
+          <View style={styles.actionRow}>
+            <Pressable
+              onPress={openAdd}
+              accessibilityRole="button"
+              accessibilityLabel="Add medication"
+              style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={styles.addBtnText}>Add</Text>
+            </Pressable>
+            <Pressable
+              onPress={openScanner}
+              accessibilityRole="button"
+              accessibilityLabel={scanLocked ? 'Scan prescription pages, General and above' : 'Scan prescription pages'}
+              style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.scanBtnText}>Scan{scanLocked ? ' ✦' : ''}</Text>
+            </Pressable>
           </View>
-        ) : null}
-
-        <NavySegmented
-          value={selectedTab}
-          onChange={setSelectedTab}
-          tabs={[
-            { key: 'active', label: `Active · ${activeMedications.length}` },
-            { key: 'schedule', label: `Today · ${todayTaken}/${todayTotal}` },
-            { key: 'history', label: 'History' },
-          ]}
-        />
-
-        <View style={styles.actionRow}>
-          <Pressable
-            onPress={openAdd}
-            accessibilityRole="button"
-            accessibilityLabel="Add medication"
-            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
-          >
-            <Text style={styles.addBtnText}>Add</Text>
-          </Pressable>
-          <Pressable
-            onPress={openScanner}
-            accessibilityRole="button"
-            accessibilityLabel="Scan prescription pages"
-            style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.scanBtnText}>Scan prescription</Text>
-          </Pressable>
-        </View>
+        </Entrance>
 
         {__DEV__ ? (
           <View style={styles.devRow}>
@@ -841,8 +843,9 @@ export default function MedicationsScreen() {
         ) : null}
 
         {scanSessions.length > 0 && (
-          <View style={styles.scanCard}>
-            <Text style={styles.scanTitle}>Scanned prescriptions</Text>
+          <Entrance index={2}>
+            <GlassSurface strong style={styles.scanCard}>
+              <Text style={styles.scanTitle}>Scans</Text>
             {scanSessions.map((session) => {
               const ready =
                 session.document_ids.length > 0 &&
@@ -855,7 +858,7 @@ export default function MedicationsScreen() {
                       {session.document_ids.length === 1
                         ? '1 page'
                         : `${session.document_ids.length} pages`}
-                      {session.status === 'reviewed' ? ' · reviewed ✓' : ''}
+                      {session.status === 'reviewed' ? ' · done' : ''}
                     </Text>
                     <Text style={styles.scanSub}>
                       {open && !ready && extractFailed
@@ -897,44 +900,50 @@ export default function MedicationsScreen() {
                 </View>
               );
             })}
-          </View>
+            </GlassSurface>
+          </Entrance>
         )}
 
         {insights && insights.flags.length > 0 && selectedTab === 'active' && (
-          <View style={styles.safetyCard}>
-            <Text style={styles.safetyTitle}>Worth a look</Text>
-            {insights.flags.slice(0, 4).map((f, i) => (
-              <Text key={`${f.kind}-${i}`} style={styles.safetyText}>
-                {f.kind === 'interaction' ? '⚠ ' : f.kind === 'duplicate' ? '⚠ ' : f.kind === 'polypharmacy' ? '💊 ' : f.kind === 'low-adherence' ? '📉 ' : '🔋 '}
-                {f.text}
-              </Text>
-            ))}
-          </View>
+          <Entrance index={2}>
+            <GlassSurface strong tint="#F5B453" tintOpacity={0.12} style={styles.safetyCard}>
+              <Text style={styles.safetyTitle}>Worth a look</Text>
+              {insights.flags.slice(0, 4).map((f, i) => (
+                <Text key={`${f.kind}-${i}`} style={styles.safetyText}>
+                  {f.text}
+                </Text>
+              ))}
+            </GlassSurface>
+          </Entrance>
         )}
 
         {selectedTab === 'active' && (
-          <ActiveTilesTab
-            medications={activeMedications}
-            isLoading={medicationsLoading}
-            extraLines={tileLines}
-            onAdd={openAdd}
-            onEdit={(med) => {
-              setEditingMedication(med);
-              setShowAddModal(true);
-            }}
-            onPause={handlePauseMedication}
-            onResume={handleResumeMedication}
-            onStop={handleStopMedication}
-            onRefill={openRefill}
-          />
+          <Entrance index={3}>
+            <ActiveTilesTab
+              medications={activeMedications}
+              isLoading={medicationsLoading}
+              extraLines={tileLines}
+              onAdd={openAdd}
+              onEdit={(med) => {
+                setEditingMedication(med);
+                setShowAddModal(true);
+              }}
+              onPause={handlePauseMedication}
+              onResume={handleResumeMedication}
+              onStop={handleStopMedication}
+              onRefill={openRefill}
+            />
+          </Entrance>
         )}
 
         {selectedTab === 'schedule' && (
-          <ScheduleTab
-            schedule={schedule}
-            isLoading={scheduleLoading}
-            onTakeDose={handleTakeDose}
-          />
+          <Entrance index={3}>
+            <ScheduleTab
+              schedule={schedule}
+              isLoading={scheduleLoading}
+              onTakeDose={handleTakeDose}
+            />
+          </Entrance>
         )}
 
         {selectedTab === 'schedule' && (
@@ -946,7 +955,9 @@ export default function MedicationsScreen() {
         )}
 
         {selectedTab === 'history' && (
-          <HistoryTab medications={medications} onResume={handleResumeMedication} />
+          <Entrance index={3}>
+            <HistoryTab medications={medications} onResume={handleResumeMedication} />
+          </Entrance>
         )}
       </ScrollView>
 
@@ -1011,11 +1022,20 @@ export default function MedicationsScreen() {
               loading={savingRefill}
               fullWidth
             />
-            <Button title="Cancel" variant="ghost" onPress={() => setRefillMed(null)} fullWidth />
+            <Pressable
+              onPress={() => setRefillMed(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel refill"
+              hitSlop={4}
+              style={({ pressed }) => [styles.refillCancel, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.refillCancelText}>Cancel</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -1057,9 +1077,9 @@ function ActiveTilesTab({
   if (medications.length === 0) {
     return (
       <View style={styles.emptyWrap}>
-        <Text style={styles.emptyTitle}>No active medications</Text>
+        <Text style={styles.emptyTitle}>Nothing here yet.</Text>
         <Text style={styles.emptyText}>
-          Add your medications to track doses and schedules.
+          Add what you take.
         </Text>
         <Pressable
           onPress={onAdd}
@@ -1073,35 +1093,21 @@ function ActiveTilesTab({
     );
   }
 
-  const rows: Medication[][] = [];
-  for (let i = 0; i < medications.length; i += 2) {
-    rows.push(medications.slice(i, i + 2));
-  }
-
   return (
-    <View style={styles.grid} accessibilityRole="list">
-      {rows.map((row, r) => (
-        <View key={r} style={styles.row}>
-          {row.map((med) => {
-            const globalIndex = r * 2 + row.indexOf(med);
-            return (
-              <MedTile
-                key={med.medication_id}
-                index={globalIndex}
-                medication={med}
-                extraLines={extraLines?.[med.medication_id]}
-                fullWidth={row.length === 1}
-                expanded={expandedId === med.medication_id}
-                onToggle={() => setExpandedId((cur) => (cur === med.medication_id ? null : med.medication_id))}
-                onEdit={() => { setExpandedId(null); onEdit(med); }}
-                onPause={() => { setExpandedId(null); onPause(med); }}
-                onResume={() => { setExpandedId(null); onResume(med); }}
-                onStop={() => { setExpandedId(null); onStop(med); }}
-                onRefill={() => { setExpandedId(null); onRefill(med); }}
-              />
-            );
-          })}
-        </View>
+    <View style={styles.medList} accessibilityRole="list">
+      {medications.map((med) => (
+        <MedTile
+          key={med.medication_id}
+          medication={med}
+          extraLines={extraLines?.[med.medication_id]}
+          expanded={expandedId === med.medication_id}
+          onToggle={() => setExpandedId((cur) => (cur === med.medication_id ? null : med.medication_id))}
+          onEdit={() => { setExpandedId(null); onEdit(med); }}
+          onPause={() => { setExpandedId(null); onPause(med); }}
+          onResume={() => { setExpandedId(null); onResume(med); }}
+          onStop={() => { setExpandedId(null); onStop(med); }}
+          onRefill={() => { setExpandedId(null); onRefill(med); }}
+        />
       ))}
     </View>
   );
@@ -1130,9 +1136,9 @@ function ScheduleTab({
   if (schedule.length === 0) {
     return (
       <View style={styles.emptyWrap}>
-        <Text style={styles.emptyTitle}>Nothing scheduled today</Text>
+        <Text style={styles.emptyTitle}>Nothing scheduled.</Text>
         <Text style={styles.emptyText}>
-          Add medications to see your daily schedule.
+          Add what you take.
         </Text>
       </View>
     );
@@ -1154,7 +1160,7 @@ function ScheduleTab({
         const items = groupedByTime[time];
         const done = items.filter((i) => i.taken).length;
         return (
-          <View key={time} style={styles.timeGroup}>
+          <GlassSurface key={time} strong style={styles.timeGroup}>
             <View style={styles.timeHead}>
               <Text style={styles.timeTitle}>{formatTime(time)}</Text>
               <Text style={styles.timeCount}>{done}/{items.length} taken</Text>
@@ -1166,7 +1172,7 @@ function ScheduleTab({
                 onTakeDose={() => onTakeDose(item.medication as any, item.scheduled_time)}
               />
             ))}
-          </View>
+          </GlassSurface>
         );
       })}
     </View>
@@ -1233,9 +1239,9 @@ function HistoryTab({ medications, onResume }: { medications: Medication[]; onRe
   if (medications.length === 0) {
     return (
       <View style={styles.emptyWrap}>
-        <Text style={styles.emptyTitle}>No history yet</Text>
+        <Text style={styles.emptyTitle}>No history.</Text>
         <Text style={styles.emptyText}>
-          Add medications to track your history.
+          Add what you take.
         </Text>
       </View>
     );
@@ -1244,8 +1250,8 @@ function HistoryTab({ medications, onResume }: { medications: Medication[]; onRe
   return (
     <View style={styles.historyContainer}>
       {pausedMeds.length > 0 ? (
-        <View style={styles.historyCard}>
-          <Text style={styles.pausedTitle}>Paused · resume anytime</Text>
+        <GlassSurface strong style={styles.historyCard}>
+          <Text style={styles.pausedTitle}>Paused</Text>
           {pausedMeds.map((med) => (
             <View key={med.medication_id} style={styles.historyItem}>
               <View style={styles.historyItemInfo}>
@@ -1263,22 +1269,20 @@ function HistoryTab({ medications, onResume }: { medications: Medication[]; onRe
               </Pressable>
             </View>
           ))}
-        </View>
+        </GlassSurface>
       ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.pickerRow}>
-          <Chip
+          <GlassChip
             label="All"
-            size="large"
             selected={!selectedMedication}
             onPress={() => setSelectedMedication(null)}
             accessibilityLabel="Show all medication history"
           />
           {medications.map((med) => (
-            <Chip
+            <GlassChip
               key={med.medication_id}
               label={med.name}
-              size="large"
               selected={selectedMedication === med.medication_id}
               onPress={() => setSelectedMedication(med.medication_id)}
               accessibilityLabel={`Show history for ${med.name}`}
@@ -1294,16 +1298,51 @@ function HistoryTab({ medications, onResume }: { medications: Medication[]; onRe
         </View>
       ) : history.length === 0 ? (
         <View style={styles.emptyWrap}>
-          <Text style={styles.emptyText}>No dose history recorded.</Text>
+          <Text style={styles.emptyText}>Nothing recorded yet.</Text>
         </View>
       ) : (
-        <View style={styles.historyCard}>
+        <GlassSurface strong style={styles.historyCard}>
           {history.map((event) => (
             <HistoryItem key={event.event_id} event={event} medications={medications} />
           ))}
-        </View>
+        </GlassSurface>
       )}
     </View>
+  );
+}
+
+// ── Glass filter chip: quiet hairline pill, white when on ────────────────
+// The shared Chip is a white pill everywhere — too loud for dark filter
+// rows. Selected wears white with dark text (the dashboard seg recipe).
+
+function GlassChip({
+  label,
+  selected,
+  onPress,
+  accessibilityLabel,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={accessibilityLabel ?? label}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.gchip,
+        selected && styles.gchipOn,
+        pressed && { opacity: 0.7 },
+      ]}
+    >
+      <Text style={[styles.gchipText, selected && styles.gchipTextOn]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1317,8 +1356,8 @@ function HistoryItem({
   medications: Medication[];
 }) {
   const medication = medications.find(m => m.medication_id === event.medication_id);
-  const statusDot = event.status === 'TAKEN' ? GV.fx.green :
-    event.status === 'MISSED' ? GV.muted : GV.fx.amber;
+  const statusDot = event.status === 'TAKEN' ? LG.card.mint :
+    event.status === 'MISSED' ? LG.card.danger : 'rgba(255,255,255,0.4)';
 
   return (
     <View style={styles.historyItem}>
@@ -1854,50 +1893,53 @@ export function AddMedicationModal({
 // Pills only for segmented + buttons. Times tabular-nums.
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: NAVY,
+    backgroundColor: LG.stage.bottom,
+  },
+  safe: {
+    flex: 1,
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 40,
-    gap: 12,
+    paddingHorizontal: 26,
+    paddingTop: 20,
+    paddingBottom: 48,
+    gap: 16,
   },
   headline: {
-    fontFamily: FONT.semi,
-    fontSize: 32,
-    lineHeight: 38,
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
     color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: -0.3,
+    textAlign: 'left',
   },
   sub: {
-    ...TYPE.body,
-    color: GV.fog,
-    textAlign: 'center',
-    alignSelf: 'center',
-    maxWidth: 330,
+    fontWeight: '400',
+    fontSize: 17,
+    lineHeight: 22,
+    color: 'rgba(233,240,255,0.66)',
+    textAlign: 'left',
     fontVariant: ['tabular-nums'],
   },
   progressWrap: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingTop: 2,
   },
   progressTrack: {
     flexDirection: 'row',
     width: 160,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
     overflow: 'hidden',
   },
   progressFill: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 2,
+    backgroundColor: LG.card.mint,
+    borderRadius: 3,
   },
   segmentTrack: {
     flexDirection: 'row',
@@ -1921,13 +1963,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   segmentText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 13,
     lineHeight: 18,
-    color: 'rgba(255, 255, 255, 0.75)',
+    letterSpacing: 0.2,
+    color: 'rgba(255, 255, 255, 0.72)',
   },
   segmentTextSelected: {
-    color: NAVY,
+    color: '#0B0F1A',
+    fontWeight: '700',
   },
   actionRow: {
     flexDirection: 'row',
@@ -1943,10 +1987,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   addBtnText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 15,
     lineHeight: 20,
-    color: NAVY,
+    color: '#0B0F1A',
   },
   scanBtn: {
     flex: 1,
@@ -1960,7 +2004,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   scanBtnText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 15,
     lineHeight: 20,
     color: '#FFFFFF',
@@ -1983,17 +2027,14 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.5)',
   },
   scanCard: {
-    backgroundColor: TILE_BG,
-    borderRadius: 8,
     padding: 16,
     gap: 4,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
   },
   scanTitle: {
-    fontFamily: FONT.semi,
-    fontSize: 15,
-    lineHeight: 20,
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 24,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
     marginBottom: 4,
   },
@@ -2011,41 +2052,36 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   scanName: {
-    fontFamily: FONT.semi,
-    fontSize: 14,
-    lineHeight: 18,
+    fontWeight: '600',
+    fontSize: 15,
+    lineHeight: 20,
     color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
   },
   scanSub: {
-    fontFamily: FONT.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
   },
   scanAddBtn: {
     minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: GV.teal,
   },
   scanAddText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 13,
     lineHeight: 18,
-    color: GV.teal,
+    color: LG.card.mint,
   },
   scanDoneBtn: {
     minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
   },
   scanDoneText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 13,
     lineHeight: 18,
     color: '#FFFFFF',
@@ -2153,37 +2189,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 300,
   },
-  // Reference grid — each cell is a relative wrap so the action
-  // menu can float ABOVE its own tile without resizing it.
-  grid: {
-    gap: 12,
-    marginTop: 4,
-  },
-  row: {
-    flexDirection: 'row',
+  // Med rows: translucent material without blur (repeated tiles),
+  // monochrome glyph + headline + quiet meta. ≥44pt by construction.
+  medList: {
     gap: 12,
   },
   tileWrap: {
-    flex: 1,
     position: 'relative',
-  },
-  tileWrapFull: {
-    flex: 1,
   },
   tileWrapOpen: {
     zIndex: 10,
     elevation: 8,
   },
-  // Menu sits directly ON the tile (zero gap): full-cover dim
-  // overlay with the three actions centered on the box.
+  // Menu floats over its own row: dim sheet, actions in a row.
   tileOverlay: {
     position: 'absolute',
-    top: 2,
-    left: 2,
-    right: 2,
-    bottom: 2,
-    borderRadius: 6,
-    backgroundColor: 'rgba(10, 14, 30, 0.78)',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
+    backgroundColor: 'rgba(5, 7, 15, 0.78)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2199,7 +2225,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   popoverBtnText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 13,
     lineHeight: 18,
     color: '#FFFFFF',
@@ -2211,102 +2237,104 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   refillBox: {
-    backgroundColor: '#10141F',
-    borderRadius: 16,
+    backgroundColor: LG.card.fillOpaque,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: 'rgba(255,255,255,0.12)',
     padding: 20,
     gap: 12,
   },
   refillTitle: {
-    fontFamily: FONT.semi,
-    fontSize: 17,
-    lineHeight: 22,
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
   },
   refillSub: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
   },
   refillError: {
-    ...TYPE.caption,
-    color: GV.danger,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: LG.card.danger,
   },
-  tile: {
-    width: '100%',
-    aspectRatio: 1.5,
-    borderRadius: 8,
-    overflow: 'hidden',
+  refillCancel: {
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    backgroundColor: TILE_BG,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    gap: 2,
   },
-  tileFull: {
-    aspectRatio: undefined,
-    minHeight: 112,
-  },
-  tileOn: {
-    borderColor: GV.teal,
-  },
-  statusDot: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  tileLabel: {
-    fontFamily: FONT.medium,
+  refillCancelText: {
+    fontWeight: '600',
     fontSize: 15,
     lineHeight: 20,
+    color: 'rgba(233,240,255,0.66)',
+  },
+  tile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    minHeight: 68,
+  },
+  tileGlyph: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileMain: {
+    flex: 1,
+    gap: 2,
+  },
+  tileChevron: {
+    fontSize: 22,
+    color: 'rgba(233,240,255,0.45)',
+  },
+  tileLabel: {
+    fontWeight: '600',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.1,
     color: '#FFFFFF',
-    textAlign: 'center',
-    paddingHorizontal: 6,
-    textShadowColor: 'rgba(0, 0, 0, 0.45)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
   tileMeta: {
-    fontFamily: FONT.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 0, 0, 0.45)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
   tileInsight: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     color: '#FFFFFF',
   },
   safetyCard: {
-    backgroundColor: '#2A1F0D',
-    borderRadius: 8,
-    padding: 14,
+    padding: 16,
     gap: 6,
-    borderWidth: 1,
-    borderColor: '#6B4E1F',
-    marginBottom: 12,
+    marginBottom: 4,
   },
   safetyTitle: {
-    fontFamily: FONT.semi,
-    fontSize: 14,
-    lineHeight: 18,
-    color: '#F5B453',
+    fontWeight: '600',
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.1,
+    color: '#FFFFFF',
   },
   safetyText: {
-    fontFamily: FONT.regular,
+    fontWeight: '400',
     fontSize: 13,
     lineHeight: 18,
-    color: '#F3E3C3',
+    color: 'rgba(233,240,255,0.80)',
   },
   emptyWrap: {
     alignItems: 'center',
@@ -2314,15 +2342,18 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   emptyTitle: {
-    fontFamily: FONT.semi,
-    fontSize: 18,
-    lineHeight: 24,
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
     textAlign: 'center',
   },
   emptyText: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(233,240,255,0.66)',
     textAlign: 'center',
     maxWidth: 300,
     marginBottom: 8,
@@ -2332,11 +2363,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   timeGroup: {
-    backgroundColor: TILE_BG,
-    borderRadius: 8,
     padding: 16,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
   },
   timeHead: {
     flexDirection: 'row',
@@ -2346,17 +2373,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   timeTitle: {
-    fontFamily: FONT.semi,
-    fontSize: 18,
+    fontWeight: '600',
+    fontSize: 20,
     lineHeight: 24,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
   timeCount: {
-    fontFamily: FONT.regular,
+    fontWeight: '400',
     fontSize: 13,
     lineHeight: 18,
-    color: GV.fog,
+    color: 'rgba(233,240,255,0.66)',
     fontVariant: ['tabular-nums'],
   },
   scheduleItem: {
@@ -2374,16 +2402,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   scheduleItemName: {
-    fontFamily: FONT.semi,
-    fontSize: 15,
-    lineHeight: 20,
+    fontWeight: '600',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.1,
     color: '#FFFFFF',
   },
   scheduleItemDetails: {
-    fontFamily: FONT.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
     marginTop: 2,
     fontVariant: ['tabular-nums'],
   },
@@ -2397,12 +2426,12 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: GV.teal,
+    backgroundColor: LG.card.mint,
     alignItems: 'center',
     justifyContent: 'center',
   },
   takenGlyph: {
-    color: '#06231B',
+    color: '#0B0F1A',
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 16,
@@ -2411,16 +2440,16 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   takenText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 13,
     lineHeight: 18,
     color: '#FFFFFF',
   },
   takenTime: {
-    fontFamily: FONT.regular,
+    fontWeight: '400',
     fontSize: 12,
     lineHeight: 16,
-    color: GV.fog,
+    color: 'rgba(233,240,255,0.66)',
     fontVariant: ['tabular-nums'],
   },
   takeBtn: {
@@ -2431,10 +2460,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   takeBtnText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 14,
     lineHeight: 18,
-    color: NAVY,
+    color: '#0B0F1A',
   },
   historyContainer: {
     gap: 12,
@@ -2446,16 +2475,13 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   historyCard: {
-    backgroundColor: TILE_BG,
-    borderRadius: 8,
     padding: 16,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
   },
   pausedTitle: {
-    fontFamily: FONT.semi,
-    fontSize: 15,
-    lineHeight: 20,
+    fontWeight: '600',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.1,
     color: '#FFFFFF',
     marginBottom: 4,
   },
@@ -2474,16 +2500,16 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   historyItemName: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 15,
     lineHeight: 20,
     color: '#FFFFFF',
   },
   historyItemDate: {
-    fontFamily: FONT.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
     marginTop: 2,
     fontVariant: ['tabular-nums'],
   },
@@ -2498,10 +2524,37 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   historyStatusText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 12,
     lineHeight: 16,
     color: 'rgba(255, 255, 255, 0.8)',
+    fontVariant: ['tabular-nums'],
+  },
+  // Quiet hairline filter pills (the shared Chip is a white pill — too
+  // loud for dark filter rows). Selected wears white with dark text.
+  gchip: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  gchipOn: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+  },
+  gchipText: {
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.72)',
+  },
+  gchipTextOn: {
+    color: '#0B0F1A',
+    fontWeight: '700',
   },
   modalContainer: {
     flex: 1,

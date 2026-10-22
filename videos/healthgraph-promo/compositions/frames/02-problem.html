@@ -1,0 +1,294 @@
+<template>
+<style>
+#root {
+  container-type: size;
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: #FFF9F1;
+}
+#pp-bg {
+  position: absolute;
+  inset: 0;
+  background: #FFF9F1;
+}
+#pp-grain-dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(#C9BCEE 1.5px, transparent 1.6px);
+  background-size: 56px 56px;
+  opacity: 0.35;
+}
+#pp-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 96px;
+  border-bottom: 2px solid #2A175D;
+  z-index: 20;
+}
+.pp-mono {
+  font-family: ui-monospace, Menlo, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 500;
+}
+#pp-topbar-label { font-size: 26px; color: #2A175D; }
+#pp-topbar-count { font-size: 26px; color: #2A175D; }
+#pp-headline {
+  position: absolute;
+  top: 140px;
+  left: 96px;
+  z-index: 20;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 500;
+  font-size: 84px;
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+  color: #2A175D;
+}
+#pp-headline em { font-style: normal; color: #7C5CD6; }
+#pp-viewport {
+  position: absolute;
+  top: 250px;
+  left: 0;
+  width: 1920px;
+  height: 620px;
+  overflow: hidden;
+  z-index: 10;
+}
+#pp-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3600px;
+  height: 620px;
+}
+.pp-station {
+  position: absolute;
+  top: 40px;
+  width: 560px;
+  height: 520px;
+}
+#pp-st-sleep { left: 120px; }
+#pp-st-meal { left: 1080px; }
+#pp-st-med { left: 2040px; }
+#pp-st-knot { left: 2900px; width: 620px; }
+.pp-card {
+  width: 420px;
+  margin: 0 auto;
+  background: #FFF9F1;
+  border: 2.5px solid #2A175D;
+  border-radius: 8px;
+  padding: 28px 32px 30px;
+}
+.pp-card-alt { background: #C9BCEE; }
+.pp-card-dark { background: #2A175D; border-color: #2A175D; }
+.pp-card-dark .pp-card-title { color: #FFF9F1; }
+.pp-card-dark .pp-card-sub { color: #C9BCEE; }
+.pp-ordinal { font-size: 24px; color: #7C5CD6; margin-bottom: 10px; }
+.pp-card-dark .pp-ordinal { color: #C9BCEE; }
+.pp-card-title {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 500;
+  font-size: 67px;
+  line-height: 0.96;
+  letter-spacing: -0.01em;
+  color: #2A175D;
+}
+.pp-card-sub { font-size: 24px; color: #2A175D; margin-top: 12px; }
+.pp-icon { display: block; margin-bottom: 14px; }
+.pp-ringrow { display: flex; gap: 26px; justify-content: center; margin-top: 26px; }
+.pp-ring { position: relative; width: 130px; height: 130px; }
+.pp-ring svg { width: 130px; height: 130px; transform: rotate(-90deg); }
+.pp-ring-track { fill: none; stroke: #C9BCEE; stroke-width: 14; }
+.pp-ring-fill { fill: none; stroke: #7C5CD6; stroke-width: 14; stroke-linecap: butt; }
+.pp-ring-dark .pp-ring-track { stroke: #341D73; }
+.pp-ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 34px;
+  color: #2A175D;
+}
+.pp-ring-dark .pp-ring-label { color: #2A175D; }
+#pp-leads { position: absolute; top: 0; left: 0; width: 3600px; height: 620px; overflow: visible; }
+#pp-leads path { fill: none; stroke: #7C5CD6; stroke-width: 6; stroke-linecap: round; }
+#pp-knot-svg { display: block; margin: 0 auto; overflow: visible; }
+#pp-knot-svg path { fill: none; stroke: #2A175D; stroke-width: 7; stroke-linecap: round; }
+#pp-knot-svg .pp-knot-accent { stroke: #7C5CD6; }
+.pp-edge {
+  position: absolute;
+  top: 330px;
+  width: 300px;
+  background: #2A175D;
+  border-radius: 8px;
+  padding: 20px 24px;
+  z-index: 15;
+}
+#pp-edge-dup { left: 2760px; }
+#pp-edge-bell { left: 3400px; }
+.pp-edge-tag { font-size: 22px; color: #C9BCEE; margin-bottom: 8px; }
+.pp-edge-line {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 34px;
+  line-height: 1.05;
+  color: #FFF9F1;
+}
+.pp-duprow {
+  display: flex;
+  justify-content: space-between;
+  border-top: 2px solid #7C5CD6;
+  padding: 8px 0;
+  font-size: 22px;
+  color: #FFF9F1;
+}
+#pp-knot-word {
+  text-align: center;
+  margin-top: 18px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 56px;
+  letter-spacing: -0.02em;
+  color: #2A175D;
+}
+</style>
+<div id="root" data-composition-id="02-problem" data-width="1920" data-height="1080">
+  <div id="pp-bg" class="clip" data-start="0" data-duration="25.749" data-track-index="0"></div>
+  <div id="pp-grain-dots" class="clip" data-start="0" data-duration="25.749" data-track-index="1"></div>
+  <div id="pp-topbar" class="clip" data-start="0" data-duration="25.749" data-track-index="2">
+    <div id="pp-topbar-label" class="pp-mono">The problem — 02</div>
+    <div id="pp-topbar-count" class="pp-mono">02 / 06</div>
+  </div>
+  <h1 id="pp-headline" class="clip" data-start="0" data-duration="25.749" data-track-index="3">SCATTERED <em>DATA</em></h1>
+  <div id="pp-viewport" class="clip" data-start="0" data-duration="25.749" data-track-index="4">
+    <div id="pp-world">
+      <svg id="pp-leads" viewBox="0 0 3600 620" preserveAspectRatio="none">
+        <path id="pp-lead-1" d="M 620 300 C 760 180, 880 420, 1040 300" />
+        <path id="pp-lead-2" d="M 1560 300 C 1700 170, 1840 430, 2000 300" />
+        <path id="pp-lead-3" d="M 2520 300 C 2660 200, 2760 400, 2920 300" />
+      </svg>
+      <section id="pp-st-sleep" class="pp-station">
+        <div class="pp-card">
+          <svg class="pp-icon" width="72" height="72" viewBox="0 0 72 72"><path d="M46 42 A18 18 0 1 1 30 14 A14 14 0 1 0 46 42 Z" fill="none" stroke="#7C5CD6" stroke-width="5" stroke-linejoin="round"/></svg>
+          <div class="pp-ordinal pp-mono">Station 01</div>
+          <div class="pp-card-title">SLEEP</div>
+          <div class="pp-card-sub pp-mono">Nightly · alone</div>
+        </div>
+        <div class="pp-ringrow">
+          <div class="pp-ring">
+            <svg viewBox="0 0 130 130"><circle class="pp-ring-track" cx="65" cy="65" r="52"/><circle class="pp-ring-fill" cx="65" cy="65" r="52" stroke-dasharray="327" stroke-dashoffset="124"/></svg>
+            <div class="pp-ring-label">62%</div>
+          </div>
+        </div>
+      </section>
+      <section id="pp-st-meal" class="pp-station">
+        <div class="pp-card pp-card-alt">
+          <svg class="pp-icon" width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="22" fill="none" stroke="#2A175D" stroke-width="5"/><path d="M36 14 L36 36 L50 44" fill="none" stroke="#2A175D" stroke-width="5" stroke-linecap="round"/></svg>
+          <div class="pp-ordinal pp-mono">Station 02</div>
+          <div class="pp-card-title">MEALS</div>
+          <div class="pp-card-sub pp-mono">Logged · twice</div>
+        </div>
+        <div class="pp-ringrow">
+          <div class="pp-ring">
+            <svg viewBox="0 0 130 130"><circle class="pp-ring-track" cx="65" cy="65" r="52"/><circle class="pp-ring-fill" cx="65" cy="65" r="52" stroke-dasharray="327" stroke-dashoffset="180"/></svg>
+            <div class="pp-ring-label">45%</div>
+          </div>
+        </div>
+      </section>
+      <section id="pp-st-med" class="pp-station">
+        <div class="pp-card pp-card-dark">
+          <svg class="pp-icon" width="72" height="72" viewBox="0 0 72 72"><rect x="14" y="26" width="44" height="30" rx="4" fill="none" stroke="#FFF9F1" stroke-width="5"/><path d="M14 36 L58 36 M28 26 L28 56" stroke="#7C5CD6" stroke-width="5"/></svg>
+          <div class="pp-ordinal pp-mono">Station 03</div>
+          <div class="pp-card-title">MEDS</div>
+          <div class="pp-card-sub pp-mono">Elsewhere · missed</div>
+        </div>
+        <div class="pp-ringrow">
+          <div class="pp-ring pp-ring-dark">
+            <svg viewBox="0 0 130 130"><circle class="pp-ring-track" cx="65" cy="65" r="52"/><circle class="pp-ring-fill" cx="65" cy="65" r="52" stroke-dasharray="327" stroke-dashoffset="229"/></svg>
+            <div class="pp-ring-label">30%</div>
+          </div>
+        </div>
+      </section>
+      <div id="pp-edge-dup" class="pp-edge">
+        <div class="pp-edge-tag pp-mono">Logged 2×</div>
+        <div class="pp-edge-line">Same meal, twice</div>
+        <div style="margin-top:12px">
+          <div class="pp-duprow pp-mono"><span>Oat bowl</span><span>320</span></div>
+          <div class="pp-duprow pp-mono"><span>Oat bowl</span><span>320</span></div>
+        </div>
+      </div>
+      <div id="pp-edge-bell" class="pp-edge">
+        <div class="pp-edge-tag pp-mono">Missed</div>
+        <svg width="54" height="54" viewBox="0 0 54 54"><path d="M27 8 C18 8 15 20 15 28 L10 36 L44 36 L39 28 C39 20 36 8 27 8 Z M23 42 A4 4 0 0 0 31 42" fill="none" stroke="#FFF9F1" stroke-width="4" stroke-linejoin="round"/></svg>
+        <div class="pp-edge-line">Dose reminder, other app</div>
+      </div>
+      <section id="pp-st-knot" class="pp-station">
+        <svg id="pp-knot-svg" width="420" height="330" viewBox="0 0 420 330">
+          <path id="pp-knot-main" d="M60 200 C40 90 180 40 230 110 C280 180 150 220 190 270 C230 320 340 280 330 200 C320 120 200 130 210 190 C218 240 320 210 300 260 C285 295 200 280 160 250 C120 220 90 250 110 280" />
+          <path id="pp-knot-accent" class="pp-knot-accent" d="M90 150 C150 100 260 90 320 150 C370 200 340 280 260 290" />
+        </svg>
+        <div class="pp-ringrow">
+          <div class="pp-ring">
+            <svg viewBox="0 0 130 130"><circle class="pp-ring-track" cx="65" cy="65" r="52"/><circle class="pp-ring-fill" cx="65" cy="65" r="52" stroke-dasharray="327" stroke-dashoffset="163"/></svg>
+            <div class="pp-ring-label">½</div>
+          </div>
+          <div class="pp-ring">
+            <svg viewBox="0 0 130 130"><circle class="pp-ring-track" cx="65" cy="65" r="52"/><circle class="pp-ring-fill" cx="65" cy="65" r="52" stroke-dasharray="327" stroke-dashoffset="220"/></svg>
+            <div class="pp-ring-label">⅓</div>
+          </div>
+        </div>
+        <div id="pp-knot-word">FRAGMENTED</div>
+      </section>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  window.__timelines = window.__timelines || {};
+  var tl = gsap.timeline({ paused: true });
+  window.__timelines["02-problem"] = tl;
+  function drawPrep(sel) {
+    var el = document.querySelector(sel);
+    var len = el.getTotalLength();
+    el.style.strokeDasharray = len;
+    el.style.strokeDashoffset = len;
+    return len;
+  }
+  var l1 = drawPrep("#pp-lead-1");
+  var l2 = drawPrep("#pp-lead-2");
+  var l3 = drawPrep("#pp-lead-3");
+  var k1 = drawPrep("#pp-knot-main");
+  var k2 = drawPrep("#pp-knot-accent");
+  tl.fromTo("#pp-topbar", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 0);
+  tl.fromTo("#pp-headline", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7 }, 0.1);
+  tl.fromTo("#pp-world", { x: 0 }, { x: -960, duration: 2.6, ease: "power2.inOut" }, 1.6);
+  tl.fromTo("#pp-st-sleep", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.8 }, 0.3);
+  tl.fromTo("#pp-lead-1", { strokeDashoffset: l1 }, { strokeDashoffset: 0, duration: 1.4, ease: "power1.inOut" }, 2.2);
+  tl.fromTo("#pp-st-meal", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.8 }, 2.6);
+  tl.fromTo("#pp-world", { x: -960 }, { x: -1920, duration: 2.6, ease: "power2.inOut" }, 4.2);
+  tl.fromTo("#pp-lead-2", { strokeDashoffset: l2 }, { strokeDashoffset: 0, duration: 1.4, ease: "power1.inOut" }, 4.6);
+  tl.fromTo("#pp-st-med", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.8 }, 5.2);
+  tl.fromTo("#pp-lead-3", { strokeDashoffset: l3 }, { strokeDashoffset: 0, duration: 1.2, ease: "power1.inOut" }, 6.4);
+  tl.fromTo("#pp-world", { x: -1920 }, { x: -2260, duration: 3.0, ease: "power2.inOut" }, 7.5);
+  tl.fromTo("#pp-st-knot", { opacity: 0, scale: 0.92 }, { opacity: 1, scale: 1, duration: 0.9, ease: "power2.out" }, 8.2);
+  tl.fromTo("#pp-knot-main", { strokeDashoffset: k1 }, { strokeDashoffset: 0, duration: 3.4, ease: "power1.inOut" }, 8.6);
+  tl.fromTo("#pp-knot-accent", { strokeDashoffset: k2 }, { strokeDashoffset: 0, duration: 2.2, ease: "power1.inOut" }, 10.2);
+  tl.fromTo("#pp-knot-word", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.8 }, 11.4);
+  tl.fromTo("#pp-world", { scale: 1 }, { scale: 1.08, transformOrigin: "3160px 300px", duration: 3.0, ease: "power1.inOut" }, 10.5);
+  tl.fromTo("#pp-knot-svg", { rotation: 0 }, { rotation: 4, transformOrigin: "50% 50%", duration: 2.4, ease: "power1.inOut" }, 14.2);
+  tl.fromTo("#pp-world", { scale: 1.08 }, { scale: 1.03, transformOrigin: "3160px 300px", duration: 2.4, ease: "power1.inOut" }, 14.2);
+  tl.fromTo("#pp-edge-dup", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.9 }, 15.2);
+  tl.fromTo("#pp-edge-bell", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.9 }, 16.6);
+  tl.seek(0);
+})();
+</script>
+</template>

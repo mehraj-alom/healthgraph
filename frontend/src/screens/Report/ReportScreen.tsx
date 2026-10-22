@@ -18,8 +18,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { Button, Card, EmptyState, SectionHeader } from '@/components';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { Button, EmptyState } from '@/components';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { getCachedPatientId } from '@/services/patientIdentity';
 import { todayKey } from '@/screens/Onboarding/momentum';
 import { getMedications } from '@/db/queries/medications';
@@ -36,9 +39,14 @@ import {
   type CaregiverReportMed,
   type ReportInput,
 } from '@/services/doctorReportHtml';
+import { PaywallGate } from '@/components/PaywallGate';
+import { tierUnlocks, usePremiumTier } from '@/services/premium';
 
 const WINDOW_DAYS = 30;
 const CAREGIVER_WINDOW_DAYS = 7;
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 function shiftDay(today: string, delta: number): string {
   const d = new Date(`${today}T12:00:00`);
@@ -61,6 +69,7 @@ export default function ReportScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const mounted = useRef(true);
+  const tier = usePremiumTier();
 
   const load = useCallback(async () => {
     try {
@@ -212,107 +221,125 @@ export default function ReportScreen() {
   const showingCaregiver = variant === 'caregiver';
   const hasContent = showingCaregiver ? caregiverMeds.length > 0 : input !== null;
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>{showingCaregiver ? 'Caregiver report.' : 'Doctor report.'}</Text>
-        <Text style={styles.sub}>
-          {showingCaregiver
-            ? 'Last 7 days · schedule, recent taking, and supply for a family member or caregiver.'
-            : 'Last 30 days, one PDF for appointments.'}
-        </Text>
+  // Element only — creating it runs no hooks; the gate decides whether it
+  // ever renders, so paid users see byte-identical UI.
+  const belowHeader = (
+    <>
+      <View style={styles.variantRow}>
+        <Button
+          title="Doctor"
+          variant={showingCaregiver ? 'ghost' : 'secondary'}
+          onPress={() => setVariant('doctor')}
+          style={{ ...styles.variantBtn, ...(!showingCaregiver ? styles.variantActive : null) }}
+          textStyle={!showingCaregiver ? styles.variantActiveText : styles.ghostText}
+        />
+        <Button
+          title="Caregiver"
+          variant={showingCaregiver ? 'secondary' : 'ghost'}
+          onPress={() => setVariant('caregiver')}
+          style={{ ...styles.variantBtn, ...(showingCaregiver ? styles.variantActive : null) }}
+          textStyle={showingCaregiver ? styles.variantActiveText : styles.ghostText}
+        />
+      </View>
 
-        <View style={styles.variantRow}>
-          <Button
-            title="Doctor"
-            variant={showingCaregiver ? 'ghost' : 'primary'}
-            onPress={() => setVariant('doctor')}
-            style={styles.variantBtn}
-          />
-          <Button
-            title="Caregiver"
-            variant={showingCaregiver ? 'primary' : 'ghost'}
-            onPress={() => setVariant('caregiver')}
-            style={styles.variantBtn}
-          />
+      {isLoading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={LG.card.mint} />
+          <Text style={styles.loading}>Gathering your data on this device…</Text>
         </View>
-
-        {isLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color="#4FD1C5" />
-            <Text style={styles.body}>Gathering your data on this device…</Text>
-          </View>
-        ) : !hasContent ? (
-          <EmptyState
-            title="Nothing to report yet"
-            message="Log medications, sleep, or weight — then come back for your PDF."
+      ) : !hasContent ? (
+        <EmptyState
+          title="Nothing to report yet"
+          message="Log medications, sleep, or weight — then come back for your PDF."
+        />
+      ) : showingCaregiver ? (
+        <>
+          <Text style={styles.sectionTitle}>Included</Text>
+          <GlassSurface strong style={styles.card}>
+            <Text style={styles.line}>{`${caregiverMeds.length} ${caregiverMeds.length === 1 ? 'medicine' : 'medicines'} with recent taking`}</Text>
+            <Text style={styles.line}>Schedule and supply included</Text>
+          </GlassSurface>
+          <Button
+            title={generating ? 'Creating PDF…' : 'Generate caregiver PDF'}
+            variant="secondary"
+            onPress={() => void generate()}
+            disabled={generating}
+            fullWidth
+            size="large"
+            style={styles.genBtn}
+            textStyle={styles.genBtnText}
           />
-        ) : showingCaregiver ? (
-          <>
-            <SectionHeader dark title="Included" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <Text style={styles.line}>{`${caregiverMeds.length} ${caregiverMeds.length === 1 ? 'medicine' : 'medicines'} with recent taking`}</Text>
-              <Text style={styles.line}>Schedule and supply included</Text>
-            </Card>
-            <Button
-              title={generating ? 'Creating PDF…' : 'Generate caregiver PDF'}
-              onPress={() => void generate()}
-              disabled={generating}
-              fullWidth
-              size="large"
-              style={styles.genBtn}
-              textStyle={styles.genBtnText}
-            />
-          </>
-        ) : (
-          <>
-            <SectionHeader dark title="Included" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <Text style={styles.line}>{`${input!.meds.length} ${input!.meds.length === 1 ? 'medication' : 'medications'} with adherence`}</Text>
-              <Text style={styles.line}>{`${input!.observations.length} recorded ${input!.observations.length === 1 ? 'observation' : 'observations'}`}</Text>
-              <Text style={styles.line}>{input!.sleep ? `Sleep · ${input!.sleep.nights} nights` : 'Sleep · none logged'}</Text>
-              <Text style={styles.line}>{input!.weight ? `Weight · ${input!.weight.startKg} → ${input!.weight.endKg} kg` : 'Weight · none logged'}</Text>
-            </Card>
-            <Button
-              title={generating ? 'Creating PDF…' : 'Generate PDF'}
-              onPress={() => void generate()}
-              disabled={generating}
-              fullWidth
-              size="large"
-              style={styles.genBtn}
-              textStyle={styles.genBtnText}
-            />
-          </>
-        )}
-        <Text style={styles.disclaimer}>
-          Generated on-device from your tracking data. Sharing sends it wherever you choose — nothing is uploaded to create it.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+        </>
+      ) : (
+        <>
+          <Text style={styles.sectionTitle}>Included</Text>
+          <GlassSurface strong style={styles.card}>
+            <Text style={styles.line}>{`${input!.meds.length} ${input!.meds.length === 1 ? 'medication' : 'medications'} with adherence`}</Text>
+            <Text style={styles.line}>{`${input!.observations.length} recorded ${input!.observations.length === 1 ? 'observation' : 'observations'}`}</Text>
+            <Text style={styles.line}>{input!.sleep ? `Sleep · ${input!.sleep.nights} nights` : 'Sleep · none logged'}</Text>
+            <Text style={styles.line}>{input!.weight ? `Weight · ${input!.weight.startKg} → ${input!.weight.endKg} kg` : 'Weight · none logged'}</Text>
+          </GlassSurface>
+          <Button
+            title={generating ? 'Creating PDF…' : 'Generate PDF'}
+            variant="secondary"
+            onPress={() => void generate()}
+            disabled={generating}
+            fullWidth
+            size="large"
+            style={styles.genBtn}
+            textStyle={styles.genBtnText}
+          />
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>{showingCaregiver ? 'Caregiver report' : 'Doctor report'}</Text>
+          <Text style={styles.sub}>
+            {showingCaregiver
+              ? 'Last 7 days · schedule, recent taking, and supply for a family member or caregiver.'
+              : 'Last 30 days, one PDF for appointments.'}
+          </Text>
+
+          {tierUnlocks(tier, 'reportExport') ? belowHeader : (
+            <View style={styles.gateWrap}>
+              <PaywallGate feature="reportExport" title="Reports">
+                {belowHeader}
+              </PaywallGate>
+            </View>
+          )}
+          <Text style={styles.disclaimer}>
+            Generated on-device from your tracking data. Sharing sends it wherever you choose — nothing is uploaded to create it.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  gateWrap: { paddingTop: 4 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
   center: { alignItems: 'center', paddingVertical: 40, gap: 12 },
-  body: { color: '#8EA0B8', fontSize: 14, textAlign: 'center' },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  line: { ...TYPE.body, color: '#FFFFFF', paddingVertical: 4 },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  card: { padding: 16 },
+  line: { fontWeight: '400', fontSize: 15, lineHeight: 22, color: '#FFFFFF', paddingVertical: 4 },
   variantRow: { flexDirection: 'row', gap: 8 },
   variantBtn: { flex: 1 },
-  genBtn: { backgroundColor: '#4FD1C5' },
-  genBtnText: { color: '#062A26' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  variantActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  variantActiveText: { color: '#0B0F1A' },
+  ghostText: { color: '#FFFFFF' },
+  genBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  genBtnText: { color: '#0B0F1A' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
 });

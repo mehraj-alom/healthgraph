@@ -22,10 +22,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Button, Card, EmptyState, SectionHeader } from '@/components';
+import { Button, EmptyState } from '@/components';
 import { EngineGraph } from '@/components/EngineGraph';
-import { HealthFact } from '@/components/HealthFact';
-import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import { SPACE } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
 import { TILE_TONES } from '@/theme/tones';
 import { useSleepEngine } from '@/hooks/useSleepEngine';
 import { describeReminder, type SleepReminderState } from '@/services/sleepReminderPlan';
@@ -34,6 +36,9 @@ import {
   formatSleepDuration,
   type SleepNight,
 } from '@/screens/SleepEngine/sleepEngine';
+
+const SECONDARY = 'rgba(233,240,255,0.66)';
+const TERTIARY = 'rgba(233,240,255,0.45)';
 
 const QUALITY_LABELS: Record<number, string> = {
   1: 'Very poor',
@@ -109,8 +114,8 @@ function BedtimeReminderSection() {
   const pad = (n: number) => String(n).padStart(2, '0');
   return (
     <>
-      <SectionHeader dark title="Bedtime reminder" titleStyle={styles.histTitle} />
-      <Card style={styles.darkCard}>
+      <Text style={styles.sectionTitle}>Bedtime reminder</Text>
+      <GlassSurface strong style={styles.card}>
         {!loaded ? (
           <Text style={styles.avgSub}>Loading…</Text>
         ) : (
@@ -153,6 +158,7 @@ function BedtimeReminderSection() {
             <Text style={styles.avgSub}>{describeReminder(state)}</Text>
             <Button
               title={saving ? 'Saving…' : 'Save reminder'}
+              variant="secondary"
               onPress={() => void save()}
               disabled={saving}
               fullWidth
@@ -162,7 +168,7 @@ function BedtimeReminderSection() {
             {msg ? <Text style={styles.avgSub}>{msg}</Text> : null}
           </>
         )}
-      </Card>
+      </GlassSurface>
     </>
   );
 }
@@ -184,138 +190,134 @@ export default function SleepEngineScreen() {
     .map((n) => ({ date: n.date, value: Math.round((n.durationMinutes / 60) * 10) / 10 }));
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Sleep.</Text>
-        <Text style={styles.sub}>Logged nights only.</Text>
+    <View style={styles.root}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Text style={styles.title}>Sleep</Text>
+          <Text style={styles.sub}>Logged nights only.</Text>
 
-        {isLoading ? (
-          <>
-            <Text style={styles.loading}>Loading…</Text>
-            <HealthFact style={styles.fact} />
-          </>
-        ) : summary.loggedNights === 0 ? (
-          <EmptyState
-            title="No sleep logged yet"
-            message="Log last night's sleep to begin."
-          />
-        ) : (
-          <>
-            <SectionHeader dark title="Average" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <Text style={styles.avgValue}>
-                {summary.avgMinutes != null ? formatSleepDuration(summary.avgMinutes) : '—'}
-              </Text>
-              <Text style={styles.avgSub}>
-                {`Across ${summary.loggedNights} ${summary.loggedNights === 1 ? 'night' : 'nights'} (last 28 days)`}
-              </Text>
-              {changeLine ? <Text style={styles.change}>{changeLine}</Text> : null}
-            </Card>
-
-            {consistencyLine ? (
-              <>
-                <SectionHeader dark title="Bedtime consistency" titleStyle={styles.histTitle} />
-                <Card style={styles.darkCard}>
-                  <Text style={styles.change}>{consistencyLine}</Text>
-                  <Text style={styles.provenance}>From nights with a logged bedtime (last 7 days).</Text>
-                </Card>
-              </>
-            ) : null}
-
-            <BedtimeReminderSection />
-
-            <SectionHeader dark title="This week" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <View style={styles.strip}>
-                {week.map((d) => (
-                  <View key={d.date} style={styles.cell}>
-                    <View
-                      style={[styles.bar, d.logged ? styles.barOn : styles.barOff]}
-                      accessibilityLabel={`${d.date} ${d.logged ? `slept ${formatSleepDuration(d.durationMinutes ?? 0)}` : 'no entry'}`}
-                    />
-                    <Text style={styles.cellDay}>{d.date.slice(8)}</Text>
-                  </View>
-                ))}
-              </View>
-              <Text style={styles.weekTotal}>
-                {loggedWeek === 0
-                  ? 'Nothing recorded this week.'
-                  : `${loggedWeek} ${loggedWeek === 1 ? 'night' : 'nights'} logged this week.`}
-              </Text>
-            </Card>
-
-            <SectionHeader dark title="Sleep graph" titleStyle={styles.histTitle} />
-            <Card style={styles.darkCard}>
-              <EngineGraph points={graphPoints} tone={TILE_TONES.sleep[1]} decimals={1} />
-              <Text style={styles.avgSub}>
-                {`${graphPoints.length} ${graphPoints.length === 1 ? 'night' : 'nights'}`}
-              </Text>
-            </Card>
-
-            <SectionHeader dark title="Recent nights" titleStyle={styles.histTitle} />
-            <View style={styles.list}>
-              {[...nights]
-                .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-                .slice(0, 14)
-                .map((night) => (
-                  <Card key={night.date} style={styles.darkCard}>
-                    <View style={styles.rowTop}>
-                      <View style={styles.rowMain}>
-                        <Text style={styles.rowTitle}>
-                          {formatSleepDuration(night.durationMinutes)}
-                        </Text>
-                        <Text style={styles.rowSub}>{nightSub(night)}</Text>
-                      </View>
-                    </View>
-                  </Card>
-                ))}
+          {isLoading ? (
+            <View style={styles.center}>
+              <Text style={styles.loading}>Loading…</Text>
             </View>
-          </>
-        )}
+          ) : summary.loggedNights === 0 ? (
+            <EmptyState
+              title="No sleep logged yet"
+              message="Log last night's sleep to begin."
+            />
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>Average</Text>
+              <GlassSurface strong style={styles.card}>
+                <Text style={styles.avgValue}>
+                  {summary.avgMinutes != null ? formatSleepDuration(summary.avgMinutes) : '—'}
+                </Text>
+                <Text style={styles.avgSub}>
+                  {`Across ${summary.loggedNights} ${summary.loggedNights === 1 ? 'night' : 'nights'} (last 28 days)`}
+                </Text>
+                {changeLine ? <Text style={styles.change}>{changeLine}</Text> : null}
+              </GlassSurface>
 
-        <Button
-          title="Log sleep"
-          onPress={goLog}
-          fullWidth
-          size="large"
-          style={styles.logBtn}
-          textStyle={styles.logBtnText}
-        />
-        <Text style={styles.disclaimer}>
-          From your check-ins on this device. Tracking only — not medical advice, diagnosis, or treatment.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+              {consistencyLine ? (
+                <>
+                  <Text style={styles.sectionTitle}>Bedtime consistency</Text>
+                  <GlassSurface strong style={styles.card}>
+                    <Text style={styles.change}>{consistencyLine}</Text>
+                    <Text style={styles.provenance}>From nights with a logged bedtime (last 7 days).</Text>
+                  </GlassSurface>
+                </>
+              ) : null}
+
+              <BedtimeReminderSection />
+
+              <Text style={styles.sectionTitle}>This week</Text>
+              <GlassSurface strong style={styles.card}>
+                <View style={styles.strip}>
+                  {week.map((d) => (
+                    <View key={d.date} style={styles.cell}>
+                      <View
+                        style={[styles.bar, d.logged ? styles.barOn : styles.barOff]}
+                        accessibilityLabel={`${d.date} ${d.logged ? `slept ${formatSleepDuration(d.durationMinutes ?? 0)}` : 'no entry'}`}
+                      />
+                      <Text style={styles.cellDay}>{d.date.slice(8)}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.weekTotal}>
+                  {loggedWeek === 0
+                    ? 'Nothing recorded this week.'
+                    : `${loggedWeek} ${loggedWeek === 1 ? 'night' : 'nights'} logged this week.`}
+                </Text>
+              </GlassSurface>
+
+              <Text style={styles.sectionTitle}>Sleep graph</Text>
+              <GlassSurface strong style={styles.card}>
+                <EngineGraph points={graphPoints} tone={TILE_TONES.sleep[1]} decimals={1} />
+                <Text style={styles.avgSub}>
+                  {`${graphPoints.length} ${graphPoints.length === 1 ? 'night' : 'nights'}`}
+                </Text>
+              </GlassSurface>
+
+              <Text style={styles.sectionTitle}>Recent nights</Text>
+              <View style={styles.list}>
+                {[...nights]
+                  .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+                  .slice(0, 14)
+                  .map((night) => (
+                    <GlassSurface key={night.date} strong style={styles.card}>
+                      <View style={styles.rowTop}>
+                        <View style={styles.rowMain}>
+                          <Text style={styles.rowTitle}>
+                            {formatSleepDuration(night.durationMinutes)}
+                          </Text>
+                          <Text style={styles.rowSub}>{nightSub(night)}</Text>
+                        </View>
+                      </View>
+                    </GlassSurface>
+                  ))}
+              </View>
+            </>
+          )}
+
+          <Button
+            title="Log sleep"
+            variant="secondary"
+            onPress={goLog}
+            fullWidth
+            size="large"
+            style={styles.logBtn}
+            textStyle={styles.logBtnText}
+          />
+          <Text style={styles.disclaimer}>
+            From your check-ins on this device. Tracking only — not medical advice, diagnosis, or treatment.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080A11' },
-  content: { paddingHorizontal: SPACE.screenH, paddingVertical: SPACE.sectionGap, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: FONT.semi, fontSize: 24, lineHeight: 30, letterSpacing: -0.3, color: '#FFFFFF', textAlign: 'center' },
-  sub: { ...TYPE.body, color: GV.fog, textAlign: 'center' },
-  histTitle: { fontSize: 20, lineHeight: 24, letterSpacing: -0.3 },
-  loading: { ...TYPE.body, color: GV.fog, textAlign: 'center', marginTop: 16 },
-  fact: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  darkCard: {
-    backgroundColor: '#10141F',
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  avgValue: { ...TYPE.display, fontSize: 40, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  avgSub: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
-  change: { ...TYPE.body, color: '#E8ECF1', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
-  provenance: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
+  root: { flex: 1, backgroundColor: '#05070F' },
+  safe: { flex: 1 },
+  content: { paddingHorizontal: SPACE.screenH, paddingVertical: 12, paddingBottom: 32, gap: 12 },
+  title: { fontWeight: '600', fontSize: 34, lineHeight: 41, letterSpacing: -0.8, color: '#FFFFFF', textAlign: 'center' },
+  sub: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center' },
+  sectionTitle: { fontWeight: '600', fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: '#FFFFFF', marginTop: 8 },
+  loading: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: SECONDARY, textAlign: 'center', marginTop: 16 },
+  center: { alignItems: 'center', paddingVertical: 24 },
+  card: { padding: 16 },
+  avgValue: { fontWeight: '600', fontSize: 40, lineHeight: 48, color: '#FFFFFF', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  avgSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 4, fontVariant: ['tabular-nums'] },
+  change: { fontWeight: '400', fontSize: 15, lineHeight: 21, color: '#FFFFFF', textAlign: 'center', marginTop: 8, fontVariant: ['tabular-nums'] },
+  provenance: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center', marginTop: 8 },
   timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
   stepper: { alignItems: 'center', gap: 4 },
   stepBtn: { minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  stepText: { fontSize: 26, color: '#FFFFFF', fontFamily: FONT.semi },
-  timeValue: { fontSize: 44, lineHeight: 50, color: '#FFFFFF', fontFamily: FONT.semi, fontVariant: ['tabular-nums'] },
-  timeColon: { fontSize: 40, color: GV.fog, fontFamily: FONT.semi },
+  stepText: { fontWeight: '600', fontSize: 26, lineHeight: 32, color: '#FFFFFF' },
+  timeValue: { fontWeight: '600', fontSize: 44, lineHeight: 50, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  timeColon: { fontWeight: '600', fontSize: 40, lineHeight: 46, color: SECONDARY },
   toggle: {
     borderRadius: 9999,
     borderWidth: 1.5,
@@ -325,24 +327,24 @@ const styles = StyleSheet.create({
     minWidth: 84,
     alignItems: 'center',
   },
-  toggleOn: { backgroundColor: '#4FD1C5', borderColor: '#4FD1C5' },
-  toggleText: { ...TYPE.chip, color: GV.fog },
-  toggleTextOn: { color: '#062A26' },
-  remindBtn: { backgroundColor: '#4FD1C5', marginTop: 8 },
-  remindBtnText: { color: '#062A26' },
+  toggleOn: { backgroundColor: LG.card.mint, borderColor: LG.card.mint },
+  toggleText: { fontWeight: '600', fontSize: 13, lineHeight: 18, color: SECONDARY },
+  toggleTextOn: { color: '#0B0F1A' },
+  remindBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF', marginTop: 8 },
+  remindBtnText: { color: '#0B0F1A' },
   strip: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   cell: { alignItems: 'center', gap: 6, minWidth: 32 },
   bar: { width: 16, height: 44, borderRadius: 8, justifyContent: 'flex-end' },
   barOn: { backgroundColor: TILE_TONES.sleep[1] },
   barOff: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)' },
-  cellDay: { ...TYPE.caption, fontSize: 12, color: GV.fog, fontVariant: ['tabular-nums'] },
-  weekTotal: { ...TYPE.caption, color: GV.fog, textAlign: 'center', marginTop: 8 },
-  list: { gap: SPACE.cardGap },
+  cellDay: { fontWeight: '400', fontSize: 12, lineHeight: 16, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  weekTotal: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, textAlign: 'center', marginTop: 8 },
+  list: { gap: 12 },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   rowMain: { flex: 1, gap: 4 },
-  rowTitle: { ...TYPE.button, fontSize: 17, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
-  rowSub: { ...TYPE.caption, color: GV.fog, fontVariant: ['tabular-nums'] },
-  logBtn: { backgroundColor: '#4FD1C5' },
-  logBtnText: { color: '#062A26' },
-  disclaimer: { ...TYPE.caption, color: GV.fog, textAlign: 'center' },
+  rowTitle: { fontWeight: '600', fontSize: 17, lineHeight: 22, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  rowSub: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: SECONDARY, fontVariant: ['tabular-nums'] },
+  logBtn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  logBtnText: { color: '#0B0F1A' },
+  disclaimer: { fontWeight: '400', fontSize: 13, lineHeight: 18, color: TERTIARY, textAlign: 'center' },
 });

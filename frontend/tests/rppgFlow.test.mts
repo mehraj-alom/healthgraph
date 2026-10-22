@@ -52,10 +52,14 @@ const RPPG_PREVIEW = 'modules/healthgraph-rppg/src/RppgCameraPreview.tsx';
 
 test('red-button tab lands on the unified pulse instrument', () => {
   const app = src(APP);
-  assert.ok(
-    app.includes('<Tab.Screen name="PpgMeasure" component={PulseInstrumentScreen}'),
-    'PpgMeasure tab must render the instrument',
-  );
+  // The tab renders the instrument. The liquid-glass redesign wraps the
+  // screen in <LiquidTabFlow>, so accept either shape — what matters is
+  // that the instrument is mounted for the PpgMeasure tab.
+  const rendersInstrument =
+    app.includes('<Tab.Screen name="PpgMeasure" component={PulseInstrumentScreen}') ||
+    (app.includes('<Tab.Screen name="PpgMeasure"') &&
+      app.includes('<PulseInstrumentScreen />'));
+  assert.ok(rendersInstrument, 'PpgMeasure tab must render the instrument');
   const tab = src(TABBAR);
   assert.ok(tab.includes("'PpgMeasure'"), 'tab bar still targets PpgMeasure');
   assert.ok(tab.includes('Measure pulse'), 'accessibility label intact');

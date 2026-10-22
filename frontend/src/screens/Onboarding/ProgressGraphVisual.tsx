@@ -173,11 +173,6 @@ export function ProgressGraphVisual({
         />
       ) : null}
 
-      <Animated.View style={[styles.captionWrap, lineStyle]}>
-        <Text style={styles.caption}>
-          Illustration only. Your data appears after you start tracking.
-        </Text>
-      </Animated.View>
     </View>
   );
 }
@@ -213,16 +208,5 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: 'rgba(124, 245, 211, 0.25)',
-  },
-  captionWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  caption: {
-    ...TYPE.caption,
-    color: GV.fog,
-    textAlign: 'center',
   },
 });

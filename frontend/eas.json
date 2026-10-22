@@ -12,8 +12,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_ASSET_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1",
-        "EXPO_PUBLIC_ANATOMY_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1"
+        "EXPO_PUBLIC_ASSET_CDN_URL": "https://api.healthgraph.shop/assets",
+        "EXPO_PUBLIC_ANATOMY_CDN_URL": "https://api.healthgraph.shop/assets"
       }
     },
     "preview": {
@@ -24,8 +24,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.healthgraph.shop",
-        "EXPO_PUBLIC_ASSET_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1",
-        "EXPO_PUBLIC_ANATOMY_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1"
+        "EXPO_PUBLIC_ASSET_CDN_URL": "https://api.healthgraph.shop/assets",
+        "EXPO_PUBLIC_ANATOMY_CDN_URL": "https://api.healthgraph.shop/assets"
       }
     },
     "production": {
@@ -35,8 +35,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.healthgraph.shop",
-        "EXPO_PUBLIC_ASSET_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1",
-        "EXPO_PUBLIC_ANATOMY_CDN_URL": "https://github.com/mehraj-alom/healthgraph-assets/releases/download/healthgraph-assets-v1"
+        "EXPO_PUBLIC_ASSET_CDN_URL": "https://api.healthgraph.shop/assets",
+        "EXPO_PUBLIC_ANATOMY_CDN_URL": "https://api.healthgraph.shop/assets"
       }
     }
   },

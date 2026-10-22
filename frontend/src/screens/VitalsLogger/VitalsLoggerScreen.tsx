@@ -15,10 +15,14 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { Button, Card, Chip, DialInput, Input, LogCelebration, Slider } from '@/components';
+import { Button, DialInput, Input, LogCelebration, Slider } from '@/components';
 import { useHideTabBarOnScroll } from '@/components/tabBarVisibility';
 import { useReducedMotion } from '@/theme';
 import { GV, TYPE, SPACE, FONT } from '@/theme/guava';
+import { LG } from '@/theme/liquidGlass';
+import { GlassSurface } from '@/components/home/GlassSurface';
+import { HomeStageBackdrop } from '@/components/home/HomeStageBackdrop';
+import Entrance from '@/components/home/Entrance';
 import { shiftDayKey, todayKeyLocal } from '@/utils/dayKey';
 import { TILE_TONES } from '@/theme/tones';
 import { api } from '@/services/api';
@@ -218,20 +222,7 @@ function apiMessage(error: unknown): string {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-// Per-category dots — small flat icons inside white cards only (Guava).
-const SECTION_ACCENTS: Record<string, { color: string }> = {
-  sleep: { color: GV.fx.purple },
-  symptomsPain: { color: GV.fx.pink },
-  activity: { color: GV.fx.blue },
-  nutrition: { color: GV.fx.green },
-  medication: { color: GV.fx.brown },
-  vitals: { color: GV.fx.sky },
-  wellbeing: { color: GV.fx.amber },
-  symptoms: { color: GV.fx.brown },
-  notes: { color: GV.muted },
-};
-
-/** Section wrapper — dark skill card per log group, no entrance motion. */
+/** Section wrapper — one frosted glass card per log group. */
 function Section({
   title,
   subtitle,
@@ -243,24 +234,20 @@ function Section({
 }: {
   title: string;
   subtitle?: string;
-  category?: keyof typeof SECTION_ACCENTS;
-  /** Order on screen — kept for call-site compatibility; no stagger. */
+  /** Kept for call-site compatibility; sections are monochrome glass. */
+  category?: string;
+  /** Stagger order on screen (capped inside Entrance). */
   index?: number;
   animate?: boolean;
   children: React.ReactNode;
   /** Exposes the section's Y offset for Priority-log scroll targets. */
   onLayout?: (e: LayoutChangeEvent) => void;
 }) {
-  void index;
-  void animate;
-  const accent = category ? SECTION_ACCENTS[category] : null;
-  return (
+  void category;
+  const body = (
     <View style={styles.section} onLayout={onLayout}>
-      <Card style={styles.sectionCard}>
+      <GlassSurface strong style={styles.sectionCard}>
         <View style={styles.sectionHead}>
-          {accent ? (
-            <View style={[styles.sectionDot, { backgroundColor: accent.color }]} />
-          ) : null}
           <View style={styles.sectionHeadText}>
             <Text style={styles.sectionHeadTitle}>{title}</Text>
             {subtitle ? (
@@ -269,14 +256,48 @@ function Section({
           </View>
         </View>
         <View style={styles.sectionBody}>{children}</View>
-      </Card>
+      </GlassSurface>
     </View>
   );
+  if (!animate) return body;
+  return <Entrance index={index}>{body}</Entrance>;
 }
 
 /** Horizontal divider — hairline on stage */
 function Divider() {
   return <View style={styles.divider} />;
+}
+
+/** Quiet glass chip — hairline pill, white when on (never loud whites). */
+function LogChip({
+  label,
+  selected,
+  onPress,
+  accessibilityLabel,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={accessibilityLabel ?? label}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.logChip,
+        selected && styles.logChipOn,
+        pressed && { opacity: 0.7 },
+      ]}
+    >
+      <Text style={[styles.logChipText, selected && styles.logChipTextOn]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
 /** Single-select pill row for mood (shows label text) */
@@ -317,13 +338,15 @@ function ScaleSelector({
   value,
   onChange,
   labels,
-  tone = GV.cta,
+  tone,
 }: {
   value: number | null;
   onChange: (v: number) => void;
   labels: Record<number, string>;
+  /** Kept for call-site compatibility; selection wears white. */
   tone?: string;
 }) {
+  void tone;
   return (
     <View>
       <View style={styles.scaleRow}>
@@ -333,7 +356,7 @@ function ScaleSelector({
             <Pressable
               key={n}
               onPress={() => onChange(n)}
-              style={[styles.scaleDot, selected && [styles.scaleDotSelected, { backgroundColor: tone, borderColor: tone }]]}
+              style={[styles.scaleDot, selected && styles.scaleDotSelected]}
               accessibilityRole="radio"
               accessibilityState={{ selected }}
               accessibilityLabel={`${n} out of 5`}
@@ -431,13 +454,15 @@ function QualitySelector({
   value,
   onChange,
   labels,
-  tone = GV.cta,
+  tone,
 }: {
   value: number | null;
   onChange: (v: number) => void;
   labels: Record<number, string>;
+  /** Kept for call-site compatibility; selection wears white. */
   tone?: string;
 }) {
+  void tone;
   return (
     <View style={styles.qualityRow}>
       {[1, 2, 3, 4, 5].map((n) => {
@@ -446,7 +471,7 @@ function QualitySelector({
           <Pressable
             key={n}
             onPress={() => onChange(n)}
-            style={[styles.qualityDot, selected && [styles.qualityDotSelected, { backgroundColor: tone, borderColor: tone }]]}
+            style={[styles.qualityDot, selected && styles.qualityDotSelected]}
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             accessibilityLabel={labels[n] || `${n} out of 5`}
@@ -485,12 +510,13 @@ function OptionChips({
   value: string;
   onChange: (v: string) => void;
   color: string;
-  /** Category duotone deep color: selected chips wear the section tone. */
+  /** Kept for call-site compatibility; selection wears white. */
   tone?: string;
   allowClear?: boolean;
   label: string;
 }) {
-  const selectedBg = tone ?? color;
+  void tone;
+  void color;
   return (
     <View style={styles.optRow}>
       {options.map((opt) => {
@@ -499,7 +525,7 @@ function OptionChips({
           <Pressable
             key={opt}
             onPress={() => onChange(selected && allowClear ? '' : opt)}
-            style={[styles.optChip, selected && [styles.optChipSelected, { backgroundColor: selectedBg, borderColor: selectedBg }]]}
+            style={[styles.optChip, selected && styles.optChipSelected]}
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             accessibilityLabel={`${opt}${selected ? ', selected' : ''}`}
@@ -999,23 +1025,6 @@ export default function VitalsLoggerScreen() {
   }, [selectedDate]);
 
   const concepts = conceptsQuery.data ?? [];
-  // Date square strings — memoized so every keystroke doesn't rebuild them.
-  const dateBadge = useMemo(() => {
-    const d = new Date(`${selectedDate}T00:00:00`);
-    return {
-      day: d.getDate(),
-      month: d.toLocaleDateString('en-US', { month: 'short' }),
-    };
-  }, [selectedDate]);
-  // Date colour — one skill-family solid per day, stable per date.
-  // The Today chip and the Edit button wear the same colour.
-  const dateColor = useMemo(() => {
-    let hash = 0;
-    for (let i = 0; i < selectedDate.length; i++) {
-      hash = (hash * 31 + selectedDate.charCodeAt(i)) >>> 0;
-    }
-    return DATE_SOLIDS[hash % DATE_SOLIDS.length];
-  }, [selectedDate]);
   // A day with a saved check-in collapses to its summary + edit button.
   const logged = !todayCheckinQuery.isLoading && editingGroupId != null;
   const formOpen = !logged || editing;
@@ -1452,62 +1461,74 @@ export default function VitalsLoggerScreen() {
   // Render
   // =========================================================================
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* ── Static header: date square + title stay put while logging ── */}
-      <View style={styles.topBar}>
-          <View style={styles.titleRow}>
-            <View style={[styles.dateBadge, { backgroundColor: dateColor }]}>
-            <Text style={styles.dateBadgeDay}>
-              {dateBadge.day}
-            </Text>
-            <Text style={styles.dateBadgeMonth}>
-              {dateBadge.month}
-            </Text>
-          </View>
-          <View style={styles.titleText}>
+    <View style={styles.screen}>
+      <HomeStageBackdrop />
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        {/* ── Static header: title stays put while logging ── */}
+        <View style={styles.topBar}>
+          <Entrance index={0}>
             <Text style={styles.title}>Daily Log</Text>
             <Text style={styles.subtitle}>
-              How are you feeling today?
+              How are you today?
             </Text>
-          </View>
+          </Entrance>
         </View>
-      </View>
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        onScroll={onTabScroll}
-        scrollEventThrottle={16}
-      >
-        {/* ── Day navigation: no card, Prev left · Today middle · Next right ── */}
-        <View style={styles.header}>
-          <View style={styles.dateNav}>
-            <View style={styles.dateEdge}>
-              <Chip label="Prev" size="large" selected={false} onPress={() => setSelectedDate((value) => shiftDate(value, -1))} accessibilityLabel="Previous day" />
-            </View>
-            <View style={styles.dateMiddle}>
-              <Chip label="Today" size="large" selected={selectedDate === dateToday()} color={dateColor} onPress={() => setSelectedDate(dateToday())} accessibilityLabel="Go to today" />
-            </View>
-            <View style={styles.dateEdgeRight}>
-              <Chip label="Next" size="large" selected={false} onPress={() => setSelectedDate((value) => shiftDate(value, 1))} accessibilityLabel="Next day" />
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          onScroll={onTabScroll}
+          scrollEventThrottle={16}
+        >
+          {/* ── Day navigation: quiet glass pills, the middle shows the day ── */}
+          <View style={styles.header}>
+            <View style={styles.dateNav}>
+              <Pressable
+                onPress={() => setSelectedDate((value) => shiftDate(value, -1))}
+                accessibilityRole="button"
+                accessibilityLabel="Previous day"
+                hitSlop={4}
+                style={({ pressed }) => [styles.dayEdge, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.dayEdgeText}>‹ Prev</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setSelectedDate(dateToday())}
+                accessibilityRole="button"
+                accessibilityLabel="Go to today"
+                hitSlop={4}
+                style={({ pressed }) => [styles.dayMid, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.dayMidText} numberOfLines={1}>
+                  {selectedDate === dateToday() ? 'Today' : formatRelativeDate(selectedDate)}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setSelectedDate((value) => shiftDate(value, 1))}
+                accessibilityRole="button"
+                accessibilityLabel="Next day"
+                hitSlop={4}
+                style={({ pressed }) => [styles.dayEdge, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.dayEdgeText}>Next ›</Text>
+              </Pressable>
             </View>
           </View>
-        </View>
 
         {/* ── Feedback banner ── */}
         {feedback ? (
-          <Card style={styles.bannerCard}>
-            <View style={[styles.bannerDot, { backgroundColor: feedback.type === 'success' ? GV.cta : GV.danger }]} />
+          <GlassSurface strong style={styles.bannerCard}>
+            <View style={[styles.bannerDot, { backgroundColor: feedback.type === 'success' ? LG.card.mint : LG.card.danger }]} />
             <Text style={styles.bannerText}>{feedback.message}</Text>
             <Pressable onPress={() => setFeedback(null)} accessibilityLabel="Dismiss" style={styles.bannerDismissBtn} hitSlop={8}>
               <Text style={styles.bannerDismiss}>Dismiss</Text>
             </Pressable>
-          </Card>
+          </GlassSurface>
         ) : null}
 
         {/* ── Today's logged data (read-only summary, before first save) ── */}
         {!logged && selectedDate === dateToday() && todayWellbeing && (
-          <Card style={styles.todayCard}>
+          <GlassSurface strong style={styles.todayCard}>
             <View style={styles.todayGrid}>
               {todayWellbeing.overall_wellbeing != null && <View style={styles.todayItem}>
                 <Text style={styles.todayLabel}>Mood</Text>
@@ -1534,14 +1555,14 @@ export default function VitalsLoggerScreen() {
               )}
             </View>
             <Text style={styles.todayNote}>
-              Saving again updates this day's log when one exists.
+              Saving updates today.
             </Text>
-          </Card>
+          </GlassSurface>
         )}
 
         {/* ── Logged day: summary details + edit button, form hidden ── */}
         {logged && !editing && todayCheckinQuery.data ? (
-          <Card style={styles.todayCard}>
+          <GlassSurface strong style={styles.todayCard}>
             <View style={styles.todayGrid}>
               {todayCheckinQuery.data.overall_wellbeing != null && <View style={styles.todayItem}>
                 <Text style={styles.todayLabel}>Mood</Text>
@@ -1571,11 +1592,11 @@ export default function VitalsLoggerScreen() {
               onPress={() => setEditing(true)}
               accessibilityRole="button"
               accessibilityLabel="Edit daily log"
-              style={({ pressed }) => [styles.editBtn, { backgroundColor: dateColor }, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.85 }]}
             >
               <Text style={styles.editBtnText}>Edit</Text>
             </Pressable>
-          </Card>
+          </GlassSurface>
         ) : null}
 
         {/* ── Form error ── */}
@@ -1586,12 +1607,12 @@ export default function VitalsLoggerScreen() {
         <>
         {/* ── Priority log: engine-driven shortcuts (Stress + Vitals fixed,
             the rest follows the user's chosen priorities) ── */}
-        <Card style={styles.modeCard}>
+        <GlassSurface strong style={styles.modeCard}>
           <Text style={styles.priorityTitle}>Priority log</Text>
-          <Text style={styles.prioritySub}>Jump to what you focus on. Your engines decide.</Text>
+          <Text style={styles.prioritySub}>Shortcuts for your focus areas.</Text>
           <View style={styles.priorityChips}>
             {priorityChips.map((chip) => (
-              <Chip
+              <LogChip
                 key={chip.key}
                 label={chip.label}
                 selected={chipDone(chip.key)}
@@ -1605,38 +1626,36 @@ export default function VitalsLoggerScreen() {
               />
             ))}
           </View>
-        </Card>
+        </GlassSurface>
 
         {/* ── Log mode: Quick essentials vs full log ── */}
-        <Card style={styles.modeCard}>
+        <GlassSurface strong style={styles.modeCard}>
           <View
             style={styles.modeRow}
             accessibilityRole="radiogroup"
             accessibilityLabel="Log mode"
           >
-            <Chip
+            <LogChip
               label="Quick"
-              size="large"
               selected={logMode === 'quick'}
               onPress={() => setLogMode('quick')}
               accessibilityLabel="Quick essentials log"
             />
-            <Chip
-              label="Normal"
-              size="large"
+            <LogChip
+              label="Full"
               selected={logMode === 'normal'}
               onPress={() => setLogMode('normal')}
-              accessibilityLabel="Normal full log"
+              accessibilityLabel="Full log"
             />
           </View>
-        </Card>
+        </GlassSurface>
         </>
         )}
 
         {/* Quick mode: essentials only (all rows share the main form's
             state, so switching modes never loses input). */}
         {formOpen && logMode === 'quick' && (
-          <Section index={0} category="wellbeing" title="Essentials" subtitle="Only what turns today green. Customize below." onLayout={recordSectionY('essentials')}>
+          <Section index={0} category="wellbeing" title="Essentials" subtitle="What matters today." onLayout={recordSectionY('essentials')}>
             <View style={styles.fieldWrap}>
               {showEssential('mood') && (
                 <>
@@ -1784,7 +1803,7 @@ export default function VitalsLoggerScreen() {
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* SLEEP                                                             */}
         {/* ══════════════════════════════════════════════════════════════════ */}
-        <Section index={0} category="sleep" title="Sleep" subtitle="How much did you sleep last night?" onLayout={recordSectionY('sleep')}>
+        <Section index={0} category="sleep" title="Sleep" subtitle="Last night." onLayout={recordSectionY('sleep')}>
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Duration</Text>
             <SleepDurationPicker
@@ -1871,7 +1890,7 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section index={1} category="symptomsPain" title="Symptoms & pain" subtitle="Record symptoms and pain only when present.">
+        <Section index={1} category="symptomsPain" title="Symptoms & pain" subtitle="Only if present.">
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Pain entries</Text>
             {pain.map((item) => (
@@ -1927,7 +1946,7 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section index={2} category="symptomsPain" title="Body map" subtitle="Log pain on a real anatomical structure. Saved to your body state and timeline.">
+        <Section index={2} category="symptomsPain" title="Body map" subtitle="Tap where it hurts.">
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Where does it hurt?</Text>
             <View style={styles.chipGrid}>
@@ -1976,7 +1995,7 @@ export default function VitalsLoggerScreen() {
             ) : null}
             {bodyError ? <Text style={styles.fieldError}>{bodyError}</Text> : null}
             <Button
-              title={bodySaving ? 'Logging…' : 'Log body pain'}
+              title={bodySaving ? 'Saving…' : 'Save'}
               onPress={() => void saveBodyPain()}
               fullWidth
               loading={bodySaving}
@@ -2025,7 +2044,7 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section index={3} category="nutrition" title="Hydration & nutrition" subtitle="Use the fields recorded by HealthGraph." onLayout={recordSectionY('nutrition')}>
+        <Section index={3} category="nutrition" title="Hydration & nutrition" subtitle="Water and meals." onLayout={recordSectionY('nutrition')}>
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>Water</Text>
             <Slider
@@ -2091,7 +2110,7 @@ export default function VitalsLoggerScreen() {
 
         <Divider />
 
-        <Section index={6} category="vitals" title="Vitals" subtitle="Pick a vital. The right device-style input appears." onLayout={recordSectionY('vitals')}>
+        <Section index={6} category="vitals" title="Vitals" subtitle="Pick one." onLayout={recordSectionY('vitals')}>
           <View style={styles.fieldWrap}>
             {conceptsQuery.isError ? (
               <Text style={styles.dialHint}>Options need a connection. Typing still works.</Text>
@@ -2193,7 +2212,7 @@ export default function VitalsLoggerScreen() {
           index={7}
           category="wellbeing"
           title="How you feel"
-          subtitle="Rate your mood, energy, and stress today."
+          subtitle="Mood, energy, stress."
           onLayout={recordSectionY('feel')}
         >
           <View style={styles.fieldWrap}>
@@ -2222,7 +2241,7 @@ export default function VitalsLoggerScreen() {
           index={8}
           category="symptoms"
           title="Symptoms"
-          subtitle="Select symptoms and rate their severity."
+          subtitle="Pick and rate."
         >
           {symptoms.map((item) => {
             const selectedSymptom = symptomConcepts.find((c) => c.id === item.conceptId);
@@ -2375,7 +2394,7 @@ export default function VitalsLoggerScreen() {
           index={9}
           category="notes"
           title="Notes"
-          subtitle="Optional. Anything else you want to record."
+          subtitle="Anything else."
         >
           <View style={styles.fieldWrap}>
             <Input
@@ -2397,7 +2416,7 @@ export default function VitalsLoggerScreen() {
         {/* SAVE                                                             */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         {formOpen && (
-        <Button           title={mutation.isPending ? 'Saving…' : editingGroupId ? "Update today's log" : "Save today's log"}
+        <Button           title={mutation.isPending ? 'Saving…' : editingGroupId ? 'Update' : 'Save'}
           onPress={logMode === 'quick' ? saveEssentials : save}
           fullWidth
           loading={mutation.isPending}
@@ -2412,7 +2431,7 @@ export default function VitalsLoggerScreen() {
         {logMode === 'normal' && recentLogs.length > 0 && (
           <>
             <Divider />
-            <Section animate={false} title="Recent history" subtitle="Your past daily logs.">
+            <Section animate={false} title="Recent history" subtitle="Past logs.">
               {recentLogs.slice(0, 14).map((log) => (
                 <View key={log.log_date} style={styles.historyRow}>
                   <View style={styles.historyLeft}>
@@ -2451,7 +2470,8 @@ export default function VitalsLoggerScreen() {
 
       {/* Celebration overlay — one-shot delight on save */}
       <LogCelebration visible={celebrate} onDone={() => setCelebrate(false)} />
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -2463,107 +2483,85 @@ const NAVY = '#080A11';
 const TILE_BG = '#2A3049';
 const HAIRLINE_ON_NAVY = 'rgba(255, 255, 255, 0.12)';
 const EDGE_ON_NAVY = 'rgba(255, 255, 255, 0.25)';
-// Date solids — skill-family muted fills, one per day, white text safe.
-const DATE_SOLIDS: readonly string[] = [
-  '#57507A',
-  '#96684A',
-  '#5C6E7C',
-  '#6E7F4E',
-  '#56837B',
-  '#66666F',
-  '#5A6078',
-  '#7C6272',
-  '#8A4A55',
-  '#8A7A5C',
-  '#527A6E',
-  '#3A3F55',
-  '#6B4A3A',
-  '#37605A',
-];
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: NAVY,
+    backgroundColor: LG.stage.bottom,
+  },
+  safe: {
+    flex: 1,
   },
   content: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 26,
     paddingTop: 8,
     paddingBottom: 40,
-    gap: 12,
+    gap: 16,
   },
   header: {
-    marginBottom: 12,
+    marginBottom: 4,
   },
+  // Quiet day navigation: hairline edges, the day itself in white.
   dateNav: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  dateEdge: {
-    flex: 1,
-    alignItems: 'flex-start',
+  dayEdge: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  dateEdgeRight: {
-    flex: 1,
-    alignItems: 'flex-end',
+  dayEdgeText: {
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.72)',
   },
-  dateMiddle: {
+  dayMid: {
     flex: 1,
+    minHeight: 44,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 9999,
+    backgroundColor: '#FFFFFF',
+  },
+  dayMidText: {
+    fontWeight: '700',
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0.2,
+    color: '#0B0F1A',
+    fontVariant: ['tabular-nums'],
   },
   title: {
-    fontFamily: FONT.semi,
-    fontSize: 30,
-    lineHeight: 37,
-    letterSpacing: -0.3,
+    fontWeight: '600',
+    fontSize: 34,
+    lineHeight: 41,
+    letterSpacing: -0.8,
     color: '#FFFFFF',
     textAlign: 'left',
   },
   subtitle: {
-    ...TYPE.body,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 17,
+    lineHeight: 22,
+    color: 'rgba(233,240,255,0.66)',
     textAlign: 'left',
   },
   topBar: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingHorizontal: 26,
+    paddingTop: 20,
     paddingBottom: 4,
-    gap: 8,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  titleText: {
-    flex: 1,
-    gap: 2,
-  },
-  dateBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    backgroundColor: GV.cta,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dateBadgeDay: {
-    ...TYPE.title,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontVariant: ['tabular-nums'],
-  },
-  dateBadgeMonth: {
-    ...TYPE.caption,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontVariant: ['tabular-nums'],
+    gap: 3,
   },
   bannerCard: {
-    backgroundColor: TILE_BG,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderRadius: 8,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2589,10 +2587,6 @@ const styles = StyleSheet.create({
     color: GV.fog,
   },
   todayCard: {
-    backgroundColor: TILE_BG,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderRadius: 8,
     padding: 16,
   },
   todaySummaryTitle: {
@@ -2627,27 +2621,24 @@ const styles = StyleSheet.create({
   editBtn: {
     minHeight: 52,
     borderRadius: 9999,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 12,
   },
   editBtnText: {
-    fontFamily: FONT.semi,
+    fontWeight: '600',
     fontSize: 16,
     lineHeight: 22,
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   formError: {
     ...TYPE.caption,
-    color: GV.danger,
+    color: LG.card.danger,
     textAlign: 'center',
     marginBottom: 4,
   },
   modeCard: {
-    backgroundColor: TILE_BG,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderRadius: 8,
     padding: 16,
   },
   modeRow: {
@@ -2655,13 +2646,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 8,
   },
   sectionCard: {
-    backgroundColor: TILE_BG,
-    borderWidth: 1,
-    borderColor: HAIRLINE_ON_NAVY,
-    borderRadius: 8,
     padding: 16,
   },
   sectionHead: {
@@ -2669,23 +2656,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  sectionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
   sectionHeadText: {
     flex: 1,
     gap: 2,
   },
   sectionHeadTitle: {
-    ...TYPE.title,
-    fontSize: 17,
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 24,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
   },
   sectionHeadSub: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
   },
   sectionBody: {
     marginTop: 12,
@@ -2709,7 +2695,7 @@ const styles = StyleSheet.create({
   },
   fieldError: {
     ...TYPE.caption,
-    color: GV.danger,
+    color: LG.card.danger,
     marginTop: 4,
   },
   entryBlock: {
@@ -2765,8 +2751,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   moodPillSelected: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   moodPillText: {
     ...TYPE.chip,
@@ -2774,7 +2760,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   moodPillTextSelected: {
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   scaleRow: {
     flexDirection: 'row',
@@ -2791,8 +2777,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   scaleDotSelected: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
 
   scaleDotText: {
@@ -2800,7 +2786,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   scaleDotTextSelected: {
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   scaleLabel: {
     ...TYPE.caption,
@@ -2861,15 +2847,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   qualityDotSelected: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   qualityDotText: {
     ...TYPE.button,
     color: '#FFFFFF',
   },
   qualityDotTextSelected: {
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   qualityHint: {
     ...TYPE.caption,
@@ -2913,15 +2899,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipSelected: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   chipText: {
     ...TYPE.chip,
     color: '#FFFFFF',
   },
   chipTextSelected: {
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   optRow: {
     flexDirection: 'row',
@@ -2941,15 +2927,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   optChipSelected: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   optChipText: {
     ...TYPE.chip,
     color: '#FFFFFF',
   },
   optChipTextSelected: {
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   severityRow: {
     flexDirection: 'row',
@@ -2967,15 +2953,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   severityDotSelected: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   severityDotText: {
     ...TYPE.chip,
     color: '#FFFFFF',
   },
   severityDotTextSelected: {
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   addBtn: {
     minHeight: 44,
@@ -2993,15 +2979,44 @@ const styles = StyleSheet.create({
     ...TYPE.button,
     color: '#FFFFFF',
   },
-  // Priority log chips live in a wrapping row inside the Priority card.
+  // Quiet glass chip — hairline pill, white when on.
+  logChip: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: SPACE.rPill,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  logChipOn: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+  },
+  logChipText: {
+    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.72)',
+  },
+  logChipTextOn: {
+    color: '#0B0F1A',
+    fontWeight: '700',
+  },
   priorityTitle: {
-    ...TYPE.title,
-    fontSize: 17,
+    fontWeight: '600',
+    fontSize: 20,
+    lineHeight: 24,
+    letterSpacing: -0.3,
     color: '#FFFFFF',
   },
   prioritySub: {
-    ...TYPE.caption,
-    color: GV.fog,
+    fontWeight: '400',
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(233,240,255,0.66)',
     marginTop: 2,
     marginBottom: 8,
   },
@@ -3019,12 +3034,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: SPACE.rPill,
-    backgroundColor: GV.cta,
+    backgroundColor: '#FFFFFF',
     marginTop: 8,
   },
   scanFoodCtaText: {
     ...TYPE.button,
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   unitToggleRow: {
     flexDirection: 'row',
@@ -3050,15 +3065,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   unitToggleBtnSelected: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   unitToggleText: {
     ...TYPE.chip,
     color: '#FFFFFF',
   },
   unitToggleTextSelected: {
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   dialHint: {
     ...TYPE.caption,
@@ -3067,11 +3082,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   bpCard: {
-    backgroundColor: '#10141F',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    borderRadius: 16,
-    padding: 14,
     gap: 4,
     marginTop: 12,
   },
@@ -3115,8 +3125,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   essMedToggleOn: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   essMedToggleOff: {
     backgroundColor: 'transparent',
@@ -3127,7 +3137,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   essMedToggleGlyphOn: {
-    color: '#FFFFFF',
+    color: '#0B0F1A',
   },
   essMedToggleGlyphOff: {
     color: '#FFFFFF',
@@ -3169,11 +3179,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   essCheckOn: {
-    backgroundColor: GV.cta,
-    borderColor: GV.cta,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   essCheckGlyph: {
-    color: '#FFFFFF',
+    color: '#0B0F1A',
     ...TYPE.chip,
   },
   essCheckLabel: {
@@ -3218,7 +3228,7 @@ const styles = StyleSheet.create({
   },
   globalError: {
     ...TYPE.caption,
-    color: GV.danger,
+    color: LG.card.danger,
     textAlign: 'center',
     marginTop: 12,
   },
