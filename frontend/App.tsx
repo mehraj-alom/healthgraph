@@ -1004,15 +1004,15 @@ export default function App() {
         console.log('rppg stage: NATIVE_MODULE_IMPORT_FAILED ' + String(e));
       }
       try {
-        const onnx = await import('@/services/rppg/onnxProvider');
-        const status = onnx.getOnnxRuntimeStatus();
+        const rppgServices = await import('@/services/rppg');
+        const status = rppgServices.getOnnxRuntimeStatus();
         console.log(
           'rppg stage: RUNTIME_PROBE supported=' +
             String(status.supported) +
             ' reason=' +
             status.reason,
         );
-        const provider = onnx.getRppgProvider();
+        const provider = rppgServices.getRppgProvider();
         console.log(
           'rppg stage: RPPG_PROVIDER_SELECT kind=' +
             provider.kind +
