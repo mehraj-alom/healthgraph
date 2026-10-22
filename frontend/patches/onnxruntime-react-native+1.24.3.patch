@@ -13,3 +13,34 @@ index 41b4359..a668e7a 100644
      extractLibs "com.facebook.fbjni:fbjni:+:headers"
      extractLibs "com.facebook.fbjni:fbjni:+"
    }
+diff --git a/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/OnnxruntimeModule.java b/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/OnnxruntimeModule.java
+index c362e6a..105c80c 100644
+--- a/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/OnnxruntimeModule.java
++++ b/node_modules/onnxruntime-react-native/android/src/main/java/ai/onnxruntime/reactnative/OnnxruntimeModule.java
+@@ -13,6 +13,7 @@ import com.facebook.react.bridge.ReactMethod;
+ import com.facebook.react.bridge.ReactApplicationContext;
+ import com.facebook.react.bridge.ReactContextBaseJavaModule;
+ import com.facebook.react.turbomodule.core.CallInvokerHolderImpl;
++import com.facebook.react.turbomodule.core.interfaces.CallInvokerHolder;
+ 
+ @RequiresApi(api = Build.VERSION_CODES.N)
+ public class OnnxruntimeModule extends ReactContextBaseJavaModule {
+@@ -29,7 +30,7 @@ public class OnnxruntimeModule extends ReactContextBaseJavaModule {
+     return "Onnxruntime";
+   }
+ 
+-  native void nativeInstall(long jsiPointer, CallInvokerHolderImpl jsCallInvokerHolder);
++  native void nativeInstall(long jsiPointer, CallInvokerHolder jsCallInvokerHolder);
+ 
+   native void nativeCleanup();
+ 
+@@ -47,8 +48,7 @@ public class OnnxruntimeModule extends ReactContextBaseJavaModule {
+     try {
+       System.loadLibrary("onnxruntimejsi");
+       JavaScriptContextHolder jsContext = getReactApplicationContext().getJavaScriptContextHolder();
+-      CallInvokerHolderImpl jsCallInvokerHolder =
+-        (CallInvokerHolderImpl) getReactApplicationContext().getCatalystInstance().getJSCallInvokerHolder();
++      CallInvokerHolder jsCallInvokerHolder = getReactApplicationContext().getJSCallInvokerHolder();
+       nativeInstall(jsContext.get(), jsCallInvokerHolder);
+       return true;
+     } catch (Exception e) {
