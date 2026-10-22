@@ -161,7 +161,8 @@ jobs:
           echo "--- native module classes in dex ---"
           for CLS in \
             "com/healthgraph/rppg/HealthGraphRPPGModule" \
-            "com/healthgraph/ppg/HealthGraphPPGModule" ; do
+            "com/healthgraph/ppg/HealthGraphPPGModule" \
+            "ai/onnxruntime/reactnative/OnnxruntimeModule" ; do
             FOUND=0
             for DEX in "$WORK"/classes*.dex; do
               if strings "$DEX" 2>/dev/null | grep -q "$CLS"; then FOUND=1; break; fi
