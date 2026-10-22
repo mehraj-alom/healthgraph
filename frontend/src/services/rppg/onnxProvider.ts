@@ -104,6 +104,7 @@ export type OnnxRuntimeStatusReason =
   | 'native-module-absent'
   | 'require-failed'
   | 'exports-missing'
+  | 'jsi-install-failed'
   | 'ok';
 
 export interface OnnxRuntimeStatus {
@@ -175,6 +176,14 @@ function probeBindings(): {
     }
     if (!mod || !mod.InferenceSession || !mod.Tensor) {
       return { bindings: null, reason: 'exports-missing' };
+    }
+    // The native module can be registered yet fail to install the JSI
+    // binding (new arch / missing JS context). binding.js only sets
+    // globalThis.OrtApi when nativeInstall() succeeds, so its absence here
+    // means inference cannot run even though the module resolved.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((globalThis as any)?.OrtApi == null) {
+      return { bindings: null, reason: 'jsi-install-failed' };
     }
     const InferenceSession = mod.InferenceSession;
     const Tensor = mod.Tensor;
