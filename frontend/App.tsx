@@ -981,6 +981,49 @@ export default function App() {
       refreshServerEntitlement(),
     );
   }, []);
+
+  // On-device pulse (face rPPG) runtime diagnostic — logcat only.
+  //
+  // WHY: the face scan used to fail with a single generic "not available"
+  // message, so the failing leg (missing native module / inference
+  // runtime absent / model download failed) was invisible. This probe
+  // runs once after mount and names the exact leg, so a failure is
+  // self-diagnosing from `adb logcat` on any device.
+  //
+  // It runs in an effect, never during render: resolving the ONNX
+  // provider installs the JSI binding, which must not happen in the
+  // render phase.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const rppg = await import('healthgraph-rppg');
+        console.log(
+          'rppg stage: NATIVE_MODULE available=' + String(rppg.isRppgAvailable),
+        );
+      } catch (e) {
+        console.log('rppg stage: NATIVE_MODULE_IMPORT_FAILED ' + String(e));
+      }
+      try {
+        const onnx = await import('@/services/rppg/onnxProvider');
+        const status = onnx.getOnnxRuntimeStatus();
+        console.log(
+          'rppg stage: RUNTIME_PROBE supported=' +
+            String(status.supported) +
+            ' reason=' +
+            status.reason,
+        );
+        const provider = onnx.getRppgProvider();
+        console.log(
+          'rppg stage: RPPG_PROVIDER_SELECT kind=' +
+            provider.kind +
+            ' available=' +
+            String(provider.isAvailable),
+        );
+      } catch (e) {
+        console.log('rppg stage: RUNTIME_PROBE_FAILED ' + String(e));
+      }
+    })();
+  }, []);
   return (
     <SafeAreaProvider>
       <QueryClientProvider

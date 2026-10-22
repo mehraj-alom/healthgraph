@@ -1,0 +1,154 @@
+name: Diagnose face rPPG (emulator logcat)
+
+# Runs the app on a headless Android emulator and captures logcat.
+#
+# WHY THIS EXISTS: the face rPPG screen failed with a single generic
+# "not available" message, so the failing leg was invisible. The app now
+# probes the native module + inference runtime at startup and logs the
+# exact leg ('rppg stage: ...'). This workflow boots an emulator, installs
+# the app, launches it, and uploads the log so the leg can be read without
+# a physical device.
+#
+# The emulator runs HERE (a GitHub runner, 16 GB) and not on a laptop: an
+# arm64/x86_64 emulator on a low-RAM machine thrashes the host and the
+# desktop emulator needs a window.
+#
+# Trigger: manual, or on demand. Not part of the release path.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/src/services/rppg/**'
+      - 'frontend/src/hooks/useRppgMeasurement.ts'
+      - 'frontend/modules/healthgraph-rppg/**'
+      - 'frontend/App.tsx'
+      - '.github/workflows/diagnose-rppg.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Run app on emulator, capture rPPG logcat
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+      EXPO_PUBLIC_ASSET_CDN_URL: ${{ vars.EXPO_PUBLIC_ASSET_CDN_URL }}
+      EXPO_PUBLIC_ANATOMY_CDN_URL: ${{ vars.EXPO_PUBLIC_ANATOMY_CDN_URL }}
+      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+      EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
+      GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # KVM makes the emulator usable instead of unusably slow.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm || { echo "KVM unavailable"; exit 1; }
+
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "emulator" \
+            "system-images;android-34;google_apis;x86_64"
+
+      # x86_64 build: the emulator image is x86_64. The native modules are
+      # architecture-agnostic Kotlin/Java, so the module resolution and the
+      # inference-runtime probe are identical to an arm64 device.
+      - name: Build x86_64 release APK
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npx expo prebuild --platform android --no-install
+          cd android
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64
+
+      - name: Create and boot the emulator
+        run: |
+          set -euo pipefail
+          echo no | "${ANDROID_HOME}/cmdline-tools/latest/bin/avdmanager" create avd \
+            -n rppg-probe \
+            -k "system-images;android-34;google_apis;x86_64" --force
+          "${ANDROID_HOME}/emulator/emulator" -avd rppg-probe \
+            -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect \
+            -memory 2048 > /tmp/emulator.log 2>&1 &
+          "${ANDROID_HOME}/platform-tools/adb" wait-for-device
+          for i in $(seq 1 60); do
+            if [ "$("${ANDROID_HOME}/platform-tools/adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+              echo "emulator booted"
+              break
+            fi
+            sleep 5
+          done
+          "${ANDROID_HOME}/platform-tools/adb" devices
+
+      - name: Install the app and capture logcat
+        run: |
+          set -uo pipefail
+          ADB="${ANDROID_HOME}/platform-tools/adb"
+          APK=frontend/android/app/build/outputs/apk/release/app-release.apk
+          "$ADB" install -r "$APK" || "$ADB" install -r -d "$APK"
+          "$ADB" logcat -c
+          # Launch the launcher activity.
+          "$ADB" shell monkey -p com.medgraph.app \
+            -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1 || true
+          sleep 35
+          "$ADB" logcat -d -v time > /tmp/full-logcat.txt || true
+
+      - name: Publish the diagnosis
+        run: |
+          set -uo pipefail
+          ADB="${ANDROID_HOME}/platform-tools/adb"
+          {
+            echo "=== rPPG / PPG / ONNX lines ==="
+            grep -iE "rppg stage|HealthGraphPPG|HealthGraphRPPG|onnx|Onnxruntime|AndroidRuntime|FATAL EXCEPTION" /tmp/full-logcat.txt || echo "(no matching lines)"
+            echo
+            echo "=== app process alive? ==="
+            "$ADB" shell pidof com.medgraph.app || echo "(app not running)"
+            echo
+            echo "=== installed native libs (x86_64) ==="
+            "$ADB" shell run-as com.medgraph.app ls lib 2>/dev/null || \
+              "$ADB" shell pm path com.medgraph.app
+          } > /tmp/rppg-diagnosis.txt 2>&1
+          cat /tmp/rppg-diagnosis.txt
+
+      - name: Upload logcat artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rppg-diagnosis
+          path: |
+            /tmp/rppg-diagnosis.txt
+            /tmp/full-logcat.txt
+          retention-days: 7
+          if-no-files-found: warn
