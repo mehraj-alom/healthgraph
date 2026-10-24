@@ -86,7 +86,5 @@ detekt {
 }
 
 tasks.withType(io.gitlab.arturbosch.detekt.Detekt::class.java).configureEach {
-    jvmOptions {
-        maxHeapSize = "512m"
-    }
+    maxHeapSize = "512m"
 }
