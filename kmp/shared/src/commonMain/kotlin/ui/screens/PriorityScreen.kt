@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +30,6 @@ import com.healthgraph.shared.ui.components.LiquidButton
 import com.healthgraph.shared.ui.components.LiquidButtonVariant
 import com.healthgraph.shared.ui.components.LiquidButtonSize
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PriorityScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -68,7 +68,6 @@ fun PriorityScreen(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PriorityHeader() {
     val state = rememberGlassAnimationState()
@@ -108,7 +107,6 @@ fun PriorityHeader() {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PriorityWorldCard() {
     val state = rememberGlassAnimationState()
@@ -195,7 +193,6 @@ fun PriorityWorldCard() {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PriorityStatItem(label: String, value: String, color: Color) {
     val state = rememberGlassAnimationState()
@@ -307,7 +304,6 @@ val priorityLayers = listOf(
     )
 )
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PriorityLayerCard(layer: PriorityLayer) {
     val state = rememberGlassAnimationState()
@@ -411,7 +407,6 @@ fun PriorityLayerCard(layer: PriorityLayer) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PriorityActionItem(action: PriorityAction, layerColor: Color) {
     val state = rememberGlassAnimationState()

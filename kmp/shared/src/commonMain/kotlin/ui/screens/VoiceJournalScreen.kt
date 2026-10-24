@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column

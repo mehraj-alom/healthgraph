@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.theme
 
 import androidx.compose.ui.graphics.Color

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+<template>
+<style>
+#root { position: absolute; inset: 0; background: #08090D; color: #FBF6EC; font-family: system-ui, sans-serif; overflow: hidden; }
+.f3-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(79,209,197,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(79,209,197,0.08) 1px, transparent 1px); background-size: 64px 64px; }
+.f3-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 110px 70px 0 70px; }
+.f3-kicker { font-size: 26px; letter-spacing: 0.22em; color: #4FD1C5; font-weight: 700; }
+.f3-title { margin-top: 24px; font-size: 88px; line-height: 1.02; font-weight: 700; text-align: center; }
+.f3-phone { margin-top: 56px; width: 860px; border-radius: 52px; background: #1D1B17; border: 2px solid rgba(79,209,197,0.5); padding: 48px 44px 54px 44px; text-align: center; }
+.f3-notch { width: 150px; height: 12px; border-radius: 999px; background: rgba(251,246,236,0.22); margin: 0 auto 26px auto; }
+.f3-label { font-size: 38px; font-weight: 600; }
+.f3-bpm { margin-top: 8px; font-size: 170px; font-weight: 700; line-height: 1; }
+.f3-live { margin-top: 6px; font-size: 28px; letter-spacing: 0.3em; color: #4FD1C5; font-weight: 700; }
+.f3-wave { margin-top: 26px; width: 100%; height: 150px; }
+.f3-pill { display: inline-block; margin-top: 30px; background: #FBF6EC; color: #1D1B17; border-radius: 999px; padding: 22px 54px; font-size: 34px; font-weight: 700; }
+.f3-cap { margin-top: 44px; font-size: 33px; color: #B8AF9E; text-align: center; }
+</style>
+<div data-hf-id="hf-x7fo" id="root" data-composition-id="f3-pulse" data-width="1080" data-height="1920">
+<section data-hf-id="hf-kxjf" class="clip" data-start="0" data-duration="10">
+<div data-hf-id="hf-ry67" class="f3-bg"></div>
+<div data-hf-id="hf-cjpe" class="f3-wrap">
+<div data-hf-id="hf-4wqs" class="f3-kicker" id="f3-kicker">REAL APP UI · CAMERA PULSE</div>
+<div data-hf-id="hf-kr61" class="f3-title" id="f3-title">Finger on lens.<br data-hf-id="hf-x5px">60 seconds.</div>
+<div data-hf-id="hf-f5i2" class="f3-phone" id="f3-phone">
+<div data-hf-id="hf-o8kk" class="f3-notch"></div>
+<div data-hf-id="hf-pp6d" class="f3-label">Pulse.</div>
+<div data-hf-id="hf-92j0" class="f3-bpm" id="f3-bpm">64</div>
+<div data-hf-id="hf-56pe" class="f3-live">BPM · LIVE</div>
+<svg data-hf-id="hf-n1bu" class="f3-wave" viewBox="0 0 600 120" preserveAspectRatio="none">
+<polyline data-hf-id="hf-zpk6" id="f3-trace" points="0,60 40,60 60,60 75,58 85,20 95,95 105,45 120,60 160,60 200,60 215,58 225,20 235,95 245,45 260,60 300,60 340,60 355,58 365,20 375,95 385,45 400,60 440,60 480,60 495,58 505,20 515,95 525,45 540,60 580,60 600,60" fill="none" stroke="#4FD1C5" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" />
+</svg>
+<div data-hf-id="hf-ujgn" class="f3-pill" id="f3-pill">Hold still…</div>
+</div>
+<div data-hf-id="hf-721e" class="f3-cap" id="f3-cap">Heart rate + HRV. No watch. No strap.</div>
+</div>
+</section>
+</div>
+<script>
+const tl = gsap.timeline({ paused: true });
+tl.fromTo("#f3-kicker", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 0.2);
+tl.fromTo("#f3-title", { opacity: 0, y: 44 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.5);
+tl.fromTo("#f3-phone", { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 1.2);
+tl.fromTo("#f3-bpm", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 1.8);
+tl.fromTo("#f3-trace", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 2.4);
+tl.fromTo("#f3-pill", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 3.4);
+tl.fromTo("#f3-cap", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 4.2);
+window.__timelines["f3-pulse"] = tl;
+</script>
+</template>
+</body>
+</html>

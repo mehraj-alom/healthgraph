@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -37,7 +38,6 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Favorite
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun InsightsScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -189,7 +189,6 @@ fun InsightCard(insight: Insight) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GlassCard(content: @Composable () -> Unit) {
     val s = rememberGlassAnimationState()

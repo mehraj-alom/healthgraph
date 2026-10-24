@@ -5,7 +5,7 @@ plugins {
 }
 
 kotlin {
-    android()
+    androidTarget()
     iosX64()
     iosArm64()
     iosSimulatorArm64()
@@ -111,6 +111,10 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).conf
             "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
         )
     }
+}
+
+ktlint {
+    config = file("$rootDir/.ktlint.yml")
 }
 
 detekt {

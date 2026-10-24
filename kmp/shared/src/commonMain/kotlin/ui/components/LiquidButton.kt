@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.components
 
 import androidx.compose.animation.animateFloatAsState
@@ -40,7 +41,6 @@ import com.healthgraph.shared.theme.interactiveGlass
 import com.healthgraph.shared.theme.liquidGlass
 import com.healthgraph.shared.theme.rememberGlassAnimationState
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 enum class LiquidButtonVariant {
     PRIMARY(HealthGraphColors.Primary, HealthGraphColors.PrimaryOn, HealthGraphColors.RefractionTint),
     SECONDARY(HealthGraphColors.Secondary, HealthGraphColors.SecondaryOn, HealthGraphColors.RefractionTintWarm),
@@ -59,7 +59,6 @@ enum class LiquidButtonVariant {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 enum class LiquidButtonSize {
     SMALL(36.dp, 12.sp, GlassCorner.SM, 8.dp),
     MEDIUM(48.dp, 14.sp, GlassCorner.MD, 12.dp),
@@ -79,7 +78,6 @@ enum class LiquidButtonSize {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LiquidButton(
     onClick: () -> Unit,
@@ -217,7 +215,6 @@ fun LiquidButton(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LiquidButtonIcon(
     onClick: () -> Unit,
@@ -255,7 +252,6 @@ fun LiquidButtonIcon(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LiquidButtonToggle(
     checked: Boolean,
@@ -283,7 +279,6 @@ fun LiquidButtonToggle(
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LiquidButtonSegmented(
     options: List<String>,

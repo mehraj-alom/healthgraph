@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +30,6 @@ import com.healthgraph.shared.ui.components.LiquidButton
 import com.healthgraph.shared.ui.components.LiquidButtonVariant
 import com.healthgraph.shared.ui.components.LiquidButtonSize
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -66,7 +66,6 @@ fun TimelineScreen(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineHeader() {
     val state = rememberGlassAnimationState()
@@ -138,7 +137,6 @@ val timelineEntries = listOf(
     TimelineEntry("8", "11:00 AM", "Symptom", "Mild Headache", "Tension-type, resolved with hydration", null, HealthGraphColors.Error, androidx.compose.material.icons.Icons.Default.Healing, EntryType.SYMPTOM)
 )
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineEntryCard(entry: TimelineEntry) {
     val state = rememberGlassAnimationState()

@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -34,7 +35,6 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HealthAreasScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -108,7 +108,6 @@ fun ScreenHeader(title: String, subtitle: String? = null, onBack: () -> Unit = {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -244,7 +243,6 @@ fun SummaryRow(label: String, status: String, detail: String, color: Color) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BodyScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -337,7 +335,6 @@ fun MeasurementRow(label: String, current: String, target: String, color: Color)
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -423,7 +420,6 @@ fun TimelineEventRow(event: TimelineEvent) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PriorityScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -516,7 +512,6 @@ fun PriorityItem(title: String, description: String, progress: Int, color: Color
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -585,7 +580,6 @@ fun SettingsRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: St
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GlassCardElevated(tint: Color = HealthGraphColors.RefractionTintCool, content: @Composable () -> Unit) {
     val s = rememberGlassAnimationState()
@@ -599,7 +593,6 @@ fun GlassCardElevated(tint: Color = HealthGraphColors.RefractionTintCool, conten
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GlassCard(cornerRadius: androidx.compose.ui.unit.Dp = GlassCorner.LG, elevation: GlassElevation = GlassElevation.Level2, content: @Composable () -> Unit) {
     val s = rememberGlassAnimationState()
@@ -613,7 +606,6 @@ fun GlassCard(cornerRadius: androidx.compose.ui.unit.Dp = GlassCorner.LG, elevat
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PlaceholderScreen(title: String, modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier) {
     val state = rememberGlassAnimationState()

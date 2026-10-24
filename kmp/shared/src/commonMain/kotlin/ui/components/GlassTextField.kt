@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.components
 
 import androidx.compose.animation.animateFloatAsState
@@ -56,14 +57,12 @@ import androidx.compose.ui.text.input.TextInputSession
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 enum class GlassTextFieldVariant {
     OUTLINED,
     FILLED,
     GLASS
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GlassTextField(
     modifier: Modifier = Modifier,
@@ -248,7 +247,6 @@ fun GlassTextField(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun AnimatedLabel(
     label: String,
@@ -277,7 +275,6 @@ fun AnimatedLabel(
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GlassTextFieldSecure(
     modifier: Modifier = Modifier,
@@ -336,7 +333,6 @@ class PasswordVisualTransformation : VisualTransformation {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GlassTextFieldSearch(
     modifier: Modifier = Modifier,

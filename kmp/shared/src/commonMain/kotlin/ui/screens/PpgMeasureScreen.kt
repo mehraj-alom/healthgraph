@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +39,6 @@ import androidx.compose.material.icons.filled.Help
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Canvas
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PpgMeasureScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
@@ -359,7 +359,6 @@ fun MeasurementHistoryRow(m: MeasurementHistoryItem) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GlassCardElevated(tint: Color = HealthGraphColors.RefractionTintCool, content: @Composable () -> Unit) {
     val s = rememberGlassAnimationState()
@@ -373,7 +372,6 @@ fun GlassCardElevated(tint: Color = HealthGraphColors.RefractionTintCool, conten
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GlassCard(content: @Composable () -> Unit) {
     val s = rememberGlassAnimationState()

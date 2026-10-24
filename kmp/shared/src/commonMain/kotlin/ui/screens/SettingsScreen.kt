@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +31,6 @@ import com.healthgraph.shared.ui.components.LiquidButtonVariant
 import com.healthgraph.shared.ui.components.LiquidButtonSize
 import com.healthgraph.shared.ui.components.LiquidButtonToggle
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -67,7 +67,6 @@ fun SettingsScreen(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsHeader() {
     val state = rememberGlassAnimationState()
@@ -216,7 +215,6 @@ val settingsSections = listOf(
     )
 )
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSection(section: SettingsSection) {
     val state = rememberGlassAnimationState()
@@ -278,7 +276,6 @@ fun SettingsSection(section: SettingsSection) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsItemRow(
     item: SettingsItem,

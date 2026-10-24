@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+<template>
+<style>
+#root { position: absolute; inset: 0; background: #08090D; color: #FBF6EC; font-family: system-ui, sans-serif; overflow: hidden; }
+.f4-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(232,134,46,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(232,134,46,0.07) 1px, transparent 1px); background-size: 64px 64px; }
+.f4-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 110px 70px 0 70px; }
+.f4-kicker { font-size: 26px; letter-spacing: 0.22em; color: #E8862E; font-weight: 700; }
+.f4-title { margin-top: 24px; font-size: 88px; line-height: 1.02; font-weight: 700; text-align: center; }
+.f4-phone { margin-top: 54px; width: 860px; border-radius: 52px; background: #1D1B17; border: 2px solid rgba(251,246,236,0.14); padding: 44px 40px 46px 40px; }
+.f4-notch { width: 150px; height: 12px; border-radius: 999px; background: rgba(251,246,236,0.22); margin: 0 auto 24px auto; }
+.f4-head { text-align: center; font-size: 38px; font-weight: 700; }
+.f4-bubble { border-radius: 28px; padding: 28px 30px; font-size: 33px; line-height: 1.35; margin-top: 22px; }
+.f4-ai { background: rgba(251,246,236,0.1); }
+.f4-user { background: rgba(79,209,197,0.18); border: 2px solid rgba(79,209,197,0.45); margin-left: 90px; }
+.f4-input { margin-top: 26px; border-radius: 999px; background: #FBF6EC; color: rgba(29,27,23,0.5); padding: 24px 34px; font-size: 32px; }
+.f4-cap { margin-top: 42px; font-size: 33px; color: #B8AF9E; text-align: center; }
+</style>
+<div data-hf-id="hf-j3re" id="root" data-composition-id="f4-chat" data-width="1080" data-height="1920">
+<section data-hf-id="hf-kxjf" class="clip" data-start="0" data-duration="10">
+<div data-hf-id="hf-xbga" class="f4-bg"></div>
+<div data-hf-id="hf-liif" class="f4-wrap">
+<div data-hf-id="hf-dq6m" class="f4-kicker" id="f4-kicker">REAL APP UI · SANOTTS AI</div>
+<div data-hf-id="hf-ypwt" class="f4-title" id="f4-title">Ask your data.<br data-hf-id="hf-x5px">Get receipts.</div>
+<div data-hf-id="hf-98n6" class="f4-phone" id="f4-phone">
+<div data-hf-id="hf-njw3" class="f4-notch"></div>
+<div data-hf-id="hf-vswr" class="f4-head">Sanotts</div>
+<div data-hf-id="hf-2sue" class="f4-bubble f4-ai" id="f4-b1">Your resting pulse dropped 4 bpm this week. Sleep looks steady.</div>
+<div data-hf-id="hf-rtsp" class="f4-bubble f4-user" id="f4-b2">Why am I so tired lately?</div>
+<div data-hf-id="hf-33wy" class="f4-bubble f4-ai" id="f4-b3">Two short nights in a row. Want a 20-minute recovery plan?</div>
+<div data-hf-id="hf-9gvn" class="f4-input" id="f4-input">Ask anything…</div>
+</div>
+<div data-hf-id="hf-58x1" class="f4-cap" id="f4-cap">Not horoscope. Evidence — footnoted to your logs.</div>
+</div>
+</section>
+</div>
+<script>
+const tl = gsap.timeline({ paused: true });
+tl.fromTo("#f4-kicker", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 0.2);
+tl.fromTo("#f4-title", { opacity: 0, y: 44 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.5);
+tl.fromTo("#f4-phone", { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 1.2);
+tl.fromTo("#f4-b1", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 2.0);
+tl.fromTo("#f4-b2", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 3.2);
+tl.fromTo("#f4-b3", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 4.4);
+tl.fromTo("#f4-input", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 5.6);
+tl.fromTo("#f4-cap", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 6.2);
+window.__timelines["f4-chat"] = tl;
+</script>
+</template>
+</body>
+</html>

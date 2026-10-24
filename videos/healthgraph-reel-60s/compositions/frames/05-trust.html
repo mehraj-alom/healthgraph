@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+<template>
+<style>
+#root { position: absolute; inset: 0; background: #08090D; color: #FBF6EC; font-family: system-ui, sans-serif; overflow: hidden; }
+.f5-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(143,193,232,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(143,193,232,0.08) 1px, transparent 1px); background-size: 64px 64px; }
+.f5-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 110px 70px 0 70px; }
+.f5-kicker { font-size: 26px; letter-spacing: 0.22em; color: #8FC1E8; font-weight: 700; }
+.f5-title { margin-top: 24px; font-size: 86px; line-height: 1.02; font-weight: 700; text-align: center; }
+.f5-card { margin-top: 52px; width: 860px; border-radius: 44px; background: #1D1B17; border: 2px solid rgba(251,246,236,0.14); padding: 44px 44px 48px 44px; }
+.f5-row { display: flex; align-items: center; gap: 22px; padding: 24px 6px; border-bottom: 2px solid rgba(251,246,236,0.1); font-size: 34px; font-weight: 600; }
+.f5-check { width: 56px; height: 56px; border-radius: 50%; background: #4FD1C5; color: #08090D; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700; }
+.f5-graph { margin-top: 30px; width: 100%; height: 170px; }
+.f5-lock { margin-top: 34px; border: 2px solid rgba(79,209,197,0.55); border-radius: 30px; padding: 30px; text-align: center; }
+.f5-lock-t { font-size: 40px; font-weight: 700; }
+.f5-lock-s { margin-top: 8px; font-size: 30px; color: #B8AF9E; }
+.f5-cap { margin-top: 40px; font-size: 33px; color: #B8AF9E; text-align: center; }
+</style>
+<div data-hf-id="hf-01u9" id="root" data-composition-id="f5-trust" data-width="1080" data-height="1920">
+<section data-hf-id="hf-kxjf" class="clip" data-start="0" data-duration="10">
+<div data-hf-id="hf-u7ll" class="f5-bg"></div>
+<div data-hf-id="hf-4jas" class="f5-wrap">
+<div data-hf-id="hf-4cpc" class="f5-kicker" id="f5-kicker">MANAGE · PRIVATE BY DESIGN</div>
+<div data-hf-id="hf-1yn5" class="f5-title" id="f5-title">Meds, graph,<br data-hf-id="hf-x5px">never sold.</div>
+<div data-hf-id="hf-02aq" class="f5-card" id="f5-card">
+<div data-hf-id="hf-njxh" class="f5-row" id="f5-r1"><div data-hf-id="hf-z221" class="f5-check">✓</div><div data-hf-id="hf-6qpc">Midday dose logged · refill 12 left</div></div>
+<div data-hf-id="hf-ri1i" class="f5-row" id="f5-r2"><div data-hf-id="hf-cx0d" class="f5-check">✓</div><div data-hf-id="hf-pw88">One tap notifies family · never auto</div></div>
+<svg data-hf-id="hf-022q" class="f5-graph" id="f5-graph" viewBox="0 0 600 170" preserveAspectRatio="none">
+<circle data-hf-id="hf-capm" cx="80" cy="120" r="16" fill="#8A7BC8" /><circle data-hf-id="hf-bvx3" cx="220" cy="80" r="16" fill="#4FD1C5" /><circle data-hf-id="hf-dndk" cx="360" cy="100" r="16" fill="#E8862E" /><circle data-hf-id="hf-962d" cx="500" cy="50" r="16" fill="#4FD1C5" />
+<polyline data-hf-id="hf-402j" points="80,120 220,80 360,100 500,50" fill="none" stroke="#4FD1C5" stroke-width="5" />
+</svg>
+<div data-hf-id="hf-xwrg" class="f5-lock" id="f5-lock">
+<div data-hf-id="hf-q832" class="f5-lock-t">On your phone. Encrypted.</div>
+<div data-hf-id="hf-06kl" class="f5-lock-s">DSGVO-compliant · Export / delete in one tap</div>
+</div>
+</div>
+<div data-hf-id="hf-j0nr" class="f5-cap" id="f5-cap">Nights explain mornings. Your tap is consent.</div>
+</div>
+</section>
+</div>
+<script>
+const tl = gsap.timeline({ paused: true });
+tl.fromTo("#f5-kicker", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 0.2);
+tl.fromTo("#f5-title", { opacity: 0, y: 44 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.5);
+tl.fromTo("#f5-card", { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 1.2);
+tl.fromTo("#f5-r1", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.6, ease: "power3.out" }, 2.0);
+tl.fromTo("#f5-r2", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.6, ease: "power3.out" }, 2.8);
+tl.fromTo("#f5-graph", { opacity: 0 }, { opacity: 1, duration: 0.7 }, 3.6);
+tl.fromTo("#f5-lock", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 4.6);
+tl.fromTo("#f5-cap", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 5.6);
+window.__timelines["f5-trust"] = tl;
+</script>
+</template>
+</body>
+</html>

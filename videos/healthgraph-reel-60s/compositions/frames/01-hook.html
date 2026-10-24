@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+<template>
+<style>
+#root { position: absolute; inset: 0; background: #08090D; color: #FBF6EC; font-family: system-ui, sans-serif; overflow: hidden; }
+.f1-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(232,134,46,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(232,134,46,0.07) 1px, transparent 1px); background-size: 64px 64px; }
+.f1-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 120px 80px 0 80px; }
+.f1-kicker { font-size: 26px; letter-spacing: 0.22em; color: #B8AF9E; font-weight: 600; }
+.f1-title { margin-top: 28px; font-size: 118px; line-height: 1.0; font-weight: 700; letter-spacing: -0.02em; text-align: center; }
+.f1-title span { color: #4FD1C5; }
+.f1-grid { margin-top: 70px; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; width: 100%; }
+.f1-chip { border: 2px solid rgba(251,246,236,0.16); border-radius: 22px; padding: 26px 18px; font-size: 33px; font-weight: 600; text-align: center; color: #FBF6EC; background: #141218; }
+.f1-tile { margin-top: 60px; width: 100%; border-radius: 36px; background: #1D1B17; border: 2px solid rgba(79,209,197,0.55); padding: 54px 30px; text-align: center; }
+.f1-tile-mark { width: 120px; height: 120px; margin: 0 auto; border-radius: 50%; border: 6px solid #4FD1C5; display: flex; align-items: center; justify-content: center; font-size: 56px; font-weight: 700; color: #4FD1C5; }
+.f1-tile-name { margin-top: 22px; font-size: 64px; font-weight: 700; }
+.f1-tile-sub { margin-top: 10px; font-size: 32px; color: #B8AF9E; }
+.f1-cap { margin-top: auto; margin-bottom: 150px; font-size: 34px; color: #B8AF9E; text-align: center; }
+</style>
+<div data-hf-id="hf-3l2q" id="root" data-composition-id="f1-hook" data-width="1080" data-height="1920">
+<section data-hf-id="hf-kxjf" class="clip" data-start="0" data-duration="10">
+<div data-hf-id="hf-7bpp" class="f1-bg"></div>
+<div data-hf-id="hf-9hrc" class="f1-wrap">
+<div data-hf-id="hf-oqfl" class="f1-kicker" id="f1-kicker">HEALTHGRAPH · 10 APPS → 1 GRAPH</div>
+<div data-hf-id="hf-aqs3" class="f1-title" id="f1-title">Ten apps.<br data-hf-id="hf-x5px"><span data-hf-id="hf-d013">One graph.</span></div>
+<div data-hf-id="hf-a8t2" class="f1-grid" id="f1-grid">
+<div data-hf-id="hf-8695" class="f1-chip">Sleep tracker</div><div data-hf-id="hf-ox7p" class="f1-chip">Calorie counter</div>
+<div data-hf-id="hf-dzgb" class="f1-chip">Med reminders</div><div data-hf-id="hf-ebqv" class="f1-chip">Period tracker</div>
+<div data-hf-id="hf-2meu" class="f1-chip">Running app</div><div data-hf-id="hf-vtwu" class="f1-chip">Mood journal</div>
+</div>
+<div data-hf-id="hf-7hqe" class="f1-tile" id="f1-tile">
+<div data-hf-id="hf-iqgr" class="f1-tile-mark">∿</div>
+<div data-hf-id="hf-wo7e" class="f1-tile-name">HealthGraph</div>
+<div data-hf-id="hf-r3ft" class="f1-tile-sub">healthgraph.shop</div>
+</div>
+<div data-hf-id="hf-u6ci" class="f1-cap" id="f1-cap">Your health, finally in one place.</div>
+</div>
+</section>
+</div>
+<script>
+const tl = gsap.timeline({ paused: true });
+tl.fromTo("#f1-kicker", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.2);
+tl.fromTo("#f1-title", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 0.6);
+tl.fromTo("#f1-grid", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 2.2);
+tl.fromTo("#f1-grid", { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.85, duration: 0.6, ease: "power3.in", immediateRender: false }, 5.6);
+tl.fromTo("#f1-tile", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.9, ease: "power3.out" }, 6.2);
+tl.fromTo("#f1-cap", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power3.out" }, 7.6);
+window.__timelines["f1-hook"] = tl;
+</script>
+</template>
+</body>
+</html>

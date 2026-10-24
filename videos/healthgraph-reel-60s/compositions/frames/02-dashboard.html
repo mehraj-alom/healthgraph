@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+<template>
+<style>
+#root { position: absolute; inset: 0; background: #08090D; color: #FBF6EC; font-family: system-ui, sans-serif; overflow: hidden; }
+.f2-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(232,134,46,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(232,134,46,0.07) 1px, transparent 1px); background-size: 64px 64px; }
+.f2-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 110px 70px 0 70px; }
+.f2-kicker { font-size: 26px; letter-spacing: 0.22em; color: #4FD1C5; font-weight: 700; }
+.f2-title { margin-top: 24px; font-size: 92px; line-height: 1.02; font-weight: 700; text-align: center; }
+.f2-phone { margin-top: 56px; width: 860px; border-radius: 52px; background: #1D1B17; border: 2px solid rgba(251,246,236,0.14); padding: 44px 44px 50px 44px; }
+.f2-notch { width: 150px; height: 12px; border-radius: 999px; background: rgba(251,246,236,0.22); margin: 0 auto 30px auto; }
+.f2-hello { text-align: center; font-size: 40px; font-weight: 600; }
+.f2-ringwrap { position: relative; width: 300px; height: 300px; margin: 26px auto 6px auto; }
+.f2-score { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 96px; font-weight: 700; }
+.f2-grid { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.f2-tile { border-radius: 26px; padding: 34px 10px; text-align: center; font-size: 36px; font-weight: 600; }
+.f2-cap { margin-top: 44px; font-size: 33px; color: #B8AF9E; text-align: center; }
+</style>
+<div data-hf-id="hf-lx9u" id="root" data-composition-id="f2-dashboard" data-width="1080" data-height="1920">
+<section data-hf-id="hf-kxjf" class="clip" data-start="0" data-duration="10">
+<div data-hf-id="hf-usiw" class="f2-bg"></div>
+<div data-hf-id="hf-fdr9" class="f2-wrap">
+<div data-hf-id="hf-6cbo" class="f2-kicker" id="f2-kicker">REAL APP UI · DASHBOARD</div>
+<div data-hf-id="hf-lvwc" class="f2-title" id="f2-title">Dial &amp; tiles,<br data-hf-id="hf-x5px">everything live.</div>
+<div data-hf-id="hf-1v7e" class="f2-phone" id="f2-phone">
+<div data-hf-id="hf-pcw9" class="f2-notch"></div>
+<div data-hf-id="hf-2fks" class="f2-hello">Good evening.</div>
+<div data-hf-id="hf-gghf" class="f2-ringwrap">
+<svg data-hf-id="hf-rpvy" viewBox="0 0 120 120" width="300" height="300">
+<circle data-hf-id="hf-be5v" cx="60" cy="60" r="50" fill="none" stroke="rgba(251,246,236,0.14)" stroke-width="11" />
+<circle data-hf-id="hf-og6g" id="f2-ring" cx="60" cy="60" r="50" fill="none" stroke="#4FD1C5" stroke-width="11" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="314" transform="rotate(-90 60 60)" />
+</svg>
+<div data-hf-id="hf-o53f" class="f2-score" id="f2-score">72</div>
+</div>
+<div data-hf-id="hf-ffbs" class="f2-grid" id="f2-grid">
+<div data-hf-id="hf-whdg" class="f2-tile" style="background:#57507A">Sleep 7h12</div>
+<div data-hf-id="hf-25vr" class="f2-tile" style="background:#96684A">Meds 2/3</div>
+<div data-hf-id="hf-irty" class="f2-tile" style="background:#5C6E7C">Pulse 64</div>
+<div data-hf-id="hf-t9mt" class="f2-tile" style="background:#6E7F4E">Docs 14</div>
+</div>
+</div>
+<div data-hf-id="hf-wdyp" class="f2-cap" id="f2-cap">The real home screen. One glance, whole day.</div>
+</div>
+</section>
+</div>
+<script>
+const tl = gsap.timeline({ paused: true });
+tl.fromTo("#f2-kicker", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 0.2);
+tl.fromTo("#f2-title", { opacity: 0, y: 44 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.5);
+tl.fromTo("#f2-phone", { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 1.2);
+tl.fromTo("#f2-ring", { attr: { "stroke-dashoffset": 314 } }, { attr: { "stroke-dashoffset": 88 }, duration: 1.6, ease: "power3.out" }, 1.8);
+tl.fromTo("#f2-score", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 2.0);
+tl.fromTo("#f2-grid", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 3.2);
+tl.fromTo("#f2-cap", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 4.4);
+window.__timelines["f2-dashboard"] = tl;
+</script>
+</template>
+</body>
+</html>

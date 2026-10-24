@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.theme
 
 import androidx.compose.ui.graphics.*
@@ -17,7 +18,7 @@ import kotlin.math.sqrt
 
 object LiquidGlassShaders {
 
-    @OptIn(ExperimentalComposeUiApi::class)
+
     fun glassSurfaceShader(
         bounds: Rect,
         cornerRadius: Dp,
@@ -74,7 +75,7 @@ object LiquidGlassShaders {
         }
     }
 
-    @OptIn(ExperimentalComposeUiApi::class)
+
     fun glassHighlightShader(
         bounds: Rect,
         cornerRadius: Dp,
@@ -112,7 +113,7 @@ object LiquidGlassShaders {
         }
     }
 
-    @OptIn(ExperimentalComposeUiApi::class)
+
     fun glassRefractionShader(
         bounds: Rect,
         cornerRadius: Dp,
@@ -152,7 +153,6 @@ object LiquidGlassShaders {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 fun Modifier.liquidGlass(
     cornerRadius: Dp = GlassCorner.MD,
     elevation: Dp = GlassElevation.Level2,
@@ -212,7 +212,6 @@ fun Modifier.liquidGlass(
         .shadow(elevation.value, RoundRectCornerShape(cornerRadius), HealthGraphColors.GlassShadow)
 )
 
-@OptIn(ExperimentalComposeUiApi::class)
 fun Modifier.glassCard(
     cornerRadius: Dp = GlassCorner.MD,
     elevation: Dp = GlassElevation.Level2,
@@ -232,7 +231,6 @@ fun Modifier.glassCard(
 
 fun RoundRectCornerShape(cornerRadius: Dp) = androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius)
 
-@OptIn(ExperimentalComposeUiApi::class)
 class GlassAnimationState(
     val timeMs: Float = 0f,
     val hoverProgress: Float = 0f,
@@ -243,7 +241,6 @@ class GlassAnimationState(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun rememberGlassAnimationState(): GlassAnimationState {
     val timeMs = remember { mutableStateOf(0f) }
@@ -265,7 +262,6 @@ fun rememberGlassAnimationState(): GlassAnimationState {
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 fun Modifier.interactiveGlass(
     cornerRadius: Dp = GlassCorner.MD,
     elevation: Dp = GlassElevation.Level2,

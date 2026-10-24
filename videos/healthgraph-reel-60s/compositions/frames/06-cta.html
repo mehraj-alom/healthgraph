@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body>
+<template>
+<style>
+#root { position: absolute; inset: 0; background: #08090D; color: #FBF6EC; font-family: system-ui, sans-serif; overflow: hidden; }
+.f6-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(232,134,46,0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(232,134,46,0.09) 1px, transparent 1px); background-size: 64px 64px; }
+.f6-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 120px 70px 0 70px; text-align: center; }
+.f6-mark { width: 130px; height: 130px; border-radius: 50%; border: 6px solid #4FD1C5; display: flex; align-items: center; justify-content: center; font-size: 62px; font-weight: 700; color: #4FD1C5; }
+.f6-name { margin-top: 26px; font-size: 110px; font-weight: 700; letter-spacing: -0.02em; }
+.f6-tag { margin-top: 10px; font-size: 40px; color: #B8AF9E; }
+.f6-prices { margin-top: 54px; width: 100%; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+.f6-price { border-radius: 28px; padding: 30px 8px; background: #1D1B17; border: 2px solid rgba(251,246,236,0.14); }
+.f6-price-hl { border-color: #E8862E; }
+.f6-pn { font-size: 30px; font-weight: 700; }
+.f6-pv { margin-top: 8px; font-size: 52px; font-weight: 700; color: #4FD1C5; }
+.f6-pp { margin-top: 4px; font-size: 26px; color: #B8AF9E; }
+.f6-shop { margin-top: 54px; background: #FBF6EC; color: #08090D; border-radius: 999px; padding: 30px 70px; font-size: 46px; font-weight: 800; }
+.f6-sub { margin-top: 24px; font-size: 34px; color: #FBF6EC; }
+.f6-note { margin-top: 18px; font-size: 28px; color: #B8AF9E; }
+</style>
+<div data-hf-id="hf-ik9w" id="root" data-composition-id="f6-cta" data-width="1080" data-height="1920">
+<section data-hf-id="hf-kxjf" class="clip" data-start="0" data-duration="10">
+<div data-hf-id="hf-xe9w" class="f6-bg"></div>
+<div data-hf-id="hf-63ox" class="f6-wrap">
+<div data-hf-id="hf-kgx3" class="f6-mark" id="f6-mark">∿</div>
+<div data-hf-id="hf-yqv4" class="f6-name" id="f6-name">HealthGraph</div>
+<div data-hf-id="hf-i5ob" class="f6-tag" id="f6-tag">Your whole health, one place.</div>
+<div data-hf-id="hf-4rr4" class="f6-prices" id="f6-prices">
+<div data-hf-id="hf-h7jw" class="f6-price"><div data-hf-id="hf-qi8t" class="f6-pn">Free</div><div data-hf-id="hf-b18z" class="f6-pv">€0</div><div data-hf-id="hf-ryfo" class="f6-pp">forever</div></div>
+<div data-hf-id="hf-fnjo" class="f6-price"><div data-hf-id="hf-lrqt" class="f6-pn">General</div><div data-hf-id="hf-1spv" class="f6-pv">€11</div><div data-hf-id="hf-6n7c" class="f6-pp">/ 30 days</div></div>
+<div data-hf-id="hf-zpkp" class="f6-price f6-price-hl"><div data-hf-id="hf-12da" class="f6-pn">All-in</div><div data-hf-id="hf-z0ko" class="f6-pv">€18</div><div data-hf-id="hf-voi8" class="f6-pp">/ 30 days</div></div>
+</div>
+<div data-hf-id="hf-689c" class="f6-shop" id="f6-shop">healthgraph.shop</div>
+<div data-hf-id="hf-h68i" class="f6-sub" id="f6-sub">Get the app free · Buy premium — from €11</div>
+<div data-hf-id="hf-h3yf" class="f6-note" id="f6-note">Wellness companion, not a medical device · DSGVO · Never sold</div>
+</div>
+</section>
+</div>
+<script>
+const tl = gsap.timeline({ paused: true });
+tl.fromTo("#f6-mark", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, 0.2);
+tl.fromTo("#f6-name", { opacity: 0, y: 44 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.6);
+tl.fromTo("#f6-tag", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 1.2);
+tl.fromTo("#f6-prices", { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 1.8);
+tl.fromTo("#f6-shop", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 2.8);
+tl.fromTo("#f6-sub", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 3.6);
+tl.fromTo("#f6-note", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 4.2);
+window.__timelines["f6-cta"] = tl;
+</script>
+</template>
+</body>
+</html>

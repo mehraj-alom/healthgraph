@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +30,6 @@ import com.healthgraph.shared.ui.components.LiquidButton
 import com.healthgraph.shared.ui.components.LiquidButtonVariant
 import com.healthgraph.shared.ui.components.LiquidButtonSize
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HealthAreasScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -66,7 +66,6 @@ fun HealthAreasScreen(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ScreenHeader(title: String, subtitle: String? = null, action: (@Composable () -> Unit)? = null) {
     val state = rememberGlassAnimationState()
@@ -129,7 +128,6 @@ val healthAreas = listOf(
     HealthArea("immunity", "Immune & Resilience", "Illness resistance & recovery", androidx.compose.material.icons.Icons.Default.Shield, HealthGraphColors.Success, 77, Trend.UP, listOf("Inflammation", "Recovery", "Adaptation"))
 )
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HealthAreaCard(area: HealthArea) {
     val state = rememberGlassAnimationState()

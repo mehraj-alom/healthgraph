@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -34,7 +35,6 @@ import com.healthgraph.shared.ui.components.LiquidButton
 import com.healthgraph.shared.ui.components.LiquidButtonVariant
 import com.healthgraph.shared.ui.components.LiquidButtonSize
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun FitnessEngineScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -146,14 +146,12 @@ fun ScreenHeader(title: String, subtitle: String? = null) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GlassCardElevated(tint: Color = HealthGraphColors.RefractionTintCool, content: @Composable () -> Unit) {
     val s = rememberGlassAnimationState()
     Box(Modifier.fillMaxWidth().liquidGlass(GlassCorner.XL, GlassElevation.Level3, tint, timeMs=s.timeMs).clip(androidx.compose.foundation.shape.RoundedCornerShape(GlassCorner.XL)).padding(20.dp), content = content)
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GlassCard(content: @Composable () -> Unit) {
     val s = rememberGlassAnimationState()

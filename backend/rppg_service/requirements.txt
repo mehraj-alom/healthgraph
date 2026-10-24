@@ -1,0 +1,8 @@
+# rPPG Backend Inference Service Dependencies
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+onnxruntime==1.20.0
+numpy==1.26.4
+pydantic==2.9.2
+pydantic-settings==2.6.1
+python-multipart==0.0.9

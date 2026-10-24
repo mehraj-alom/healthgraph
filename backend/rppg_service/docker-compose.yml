@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  rppg-inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: healthgraph-rppg-inference
+    ports:
+      - "8080:8080"
+    environment:
+      - RPPG_MODEL_PATH=/app/physformer_rppg_fp16.onnx
+      - PORT=8080
+      - ORT_INTRA_THREADS=4
+      - ORT_INTER_THREADS=2
+      - USE_CUDA=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # For GPU support, uncomment and ensure nvidia-container-toolkit is installed:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    # environment:
+    #   - USE_CUDA=true

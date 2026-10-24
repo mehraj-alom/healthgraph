@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
@@ -32,8 +33,12 @@ import com.healthgraph.shared.theme.HealthGraphTypography
 import com.healthgraph.shared.theme.interactiveGlass
 import com.healthgraph.shared.theme.liquidGlass
 import com.healthgraph.shared.theme.rememberGlassAnimationState
+import kotlin.annotation.OptIn
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.material3.ExperimentalMaterial3Api
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
+
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
@@ -62,7 +67,6 @@ fun GlassCard(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GlassCardElevated(
     modifier: Modifier = Modifier,
@@ -82,7 +86,6 @@ fun GlassCardElevated(
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GlassCardSectioned(
     modifier: Modifier = Modifier,
@@ -142,7 +145,6 @@ fun GlassCardSectioned(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GlassCardMedia(
     modifier: Modifier = Modifier,

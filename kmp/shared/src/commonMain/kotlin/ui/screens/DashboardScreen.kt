@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +39,6 @@ import com.healthgraph.shared.ui.components.LiquidButton
 import com.healthgraph.shared.ui.components.LiquidButtonVariant
 import com.healthgraph.shared.ui.components.LiquidButtonSize
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -83,7 +83,6 @@ fun DashboardScreen(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardHeader() {
     val state = rememberGlassAnimationState()
@@ -129,7 +128,6 @@ fun DashboardHeader() {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun QuickActionsRow() {
     val actions = listOf(
@@ -156,7 +154,6 @@ data class QuickAction(
     val onClick: () -> Unit
 )
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun QuickActionCard(action: QuickAction) {
     val state = rememberGlassAnimationState()
@@ -210,7 +207,6 @@ fun QuickActionCard(action: QuickAction) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HealthSummaryCard() {
     GlassCardElevated(
@@ -250,7 +246,6 @@ fun HealthSummaryCard() {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HealthMetricItem(title: String, value: String, color: Color) {
     val state = rememberGlassAnimationState()
@@ -278,7 +273,6 @@ fun HealthMetricItem(title: String, value: String, color: Color) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TodayMetricsRow() {
     GlassCard(
@@ -303,7 +297,6 @@ fun TodayMetricsRow() {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun MetricCard(title: String, current: String, progress: String, color: Color) {
     val state = rememberGlassAnimationState()
@@ -353,7 +346,6 @@ fun MetricCard(title: String, current: String, progress: String, color: Color) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun RecentActivityCard() {
     GlassCard(
@@ -389,7 +381,6 @@ fun RecentActivityCard() {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ActivityItem(title: String, description: String, time: String, color: Color) {
     Row(
@@ -420,7 +411,6 @@ fun ActivityItem(title: String, description: String, time: String, color: Color)
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun UpcomingRemindersCard() {
     GlassCard(
@@ -456,7 +446,6 @@ fun UpcomingRemindersCard() {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ReminderItem(title: String, time: String, isUrgent: Boolean, color: Color) {
     Row(

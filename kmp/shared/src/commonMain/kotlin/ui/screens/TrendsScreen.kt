@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +39,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Background
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TrendsScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -259,7 +259,6 @@ fun ComparisonRow(label: String, change: String, color: Color) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GlassCardElevated(content: @Composable () -> Unit) {
     val s = rememberGlassAnimationState()
@@ -273,7 +272,6 @@ fun GlassCardElevated(content: @Composable () -> Unit) {
     )
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GlassCard(content: @Composable () -> Unit) {
     val s = rememberGlassAnimationState()

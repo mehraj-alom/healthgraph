@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 package com.healthgraph.shared.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -37,7 +38,6 @@ import com.healthgraph.shared.ui.components.LiquidButton
 import com.healthgraph.shared.ui.components.LiquidButtonVariant
 import com.healthgraph.shared.ui.components.LiquidButtonSize
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BodyScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
@@ -167,7 +167,6 @@ data class BodyNode(
     val color: Color
 )
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BodyHeader(
     selectedSystem: BodySystem,
@@ -226,7 +225,6 @@ fun BodyHeader(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BodySystemTab(
     system: BodySystem,
@@ -270,7 +268,6 @@ fun BodySystemTab(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BodyVisualization(
     system: BodySystem,
@@ -306,7 +303,6 @@ fun BodyVisualization(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun Body3DPlaceholder(system: BodySystem) {
     val state = rememberGlassAnimationState()
@@ -353,7 +349,6 @@ fun Body3DPlaceholder(system: BodySystem) {
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BodyNodeMarker(
     node: BodyNode,
@@ -419,7 +414,6 @@ fun calculateNodePosition(index: Int, total: Int): androidx.compose.ui.geometry.
     return androidx.compose.ui.geometry.Offset(x, y)
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BodyBottomSheet(
     system: BodySystem,
@@ -499,7 +493,6 @@ fun BodyBottomSheet(
     }
 }
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun BodyNodeDetail(node: BodyNode) {
     val state = rememberGlassAnimationState()

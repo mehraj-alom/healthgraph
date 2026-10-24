@@ -16,6 +16,7 @@
 
 import { createOnnxRppgProvider, getOnnxRuntimeStatus } from './onnxProvider';
 import { createUnavailableRppgProvider } from './unavailableProvider';
+import { createBackendRppgProvider, isBackendRppgAvailable, shouldUseBackend } from './backendProvider';
 import type { RppgProvider } from './types';
 
 export * from './types';
@@ -27,6 +28,8 @@ export {
 } from './onnxProvider';
 export type { OnnxRuntimeStatus, OnnxRuntimeStatusReason } from './onnxProvider';
 export { createUnavailableRppgProvider } from './unavailableProvider';
+export { createBackendRppgProvider, isBackendRppgAvailable, shouldUseBackend } from './backendProvider';
+export type { BackendProviderDoc } from './backendProvider';
 export { buildRppgSmokeTensor, runRppgDevValidation } from './devValidate';
 export type { RppgDevValidationResult } from './devValidate';
 export { parseRppgWindow, readRppgWindowFile, buildRppgWindowForTests, RppgWindowError } from './frameWindow';
@@ -50,6 +53,16 @@ let cached: RppgProvider | null = null;
 /** Select the usable rPPG provider for this runtime (cached). */
 export function getRppgProvider(): RppgProvider {
   if (!cached) {
+    // Check if backend mode is explicitly enabled
+    if (shouldUseBackend()) {
+      const baseUrl = process.env.EXPO_PUBLIC_RPPG_BACKEND_URL ?? 'http://localhost:8080';
+      console.log(
+        `rppg stage: RPPG_PROVIDER_SELECT kind=backend url=${baseUrl}`,
+      );
+      cached = createBackendRppgProvider();
+      return cached;
+    }
+
     let status = { supported: false, reason: 'require-failed' } as ReturnType<
       typeof getOnnxRuntimeStatus
     >;

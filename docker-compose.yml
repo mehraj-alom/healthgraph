@@ -12,6 +12,9 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+    depends_on:
+      rppg-inference:
+        condition: service_healthy
 
   celery-worker:
     build:
@@ -32,6 +35,28 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+
+  rppg-inference:
+    build:
+      context: ./backend/rppg_service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1.5
+    ports:
+      - "8080:8080"
+    environment:
+      - RPPG_MODEL_PATH=/app/physformer_rppg_fp16.onnx
+      - PORT=8080
+      - ORT_INTRA_THREADS=4
+      - ORT_INTER_THREADS=2
+      - USE_CUDA=false
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
 volumes:
   document_storage:

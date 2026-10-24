@@ -17,7 +17,7 @@
       "bundleIdentifier": "com.medgraph.app",
       "infoPlist": {
         "CFBundleDisplayName": "HealthGraph",
-        "NSCameraUsageDescription": "Puls per Kamera messen und Dokumente scannen. Face pulse is computed on-device, frames never stored. / Kamera-Puls und Dokumenten-Scan, direkt am Ger\u00e4t.",
+        "NSCameraUsageDescription": "Puls per Kamera messen und Dokumente scannen. Face pulse frames are processed securely in the cloud, never stored on device. / Kamera-Puls und Dokumenten-Scan, Verarbeitung in der Cloud.",
         "NSMicrophoneUsageDescription": "Voice check-ins und Sprach-Alarme. / Voice check-ins and spoken alarms.",
         "NSHealthUpdateUsageDescription": "HealthGraph liest Trainings- und Schlafdaten nur mit deiner Erlaubnis. / Reads workouts and sleep only with permission.",
         "NSHealthShareUsageDescription": "HealthGraph schreibt Messwerte nur mit deiner Erlaubnis. / Writes vitals only with permission.",
@@ -47,9 +47,6 @@
       "expo-secure-store",
       "expo-notifications",
       "./modules/healthgraph-ppg/app.plugin.js",
-      "./modules/healthgraph-rppg/app.plugin.js",
-      "onnxruntime-react-native",
-      "./plugins/withOnnxruntimePackage.js",
       [
         "expo-sqlite",
         {
@@ -75,7 +72,6 @@
           }
         }
       ],
-      "./plugins/withArm64Abi.js",
       "expo-sharing",
       "expo-audio",
       "react-native-health-connect"
