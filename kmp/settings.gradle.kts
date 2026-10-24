@@ -11,7 +11,6 @@ pluginManagement {
         id("com.android.library") version "8.4.0" apply false
         id("org.jlleitschuh.gradle.ktlint") version "11.0.0" apply false
         id("io.gitlab.arturbosch.detekt") version "1.23.6" apply false
-        id("org.owasp.dependencycheck") version "1.2.1" apply false
     }
 }
 
