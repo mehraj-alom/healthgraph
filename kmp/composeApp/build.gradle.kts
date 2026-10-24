@@ -1,7 +1,7 @@
 plugins {
-    alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.detekt)
+    id("org.jetbrains.kotlin.multiplatform")
+    id("com.android.application")
+    id("io.gitlab.arturbosch.detekt")
 }
 
 kotlin {
