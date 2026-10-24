@@ -43,7 +43,17 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
             }
         }
-        val iosMain by getting {
+        val iosX64Main by getting {
+            dependencies {
+                implementation("androidx.compose.ui:ui-platform-ios")
+            }
+        }
+        val iosArm64Main by getting {
+            dependencies {
+                implementation("androidx.compose.ui:ui-platform-ios")
+            }
+        }
+        val iosSimulatorArm64Main by getting {
             dependencies {
                 implementation("androidx.compose.ui:ui-platform-ios")
             }
