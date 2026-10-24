@@ -58,10 +58,6 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).conf
     }
 }
 
-ktlint {
-    config = file("$rootDir/.ktlint.yml")
-}
-
 detekt {
     config = files("detekt.yml")
     buildUponDefaultConfig = true
