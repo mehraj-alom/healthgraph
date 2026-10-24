@@ -35,7 +35,7 @@ fun TimelineScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
 ) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -52,7 +52,7 @@ fun TimelineScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             TimelineHeader()
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -70,7 +70,7 @@ fun TimelineScreen(
 @Composable
 fun TimelineHeader() {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -94,7 +94,7 @@ fun TimelineHeader() {
                 Text("Timeline", style = HealthGraphTypography.HeadlineMedium)
                 Text("Your health journey", style = HealthGraphTypography.BodyMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
             }
-            
+
             LiquidButton(
                 onClick = {},
                 label = "Add Entry",
@@ -142,7 +142,7 @@ val timelineEntries = listOf(
 @Composable
 fun TimelineEntryCard(entry: TimelineEntry) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -169,7 +169,7 @@ fun TimelineEntryCard(entry: TimelineEntry) {
                     .background(entry.color)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
             )
-            
+
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -204,7 +204,7 @@ fun TimelineEntryCard(entry: TimelineEntry) {
                                     .align(Alignment.Center)
                             )
                         }
-                        
+
                         Column(
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
@@ -212,19 +212,19 @@ fun TimelineEntryCard(entry: TimelineEntry) {
                             Text(text = entry.timestamp, style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceMuted))
                         }
                     }
-                    
+
                     Text(text = entry.title, style = HealthGraphTypography.TitleMedium)
                 }
-                
+
                 Text(text = entry.description, style = HealthGraphTypography.BodyMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
-                
+
                 entry.value?.let { value ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(text = value, style = HealthGraphTypography.NumberMedium.copy(color = entry.color))
-                        
+
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {

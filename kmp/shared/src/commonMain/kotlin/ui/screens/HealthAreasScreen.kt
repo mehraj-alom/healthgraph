@@ -35,7 +35,7 @@ fun HealthAreasScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
 ) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -52,7 +52,7 @@ fun HealthAreasScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             ScreenHeader(title = "Health Areas", subtitle = "Track and optimize your wellbeing")
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -70,7 +70,7 @@ fun HealthAreasScreen(
 @Composable
 fun ScreenHeader(title: String, subtitle: String? = null, action: (@Composable () -> Unit)? = null) {
     val state = rememberGlassAnimationState()
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -93,7 +93,7 @@ fun ScreenHeader(title: String, subtitle: String? = null, action: (@Composable (
                 Text(text = it, style = HealthGraphTypography.BodyMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
             }
         }
-        
+
         action?.invoke()
     }
 }
@@ -133,7 +133,7 @@ val healthAreas = listOf(
 @Composable
 fun HealthAreaCard(area: HealthArea) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -180,7 +180,7 @@ fun HealthAreaCard(area: HealthArea) {
                                 .align(Alignment.Center)
                         )
                     }
-                    
+
                     Column(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
@@ -188,7 +188,7 @@ fun HealthAreaCard(area: HealthArea) {
                         Text(text = area.description, style = HealthGraphTypography.BodyMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
                     }
                 }
-                
+
                 Column(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     horizontalAlignment = Alignment.End
@@ -197,7 +197,7 @@ fun HealthAreaCard(area: HealthArea) {
                         text = "${area.score}%",
                         style = HealthGraphTypography.NumberLarge.copy(color = area.color)
                     )
-                    
+
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -223,7 +223,7 @@ fun HealthAreaCard(area: HealthArea) {
                     }
                 }
             }
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -244,7 +244,7 @@ fun HealthAreaCard(area: HealthArea) {
                     }
                 }
             }
-            
+
             LiquidButton(
                 onClick = {},
                 label = "Explore ${area.name}",

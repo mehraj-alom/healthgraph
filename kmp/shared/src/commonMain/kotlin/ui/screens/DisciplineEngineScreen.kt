@@ -250,7 +250,7 @@ fun ScoreRow(label: String, score: Int, color: Color) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, style = HealthGraphTypography.BodyMedium, modifier = Modifier.weight(1f))
-        
+
         Box(
             modifier = Modifier
                 .width(80.dp)
@@ -267,7 +267,7 @@ fun ScoreRow(label: String, score: Int, color: Color) {
                     .clip(RoundedCornerShape(3.dp))
             )
         }
-        
+
         Text("$score%", style = HealthGraphTypography.TitleMedium.copy(color = color), modifier = Modifier.width(50.dp))
     }
 }

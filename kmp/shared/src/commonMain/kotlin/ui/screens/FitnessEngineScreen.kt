@@ -40,7 +40,7 @@ fun FitnessEngineScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
 ) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -52,7 +52,7 @@ fun FitnessEngineScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             ScreenHeader("Fitness Engine", "VO₂ Max, Strength & Mobility")
-            
+
             GlassCardElevated(tint = HealthGraphColors.Accent.copy(alpha = 0.15f)) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(
@@ -73,7 +73,7 @@ fun FitnessEngineScreen(
                             }
                         }
                     }
-                    
+
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         FitnessMetric("Strength", "85th %ile", HealthGraphColors.Success)
                         FitnessMetric("Mobility", "Good", HealthGraphColors.Primary)
@@ -81,7 +81,7 @@ fun FitnessEngineScreen(
                     }
                 }
             }
-            
+
             GlassCard {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("This Week's Plan", style = HealthGraphTypography.TitleLarge)

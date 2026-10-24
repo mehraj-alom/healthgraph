@@ -202,7 +202,7 @@ fun StressFactorRow(label: String, level: Int, color: Color) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, style = HealthGraphTypography.BodyMedium, modifier = Modifier.weight(1f))
-        
+
         Box(
             modifier = Modifier
                 .width(100.dp)
@@ -219,7 +219,7 @@ fun StressFactorRow(label: String, level: Int, color: Color) {
                     .clip(RoundedCornerShape(3.dp))
             )
         }
-        
+
         Text("$level%", style = HealthGraphTypography.LabelMedium.copy(color = color), modifier = Modifier.width(40.dp))
     }
 }

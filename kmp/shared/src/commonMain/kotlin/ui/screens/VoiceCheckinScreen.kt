@@ -40,11 +40,11 @@ fun VoiceCheckinScreen(modifier: androidx.compose.ui.Modifier = androidx.compose
     val voiceLevel by remember { mutableStateOf(50) }
     val transcript by remember { mutableStateOf("") }
     val lastCheckin by remember { LocalDateTime.now() }
-    
+
     Box(modifier.fillMaxWidth().padding(16.dp).liquidGlass(0.dp, 0.dp, Color.Transparent, s.timeMs)) {
         Column(Modifier.fillMaxWidth(), Arrangement.spacedBy(20.dp)) {
             ScreenHeader("Voice Check-in", "Daily voice recording")
-            
+
             GlassCardElevated(HealthGraphColors.Primary.copy(alpha=0.1f)) {
                 Column(verticalArrangement = Arrangement.spacedBy(24.dp), horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                     // Voice level indicator
@@ -53,7 +53,7 @@ fun VoiceCheckinScreen(modifier: androidx.compose.ui.Modifier = androidx.compose
         Text("${voiceLevel}%", style = HealthGraphTypography.BodyMedium.copy(color=HealthGraphColors.Primary))
     }
                     androidx.compose.foundation.BarGraph(Modifier.size(200.dp, 8.dp).background(HealthGraphColors.SurfaceVariant.copy(alpha=0.3f)), value = voiceLevel, max = 100, barColor = HealthGraphColors.Primary, backgroundColor = HealthGraphColors.SurfaceVariant)
-                    
+
                     // Mood selector
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         CatChip("Happy", "happy", selectedMood == "happy", { selectedMood = "happy" })
@@ -61,20 +61,20 @@ fun VoiceCheckinScreen(modifier: androidx.compose.ui.Modifier = androidx.compose
                         CatChip("Energized", "energized", selectedMood == "energized", { selectedMood = "energized" })
                         CatChip("Stressed", "stressed", selectedMood == "stressed", { selectedMood = "stressed" })
                     }
-                    
+
                     Text("Current: ${selectedMood}", style = HealthGraphTypography.BodyMedium.copy(color=HealthGraphColors.OnSurfaceVariant), modifier = Modifier.padding(horizontal = 24.dp))
-                    
+
                     Spacer(Modifier.weight(1f))
-                    
+
                     // Record button
                     LiquidButton(onClick={ /* record voice */ }, label="Record Voice Check-in", variant=LiquidButtonVariant.FILLED, size=LiquidButtonSize.LARGE, modifier = Modifier.fillMaxWidth().padding(24.dp))
-                    
+
                     Spacer(Modifier.weight(0.5f))
-                    
+
                     Text("Last check-in: ${lastCheckin.format("h:mm a")}", style = HealthGraphTypography.Caption.copy(color=HealthGraphColors.OnSurfaceVariant))
                 }
             }
-            
+
             GlassCard {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Recent Transcripts", style = HealthGraphTypography.TitleLarge)

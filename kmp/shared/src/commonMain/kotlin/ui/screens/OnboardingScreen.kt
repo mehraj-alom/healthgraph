@@ -39,7 +39,7 @@ fun OnboardingScreen(
 ) {
     val state = rememberGlassAnimationState()
     val currentStep by remember { mutableStateOf(0) }
-    
+
     val steps = listOf(
         OnboardingStep("Welcome", "Your health journey starts here", Icons.Default.Favorite, HealthGraphColors.Primary),
         OnboardingStep("Permissions", "Grant access for accurate tracking", Icons.Default.Security, HealthGraphColors.Accent),
@@ -68,7 +68,7 @@ fun OnboardingScreen(
                             .weight(1f)
                             .height(4.dp)
                             .background(
-                                if (index <= currentStep) steps[index].color 
+                                if (index <= currentStep) steps[index].color
                                 else HealthGraphColors.SurfaceVariant.copy(alpha = 0.3f)
                             )
                             .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
@@ -115,10 +115,10 @@ fun OnboardingScreen(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        
+
                         LiquidButton(
-                            onClick = { 
-                                if (currentStep < steps.lastIndex) currentStep++ else onComplete() 
+                            onClick = {
+                                if (currentStep < steps.lastIndex) currentStep++ else onComplete()
                             },
                             label = if (currentStep < steps.lastIndex) "Next" else "Get Started",
                             variant = LiquidButtonVariant.FILLED,

@@ -89,7 +89,7 @@ fun PpgMeasureScreen(
                                         androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                                             val centerY = size.height / 2f
                                             val waveHeight = size.height * 0.3f
-                                            
+
                                             // Draw grid
                                             for (i in 0..10) {
                                                 val y = centerY + (i - 5) * (waveHeight / 5f)
@@ -100,14 +100,14 @@ fun PpgMeasureScreen(
                                                     strokeWidth = 1.dp.toPx()
                                                 )
                                             }
-                                            
+
                                             // Draw pulse wave
                                             val points = pulsePoints.mapIndexed { i, v ->
                                                 val x = (i / (pulsePoints.size - 1).toFloat()) * size.width
                                                 val y = centerY - v * waveHeight
                                                 androidx.compose.ui.geometry.Offset(x, y)
                                             }
-                                            
+
                                             for (j in 1 until points.size) {
                                                 drawLine(
                                                     HealthGraphColors.Error,
@@ -119,7 +119,7 @@ fun PpgMeasureScreen(
                                             }
                                         }
                                     }
-                                    
+
                                     // Heart rate display
                                     Column(
                                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),

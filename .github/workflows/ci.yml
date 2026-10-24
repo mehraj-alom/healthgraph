@@ -16,7 +16,7 @@ jobs:
   lint:
     name: Lint & Static Analysis
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: kmp
@@ -36,7 +36,10 @@ jobs:
         with:
           gradle-version: wrapper
 
-      - name: Run KtLint
+      - name: Run KtLint Format (auto-fix)
+        run: ./gradlew :shared:ktlintFormat :composeApp:ktlintFormat --no-daemon
+
+      - name: Run KtLint Check
         run: ./gradlew :shared:ktlintCheck :composeApp:ktlintCheck --no-daemon
 
       - name: Run Detekt

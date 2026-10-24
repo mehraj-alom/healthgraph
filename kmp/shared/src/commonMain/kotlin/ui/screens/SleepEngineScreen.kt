@@ -192,7 +192,7 @@ fun SleepTrendRow(day: String, score: Int, duration: String) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(day, style = HealthGraphTypography.BodyMedium.copy(fontWeight = FontWeight.Medium), modifier = Modifier.width(50.dp))
-        
+
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -209,7 +209,7 @@ fun SleepTrendRow(day: String, score: Int, duration: String) {
                     .clip(RoundedCornerShape(3.dp))
             )
         }
-        
+
         Text("$score", style = HealthGraphTypography.TitleSmall.copy(color = color), modifier = Modifier.width(36.dp))
         Text(duration, style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceVariant), modifier = Modifier.width(60.dp))
     }

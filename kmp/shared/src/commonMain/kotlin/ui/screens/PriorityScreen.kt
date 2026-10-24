@@ -35,7 +35,7 @@ fun PriorityScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
 ) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -52,9 +52,9 @@ fun PriorityScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             PriorityHeader()
-            
+
             PriorityWorldCard()
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -72,7 +72,7 @@ fun PriorityScreen(
 @Composable
 fun PriorityHeader() {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -96,7 +96,7 @@ fun PriorityHeader() {
                 Text("Priority Engine", style = HealthGraphTypography.HeadlineMedium)
                 Text("Your personalized action queue", style = HealthGraphTypography.BodyMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
             }
-            
+
             LiquidButton(
                 onClick = {},
                 label = "Refresh",
@@ -112,7 +112,7 @@ fun PriorityHeader() {
 @Composable
 fun PriorityWorldCard() {
     val state = rememberGlassAnimationState()
-    
+
     GlassCardElevated(
         cornerRadius = GlassCorner.XL,
         elevation = GlassElevation.Level3,
@@ -133,7 +133,7 @@ fun PriorityWorldCard() {
                     Text("Today's Priority Score", style = HealthGraphTypography.TitleMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
                     Text("94%", style = HealthGraphTypography.NumberDisplay.copy(color = HealthGraphColors.Primary))
                 }
-                
+
                 Box(
                     modifier = Modifier
                         .size(80.dp)
@@ -153,14 +153,14 @@ fun PriorityWorldCard() {
                         androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
                             val center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
                             val radius = min(size.width, size.height) / 2 - 4
-                            
+
                             drawCircle(
                                 color = HealthGraphColors.GlassStroke,
                                 center = center,
                                 radius = radius,
                                 style = androidx.compose.ui.draw.Stroke(width = 4.dp.toPx())
                             )
-                            
+
                             drawArc(
                                 color = HealthGraphColors.Primary,
                                 startAngle = -90f,
@@ -170,7 +170,7 @@ fun PriorityWorldCard() {
                                 size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
                                 style = androidx.compose.ui.draw.Stroke(width = 4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
                             )
-                            
+
                             drawText(
                                 text = "94%",
                                 fontSize = 24.sp,
@@ -182,7 +182,7 @@ fun PriorityWorldCard() {
                     }
                 }
             }
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -199,7 +199,7 @@ fun PriorityWorldCard() {
 @Composable
 fun PriorityStatItem(label: String, value: String, color: Color) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .weight(1f)
@@ -312,7 +312,7 @@ val priorityLayers = listOf(
 fun PriorityLayerCard(layer: PriorityLayer) {
     val state = rememberGlassAnimationState()
     val expanded by remember { mutableStateOf(layer.isActive) }
-    
+
     GlassCard(
         cornerRadius = GlassCorner.LG,
         elevation = if (layer.isActive) GlassElevation.Level3 else GlassElevation.Level2,
@@ -351,7 +351,7 @@ fun PriorityLayerCard(layer: PriorityLayer) {
                                 .align(Alignment.Center)
                         )
                     }
-                    
+
                     Column(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
@@ -365,7 +365,7 @@ fun PriorityLayerCard(layer: PriorityLayer) {
                         Text(text = layer.description, style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceVariant))
                     }
                 }
-                
+
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -374,11 +374,11 @@ fun PriorityLayerCard(layer: PriorityLayer) {
                         text = "${layer.actions.count { it.isCompleted }}/${layer.actions.size}",
                         style = HealthGraphTypography.NumberMedium.copy(color = layer.color)
                     )
-                    
+
                     Icon(
-                        imageVector = if (expanded) 
-                            androidx.compose.material.icons.Icons.Default.KeyboardArrowUp 
-                        else 
+                        imageVector = if (expanded)
+                            androidx.compose.material.icons.Icons.Default.KeyboardArrowUp
+                        else
                             androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
                         contentDescription = "Expand",
                         tint = HealthGraphColors.OnSurfaceVariant,
@@ -388,7 +388,7 @@ fun PriorityLayerCard(layer: PriorityLayer) {
                     )
                 }
             }
-            
+
             if (expanded) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -397,7 +397,7 @@ fun PriorityLayerCard(layer: PriorityLayer) {
                     layer.actions.forEach { action ->
                         PriorityActionItem(action = action, layerColor = layer.color)
                     }
-                    
+
                     LiquidButton(
                         onClick = {},
                         label = "Add Action",
@@ -415,7 +415,7 @@ fun PriorityLayerCard(layer: PriorityLayer) {
 @Composable
 fun PriorityActionItem(action: PriorityAction, layerColor: Color) {
     val state = rememberGlassAnimationState()
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -460,7 +460,7 @@ fun PriorityActionItem(action: PriorityAction, layerColor: Color) {
                         )
                     }
                 }
-                
+
                 Column(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
@@ -474,7 +474,7 @@ fun PriorityActionItem(action: PriorityAction, layerColor: Color) {
                     Text(text = action.description, style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceVariant))
                 }
             }
-            
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -487,7 +487,7 @@ fun PriorityActionItem(action: PriorityAction, layerColor: Color) {
                 ) {
                     Text(text = action.impact.name, style = HealthGraphTypography.LabelSmall.copy(color = action.impact.color))
                 }
-                
+
                 Text(text = action.estimatedTime, style = HealthGraphTypography.LabelSmall.copy(color = HealthGraphColors.OnSurfaceMuted))
             }
         }

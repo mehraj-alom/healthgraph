@@ -44,7 +44,7 @@ fun DashboardScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
 ) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -87,7 +87,7 @@ fun DashboardScreen(
 @Composable
 fun DashboardHeader() {
     val state = rememberGlassAnimationState()
-    
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -105,7 +105,7 @@ fun DashboardHeader() {
                 style = HealthGraphTypography.HeadlineLarge
             )
         }
-        
+
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -138,7 +138,7 @@ fun QuickActionsRow() {
         QuickAction("Sleep", androidx.compose.material.icons.Icons.Default.Bedtime, HealthGraphColors.Primary) {},
         QuickAction("Activity", androidx.compose.material.icons.Icons.Default.DirectionsRun, HealthGraphColors.Warning) {}
     )
-    
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -160,7 +160,7 @@ data class QuickAction(
 @Composable
 fun QuickActionCard(action: QuickAction) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .weight(1f)
@@ -200,7 +200,7 @@ fun QuickActionCard(action: QuickAction) {
                         .align(Alignment.Center)
                 )
             }
-            
+
             Text(
                 text = action.title,
                 style = HealthGraphTypography.LabelMedium.copy(color = HealthGraphColors.OnSurface),
@@ -229,7 +229,7 @@ fun HealthSummaryCard() {
                 Text("Health Score", style = HealthGraphTypography.TitleLarge)
                 Text("87%", style = HealthGraphTypography.NumberLarge.copy(color = HealthGraphColors.Primary))
             }
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -239,7 +239,7 @@ fun HealthSummaryCard() {
                 HealthMetricItem("Steps", "8,432", HealthGraphColors.Accent)
                 HealthMetricItem("Stress", "Low", HealthGraphColors.Success)
             }
-            
+
             LiquidButton(
                 onClick = {},
                 label = "View Details",
@@ -254,7 +254,7 @@ fun HealthSummaryCard() {
 @Composable
 fun HealthMetricItem(title: String, value: String, color: Color) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .weight(1f)
@@ -290,7 +290,7 @@ fun TodayMetricsRow() {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text("Today's Metrics", style = HealthGraphTypography.TitleLarge)
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -307,7 +307,7 @@ fun TodayMetricsRow() {
 @Composable
 fun MetricCard(title: String, current: String, progress: String, color: Color) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .weight(1f)
@@ -331,7 +331,7 @@ fun MetricCard(title: String, current: String, progress: String, color: Color) {
                 Text(text = title, style = HealthGraphTypography.LabelMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
                 Text(text = progress, style = HealthGraphTypography.LabelLarge.copy(color = color))
             }
-            
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -347,7 +347,7 @@ fun MetricCard(title: String, current: String, progress: String, color: Color) {
                         .clip(androidx.compose.foundation.shape.RoundedCornerShape(GlassCorner.Full))
                 )
             }
-            
+
             Text(text = current, style = HealthGraphTypography.BodySmall.copy(color = HealthGraphColors.OnSurfaceMuted))
         }
     }
@@ -376,7 +376,7 @@ fun RecentActivityCard() {
                     size = LiquidButtonSize.SMALL
                 )
             }
-            
+
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -407,7 +407,7 @@ fun ActivityItem(title: String, description: String, time: String, color: Color)
                     .background(color)
                     .clip(androidx.compose.foundation.shape.CircleShape)
             )
-            
+
             Column(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
@@ -415,7 +415,7 @@ fun ActivityItem(title: String, description: String, time: String, color: Color)
                 Text(text = description, style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceVariant))
             }
         }
-        
+
         Text(text = time, style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceMuted))
     }
 }
@@ -443,7 +443,7 @@ fun UpcomingRemindersCard() {
                     size = LiquidButtonSize.SMALL
                 )
             }
-            
+
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -476,7 +476,7 @@ fun ReminderItem(title: String, time: String, isUrgent: Boolean, color: Color) {
                     .background(if (isUrgent) color else HealthGraphColors.OnSurfaceMuted)
                     .clip(androidx.compose.foundation.shape.CircleShape)
             )
-            
+
             Column(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
@@ -489,7 +489,7 @@ fun ReminderItem(title: String, time: String, isUrgent: Boolean, color: Color) {
                 Text(text = time, style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceVariant))
             }
         }
-        
+
         if (isUrgent) {
             LiquidButton(
                 onClick = {},

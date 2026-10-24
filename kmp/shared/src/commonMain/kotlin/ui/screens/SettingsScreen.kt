@@ -36,7 +36,7 @@ fun SettingsScreen(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
 ) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -53,7 +53,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SettingsHeader()
-            
+
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -71,7 +71,7 @@ fun SettingsScreen(
 @Composable
 fun SettingsHeader() {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -95,7 +95,7 @@ fun SettingsHeader() {
                 Text("Settings", style = HealthGraphTypography.HeadlineMedium)
                 Text("Customize your experience", style = HealthGraphTypography.BodyMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
             }
-            
+
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -220,7 +220,7 @@ val settingsSections = listOf(
 @Composable
 fun SettingsSection(section: SettingsSection) {
     val state = rememberGlassAnimationState()
-    
+
     GlassCard(
         cornerRadius = GlassCorner.LG,
         elevation = GlassElevation.Level2,
@@ -257,10 +257,10 @@ fun SettingsSection(section: SettingsSection) {
                             .align(Alignment.Center)
                     )
                 }
-                
+
                 Text(text = section.title, style = HealthGraphTypography.TitleLarge)
             }
-            
+
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -293,14 +293,14 @@ fun SettingsItemRow(
         isLast -> GlassCorner.MD.copy(bottomStart = GlassCorner.MD.value, bottomEnd = GlassCorner.MD.value)
         else -> 0.dp
     }
-    
+
     val shape = when {
         isFirst && isLast -> androidx.compose.foundation.shape.RoundedCornerShape(GlassCorner.MD)
         isFirst -> androidx.compose.foundation.shape.RoundedCornerShape(topStart = GlassCorner.MD, topEnd = GlassCorner.MD)
         isLast -> androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = GlassCorner.MD, bottomEnd = GlassCorner.MD)
         else -> androidx.compose.foundation.shape.RoundedCornerShape(0.dp)
     }
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -346,7 +346,7 @@ fun SettingsItemRow(
                             .align(Alignment.Center)
                     )
                 }
-                
+
                 Column(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
@@ -356,7 +356,7 @@ fun SettingsItemRow(
                     }
                 }
             }
-            
+
             when (item.action) {
                 SettingsAction.NAVIGATE -> {
                     Icon(

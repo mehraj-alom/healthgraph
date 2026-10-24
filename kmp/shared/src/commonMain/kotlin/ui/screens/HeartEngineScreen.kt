@@ -199,7 +199,7 @@ fun HrvTrendRow(day: String, morning: Int, evening: Int) {
     ) {
         Text(day, style = HealthGraphTypography.BodyMedium.copy(fontWeight = FontWeight.Medium), modifier = Modifier.width(50.dp))
         Text("$morning ms", style = HealthGraphTypography.TitleSmall.copy(color = color), modifier = Modifier.width(70.dp))
-        
+
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -216,7 +216,7 @@ fun HrvTrendRow(day: String, morning: Int, evening: Int) {
                     .clip(RoundedCornerShape(2.dp))
             )
         }
-        
+
         Text("Eve: $evening ms", style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceVariant), modifier = Modifier.width(80.dp))
     }
 }

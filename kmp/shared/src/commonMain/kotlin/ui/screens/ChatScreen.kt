@@ -88,7 +88,7 @@ fun ChatScreen(
                 items(messages.reversed()) { message ->
                     MessageBubble(message)
                 }
-                
+
                 // Typing indicator
                 if (isTyping) {
                     TypingIndicator()
@@ -109,7 +109,7 @@ fun ChatScreen(
                         size = LiquidButtonSize.MEDIUM,
                         icon = Icons.Default.AttachFile
                     )
-                    
+
                     GlassTextField(
                         value = messageText,
                         onValueChange = { messageText = it },
@@ -118,7 +118,7 @@ fun ChatScreen(
                             .weight(1f)
                             .padding(vertical = 8.dp)
                     )
-                    
+
                     LiquidButton(
                         onClick = { /* voice */ },
                         label = "",
@@ -126,7 +126,7 @@ fun ChatScreen(
                         size = LiquidButtonSize.MEDIUM,
                         icon = Icons.Default.Mic
                     )
-                    
+
                     LiquidButton(
                         onClick = { sendMessage() },
                         label = "",

@@ -45,7 +45,7 @@ fun BodyScreen(
     val state = rememberGlassAnimationState()
     val selectedSystem by remember { mutableStateOf(BodySystem.CARDIOVASCULAR) }
     val showDetails by remember { mutableStateOf(false) }
-    
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -61,7 +61,7 @@ fun BodyScreen(
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             BodyHeader(selectedSystem = selectedSystem, onSystemChange = { selectedSystem = it })
-            
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -75,7 +75,7 @@ fun BodyScreen(
                     }
                 )
             }
-            
+
             BodyBottomSheet(
                 system = selectedSystem,
                 isExpanded = showDetails,
@@ -174,7 +174,7 @@ fun BodyHeader(
     onSystemChange: (BodySystem) -> Unit
 ) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -201,7 +201,7 @@ fun BodyHeader(
                     Text("Body Systems", style = HealthGraphTypography.HeadlineMedium)
                     Text(selectedSystem.description, style = HealthGraphTypography.BodyMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
                 }
-                
+
                 LiquidButtonIcon(
                     onClick = {},
                     icon = { Icon(androidx.compose.material.icons.Icons.Default.Settings, "Settings") },
@@ -209,7 +209,7 @@ fun BodyHeader(
                     variant = LiquidButtonVariant.GHOST
                 )
             }
-            
+
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -234,7 +234,7 @@ fun BodySystemTab(
     onClick: () -> Unit
 ) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .liquidGlass(
@@ -277,7 +277,7 @@ fun BodyVisualization(
     onNodeClick: (BodyNode) -> Unit
 ) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -294,7 +294,7 @@ fun BodyVisualization(
             contentAlignment = Alignment.Center
         ) {
             Body3DPlaceholder(system = system)
-            
+
             system.nodes.forEachIndexed { index, node ->
                 BodyNodeMarker(
                     node = node,
@@ -310,7 +310,7 @@ fun BodyVisualization(
 @Composable
 fun Body3DPlaceholder(system: BodySystem) {
     val state = rememberGlassAnimationState()
-    
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -334,16 +334,16 @@ fun Body3DPlaceholder(system: BodySystem) {
                 tint = system.color.copy(alpha = 0.3f),
                 modifier = Modifier.size(120.dp)
             )
-            
+
             androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(16.dp))
-            
+
             Text(
                 text = "${system.name} System",
                 style = HealthGraphTypography.TitleLarge.copy(color = system.color.copy(alpha = 0.5f))
             )
-            
+
             androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(
                 text = "3D Anatomy View\n(Compose Multiplatform + Filament/SceneView)",
                 style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceMuted),
@@ -369,7 +369,7 @@ fun BodyNodeMarker(
             stiffness = androidx.compose.animation.core.Spring.StiffnessHigh
         )
     )
-    
+
     Box(
         modifier = Modifier
             .offset(x = position.x, y = position.y)
@@ -427,7 +427,7 @@ fun BodyBottomSheet(
     onExpandChange: (Boolean) -> Unit
 ) {
     val state = rememberGlassAnimationState()
-    
+
     AnimatedVisibility(
         visible = true,
         enter = androidx.compose.animation.slideInVertically(
@@ -470,18 +470,18 @@ fun BodyBottomSheet(
                         Text(text = "${system.name} Details", style = HealthGraphTypography.TitleLarge)
                         Text(text = "${system.nodes.size} monitored nodes", style = HealthGraphTypography.BodyMedium.copy(color = HealthGraphColors.OnSurfaceVariant))
                     }
-                    
+
                     Icon(
-                        imageVector = if (isExpanded) 
-                            androidx.compose.material.icons.Icons.Default.KeyboardArrowUp 
-                        else 
+                        imageVector = if (isExpanded)
+                            androidx.compose.material.icons.Icons.Default.KeyboardArrowUp
+                        else
                             androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
                         contentDescription = "Expand",
                         tint = HealthGraphColors.OnSurfaceVariant,
                         modifier = Modifier.size(24.dp)
                     )
                 }
-                
+
                 if (isExpanded) {
                     LazyColumn(
                         modifier = Modifier
@@ -503,7 +503,7 @@ fun BodyBottomSheet(
 @Composable
 fun BodyNodeDetail(node: BodyNode) {
     val state = rememberGlassAnimationState()
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -528,7 +528,7 @@ fun BodyNodeDetail(node: BodyNode) {
                     .background(node.color)
                     .clip(androidx.compose.foundation.shape.CircleShape)
             )
-            
+
             Column(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
@@ -536,7 +536,7 @@ fun BodyNodeDetail(node: BodyNode) {
                 Text(text = node.status, style = HealthGraphTypography.Caption.copy(color = HealthGraphColors.OnSurfaceVariant))
             }
         }
-        
+
         Icon(
             imageVector = androidx.compose.material.icons.Icons.Default.ChevronRight,
             contentDescription = "Details",
