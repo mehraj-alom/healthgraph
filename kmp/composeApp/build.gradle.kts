@@ -2,6 +2,7 @@ plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("com.android.application")
     id("io.gitlab.arturbosch.detekt")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 kotlin {
@@ -18,19 +19,19 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 implementation(project(":shared"))
-                implementation(platform("androidx.compose:compose-bom:2024.08.00"))
-                implementation("androidx.compose.runtime:runtime")
-                implementation("androidx.compose.foundation:foundation")
-                implementation("androidx.compose.material3:material3")
-                implementation("androidx.compose.material:material-icons-extended")
-                implementation("androidx.compose.ui:ui-resources")
-                implementation("androidx.compose.material3:material3")
-                implementation("androidx.compose.animation:animation")
-                implementation("androidx.compose.ui:ui")
-                implementation("androidx.compose.ui:ui-graphics")
-                implementation("androidx.compose.ui:ui-text")
-                implementation("androidx.compose.ui:ui-unit")
-                implementation("androidx.compose.ui:ui-geometry")
+                // Explicit Compose 1.6.10 versions (instead of BOM)
+                implementation("androidx.compose.runtime:runtime:1.6.10")
+                implementation("androidx.compose.foundation:foundation:1.6.10")
+                implementation("androidx.compose.material3:material3:1.6.10")
+                implementation("androidx.compose.material:material-icons-extended:1.6.10")
+                implementation("androidx.compose.ui:ui-resources:1.6.10")
+                implementation("androidx.compose.material3:material3:1.6.10")
+                implementation("androidx.compose.animation:animation:1.6.10")
+                implementation("androidx.compose.ui:ui:1.6.10")
+                implementation("androidx.compose.ui:ui-graphics:1.6.10")
+                implementation("androidx.compose.ui:ui-text:1.6.10")
+                implementation("androidx.compose.ui:ui-unit:1.6.10")
+                implementation("androidx.compose.ui:ui-geometry:1.6.10")
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.kotlinx.serialization.json)
@@ -41,7 +42,7 @@ kotlin {
         }
         val androidMain by getting {
             dependencies {
-                implementation("androidx.compose.ui:ui-platform-android")
+                implementation("androidx.compose.ui:ui-platform-android:1.6.10")
                 implementation(libs.androidx.lifecycle.runtime)
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.androidx.window)
@@ -50,27 +51,27 @@ kotlin {
         }
         val iosX64Main by getting {
             dependencies {
-                implementation("androidx.compose.ui:ui-platform-ios")
+                implementation("androidx.compose.ui:ui-platform-ios:1.6.10")
             }
         }
         val iosArm64Main by getting {
             dependencies {
-                implementation("androidx.compose.ui:ui-platform-ios")
+                implementation("androidx.compose.ui:ui-platform-ios:1.6.10")
             }
         }
         val iosSimulatorArm64Main by getting {
             dependencies {
-                implementation("androidx.compose.ui:ui-platform-ios")
+                implementation("androidx.compose.ui:ui-platform-ios:1.6.10")
             }
         }
         val jvmMain by getting {
             dependencies {
-                implementation("androidx.compose.ui:ui-platform-jvm")
+                implementation("androidx.compose.ui:ui-platform-jvm:1.6.10")
             }
         }
         val wasmJsMain by getting {
             dependencies {
-                implementation("androidx.compose.ui:ui-platform-wasm")
+                implementation("androidx.compose.ui:ui-platform-wasm:1.6.10")
                 implementation(libs.kotlinx.coroutines.js)
             }
         }

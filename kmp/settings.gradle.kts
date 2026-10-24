@@ -11,6 +11,7 @@ pluginManagement {
         id("com.android.library") version "8.4.0" apply false
         id("org.jlleitschuh.gradle.ktlint") version "11.0.0" apply false
         id("io.gitlab.arturbosch.detekt") version "1.23.6" apply false
+        id("org.jetbrains.kotlin.plugin.compose") version "2.0.20" apply false
     }
 }
 

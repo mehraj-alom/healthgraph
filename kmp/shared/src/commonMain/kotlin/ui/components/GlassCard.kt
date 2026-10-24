@@ -33,11 +33,6 @@ import com.healthgraph.shared.theme.HealthGraphTypography
 import com.healthgraph.shared.theme.interactiveGlass
 import com.healthgraph.shared.theme.liquidGlass
 import com.healthgraph.shared.theme.rememberGlassAnimationState
-import kotlin.annotation.OptIn
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.material3.ExperimentalMaterial3Api
-
-@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 
 @Composable
 fun GlassCard(
