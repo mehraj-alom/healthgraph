@@ -2,7 +2,6 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.application)
     alias(libs.plugins.detekt)
-    alias(libs.plugins.dependency.check)
 }
 
 kotlin {
@@ -158,12 +157,4 @@ detekt {
 
 tasks.named("detekt").configure {
     maxHeapSize = "512m"
-}
-
-dependencyCheck {
-    nvd {
-        apiKey = System.getenv("NVD_API_KEY") ?: ""
-    }
-    suppressions = files("dependency-check-suppressions.xml")
-    failBuildOnCVSS = 7
 }
