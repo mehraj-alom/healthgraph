@@ -9,9 +9,6 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
     jvm()
-    wasmJs {
-        browser()
-    }
 
     sourceSets {
         val commonMain by getting {
@@ -61,12 +58,6 @@ kotlin {
         val jvmMain by getting {
             dependencies {
                 implementation("androidx.compose.ui:ui-platform-jvm")
-            }
-        }
-        val wasmJsMain by getting {
-            dependencies {
-                implementation("androidx.compose.ui:ui-platform-wasm")
-                implementation(libs.kotlinx.coroutines.js)
             }
         }
     }
