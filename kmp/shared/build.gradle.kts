@@ -3,7 +3,6 @@ plugins {
 }
 
 kotlin {
-    androidTarget()
     iosX64()
     iosArm64()
     iosSimulatorArm64()
@@ -11,7 +10,6 @@ kotlin {
     wasmJs()
 
     listOf(
-        androidTarget(),
         iosX64(),
         iosArm64(),
         iosSimulatorArm64(),
@@ -44,7 +42,6 @@ kotlin {
                 implementation("androidx.compose.ui:ui-unit")
                 implementation("androidx.compose.ui:ui-geometry")
                 implementation(libs.kotlinx.coroutines.core)
-                implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.kotlinx.collections.immutable)
@@ -56,15 +53,6 @@ kotlin {
                 implementation(libs.ktor.client.okhttp)
                 implementation(libs.ktor.client.cio)
                 implementation(libs.kotlinx.coroutines.core)
-            }
-        }
-        val androidMain by getting {
-            dependencies {
-                implementation("androidx.compose.ui:ui-platform-android")
-                implementation(libs.androidx.lifecycle.runtime)
-                implementation(libs.androidx.activity.compose)
-                implementation(libs.androidx.window)
-                implementation(libs.okio)
             }
         }
         val iosMain by getting {
