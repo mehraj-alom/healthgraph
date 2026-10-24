@@ -30,18 +30,19 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation(libs.compose.runtime)
-                implementation(libs.compose.foundation)
-                implementation(libs.compose.material3)
-                implementation(libs.compose.materialIconsExtended)
-                implementation(libs.compose.componentsResources)
-                implementation(libs.compose.componentsDefaults)
-                implementation(libs.compose.animation)
-                implementation(libs.compose.ui)
-                implementation(libs.compose.uiGraphics)
-                implementation(libs.compose.uiText)
-                implementation(libs.compose.uiUnit)
-                implementation(libs.compose.uiGeometry)
+                implementation(platform("androidx.compose:compose-bom:2024.08.00"))
+                implementation("androidx.compose.runtime:runtime")
+                implementation("androidx.compose.foundation:foundation")
+                implementation("androidx.compose.material3:material3")
+                implementation("androidx.compose.material:material-icons-extended")
+                implementation("androidx.compose.ui:ui-resources")
+                implementation("androidx.compose.material3:material3")
+                implementation("androidx.compose.animation:animation")
+                implementation("androidx.compose.ui:ui")
+                implementation("androidx.compose.ui:ui-graphics")
+                implementation("androidx.compose.ui:ui-text")
+                implementation("androidx.compose.ui:ui-unit")
+                implementation("androidx.compose.ui:ui-geometry")
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.kotlinx.serialization.json)
@@ -59,7 +60,7 @@ kotlin {
         }
         val androidMain by getting {
             dependencies {
-                implementation(libs.compose.uiPlatformAndroid)
+                implementation("androidx.compose.ui:ui-platform-android")
                 implementation(libs.androidx.lifecycle.runtime)
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.androidx.window)
@@ -68,17 +69,17 @@ kotlin {
         }
         val iosMain by getting {
             dependencies {
-                implementation(libs.compose.uiPlatformIos)
+                implementation("androidx.compose.ui:ui-platform-ios")
             }
         }
         val jvmMain by getting {
             dependencies {
-                implementation(libs.compose.uiPlatformJvm)
+                implementation("androidx.compose.ui:ui-platform-jvm")
             }
         }
         val wasmJsMain by getting {
             dependencies {
-                implementation(libs.compose.uiPlatformWasm)
+                implementation("androidx.compose.ui:ui-platform-wasm")
                 implementation(libs.kotlinx.coroutines.js)
             }
         }
