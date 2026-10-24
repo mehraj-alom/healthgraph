@@ -3,6 +3,7 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
     plugins {
         id("org.jetbrains.kotlin.multiplatform") version "2.0.20" apply false
