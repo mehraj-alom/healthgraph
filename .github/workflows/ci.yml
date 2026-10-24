@@ -17,6 +17,9 @@ jobs:
     name: Lint & Static Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: kmp
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,6 +52,9 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: kmp
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,8 +80,8 @@ jobs:
         with:
           name: test-reports
           path: |
-            **/build/reports/tests/**/*
-            **/build/test-results/**/*
+            kmp/**/build/reports/tests/**/*
+            kmp/**/build/test-results/**/*
 
   # ===========================================
   # BUILD ANDROID
@@ -85,6 +91,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [lint, unit-tests]
+    defaults:
+      run:
+        working-directory: kmp
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,7 +124,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
-          path: composeApp/build/outputs/apk/debug/*.apk
+          path: kmp/composeApp/build/outputs/apk/debug/*.apk
           retention-days: 7
 
   # ===========================================
@@ -126,6 +135,9 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     needs: [lint, unit-tests]
+    defaults:
+      run:
+        working-directory: kmp
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -154,7 +166,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-framework
-          path: composeApp/build/bin/iosArm64/debugFramework/
+          path: kmp/composeApp/build/bin/iosArm64/debugFramework/
           retention-days: 7
 
   # ===========================================
@@ -165,6 +177,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [lint, unit-tests]
+    defaults:
+      run:
+        working-directory: kmp
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -188,7 +203,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-app
-          path: composeApp/build/compose/binaries/main/dmg/
+          path: kmp/composeApp/build/compose/binaries/main/dmg/
           retention-days: 7
 
   # ===========================================
@@ -199,6 +214,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: [lint, unit-tests]
+    defaults:
+      run:
+        working-directory: kmp
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -222,7 +240,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-build
-          path: composeApp/build/dist/wasmJs/productionExecutable/
+          path: kmp/composeApp/build/dist/wasmJs/productionExecutable/
           retention-days: 7
 
   # ===========================================
@@ -236,6 +254,9 @@ jobs:
     needs: [build-android, build-ios, build-desktop, build-web]
     permissions:
       contents: write
+    defaults:
+      run:
+        working-directory: kmp
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -270,8 +291,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            composeApp/build/outputs/apk/release/*.apk
-            composeApp/build/outputs/bundle/release/*.aab
+            kmp/composeApp/build/outputs/apk/release/*.apk
+            kmp/composeApp/build/outputs/bundle/release/*.aab
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -283,6 +304,9 @@ jobs:
     name: Dependency Vulnerability Scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: kmp
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -308,7 +332,7 @@ jobs:
         with:
           name: dependency-reports
           path: |
-            **/build/reports/dependency-check/**/*
+            kmp/**/build/reports/dependency-check/**/*
           retention-days: 30
 
   # ===========================================
