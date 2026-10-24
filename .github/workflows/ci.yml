@@ -36,9 +36,6 @@ jobs:
         with:
           gradle-version: wrapper
 
-      - name: Run KtLint Format (auto-fix)
-        run: ./gradlew :shared:ktlintFormat :composeApp:ktlintFormat --no-daemon
-
       - name: Run KtLint Check
         run: ./gradlew :shared:ktlintCheck :composeApp:ktlintCheck --no-daemon
 

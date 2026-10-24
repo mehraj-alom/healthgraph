@@ -1,0 +1,47 @@
+# KtLint configuration for HealthGraph KMP
+# Extends standard Kotlin style guide with project-specific adjustments
+
+# Use standard Kotlin style guide
+standard: true
+
+# Exclude generated code
+excluded_paths:
+  - "**/build/**"
+  - "**/generated/**"
+  - "**/*.g.dart"
+  - "**/*.freezed.dart"
+
+# Disable rules that conflict with our code style
+disabled_rules:
+  # Line length - our UI code has long composable chains
+  - max_line_length
+  # Wildcard imports - we use explicit imports for Compose
+  - no_wildcard_imports
+  # Magic numbers - UI code has many dp/sp values
+  - magic_number
+  # Trailing whitespace - handled by IDE
+  - trailing_whitespace
+  # Function wrapping - not auto-fixable for long composable chains
+  - function_parameter_wrapping
+  # Import ordering - not auto-fixable
+  - import_ordering
+  # Trailing comma - not auto-fixable for long chains
+  - trailing_comma
+
+# Allow longer lines for Compose UI code
+max_line_length:
+  max: 160
+  exclude_package_statements: true
+  exclude_import_statements: true
+  exclude_comment_lines: true
+
+# Indentation
+indent:
+  continuation_indent_size: 4
+  indent_size: 4
+
+# No semicolons
+no_semicolons: true
+
+# No consecutive blank lines
+no_consecutive_blank_lines: true
