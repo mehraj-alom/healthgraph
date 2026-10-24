@@ -86,15 +86,6 @@ kotlin {
     }
 }
 
-android {
-    namespace = "com.healthgraph.shared"
-    compileSdk = 34
-    defaultConfig {
-        minSdk = 24
-        targetSdk = 34
-    }
-}
-
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     kotlinOptions {
         jvmTarget = "17"
