@@ -103,48 +103,6 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).conf
     }
 }
 
-kotlin {
-    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJvmTarget::class.java).configureEach {
-        compilations.configureEach {
-            compilerOptions {
-                freeCompilerArgs += listOf(
-                    "-Xopt-in=kotlin.RequiresOptIn",
-                    "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
-                    "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-                    "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-                    "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
-                )
-            }
-        }
-    }
-    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsTarget::class.java).configureEach {
-        compilations.configureEach {
-            compilerOptions {
-                freeCompilerArgs += listOf(
-                    "-Xopt-in=kotlin.RequiresOptIn",
-                    "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
-                    "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-                    "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-                    "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
-                )
-            }
-        }
-    }
-    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget::class.java).configureEach {
-        compilations.configureEach {
-            compilerOptions {
-                freeCompilerArgs += listOf(
-                    "-Xopt-in=kotlin.RequiresOptIn",
-                    "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
-                    "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-                    "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-                    "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
-                )
-            }
-        }
-    }
-}
-
 detekt {
     config = files("detekt.yml")
     buildUponDefaultConfig = true
