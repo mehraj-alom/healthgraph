@@ -3,16 +3,12 @@ plugins {
 }
 
 kotlin {
-    iosX64()
-    iosArm64()
-    iosSimulatorArm64()
+    ios()
     jvm()
     wasmJs()
 
     listOf(
-        iosX64(),
-        iosArm64(),
-        iosSimulatorArm64(),
+        ios(),
         jvm(),
         wasmJs()
     ).forEach {
