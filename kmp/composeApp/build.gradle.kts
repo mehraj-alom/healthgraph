@@ -5,17 +5,13 @@ plugins {
 
 kotlin {
     androidTarget()
-    iosX64()
-    iosArm64()
-    iosSimulatorArm64()
+    ios()
     jvm()
     wasmJs()
 
     listOf(
         androidTarget(),
-        iosX64(),
-        iosArm64(),
-        iosSimulatorArm64(),
+        ios(),
         jvm(),
         wasmJs()
     ).forEach {
