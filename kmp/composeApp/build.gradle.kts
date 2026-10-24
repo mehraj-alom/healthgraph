@@ -9,19 +9,20 @@ kotlin {
     jvm()
     wasmJs()
 
-    listOf(
-        androidTarget(),
-        ios(),
-        jvm(),
-        wasmJs()
-    ).forEach {
-        it.compilerOptions.freeCompilerArgs.addAll(
-            "-Xopt-in=kotlin.RequiresOptIn",
-            "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
-            "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-            "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-            "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
-        )
+    targets.all {
+        compilations.all {
+            compileTaskProvider.configure {
+                kotlinOptions {
+                    freeCompilerArgs += listOf(
+                        "-Xopt-in=kotlin.RequiresOptIn",
+                        "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+                        "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+                        "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+                        "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
+                    )
+                }
+            }
+        }
     }
 
     sourceSets {
