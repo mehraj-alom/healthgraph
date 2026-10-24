@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.compose.multiplatform)
 }
 
 kotlin {
@@ -92,17 +91,6 @@ android {
     defaultConfig {
         minSdk = 24
         targetSdk = 34
-    }
-}
-
-compose {
-    multiplatform {
-        targets {
-            android()
-            ios()
-            jvm()
-            wasmJs()
-        }
     }
 }
 
