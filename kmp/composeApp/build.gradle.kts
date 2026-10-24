@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
 }
@@ -34,18 +33,19 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 implementation(project(":shared"))
-                implementation(compose.runtime)
-                implementation(compose.foundation)
-                implementation(compose.material3)
-                implementation(compose.materialIconsExtended)
-                implementation(compose.components.resources)
-                implementation(compose.components.defaults)
-                implementation(compose.animation)
-                implementation(compose.ui)
-                implementation(compose.ui.graphics)
-                implementation(compose.ui.text)
-                implementation(compose.ui.unit)
-                implementation(compose.ui.geometry)
+                implementation(platform("androidx.compose:compose-bom:2024.08.00"))
+                implementation("androidx.compose.runtime:runtime")
+                implementation("androidx.compose.foundation:foundation")
+                implementation("androidx.compose.material3:material3")
+                implementation("androidx.compose.material:material-icons-extended")
+                implementation("androidx.compose.ui:ui-resources")
+                implementation("androidx.compose.material3:material3")
+                implementation("androidx.compose.animation:animation")
+                implementation("androidx.compose.ui:ui")
+                implementation("androidx.compose.ui:ui-graphics")
+                implementation("androidx.compose.ui:ui-text")
+                implementation("androidx.compose.ui:ui-unit")
+                implementation("androidx.compose.ui:ui-geometry")
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.kotlinx.serialization.json)
@@ -56,7 +56,7 @@ kotlin {
         }
         val androidMain by getting {
             dependencies {
-                implementation(compose.ui.platform.android)
+                implementation("androidx.compose.ui:ui-platform-android")
                 implementation(libs.androidx.lifecycle.runtime)
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.androidx.window)
@@ -65,17 +65,17 @@ kotlin {
         }
         val iosMain by getting {
             dependencies {
-                implementation(compose.ui.platform.ios)
+                implementation("androidx.compose.ui:ui-platform-ios")
             }
         }
         val jvmMain by getting {
             dependencies {
-                implementation(compose.ui.platform.jvm)
+                implementation("androidx.compose.ui:ui-platform-jvm")
             }
         }
         val wasmJsMain by getting {
             dependencies {
-                implementation(compose.ui.platform.wasm)
+                implementation("androidx.compose.ui:ui-platform-wasm")
                 implementation(libs.kotlinx.coroutines.js)
             }
         }
@@ -105,19 +105,15 @@ android {
     }
 }
 
-compose {
-    multiplatform {
-        targets {
-            android()
-            ios()
-            jvm()
-            wasmJs()
-        }
-    }
-}
-
-tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
     kotlinOptions {
         jvmTarget = "17"
+        freeCompilerArgs += listOf(
+            "-Xopt-in=kotlin.RequiresOptIn",
+            "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+            "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+            "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+            "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
+        )
     }
 }
