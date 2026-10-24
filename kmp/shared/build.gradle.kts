@@ -5,9 +5,6 @@ plugins {
 }
 
 kotlin {
-    iosX64()
-    iosArm64()
-    iosSimulatorArm64()
     jvm()
 
     sourceSets {
@@ -38,21 +35,6 @@ kotlin {
                 implementation(libs.ktor.client.okhttp)
                 implementation(libs.ktor.client.cio)
                 implementation(libs.kotlinx.coroutines.core)
-            }
-        }
-        val iosX64Main by getting {
-            dependencies {
-                implementation("androidx.compose.ui:ui-platform-ios")
-            }
-        }
-        val iosArm64Main by getting {
-            dependencies {
-                implementation("androidx.compose.ui:ui-platform-ios")
-            }
-        }
-        val iosSimulatorArm64Main by getting {
-            dependencies {
-                implementation("androidx.compose.ui:ui-platform-ios")
             }
         }
         val jvmMain by getting {
