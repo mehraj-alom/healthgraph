@@ -1,0 +1,116 @@
+# detekt configuration for HealthGraph KMP
+build:
+  maxIssues: 0
+  weights:
+    complexity: 2
+    LongParameterList: 1
+    style: 1
+    comments: 1
+
+config:
+  validation: true
+  warnsAsErrors: false
+
+comments:
+  active: true
+  CommentOverPrivateFunction:
+    active: false
+  CommentOverPrivateProperty:
+    active: false
+  EndOfSentenceFormat:
+    active: true
+    endOfSentenceFormat: ([.!?][ \t\n\r\f]+|[.!?]$)
+  KDocDescriptionContainsDocumentationText:
+    active: false
+
+complexity:
+  active: true
+  ComplexInterface:
+    active: false
+  ComplexMethod:
+    active: true
+    threshold: 15
+    ignoreSingleExpression: true
+    ignoreSimpleWhenEntries: true
+  LongMethod:
+    active: true
+    threshold: 60
+  LongParameterList:
+    active: true
+    threshold: 6
+    ignoreDefaultValues: true
+    ignoreDataClasses: true
+    ignoreAnnotated: ["Composable", "Preview"]
+  TooManyFunctions:
+    active: false
+
+style:
+  active: true
+  WildcardImport:
+    active: true
+    excludeImports: ['kotlinx.android.synthetic.*', 'io.ktor.*', 'kotlinx.coroutines.*']
+  MagicNumber:
+    active: true
+    ignoreNumbers: ['-1', '0', '1', '2', '10', '100', '1000']
+    ignorePropertyDeclaration: true
+    ignoreLocalVariableDeclaration: true
+    ignoreConstantDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreNamedArgument: true
+    ignoreEnumDeclaration: true
+  NestedScopeFunctions:
+    active: false
+  ReturnCount:
+    active: true
+    max: 6
+  TooGenericExceptionCaught:
+    active: true
+    exceptionNames: ['Exception', 'Throwable', 'Error', 'RuntimeException']
+  UtilityClassWithPublicConstructor:
+    active: false
+
+formatting:
+  active: true
+  android: false
+  autoCorrect: false
+  indentation: 4
+  continuationIndent: 8
+  maximumLineLength: 120
+
+naming:
+  active: true
+  ClassNaming:
+    active: true
+    classPattern: '^[A-Z][a-zA-Z0-9]*$'
+  FunctionNaming:
+    active: true
+    functionPattern: '^[a-z][a-zA-Z0-9]*$'
+    ignoreOverridden: true
+  VariableNaming:
+    active: true
+    variablePattern: '^[a-z][a-zA-Z0-9]*$'
+    ignoreOverridden: true
+    ignoreAnnotated: ["Composable", "Preview"]
+  ParameterNaming:
+    active: true
+    parameterPattern: '^[a-z][a-zA-Z0-9]*$'
+
+exceptions:
+  active: true
+  TooGenericExceptionThrown:
+    active: false
+
+potential-bugs:
+  active: true
+  IteratorHasNextCallsNextMethod:
+    active: false
+  IteratorThrowsNoSuchElementException:
+    active: false
+  UnsafeCast:
+    active: true
+
+# KMP specific
+suppressions:
+  active: true
+  excludes: ['**/generated/**', '**/build/**']

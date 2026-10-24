@@ -1,28 +1,18 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.application)
+    alias(libs.plugins.detekt)
+    alias(libs.plugins.dependency.check)
 }
 
 kotlin {
-    androidTarget()
-    ios()
+    android()
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
     jvm()
-    wasmJs()
-
-    targets.all {
-        compilations.all {
-            compileTaskProvider.configure {
-                kotlinOptions {
-                    freeCompilerArgs += listOf(
-                        "-Xopt-in=kotlin.RequiresOptIn",
-                        "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
-                        "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-                        "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-                        "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
-                    )
-                }
-            }
-        }
+    wasmJs {
+        browser()
     }
 
     sourceSets {
@@ -112,4 +102,68 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).conf
             "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
         )
     }
+}
+
+kotlin {
+    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJvmTarget::class.java).configureEach {
+        compilations.configureEach {
+            compilerOptions {
+                freeCompilerArgs += listOf(
+                    "-Xopt-in=kotlin.RequiresOptIn",
+                    "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+                    "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+                    "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+                    "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
+                )
+            }
+        }
+    }
+    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsTarget::class.java).configureEach {
+        compilations.configureEach {
+            compilerOptions {
+                freeCompilerArgs += listOf(
+                    "-Xopt-in=kotlin.RequiresOptIn",
+                    "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+                    "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+                    "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+                    "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
+                )
+            }
+        }
+    }
+    targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget::class.java).configureEach {
+        compilations.configureEach {
+            compilerOptions {
+                freeCompilerArgs += listOf(
+                    "-Xopt-in=kotlin.RequiresOptIn",
+                    "-Xopt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
+                    "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+                    "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+                    "-Xopt-in=androidx.compose.ui.ExperimentalComposeUiApi"
+                )
+            }
+        }
+    }
+}
+
+detekt {
+    config = files("detekt.yml")
+    buildUponDefaultConfig = true
+    reports {
+        html.required.set(true)
+        xml.required.set(true)
+        txt.required.set(false)
+    }
+}
+
+tasks.named("detekt").configure {
+    maxHeapSize = "512m"
+}
+
+dependencyCheck {
+    nvd {
+        apiKey = System.getenv("NVD_API_KEY") ?: ""
+    }
+    suppressions = files("dependency-check-suppressions.xml")
+    failBuildOnCVSS = 7
 }

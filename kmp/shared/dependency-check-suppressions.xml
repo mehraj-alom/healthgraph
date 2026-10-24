@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-check-suppressions.2.0.xsd">
+    <!-- Suppress known false positives for HealthGraph KMP shared module -->
+    
+    <!-- Kotlin stdlib transitive dependencies -->
+    <suppress>
+        <notes>Kotlin stdlib transitive dependencies flagged incorrectly</notes>
+        <packageUrl regex="true">pkg:maven/org.jetbrains.kotlin/kotlin-stdlib@.*</packageUrl>
+        <cpe>cpe:2.3:a:jetbrains:kotlin:*:*:*:*:*:*:*:*</cpe>
+    </suppress>
+    
+    <!-- Compose transitive dependencies -->
+    <suppress>
+        <notes>Compose transitive dependencies flagged incorrectly</notes>
+        <packageUrl regex="true">pkg:maven/androidx.compose.*@.*</packageUrl>
+        <cpe>cpe:2.3:a:android:compose:*:*:*:*:*:*:*:*</cpe>
+    </suppress>
+    
+    <!-- Ktor transitive dependencies -->
+    <suppress>
+        <notes>Ktor transitive dependencies flagged incorrectly</notes>
+        <packageUrl regex="true">pkg:maven/io.ktor/ktor-.*@.*</packageUrl>
+        <cpe>cpe:2.3:a:ktor:ktor:*:*:*:*:*:*:*:*</cpe>
+    </suppress>
+</suppressions>
